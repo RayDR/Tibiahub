@@ -1,0 +1,62 @@
+/* ============================================
+   ELEMENT BADGE
+   Damage type badges
+   ============================================ */
+
+.element-icon {
+  font-size: 1.2rem;
+  line-height: 1;
+}
+
+.element-badge {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-xs);
+  padding: var(--space-xs) var(--space-sm);
+  border-radius: var(--radius-sm);
+  font-size: 0.875rem;
+  font-weight: 600;
+  transition: all var(--transition-base);
+}
+
+.element-badge--physical {
+  background: rgba(192, 192, 192, 0.2);
+  border: 1px solid var(--metal-silver);
+  color: var(--metal-silver);
+}
+
+.element-badge--fire {
+  background: rgba(255, 107, 53, 0.2);
+  border: 1px solid var(--ember-orange);
+  color: var(--ember-orange);
+}
+
+.element-badge--ice {
+  background: rgba(96, 165, 250, 0.2);
+  border: 1px solid var(--info);
+  color: var(--info);
+}
+
+.element-badge--energy {
+  background: rgba(251, 191, 36, 0.2);
+  border: 1px solid var(--warning);
+  color: var(--warning);
+}
+
+.element-badge--earth {
+  background: rgba(34, 197, 94, 0.2);
+  border: 1px solid #22c55e;
+  color: #22c55e;
+}
+
+.element-badge--holy {
+  background: rgba(255, 215, 0, 0.2);
+  border: 1px solid var(--dragon-gold);
+  color: var(--dragon-gold);
+}
+
+.element-badge--death {
+  background: rgba(139, 92, 246, 0.2);
+  border: 1px solid #8b5cf6;
+  color: #8b5cf6;
+}

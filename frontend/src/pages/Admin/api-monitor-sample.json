@@ -1,0 +1,126 @@
+{
+  "timestamp": "2026-01-20T08:58:16.123400",
+  "total_apis": 4,
+  "online_count": 3,
+  "apis": [
+    {
+      "name": "Tibia.com Official API",
+      "url": "https://api.tibia.com/v1/worlds",
+      "status": "offline",
+      "error": "HTTPSConnectionPool(host='api.tibia.com', port=443): Max retries exceeded with url: /v1/worlds (Caused by NameResolutionError)"
+    },
+    {
+      "name": "TibiaData API",
+      "url": "https://api.tibiadata.com/v4/worlds",
+      "status": "online",
+      "status_code": 200,
+      "latency_ms": 1543,
+      "sample_data": {
+        "worlds_count": 87,
+        "first_3_worlds": [
+          "Aethera",
+          "Antica",
+          "Astera"
+        ]
+      },
+      "full_response": {
+        "worlds": {
+          "players_online": 5035,
+          "record_players": 64028,
+          "record_date": "2007-11-28T18:26:00Z",
+          "regular_worlds": [
+            {
+              "name": "Aethera",
+              "status": "online",
+              "players_online": 5,
+              "location": "North America",
+              "pvp_type": "Open PvP",
+              "premium_only": false,
+              "transfer_type": "blocked",
+              "battleye_protected": true,
+              "battleye_date": "release",
+              "game_world_type": "regular"
+            },
+            {
+              "name": "Antica",
+              "status": "online",
+              "players_online": 297,
+              "location": "Europe",
+              "pvp_type": "Open PvP",
+              "premium_only": false,
+              "transfer_type": "regular",
+              "battleye_protected": true,
+              "battleye_date": "2017-08-29",
+              "game_world_type": "regular"
+            },
+            {
+              "name": "Astera",
+              "status": "online",
+              "players_online": 67,
+              "location": "North America",
+              "pvp_type": "Optional PvP",
+              "premium_only": false,
+              "transfer_type": "regular",
+              "battleye_protected": true,
+              "battleye_date": "2017-09-12",
+              "game_world_type": "regular"
+            }
+          ]
+        }
+      }
+    },
+    {
+      "name": "TibiaWiki (Fandom)",
+      "url": "https://tibia.fandom.com/api.php",
+      "status": "online",
+      "status_code": 200,
+      "latency_ms": 124,
+      "sample_data": {
+        "pages_count": 3,
+        "sample_pages": [
+          "...",
+          "0152551751 (Book)",
+          "0174648349 (Book)"
+        ]
+      },
+      "full_response": {
+        "batchcomplete": true,
+        "continue": {
+          "apcontinue": "04215956151_(Book)",
+          "continue": "-||"
+        },
+        "query": {
+          "allpages": [
+            {
+              "pageid": 87060,
+              "ns": 0,
+              "title": "..."
+            },
+            {
+              "pageid": 11290,
+              "ns": 0,
+              "title": "0152551751 (Book)"
+            },
+            {
+              "pageid": 11268,
+              "ns": 0,
+              "title": "0174648349 (Book)"
+            }
+          ]
+        }
+      }
+    },
+    {
+      "name": "TibiaGuildHub Database",
+      "url": "internal",
+      "status": "online",
+      "status_code": 200,
+      "latency_ms": 0,
+      "sample_data": {
+        "creature_count": 6,
+        "database": "SQLite",
+        "status": "healthy"
+      }
+    }
+  ]
+}

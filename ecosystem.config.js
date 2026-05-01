@@ -1,0 +1,41 @@
+module.exports = {
+  apps: [
+    {
+      name: 'tibiahub-api',
+      cwd: './backend',
+      script: 'venv/bin/python',
+      args: 'main.py',
+      instances: 1,
+      autorestart: true,
+      watch: false,
+      max_memory_restart: '500M',
+      env: {
+        PYTHONUNBUFFERED: '1',
+        API_HOST: '127.0.0.1',
+        API_PORT: '8001',
+      },
+      error_file: './logs/api-error.log',
+      out_file: './logs/api-out.log',
+      log_date_format: 'YYYY-MM-DD HH:mm:ss Z',
+      merge_logs: true,
+    },
+    {
+      name: 'tibiahub-frontend',
+      cwd: './frontend',
+      script: 'npx',
+      args: 'vite preview --host 0.0.0.0 --port 5174',
+      instances: 1,
+      autorestart: true,
+      watch: false,
+      max_memory_restart: '300M',
+      env: {
+        NODE_ENV: 'production',
+        VITE_API_URL: '/api/v1',
+      },
+      error_file: './logs/frontend-error.log',
+      out_file: './logs/frontend-out.log',
+      log_date_format: 'YYYY-MM-DD HH:mm:ss Z',
+      merge_logs: true,
+    },
+  ],
+};

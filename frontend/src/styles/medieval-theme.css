@@ -1,0 +1,229 @@
+/* Medieval Theme - Dark Medieval Colors */
+[data-theme="medieval"] {
+  /* Primary Medieval Colors */
+  --medieval-gold: #d4af37;
+  --medieval-gold-dark: #b8941e;
+  --medieval-bronze: #cd7f32;
+  --medieval-iron: #686868;
+  --medieval-stone: #8b8589;
+  
+  /* Background Medieval */
+  --medieval-bg-primary: #1a1410;
+  --medieval-bg-secondary: #2a1f1a;
+  --medieval-bg-tertiary: #3a2f2a;
+  
+  /* Text Medieval */
+  --medieval-text-primary: #f5e6d3;
+  --medieval-text-secondary: #d4c5b0;
+  --medieval-text-accent: #d4af37;
+  
+  /* Borders Medieval */
+  --medieval-border: #5a4a3a;
+  --medieval-border-light: #7a6a5a;
+  
+  /* Guild Colors Medieval */
+  --guild-primary: #8b0000; /* dark-red */
+  --guild-primary-dark: #660000;
+  --guild-primary-light: #a52a2a;
+}
+
+[data-theme="medieval"] body {
+  background: linear-gradient(180deg, var(--medieval-bg-primary) 0%, var(--medieval-bg-secondary) 100%);
+  color: var(--medieval-text-primary);
+}
+
+/* Navigation Medieval Style */
+[data-theme="medieval"] nav {
+  background: linear-gradient(
+    135deg,
+    rgba(26, 20, 16, 0.95) 0%,
+    rgba(42, 31, 26, 0.95) 100%
+  );
+  border: 2px solid var(--medieval-border);
+  box-shadow: 0 8px 32px rgba(0, 0, 0, 0.5),
+              inset 0 1px 0 rgba(212, 175, 55, 0.1);
+}
+
+[data-theme="medieval"] .text-amber-500,
+[data-theme="medieval"] .text-amber-400 {
+  color: var(--medieval-gold) !important;
+}
+
+/* Guild Sidebar Medieval */
+[data-theme="medieval"] aside > div {
+  background: linear-gradient(
+    180deg,
+    rgba(42, 31, 26, 0.9) 0%,
+    rgba(26, 20, 16, 0.9) 100%
+  );
+  border: 2px solid var(--medieval-border);
+  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.6),
+              inset 0 2px 4px rgba(212, 175, 55, 0.05);
+}
+
+[data-theme="medieval"] aside h3 {
+  color: var(--medieval-gold);
+  text-shadow: 0 2px 4px rgba(0, 0, 0, 0.5);
+}
+
+/* Buttons Medieval */
+[data-theme="medieval"] button {
+  background: linear-gradient(
+    135deg,
+    var(--medieval-bronze) 0%,
+    var(--medieval-gold-dark) 100%
+  );
+  border: 1px solid var(--medieval-gold-dark);
+  box-shadow: 0 4px 8px rgba(0, 0, 0, 0.4),
+              inset 0 1px 0 rgba(255, 255, 255, 0.1);
+  transition: all 0.3s ease;
+}
+
+[data-theme="medieval"] button:hover {
+  background: linear-gradient(
+    135deg,
+    var(--medieval-gold) 0%,
+    var(--medieval-bronze) 100%
+  );
+  box-shadow: 0 6px 12px rgba(212, 175, 55, 0.4),
+              inset 0 1px 0 rgba(255, 255, 255, 0.2);
+  transform: translateY(-2px);
+}
+
+/* Cards Medieval */
+[data-theme="medieval"] .bg-slate-900\/50,
+[data-theme="medieval"] .bg-slate-900\/30 {
+  background: linear-gradient(
+    135deg,
+    rgba(42, 31, 26, 0.8) 0%,
+    rgba(26, 20, 16, 0.8) 100%
+  ) !important;
+  border-color: var(--medieval-border) !important;
+  box-shadow: 0 8px 16px rgba(0, 0, 0, 0.5),
+              inset 0 1px 2px rgba(212, 175, 55, 0.05);
+}
+
+/* Text Colors Medieval */
+[data-theme="medieval"] .text-slate-100,
+[data-theme="medieval"] .text-slate-200 {
+  color: var(--medieval-text-primary) !important;
+}
+
+[data-theme="medieval"] .text-slate-400,
+[data-theme="medieval"] .text-slate-300 {
+  color: var(--medieval-text-secondary) !important;
+}
+
+/* Primary Color Medieval (Guild Red) */
+[data-theme="medieval"] .text-primary {
+  color: var(--guild-primary) !important;
+  text-shadow: 0 1px 2px rgba(0, 0, 0, 0.5);
+}
+
+/* Borders Medieval */
+[data-theme="medieval"] .border-slate-700,
+[data-theme="medieval"] .border-slate-700\/50 {
+  border-color: var(--medieval-border) !important;
+}
+
+[data-theme="medieval"] .border-red-900\/30,
+[data-theme="medieval"] .border-red-900\/20 {
+  border-color: var(--medieval-border-light) !important;
+}
+
+/* Inputs Medieval */
+[data-theme="medieval"] input,
+[data-theme="medieval"] textarea,
+[data-theme="medieval"] select {
+  background: rgba(26, 20, 16, 0.8);
+  border: 1px solid var(--medieval-border);
+  color: var(--medieval-text-primary);
+  box-shadow: inset 0 2px 4px rgba(0, 0, 0, 0.3);
+}
+
+[data-theme="medieval"] input:focus,
+[data-theme="medieval"] textarea:focus,
+[data-theme="medieval"] select:focus {
+  border-color: var(--medieval-gold);
+  box-shadow: 0 0 0 2px rgba(212, 175, 55, 0.1),
+              inset 0 2px 4px rgba(0, 0, 0, 0.3);
+}
+
+/* Active States Medieval */
+[data-theme="medieval"] .bg-red-600\/20 {
+  background: linear-gradient(
+    135deg,
+    rgba(139, 0, 0, 0.2) 0%,
+    rgba(102, 0, 0, 0.2) 100%
+  ) !important;
+}
+
+[data-theme="medieval"] .bg-amber-600\/20 {
+  background: linear-gradient(
+    135deg,
+    rgba(212, 175, 55, 0.2) 0%,
+    rgba(184, 148, 30, 0.2) 100%
+  ) !important;
+}
+
+/* Tournament Badge Medieval */
+[data-theme="medieval"] .bg-yellow-500 {
+  background: linear-gradient(
+    135deg,
+    var(--medieval-gold) 0%,
+    var(--medieval-bronze) 100%
+  ) !important;
+  box-shadow: 0 4px 12px rgba(212, 175, 55, 0.5);
+}
+
+/* Scrollbar Medieval */
+[data-theme="medieval"] ::-webkit-scrollbar {
+  width: 12px;
+  background: var(--medieval-bg-primary);
+}
+
+[data-theme="medieval"] ::-webkit-scrollbar-track {
+  background: var(--medieval-bg-secondary);
+  border: 1px solid var(--medieval-border);
+}
+
+[data-theme="medieval"] ::-webkit-scrollbar-thumb {
+  background: linear-gradient(
+    180deg,
+    var(--medieval-bronze) 0%,
+    var(--medieval-gold-dark) 100%
+  );
+  border-radius: 6px;
+  border: 1px solid var(--medieval-border);
+}
+
+[data-theme="medieval"] ::-webkit-scrollbar-thumb:hover {
+  background: linear-gradient(
+    180deg,
+    var(--medieval-gold) 0%,
+    var(--medieval-bronze) 100%
+  );
+}
+
+/* Parchment Effect for Cards */
+[data-theme="medieval"] .medieval-parchment {
+  background: linear-gradient(
+    135deg,
+    #f4e7d7 0%,
+    #e8dcc8 50%,
+    #f4e7d7 100%
+  );
+  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.3),
+              inset 0 2px 4px rgba(0, 0, 0, 0.1);
+  border: 2px solid #8b7355;
+}
+
+/* Medieval Font Styling */
+[data-theme="medieval"] h1,
+[data-theme="medieval"] h2,
+[data-theme="medieval"] h3,
+[data-theme="medieval"] .font-serif {
+  font-family: 'Cinzel', 'Georgia', serif;
+  letter-spacing: 0.05em;
+  text-shadow: 0 2px 4px rgba(0, 0, 0, 0.5);
+}

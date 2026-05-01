@@ -1,0 +1,116 @@
+"""
+Extended models for Tibia items, quests, and hunting places
+Stores complete data from external APIs locally
+Note: Quest and Quest models already exist - these are for API synced data
+"""
+from sqlalchemy import Column, Integer, String, Text, Float, DateTime, JSON, Boolean, ForeignKey
+from sqlalchemy.orm import relationship
+from sqlalchemy.sql import func
+from app.db.database import Base
+
+class Item(Base):
+    """Store item data from TibiaWiki API"""
+    __tablename__ = "tibiawiki_items"
+    
+    id = Column(Integer, primary_key=True, index=True)
+    name = Column(String(255), unique=True, index=True, nullable=False)
+    item_id = Column(Integer, nullable=True, unique=True)  # Tibia item ID
+    description = Column(Text, nullable=True)
+    type = Column(String(100), nullable=True, index=True)  # e.g., "weapon", "armor", "consumable"
+    
+    # Item properties
+    weight = Column(Float, nullable=True)
+    value = Column(Integer, nullable=True)
+    attack = Column(Integer, nullable=True)
+    defense = Column(Integer, nullable=True)
+    armor = Column(Integer, nullable=True)
+    
+    # Requirements
+    level_required = Column(Integer, nullable=True)
+    vocation_required = Column(String(100), nullable=True)
+    
+    # Classification
+    tradeable = Column(Boolean, default=True)
+    stackable = Column(Boolean, default=False)
+    
+    # Full raw data from API
+    raw_data = Column(JSON, nullable=True)
+    
+    created_at = Column(DateTime(timezone=True), server_default=func.now())
+    updated_at = Column(DateTime(timezone=True), onupdate=func.now())
+
+class HuntingPlace(Base):
+    """Store hunting place data from TibiaWiki API"""
+    __tablename__ = "tibiawiki_hunting_places"
+    
+    id = Column(Integer, primary_key=True, index=True)
+    name = Column(String(255), unique=True, index=True, nullable=False)
+    description = Column(Text, nullable=True)
+    location = Column(String(255), nullable=True)
+    
+    # Difficulty
+    min_level_recommended = Column(Integer, nullable=True)
+    max_level_recommended = Column(Integer, nullable=True)
+    
+    # Creatures
+    creatures = Column(JSON, nullable=True)  # List of creature names found here
+    
+    # Loot
+    loot_expectation = Column(String(50), nullable=True)  # e.g., "low", "medium", "high"
+    common_loot = Column(JSON, nullable=True)
+    
+    # Full raw data from API
+    raw_data = Column(JSON, nullable=True)
+    
+    created_at = Column(DateTime(timezone=True), server_default=func.now())
+    updated_at = Column(DateTime(timezone=True), onupdate=func.now())
+
+class TibiaWikiQuest(Base):
+    """Store quest data from TibiaWiki API"""
+    __tablename__ = "tibiawiki_quests"
+    
+    id = Column(Integer, primary_key=True, index=True)
+    name = Column(String(255), unique=True, index=True, nullable=False)
+    description = Column(Text, nullable=True)
+    
+    # Quest properties
+    min_level = Column(Integer, nullable=True)
+    max_level = Column(Integer, nullable=True)
+    experience_reward = Column(Integer, nullable=True)
+    treasure = Column(JSON, nullable=True)  # List of reward items
+    
+    # Quest details
+    duration = Column(String(100), nullable=True)  # e.g., "daily", "repeatable", "one-time"
+    location = Column(String(255), nullable=True)
+    npc = Column(String(255), nullable=True)  # NPC who gives the quest
+    
+    # Full raw data from API
+    raw_data = Column(JSON, nullable=True)
+    
+    created_at = Column(DateTime(timezone=True), server_default=func.now())
+    updated_at = Column(DateTime(timezone=True), onupdate=func.now())
+
+class APISync(Base):
+    """Track API synchronization logs and progress"""
+    __tablename__ = "api_syncs"
+    
+    id = Column(Integer, primary_key=True, index=True)
+    api_name = Column(String(100), index=True, nullable=False)  # "creatures", "items", "hunting_places", "quests"
+    endpoint = Column(String(255), nullable=False)
+    status = Column(String(50), nullable=False)  # "pending", "running", "success", "error"
+    source = Column(String(50), nullable=True)  # "tibiawiki", "tibiadata", "local"
+    
+    # Progress tracking
+    total_items = Column(Integer, nullable=True)
+    processed_items = Column(Integer, default=0)
+    error_count = Column(Integer, default=0)
+    
+    # Details
+    message = Column(Text, nullable=True)
+    error_details = Column(Text, nullable=True)
+    
+    started_at = Column(DateTime(timezone=True), server_default=func.now())
+    completed_at = Column(DateTime(timezone=True), nullable=True)
+    
+    created_at = Column(DateTime(timezone=True), server_default=func.now())
+    updated_at = Column(DateTime(timezone=True), onupdate=func.now())

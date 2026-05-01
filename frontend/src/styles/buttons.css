@@ -1,0 +1,55 @@
+/* ============================================
+   BUTTONS
+   Metallic Tibia-style buttons
+   ============================================ */
+
+.btn {
+  background: linear-gradient(180deg, var(--metal-bronze) 0%, var(--cave-rock) 100%);
+  border: 2px solid var(--border-metal);
+  color: var(--text-primary);
+  padding: 0.75rem 1.5rem;
+  border-radius: var(--radius-sm);
+  cursor: pointer;
+  transition: all var(--transition-base);
+  box-shadow: 
+    inset 0 1px 0 rgba(212, 175, 55, 0.3),
+    0 4px 8px rgba(0, 0, 0, 0.4);
+  font-weight: 600;
+  font-size: 1rem;
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-sm);
+  text-decoration: none;
+}
+
+.btn:hover {
+  background: linear-gradient(180deg, var(--metal-gold) 0%, var(--metal-bronze) 100%);
+  border-color: var(--metal-gold);
+  box-shadow: 
+    inset 0 1px 0 rgba(212, 175, 55, 0.5),
+    0 6px 12px rgba(255, 107, 53, 0.4);
+  transform: translateY(-2px);
+}
+
+.btn:active {
+  transform: translateY(0);
+}
+
+.btn--primary {
+  background: linear-gradient(180deg, var(--metal-gold) 0%, var(--metal-bronze) 100%);
+  border-color: var(--dragon-gold);
+}
+
+.btn--secondary {
+  background: linear-gradient(180deg, var(--cave-stone) 0%, var(--cave-dark) 100%);
+}
+
+.btn--small {
+  padding: 0.5rem 1rem;
+  font-size: 0.875rem;
+}
+
+.btn--large {
+  padding: 1rem 2rem;
+  font-size: 1.125rem;
+}

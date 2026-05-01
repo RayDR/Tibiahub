@@ -1,0 +1,30 @@
+/* ============================================
+   SCROLLBAR
+   Custom metallic scrollbar
+   ============================================ */
+
+::-webkit-scrollbar {
+  width: 12px;
+  height: 12px;
+}
+
+::-webkit-scrollbar-track {
+  background: var(--cave-dark);
+  border: 1px solid var(--border-metal);
+}
+
+::-webkit-scrollbar-thumb {
+  background: linear-gradient(180deg, var(--metal-bronze) 0%, var(--border-metal) 100%);
+  border: 1px solid var(--metal-gold);
+  border-radius: 2px;
+}
+
+::-webkit-scrollbar-thumb:hover {
+  background: linear-gradient(180deg, var(--metal-gold) 0%, var(--metal-bronze) 100%);
+}
+
+/* Firefox */
+* {
+  scrollbar-width: thin;
+  scrollbar-color: var(--metal-bronze) var(--cave-dark);
+}
