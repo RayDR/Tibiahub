@@ -6,9 +6,9 @@ Backend API para el sistema de bestiario de Tibia construido con FastAPI y SQLit
 
 - ✅ API RESTful con FastAPI
 - ✅ Base de datos SQLite normalizada
-- ✅ Sistema de recomendación de zonas de hunt por vocación y nivel
-- ✅ Búsqueda y filtrado de criaturas
-- ✅ Información detallada de loot y spawn locations
+- ✅ Integración real con TibiaData y TibiaWiki Fandom
+- ✅ Bestiary live con cache TTL y sin fallback falso en producción
+- ✅ Sistema de rifas de guild con reglas por cuenta local y reruns auditables
 - ✅ Documentación automática con Swagger UI
 
 ## 📋 Requisitos
@@ -34,9 +34,14 @@ pip install -r requirements.txt
 cp .env.example .env
 ```
 
-4. Inicializar base de datos con datos de ejemplo:
+4. Inicializar base de datos:
 ```bash
 python seed_db.py
+```
+
+5. Asegurar modo real en producción:
+```bash
+USE_MOCK_DATA=false
 ```
 
 ## 🏃 Ejecución
@@ -59,6 +64,17 @@ Una vez iniciado el servidor, accede a:
 
 - **Swagger UI**: http://localhost:8000/docs
 - **ReDoc**: http://localhost:8000/redoc
+
+## 🌐 Fuentes externas
+
+- TibiaData v4 para worlds, characters y guilds.
+- TibiaWiki Fandom MediaWiki API para bestiary, loot, locations e imágenes.
+
+## ⚠️ Limitaciones conocidas
+
+- No existe account ID público confiable en TibiaData para rifas.
+- La unicidad por cuenta se implementa con usuarios locales y personajes vinculados.
+- Si una fuente externa no entrega un campo, la API responde `null` y el frontend renderiza `Unknown` o `Not available`.
 
 ## 🎯 Endpoints Principales
 

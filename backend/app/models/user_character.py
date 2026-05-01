@@ -11,6 +11,13 @@ class UserCharacter(Base):
     # optional cached Tibia data
     level = Column(Integer, nullable=True)
     vocation = Column(String(50), nullable=True)
+    world_name = Column(String(100), nullable=True)
+    guild_name = Column(String(200), nullable=True)
+    guild_rank = Column(String(100), nullable=True)
+    residence = Column(String(100), nullable=True)
+    achievement_points = Column(Integer, nullable=True)
+    sex = Column(String(20), nullable=True)
+    last_login_at = Column(DateTime(timezone=True), nullable=True)
     last_seen = Column(DateTime(timezone=True), nullable=True)
 
     user = relationship("User", back_populates="characters")

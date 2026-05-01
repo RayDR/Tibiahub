@@ -7,6 +7,13 @@ class ProfileResponse(BaseModel):
     email: Optional[str] = None
     tibia_character_name: str
     guild_rank: Optional[str] = None
+    guild_name: Optional[str] = None
+    world_name: Optional[str] = None
+    residence: Optional[str] = None
+    achievement_points: Optional[int] = None
+    last_login_at: Optional[datetime] = None
+    tibia_status: Optional[str] = None
+    tibia_last_error: Optional[str] = None
     vocation: Optional[str] = None
     level: Optional[int] = None
     is_active: bool

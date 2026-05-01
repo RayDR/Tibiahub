@@ -1,8 +1,7 @@
-"""
-Creature model - Represents monsters in Tibia
-"""
-from sqlalchemy import Column, Integer, String, Float, Text, Boolean, Table, ForeignKey
+"""Creature model - Represents monsters in Tibia."""
+from sqlalchemy import Boolean, Column, DateTime, Float, ForeignKey, Integer, JSON, String, Table, Text
 from sqlalchemy.orm import relationship
+from sqlalchemy.sql import func
 
 from app.db.database import Base
 
@@ -32,6 +31,11 @@ class Creature(Base):
     
     id = Column(Integer, primary_key=True, index=True)
     name = Column(String(100), unique=True, index=True, nullable=False)
+    normalized_name = Column(String(150), index=True)
+    slug = Column(String(150), index=True)
+    external_id = Column(String(100), nullable=True, index=True)
+    source_name = Column(String(50), nullable=True, index=True)
+    source_url = Column(String(255), nullable=True)
     article = Column(String(10))  # "a" or "an"
     plural = Column(String(100))
     
@@ -57,9 +61,22 @@ class Creature(Base):
     # Description
     description = Column(Text)
     behavior = Column(Text)  # How the creature behaves in combat
+    bestiary_class = Column(String(100), nullable=True)
+    bestiary_level = Column(String(50), nullable=True)
+    charm_points = Column(Integer, nullable=True)
+    creature_class = Column(String(100), nullable=True)
+    primary_type = Column(String(100), nullable=True)
     
     # Image
     image_url = Column(String(255))
+    data_sources = Column(JSON, nullable=True)
+    missing_fields = Column(JSON, nullable=True)
+    related_tasks = Column(JSON, nullable=True)
+    locations = Column(JSON, nullable=True)
+    raw_data = Column(JSON, nullable=True)
+    last_synced_at = Column(DateTime(timezone=True), nullable=True)
+    created_at = Column(DateTime(timezone=True), server_default=func.now())
+    updated_at = Column(DateTime(timezone=True), server_default=func.now(), onupdate=func.now())
     
     # Relationships
     weaknesses = relationship(

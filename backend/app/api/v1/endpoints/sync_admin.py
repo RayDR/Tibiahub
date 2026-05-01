@@ -1,11 +1,9 @@
-"""
-Admin endpoints for data synchronization
-Handles syncing external APIs to local database with background tasks
-"""
-from typing import List, Any, Optional, Dict
-from fastapi import APIRouter, Depends, HTTPException, status, BackgroundTasks, Query
+"""Admin endpoints for data synchronization and local metadata curation."""
+from typing import Any, List, Optional
+
+from fastapi import APIRouter, Depends, HTTPException, Query, status
 from sqlalchemy.orm import Session
-import asyncio
+from pydantic import BaseModel
 
 from app.db.database import get_db
 from app.models.user import User
@@ -13,7 +11,7 @@ from app.api.v1.endpoints.auth import get_current_admin_user
 from app.services.external_sync_service import ExternalSyncService
 from app.models.external_data import APISync, Item, HuntingPlace, TibiaWikiQuest
 from app.models.creature import Creature
-from pydantic import BaseModel
+from app.services.entity_metadata_service import EntityMetadataService
 from datetime import datetime
 
 router = APIRouter()
@@ -29,6 +27,8 @@ class SyncResponse(BaseModel):
     total: int = 0
     error: Optional[str] = None
     sync_id: int
+    message: Optional[str] = None
+    conflicts: Optional[List[dict[str, Any]]] = None
 
 class SyncLogResponse(BaseModel):
     """Sync log entry"""
@@ -72,11 +72,21 @@ class ConflictResolution(BaseModel):
     conflicts: List[ConflictItem]
     action: str  # 'skip_all' or 'overwrite_all'
 
+
+class MetadataFlagRequest(BaseModel):
+    entity_type: str
+    entity_key: str
+    display_name: str
+    entity_id: Optional[int] = None
+    is_featured: Optional[bool] = None
+    is_pinned: Optional[bool] = None
+    is_favorite: Optional[bool] = None
+    notes: Optional[str] = None
+
 # ============ SYNC ENDPOINTS ============
 
 @router.post("/sync/creatures", response_model=SyncResponse)
 async def sync_creatures(
-    background_tasks: BackgroundTasks,
     mode: str = Query("compare", description="Sync mode: 'auto' or 'compare'"),
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_admin_user)
@@ -86,35 +96,16 @@ async def sync_creatures(
     Runs in background, returns sync ID to track progress
     Mode: 'auto' (overwrite without asking) or 'compare' (check conflicts first)
     """
-    async def run_sync():
-        result = await ExternalSyncService.sync_creatures(db, mode=mode)
-        return result
-    
-    # If compare mode, check for conflicts first
+    _ = current_user
     if mode == "compare":
         conflicts = await ExternalSyncService.check_creature_conflicts(db)
         if conflicts:
-            return {
-                "api": "creatures",
-                "status": "conflicts_found",
-                "conflicts": conflicts,
-                "sync_id": 0,
-                "message": f"Found {len(conflicts)} conflicts. Resolve them first."
-            }
-    
-    # Run sync in background
-    background_tasks.add_task(asyncio.run, run_sync())
-    
-    return SyncResponse(
-        api="creatures",
-        status="pending",
-        sync_id=0,
-        message="Sync started, check logs with sync ID"
-    )
+            return SyncResponse(api="creatures", status="conflicts_found", sync_id=0, message=f"Found {len(conflicts)} conflicts. Resolve them first.", conflicts=conflicts)
+    result = await ExternalSyncService.sync_creatures(db, mode=mode)
+    return SyncResponse(**result)
 
 @router.post("/sync/items", response_model=SyncResponse)
 async def sync_items(
-    background_tasks: BackgroundTasks,
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_admin_user)
 ):
@@ -122,20 +113,12 @@ async def sync_items(
     Sync items from TibiaWiki API
     Runs in background
     """
-    async def run_sync():
-        result = await ExternalSyncService.sync_items(db)
-        return result
-    
-    background_tasks.add_task(asyncio.run, run_sync())
-    
-    return SyncResponse(
-        api="items",
-        status="pending"
-    )
+    _ = current_user
+    result = await ExternalSyncService.sync_items(db)
+    return SyncResponse(**result)
 
 @router.post("/sync/hunting-places", response_model=SyncResponse)
 async def sync_hunting_places(
-    background_tasks: BackgroundTasks,
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_admin_user)
 ):
@@ -143,21 +126,12 @@ async def sync_hunting_places(
     Sync hunting places from TibiaWiki API
     Runs in background
     """
-    async def run_sync():
-        from app.services.external_sync_service import ExternalSyncService
-        result = await ExternalSyncService.sync_hunting_places(db)
-        return result
-    
-    background_tasks.add_task(asyncio.run, run_sync())
-    
-    return SyncResponse(
-        api="hunting_places",
-        status="pending"
-    )
+    _ = current_user
+    result = await ExternalSyncService.sync_hunting_places(db)
+    return SyncResponse(**result)
 
 @router.post("/sync/quests", response_model=SyncResponse)
 async def sync_quests(
-    background_tasks: BackgroundTasks,
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_admin_user)
 ):
@@ -165,21 +139,12 @@ async def sync_quests(
     Sync quests from TibiaWiki API
     Runs in background
     """
-    async def run_sync():
-        from app.services.external_sync_service import ExternalSyncService
-        result = await ExternalSyncService.sync_quests(db)
-        return result
-    
-    background_tasks.add_task(asyncio.run, run_sync())
-    
-    return SyncResponse(
-        api="quests",
-        status="pending"
-    )
+    _ = current_user
+    result = await ExternalSyncService.sync_quests(db)
+    return SyncResponse(**result)
 
 @router.post("/sync/all", response_model=dict)
 async def sync_all(
-    background_tasks: BackgroundTasks,
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_admin_user)
 ):
@@ -187,14 +152,17 @@ async def sync_all(
     Sync all external APIs in background
     Returns status for each sync
     """
-    # Add all sync tasks to background
-    background_tasks.add_task(asyncio.run, ExternalSyncService.sync_creatures(db))
-    background_tasks.add_task(asyncio.run, ExternalSyncService.sync_items(db))
-    
+    _ = current_user
+    results = {
+        "creatures": await ExternalSyncService.sync_creatures(db, mode="auto"),
+        "items": await ExternalSyncService.sync_items(db),
+        "hunting_places": await ExternalSyncService.sync_hunting_places(db),
+        "quests": await ExternalSyncService.sync_quests(db),
+    }
     return {
-        "status": "syncs_started",
+        "status": "completed",
         "apis": ["creatures", "items", "hunting_places", "quests"],
-        "message": "Check sync logs with sync IDs to track progress"
+        "results": results,
     }
 
 # ============ LOGS ENDPOINTS ============
@@ -363,3 +331,38 @@ async def resolve_conflicts(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail=str(e)
         )
+
+
+@router.post("/metadata/flags")
+def set_entity_metadata_flags(
+    payload: MetadataFlagRequest,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_admin_user),
+):
+    _ = current_user
+    record = EntityMetadataService.set_flags(
+        db,
+        entity_type=payload.entity_type,
+        entity_key=payload.entity_key,
+        display_name=payload.display_name,
+        entity_id=payload.entity_id,
+        is_featured=payload.is_featured,
+        is_pinned=payload.is_pinned,
+        is_favorite=payload.is_favorite,
+        notes=payload.notes,
+    )
+    db.commit()
+    db.refresh(record)
+    return {
+        "status": "success",
+        "id": record.id,
+        "entity_type": record.entity_type,
+        "entity_key": record.entity_key,
+        "display_name": record.display_name,
+        "entity_id": record.entity_id,
+        "is_featured": record.is_featured,
+        "is_pinned": record.is_pinned,
+        "is_favorite": record.is_favorite,
+        "search_count": record.search_count,
+        "notes": record.notes,
+    }

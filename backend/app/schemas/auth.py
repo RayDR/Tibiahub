@@ -31,6 +31,11 @@ class UserResponse(UserBase):
     vocation: Optional[str] = None
     level: Optional[int] = None
     tibia_character_name: Optional[str] = None
+    guild_name: Optional[str] = None
+    world_name: Optional[str] = None
+    residence: Optional[str] = None
+    achievement_points: Optional[int] = None
+    tibia_status: Optional[str] = None
 
     class Config:
         from_attributes = True

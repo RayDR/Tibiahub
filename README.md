@@ -13,18 +13,18 @@ Sistema completo de bestiario de Tibia con backend FastAPI y frontend React, inc
 ### Backend (FastAPI + SQLite)
 - ✅ API RESTful completa con documentación Swagger
 - ✅ Base de datos SQLite normalizada con relaciones
-- ✅ Modelos para criaturas, elementos, loot, zonas y spawn locations
-- ✅ Sistema inteligente de recomendación de hunt zones
-- ✅ Filtros y búsquedas optimizadas
-- ✅ Datos iniciales incluidos (5 criaturas, 5 zonas, loot completo)
+- ✅ Integración real con TibiaData y TibiaWiki Fandom para criaturas, guilds y validación
+- ✅ Sistema de rifas de guild con participantes por cuenta local, historial y reruns administrados
+- ✅ Modo mock aislado por configuración con `USE_MOCK_DATA=false` por defecto
+- ✅ Filtros, búsquedas y normalización de nombres para el bestiary
 
 ### Frontend (React + TypeScript)
 - ✅ Diseño inspirado en la estética de Tibia
 - ✅ Interfaz responsive y moderna
-- ✅ Búsqueda y filtrado de criaturas
-- ✅ Vista detallada con stats, loot y ubicaciones
-- ✅ Buscador de zonas con selector de vocación y nivel
-- ✅ Sistema de scoring visual para recomendaciones
+- ✅ Búsqueda, orden y manejo explícito de loading/error/empty states
+- ✅ Vista detallada con metadata real disponible y fallback a `Unknown` cuando falta en la fuente
+- ✅ Consola administrativa para rifas de guild
+- ✅ Consumo de API por ruta relativa `/api/v1` para despliegue detrás de Nginx
 
 ## 🏗️ Arquitectura
 
@@ -70,7 +70,10 @@ pip install -r requirements.txt
 # Copiar configuración
 cp .env.example .env
 
-# Inicializar base de datos con datos de ejemplo
+# Mantener datos reales en producción
+# USE_MOCK_DATA=false
+
+# Inicializar base de datos
 python seed_db.py
 
 # Iniciar servidor
@@ -80,6 +83,15 @@ python main.py
 El backend estará disponible en: http://localhost:8000
 
 📚 Documentación API: http://localhost:8000/docs
+
+### APIs externas usadas
+- TibiaData v4: mundos, personajes, guilds
+- TibiaWiki Fandom MediaWiki API: bestiary, loot, locations, sprites
+
+### Limitaciones conocidas
+- TibiaData no expone un account ID público utilizable para sorteos.
+- La restricción de una participación y un premio por cuenta se resuelve con usuarios locales autenticados y sus personajes vinculados.
+- Si TibiaWiki o TibiaData no exponen un campo, la UI muestra `Unknown` o `Not available` en vez de inventar valores.
 
 ### 2. Frontend Setup
 
@@ -258,22 +270,28 @@ Dark Brown:  #2a1810  /* Paneles oscuros */
 ./install.sh
 
 # 2. Configurar nginx (como root)
-sudo ln -sf /forge/tibia-bestiary/nginx-tibia-bestiary.conf /etc/nginx/sites-available/tibia-bestiary
-sudo ln -sf /etc/nginx/sites-available/tibia-bestiary /etc/nginx/sites-enabled/
-sudo nginx -t && sudo systemctl reload nginx
+sudo ln -sf /forge/tibiahub/nginx-tibiahub.conf /etc/nginx/sites-available/tibiahub
+sudo ln -sf /etc/nginx/sites-available/tibiahub /etc/nginx/sites-enabled/tibiahub
+sudo nginx -t
+sudo systemctl reload nginx
 
-# 3. Iniciar servicios con PM2
+# 3. Validar certificado y redirección HTTPS
+sudo certbot certificates
+sudo openssl s_client -connect tibiahub.domoforge.com:443 -servername tibiahub.domoforge.com
+curl -I http://tibiahub.domoforge.com
+curl -I https://tibiahub.domoforge.com
+
+# 4. Iniciar servicios con PM2
 ./start.sh
 
-# 4. Guardar configuración PM2
+# 5. Guardar configuración PM2
 pm2 save
-pm2 startup  # Seguir instrucciones para auto-inicio
+pm2 startup
 ```
 
 **Acceso (HTTPS):**
-- Frontend: https://tibia.domoforge.com
-- API Docs: https://tibia.domoforge.com/docs
-- ⚠️ Certificado self-signed (ver [HTTPS_SETUP.md](HTTPS_SETUP.md))
+- Frontend: https://tibiahub.domoforge.com
+- API Docs: https://tibiahub.domoforge.com/docs
 
 ### Gestión de Servicios PM2
 

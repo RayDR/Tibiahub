@@ -1,7 +1,7 @@
 import axios from 'axios';
-import type { Creature, CreatureSimple, HuntZone, HuntRecommendation, Vocation } from '../types';
+import type { Creature, CreatureSimple, HuntZone, HuntRecommendation, ItemSearchResult, Vocation } from '../types';
 
-const API_BASE_URL = import.meta.env.VITE_API_URL || 'http://localhost:8000/api/v1';
+const API_BASE_URL = import.meta.env.VITE_API_URL || '/api/v1';
 
 const api = axios.create({
   baseURL: API_BASE_URL,
@@ -25,8 +25,15 @@ export const creaturesApi = {
     limit?: number;
     search?: string;
     difficulty?: string;
+    sort_by?: 'name' | 'experience' | 'hitpoints' | 'difficulty';
+    sort_order?: 'asc' | 'desc';
   }): Promise<CreatureSimple[]> => {
     const response = await api.get('/creatures/', { params });
+    return response.data;
+  },
+
+  getHighlights: async (limit: number = 18): Promise<CreatureSimple[]> => {
+    const response = await api.get('/creatures/highlights', { params: { limit } });
     return response.data;
   },
 
@@ -46,6 +53,11 @@ export const creaturesApi = {
 export const huntZonesApi = {
   getAll: async (filters: { skip?: number; limit?: number; min_level?: number; max_level?: number; city?: string; search?: string } = {}): Promise<HuntZone[]> => {
     const response = await api.get('/hunt-zones/', { params: filters });
+    return response.data;
+  },
+
+  getHighlights: async (limit: number = 12): Promise<HuntZone[]> => {
+    const response = await api.get('/hunt-zones/highlights', { params: { limit } });
     return response.data;
   },
 
@@ -99,8 +111,13 @@ export const huntZonesApi = {
 
 // Items API
 export const itemsApi = {
-  search: async (search: string, limit: number = 50): Promise<any[]> => {
+  search: async (search: string, limit: number = 50): Promise<ItemSearchResult[]> => {
     const response = await api.get('/items/', { params: { search, limit } });
+    return response.data;
+  },
+
+  getHighlights: async (limit: number = 12): Promise<ItemSearchResult[]> => {
+    const response = await api.get('/items/highlights', { params: { limit } });
     return response.data;
   },
 };

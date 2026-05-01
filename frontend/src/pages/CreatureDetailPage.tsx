@@ -1,15 +1,16 @@
 import React, { useEffect, useState } from 'react';
-import { useParams, useNavigate, Link } from 'react-router-dom';
+import { useNavigate, useParams } from 'react-router-dom';
+import { motion } from 'framer-motion';
+import { AlertTriangle, ArrowLeft, Gem, Heart, Info, Loader2, MapPin, Shield, Skull, Swords, Zap } from 'lucide-react';
+
 import { creaturesApi } from '../services/api';
 import type { Creature } from '../types';
-import { ArrowLeft, Shield, Swords, Zap, Heart, Star, MapPin, Skull, Gem, Info, Loader2 } from 'lucide-react';
-import { motion } from 'framer-motion';
 
-// Helper for formatting numbers
-const formatNumber = (num: number): string => {
-  if (num >= 1000000) return `${(num / 1000000).toFixed(1)}M`;
-  if (num >= 1000) return `${(num / 1000).toFixed(1)}K`;
-  return num.toString();
+const formatNumber = (value?: number | null): string => {
+  if (value === null || value === undefined) return 'Unknown';
+  if (value >= 1000000) return `${(value / 1000000).toFixed(1)}M`;
+  if (value >= 1000) return `${(value / 1000).toFixed(1)}K`;
+  return `${value}`;
 };
 
 const CreatureDetailPage: React.FC = () => {
@@ -17,121 +18,99 @@ const CreatureDetailPage: React.FC = () => {
   const navigate = useNavigate();
   const [creature, setCreature] = useState<Creature | null>(null);
   const [loading, setLoading] = useState(true);
+  const [errorMessage, setErrorMessage] = useState<string | null>(null);
 
   useEffect(() => {
     const fetchCreature = async () => {
       if (!id) return;
       try {
         setLoading(true);
-        const data = await creaturesApi.getById(parseInt(id));
+        setErrorMessage(null);
+        const data = await creaturesApi.getById(Number.parseInt(id, 10));
         setCreature(data);
-      } catch (err) {
-        console.error('Failed to load creature details', err);
+      } catch (error: any) {
+        console.error('Failed to load creature details', error);
+        setErrorMessage(error?.response?.data?.detail || error?.message || 'Failed to load creature details');
       } finally {
         setLoading(false);
       }
     };
-    fetchCreature();
+    void fetchCreature();
   }, [id]);
 
-  if (loading) return (
-    <div className="min-h-screen flex items-center justify-center text-amber-500">
-      <div className="flex flex-col items-center gap-4">
-        <Loader2 className="animate-spin" size={48} />
-        <p className="text-lg font-serif">Summoning creature details...</p>
+  if (loading) {
+    return (
+      <div className="flex min-h-screen items-center justify-center text-amber-500">
+        <div className="flex flex-col items-center gap-4">
+          <Loader2 className="animate-spin" size={48} />
+          <p className="text-lg font-serif">Summoning creature details...</p>
+        </div>
       </div>
-    </div>
-  );
+    );
+  }
 
-  if (!creature) return null;
-
-  // Derived stats
-  const expPerHour = creature.experience * 100; // Est. 100 kills/hr
-  const profitPerHour = (creature.loot_value || 0) * 100;
+  if (!creature || errorMessage) {
+    return (
+      <div className="mx-auto max-w-3xl rounded-2xl border border-red-500/20 bg-red-950/20 p-6 text-red-100">
+        <div className="mb-3 flex items-center gap-2 text-lg font-semibold">
+          <AlertTriangle className="h-5 w-5" /> Creature detail unavailable
+        </div>
+        <p className="text-sm text-red-200/80">{errorMessage || 'Creature not found'}</p>
+      </div>
+    );
+  }
 
   return (
     <div className="min-h-screen pb-20 pt-28">
-
-      {/* Hero Header */}
       <div className="relative mb-8">
-        <div className="absolute inset-0 bg-gradient-to-b from-amber-500/10 to-transparent pointer-events-none" />
-        <div className="container mx-auto px-4 relative z-10">
-          <button
-            onClick={() => navigate('/')}
-            className="flex items-center gap-2 text-slate-400 hover:text-white transition-colors mb-6 group"
-          >
-            <ArrowLeft size={18} className="group-hover:-translate-x-1 transition-transform" />
+        <div className="pointer-events-none absolute inset-0 bg-gradient-to-b from-amber-500/10 to-transparent" />
+        <div className="container relative z-10 mx-auto px-4">
+          <button onClick={() => navigate('/')} className="group mb-6 flex items-center gap-2 text-slate-400 transition-colors hover:text-white">
+            <ArrowLeft size={18} className="transition-transform group-hover:-translate-x-1" />
             Back to Bestiary
           </button>
 
-          <div className="flex flex-col md:flex-row gap-8 items-start">
-            {/* Creature Image Box */}
-            <motion.div
-              initial={{ scale: 0.9, opacity: 0 }}
-              animate={{ scale: 1, opacity: 1 }}
-              className="w-full md:w-64 aspect-square bg-slate-900/80 border border-slate-700 rounded-2xl flex items-center justify-center p-8 shadow-2xl shadow-black/50 relative overflow-hidden group"
-            >
-              <div className="absolute inset-0 bg-gradient-to-br from-amber-500/5 to-purple-500/5 group-hover:opacity-100 transition-opacity" />
+          <div className="flex flex-col items-start gap-8 md:flex-row">
+            <motion.div initial={{ scale: 0.92, opacity: 0 }} animate={{ scale: 1, opacity: 1 }} className="relative aspect-square w-full overflow-hidden rounded-2xl border border-slate-700 bg-slate-900/80 p-8 shadow-2xl shadow-black/50 md:w-64">
+              <div className="absolute inset-0 bg-gradient-to-br from-amber-500/5 to-red-500/5" />
               {creature.image_url ? (
-                <img
-                  src={`/api/v1/creatures/${creature.id}/image`}
-                  alt={creature.name}
-                  className="w-full h-full object-contain filter drop-shadow-[0_0_15px_rgba(0,0,0,0.6)]"
-                />
+                <img src={`/api/v1/creatures/${creature.id}/image`} alt={creature.name} className="h-full w-full object-contain drop-shadow-[0_0_15px_rgba(0,0,0,0.6)]" />
               ) : (
-                <Skull size={80} className="text-slate-700 opacity-50" />
-              )}
-              {creature.is_boss && (
-                <div className="absolute top-3 right-3 bg-red-500/20 text-red-400 border border-red-500/30 px-3 py-1 rounded-full text-xs font-bold uppercase tracking-widest shadow-lg">
-                  BOSS
-                </div>
+                <div className="flex h-full items-center justify-center"><Skull size={80} className="text-slate-700 opacity-50" /></div>
               )}
             </motion.div>
 
-            {/* Info */}
             <div className="flex-1 space-y-6">
               <div>
-                <motion.h1
-                  initial={{ y: -20, opacity: 0 }}
-                  animate={{ y: 0, opacity: 1 }}
-                  className="text-4xl md:text-6xl font-serif font-bold text-white mb-2 tracking-tight"
-                >
+                <motion.h1 initial={{ y: -20, opacity: 0 }} animate={{ y: 0, opacity: 1 }} className="mb-2 text-4xl font-serif font-bold tracking-tight text-white md:text-6xl">
                   {creature.name}
                 </motion.h1>
-                <div className="flex flex-wrap gap-3">
-                  {creature.difficulty && (
-                    <span className={`px-3 py-1 rounded-lg text-sm font-bold border ${creature.difficulty === 'Hard' ? 'bg-red-500/10 border-red-500/20 text-red-400' :
-                      creature.difficulty === 'Medium' ? 'bg-amber-500/10 border-amber-500/20 text-amber-400' :
-                        'bg-emerald-500/10 border-emerald-500/20 text-emerald-400'
-                      }`}>
-                      {creature.difficulty}
-                    </span>
-                  )}
-                  {creature.occurrence && (
-                    <span className="px-3 py-1 rounded-lg text-sm font-medium bg-slate-800 text-slate-400 border border-slate-700">
-                      {creature.occurrence}
-                    </span>
-                  )}
+                <div className="flex flex-wrap gap-3 text-sm">
+                  <span className="rounded-lg border border-amber-500/20 bg-amber-500/10 px-3 py-1 font-semibold text-amber-300">{creature.difficulty || 'Unknown difficulty'}</span>
+                  <span className="rounded-lg border border-slate-700 bg-slate-800 px-3 py-1 text-slate-300">{creature.occurrence || 'Unknown occurrence'}</span>
+                  <span className="rounded-lg border border-slate-700 bg-slate-800 px-3 py-1 text-slate-300">Bestiary: {creature.bestiary_class || 'Unknown'}</span>
+                  <span className="rounded-lg border border-slate-700 bg-slate-800 px-3 py-1 text-slate-300">Charm points: {creature.charm_points ?? 'Unknown'}</span>
                 </div>
               </div>
 
-              {/* Stats Grid */}
-              <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
+              <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
                 {[
                   { label: 'Hitpoints', value: formatNumber(creature.hitpoints), icon: Heart, color: 'text-rose-400' },
-                  { label: 'Experience', value: formatNumber(creature.experience), icon: Star, color: 'text-amber-400' },
-                  { label: 'Armor', value: creature.armor, icon: Shield, color: 'text-slate-200' },
-                  { label: 'Speed', value: creature.speed, icon: Zap, color: 'text-yellow-200' },
-                  { label: 'Max Damage', value: creature.max_damage || '?', icon: Swords, color: 'text-red-400' },
-                  { label: 'Est. Exp/Hr', value: formatNumber(expPerHour), icon: '📈', color: 'text-emerald-400' },
-                ].map((stat, i) => (
-                  <div key={i} className="bg-slate-900/50 border border-slate-800 p-4 rounded-xl flex items-center gap-4">
-                    <div className={`p-2 rounded-lg bg-slate-950 ${stat.color}`}>
+                  { label: 'Experience', value: formatNumber(creature.experience), icon: Gem, color: 'text-amber-400' },
+                  { label: 'Armor', value: formatNumber(creature.armor), icon: Shield, color: 'text-slate-100' },
+                  { label: 'Speed', value: formatNumber(creature.speed), icon: Zap, color: 'text-yellow-200' },
+                  { label: 'Max damage', value: formatNumber(creature.max_damage), icon: Swords, color: 'text-red-400' },
+                  { label: 'Primary type', value: creature.primary_type || 'Unknown', icon: Info, color: 'text-cyan-300' },
+                  { label: 'Creature class', value: creature.creature_class || 'Unknown', icon: Skull, color: 'text-purple-300' },
+                  { label: 'Bestiary level', value: creature.bestiary_level || 'Unknown', icon: Gem, color: 'text-emerald-300' },
+                ].map((stat) => (
+                  <div key={stat.label} className="flex items-center gap-4 rounded-xl border border-slate-800 bg-slate-900/50 p-4">
+                    <div className={`rounded-lg bg-slate-950 p-2 ${stat.color}`}>
                       {typeof stat.icon === 'string' ? stat.icon : <stat.icon size={20} />}
                     </div>
                     <div>
-                      <div className="text-xs text-slate-500 uppercase font-bold tracking-wider">{stat.label}</div>
-                      <div className={`text-xl font-bold font-mono ${stat.color}`}>{stat.value}</div>
+                      <div className="text-xs font-bold uppercase tracking-wider text-slate-500">{stat.label}</div>
+                      <div className={`text-lg font-bold ${stat.color}`}>{stat.value}</div>
                     </div>
                   </div>
                 ))}
@@ -141,120 +120,82 @@ const CreatureDetailPage: React.FC = () => {
         </div>
       </div>
 
-      <div className="container mx-auto px-4 grid lg:grid-cols-12 gap-8">
-
-        {/* Left Column: Details & Loot */}
-        <div className="lg:col-span-8 space-y-8">
-
-          {/* Behavior */}
-          {creature.behavior && (
-            <div className="bg-slate-900/80 border border-slate-700 rounded-2xl p-6 backdrop-blur">
-              <h2 className="text-xl font-serif font-bold text-amber-500 mb-4 flex items-center gap-2">
-                <Info size={20} /> Ecology & Strategy
-              </h2>
-              <p className="text-slate-300 leading-relaxed text-lg">
-                {creature.behavior}
-              </p>
-            </div>
-          )}
-
-          {/* Loot Table */}
-          <div className="bg-slate-900/80 border border-slate-700 rounded-2xl p-6 backdrop-blur">
-            <div className="flex items-center justify-between mb-6">
-              <h2 className="text-xl font-serif font-bold text-amber-500 flex items-center gap-2">
-                <Gem size={20} /> Loot Table
-              </h2>
-              <div className="text-sm text-slate-500">
-                Est. Profit: <span className="text-amber-400 font-mono">{formatNumber(profitPerHour)}</span> gp/hr
-              </div>
-            </div>
-
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-              {creature.loot_items.map((loot) => (
-                <div key={loot.id} className="bg-slate-950/50 border border-slate-800 p-3 rounded-xl flex items-center justify-between group hover:border-slate-600 transition-colors">
-                  <div className="flex items-center gap-3">
-                    <div className={`w-10 h-10 rounded-lg flex items-center justify-center text-lg
-                         ${loot.rarity === 'Rare' || loot.rarity === 'Very Rare' ? 'bg-amber-500/10 text-amber-500' : 'bg-slate-800 text-slate-500'}
-                       `}>
-                      💎
-                    </div>
-                    <div>
-                      <div className="font-bold text-slate-200 group-hover:text-amber-400 transition-colors">{loot.item_name}</div>
-                      <div className="text-xs text-slate-500">
-                        {loot.percentage?.toFixed(2)}% drop chance
-                      </div>
-                    </div>
-                  </div>
-                  {loot.item_value && (
-                    <div className="text-right">
-                      <div className="font-mono text-amber-200">{formatNumber(loot.item_value)}</div>
-                      <div className="text-[10px] text-slate-600 uppercase">Value</div>
-                    </div>
-                  )}
-                </div>
-              ))}
-            </div>
+      <div className="container mx-auto grid gap-8 px-4 lg:grid-cols-12">
+        <div className="space-y-8 lg:col-span-8">
+          <div className="rounded-2xl border border-slate-700 bg-slate-900/80 p-6 backdrop-blur">
+            <h2 className="mb-4 flex items-center gap-2 text-xl font-serif font-bold text-amber-500">
+              <Info size={20} /> Overview
+            </h2>
+            <p className="mb-4 text-lg leading-relaxed text-slate-300">{creature.description || 'Not available'}</p>
+            <p className="text-sm leading-relaxed text-slate-400">{creature.behavior || 'Behavior not available.'}</p>
           </div>
 
-        </div>
-
-        {/* Right Column: Spawns & Weaknesses */}
-        <div className="lg:col-span-4 space-y-8">
-
-          {/* Elements / Weaknesses */}
-          <div className="bg-slate-900/80 border border-slate-700 rounded-2xl p-6 backdrop-blur">
-            <h2 className="text-lg font-bold text-white mb-4">Elemental Sensitivity</h2>
-            <div className="space-y-3">
-              {(creature.weaknesses || []).map(w => (
-                <div key={w.name} className="flex items-center justify-between p-3 rounded-lg bg-green-500/10 border border-green-500/20">
-                  <span className="text-green-400 font-bold flex items-center gap-2">
-                    <span className="text-xl">🔥</span> {w.name}
-                  </span>
-                  <span className="font-mono text-green-300">+20% Dmg</span>
+          <div className="rounded-2xl border border-slate-700 bg-slate-900/80 p-6 backdrop-blur">
+            <div className="mb-6 flex items-center justify-between gap-4">
+              <h2 className="flex items-center gap-2 text-xl font-serif font-bold text-amber-500">
+                <Gem size={20} /> Loot & Drops
+              </h2>
+              <div className="text-sm text-slate-500">Source values are shown as-is. Unknown means the source did not expose an exact drop chance.</div>
+            </div>
+            <div className="grid gap-4 md:grid-cols-2">
+              {creature.loot_items.length > 0 ? creature.loot_items.map((loot) => (
+                <div key={loot.id} className="rounded-xl border border-slate-800 bg-slate-950/50 p-4">
+                  <div className="mb-2 flex items-center gap-3">
+                    <div className="flex h-11 w-11 items-center justify-center rounded-lg bg-slate-800 text-lg">💎</div>
+                    <div>
+                      <div className="font-semibold text-slate-100">{loot.item_name}</div>
+                      <div className="text-xs text-slate-500">Rarity: {loot.rarity || 'Unknown'} · Chance: {loot.percentage ?? 'Not available'}</div>
+                    </div>
+                  </div>
+                  <div className="text-xs text-slate-400">Amount: {loot.min_amount} - {loot.max_amount}</div>
+                  {loot.source_url && (
+                    <a href={loot.source_url} target="_blank" rel="noreferrer" className="mt-2 inline-block text-xs text-amber-400 hover:text-amber-300">
+                      Source page
+                    </a>
+                  )}
                 </div>
-              ))}
-              {(creature.resistances || []).map(r => (
-                <div key={r.name} className="flex items-center justify-between p-3 rounded-lg bg-red-500/10 border border-red-500/20">
-                  <span className="text-red-400 font-bold flex items-center gap-2">
-                    <span className="text-xl">🛡️</span> {r.name}
-                  </span>
-                  <span className="font-mono text-red-300">-20% Dmg</span>
-                </div>
-              ))}
-              {(!creature.weaknesses?.length && !creature.resistances?.length) && (
-                <div className="text-slate-500 text-sm italic py-2">No specific elemental strengths or weaknesses known.</div>
+              )) : (
+                <div className="text-sm text-slate-500">No drop data available.</div>
               )}
             </div>
           </div>
+        </div>
 
-          {/* Spawn Locations */}
-          {creature.spawn_locations.length > 0 && (
-            <div className="bg-slate-900/80 border border-slate-700 rounded-2xl p-6 backdrop-blur">
-              <h2 className="text-lg font-bold text-white mb-4 flex items-center gap-2">
-                <MapPin className="text-amber-500" size={20} /> Known Habitats
-              </h2>
-              <div className="space-y-3">
-                {creature.spawn_locations.map(spawn => (
-                  spawn.hunt_zone && (
-                    <Link
-                      key={spawn.id}
-                      to="/recommendations"
-                      className="block p-4 rounded-xl bg-slate-950 border border-slate-800 hover:border-amber-500/50 hover:shadow-lg hover:shadow-amber-500/10 transition-all group"
-                    >
-                      <h4 className="font-bold text-slate-200 group-hover:text-amber-400 transition-colors mb-1">{spawn.hunt_zone.name}</h4>
-                      <div className="flex items-center justify-between text-xs text-slate-500">
-                        <span>Level {spawn.hunt_zone.min_level}+</span>
-                        <span className="bg-slate-900 px-2 py-1 rounded text-slate-400 border border-slate-800 group-hover:border-amber-500/30 transition-colors">
-                          {spawn.quantity || 'Unknown Qty'}
-                        </span>
-                      </div>
-                    </Link>
-                  )
-                ))}
-              </div>
+        <div className="space-y-8 lg:col-span-4">
+          <div className="rounded-2xl border border-slate-700 bg-slate-900/80 p-6 backdrop-blur">
+            <h2 className="mb-4 flex items-center gap-2 text-lg font-bold text-white">
+              <MapPin className="text-amber-500" size={20} /> Known Locations
+            </h2>
+            <div className="space-y-2 text-sm text-slate-300">
+              {creature.locations?.length > 0 ? creature.locations.map((location) => (
+                <div key={location} className="rounded-lg border border-slate-800 bg-slate-950/60 px-3 py-2">{location}</div>
+              )) : <div className="text-slate-500">Not available</div>}
             </div>
-          )}
+          </div>
 
+          <div className="rounded-2xl border border-slate-700 bg-slate-900/80 p-6 backdrop-blur">
+            <h2 className="mb-4 text-lg font-bold text-white">Related Tasks</h2>
+            <div className="space-y-2 text-sm text-slate-300">
+              {creature.related_tasks?.length > 0 ? creature.related_tasks.map((task) => (
+                <div key={task} className="rounded-lg border border-slate-800 bg-slate-950/60 px-3 py-2">{task}</div>
+              )) : <div className="text-slate-500">Not available</div>}
+            </div>
+          </div>
+
+          <div className="rounded-2xl border border-slate-700 bg-slate-900/80 p-6 backdrop-blur">
+            <h2 className="mb-4 text-lg font-bold text-white">Sources & Completeness</h2>
+            <div className="space-y-2 text-sm text-slate-300">
+              <div>Sources: {creature.data_sources?.length > 0 ? creature.data_sources.join(', ') : 'Unknown'}</div>
+              <div>Missing fields: {creature.missing_fields?.length > 0 ? creature.missing_fields.join(', ') : 'None'}</div>
+              {creature.source_url ? (
+                <a href={creature.source_url} target="_blank" rel="noreferrer" className="inline-block text-amber-400 hover:text-amber-300">
+                  Open source page
+                </a>
+              ) : (
+                <div className="text-slate-500">Source page not available</div>
+              )}
+            </div>
+          </div>
         </div>
       </div>
     </div>

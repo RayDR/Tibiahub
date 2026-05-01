@@ -1,9 +1,10 @@
-"""
-Pydantic schemas for API validation
-"""
+"""Pydantic schemas for API validation."""
+from __future__ import annotations
+
 from pydantic import BaseModel, Field
 from typing import List, Optional
 from enum import Enum
+from datetime import datetime
 
 
 # Vocation Enum for Winter Update 2025
@@ -42,6 +43,8 @@ class LootBase(BaseModel):
     max_amount: int = 1
     item_value: Optional[int] = None
     item_type: Optional[str] = None
+    item_image_url: Optional[str] = None
+    source_url: Optional[str] = None
 
 
 class LootCreate(LootBase):
@@ -51,7 +54,7 @@ class LootCreate(LootBase):
 
 class Loot(LootBase):
     id: int
-    creature_id: int
+    creature_id: Optional[int] = None
     
     class Config:
         from_attributes = True
@@ -65,7 +68,7 @@ class Loot(LootBase):
 class HuntZoneBase(BaseModel):
     name: str
     city: Optional[str] = None
-    min_level: int
+    min_level: Optional[int] = None
     max_level: Optional[int] = None
     recommended_level: Optional[int] = None
     knights_recommended: bool = False
@@ -86,6 +89,7 @@ class HuntZoneBase(BaseModel):
     location_y: Optional[int] = None
     location_z: Optional[int] = None
     map_image_url: Optional[str] = None
+    source_url: Optional[str] = None
 
 
 class HuntZoneCreate(HuntZoneBase):
@@ -96,9 +100,10 @@ class HuntZoneSimple(BaseModel):
     id: int
     name: str
     city: Optional[str] = None
-    min_level: int
+    min_level: Optional[int] = None
     max_level: Optional[int] = None
     difficulty: Optional[str] = None
+    source_url: Optional[str] = None
     
     class Config:
         from_attributes = True
@@ -106,6 +111,8 @@ class HuntZoneSimple(BaseModel):
 
 class HuntZone(HuntZoneBase):
     id: int
+    creatures: List[CreatureSimple] = []
+    last_synced_at: Optional[datetime] = None
     
     class Config:
         from_attributes = True
@@ -151,6 +158,16 @@ class CreatureBase(BaseModel):
     description: Optional[str] = None
     behavior: Optional[str] = None
     image_url: Optional[str] = None
+    bestiary_class: Optional[str] = None
+    bestiary_level: Optional[str] = None
+    charm_points: Optional[int] = None
+    creature_class: Optional[str] = None
+    primary_type: Optional[str] = None
+    source_url: Optional[str] = None
+    data_sources: Optional[List[str]] = None
+    missing_fields: Optional[List[str]] = None
+    related_tasks: Optional[List[str]] = None
+    locations: Optional[List[str]] = None
 
 
 class CreatureCreate(CreatureBase):
@@ -159,11 +176,13 @@ class CreatureCreate(CreatureBase):
 
 class CreatureSimple(BaseModel):
     id: int
+    slug: Optional[str] = None
     name: str
     hitpoints: int
     experience: int
     difficulty: Optional[str] = None
     image_url: Optional[str] = None
+    source_url: Optional[str] = None
     
     class Config:
         from_attributes = True
@@ -175,6 +194,11 @@ class LootWithCreature(Loot):
 
 class Creature(CreatureBase):
     id: int
+    slug: Optional[str] = None
+    normalized_name: Optional[str] = None
+    external_id: Optional[str] = None
+    source_name: Optional[str] = None
+    last_synced_at: Optional[datetime] = None
     loot_items: List[Loot] = []
     spawn_locations: List[SpawnLocation] = []
     weaknesses: List[Element] = []
@@ -190,3 +214,29 @@ class HuntRecommendation(BaseModel):
     score: float = Field(..., description="Recommendation score (0-100)")
     reasons: List[str] = Field(..., description="Why this zone is recommended")
     creatures: List[CreatureSimple] = Field(..., description="Main creatures in this zone")
+
+
+class ItemDropCreature(BaseModel):
+    creature_id: int
+    creature_name: str
+    creature_slug: Optional[str] = None
+    chance: Optional[float] = None
+    rarity: Optional[str] = None
+    hunt_zones: List[HuntZoneSimple] = []
+
+
+class ItemSearchResult(BaseModel):
+    item_name: str
+    normalized_name: str
+    item_image_url: Optional[str] = None
+    source_url: Optional[str] = None
+    drops: List[ItemDropCreature] = []
+
+
+class HomeHighlights(BaseModel):
+    featured_creatures: List[CreatureSimple] = []
+    trending_creatures: List[CreatureSimple] = []
+    featured_items: List[ItemSearchResult] = []
+    trending_items: List[ItemSearchResult] = []
+    featured_hunt_zones: List[HuntZoneSimple] = []
+    trending_hunt_zones: List[HuntZoneSimple] = []

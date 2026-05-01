@@ -1,322 +1,169 @@
-"""
-Service to fetch data from Tibia API
-Uses TibiaData API (v4) as primary endpoint: https://api.tibiadata.com/v4/
-No API key required - public access
-"""
-import httpx
-import logging
-from typing import Optional, Dict, Any
-from datetime import datetime, timedelta
+"""Live TibiaData integration for character, guild, and world data."""
+from __future__ import annotations
+
 import asyncio
+import logging
+from datetime import datetime, timedelta
+from typing import Any, Dict, Optional
+from urllib.parse import quote
+
+import httpx
+
+from app.core.config import settings
+from app.services.mock_data import MOCK_CHARACTER, MOCK_GUILD, MOCK_WORLDS
 
 logger = logging.getLogger(__name__)
 
-# Using TibiaData API v4
-# Provides character/guild/world data
-TIBIA_API_BASE = "https://api.tibiadata.com/v4"
-TIMEOUT = 10.0
+TIMEOUT = 15.0
+
 
 class TibiaAPIError(Exception):
-    """Custom exception for Tibia API errors"""
-    pass
+    """Custom exception for TibiaData failures."""
+
+
+async def _get_json(url: str) -> Dict[str, Any]:
+    async with httpx.AsyncClient(timeout=TIMEOUT, headers={"User-Agent": settings.TIBIAWIKI_USER_AGENT}) as client:
+        response = await client.get(url)
+        logger.info("tibiadata_request url=%s status=%s cache_hit=false fallback=false", url, response.status_code)
+        response.raise_for_status()
+        return response.json()
+
 
 async def get_character_info(character_name: str) -> Optional[Dict[str, Any]]:
-    """
-    Fetch character information from TibiaData API
-    TibiaData v4 endpoint: /characters/{characterName}
-    """
-    try:
-        async with httpx.AsyncClient(timeout=TIMEOUT) as client:
-            # TibiaData uses URL encoding with %20 for spaces
-            encoded_name = character_name.replace(' ', '%20')
-            url = f"{TIBIA_API_BASE}/character/{encoded_name}"
-            logger.info(f"Fetching character: {character_name} from {url}")
-            
-            try:
-                response = await client.get(url)
-            except (httpx.ConnectError, httpx.TimeoutException, OSError) as e:
-                # API unavailable - use demo data
-                logger.warning(f"API unreachable ({e}), using demo data for {character_name}")
-                if character_name.lower() == "ray on":
-                    return {
-                        'name': 'Ray On',
-                        'level': 587,
-                        'vocation': 'Sorcerer',
-                        'world': 'Thibia',
-                        'last_login': '2026-01-20T22:00:00Z',
-                        'guild': 'Bloodborne Warhowl',
-                    }
-                return {
-                    'name': character_name,
-                    'level': 100,
-                    'vocation': 'Druid',
-                    'world': 'Thibia',
-                    'last_login': '2026-01-20T20:00:00Z',
-                    'guild': None,
-                }
-            
-            if response.status_code == 404:
-                # Character not found on API - try demo data as fallback
-                logger.warning(f"Character not found on TibiaData API: {character_name}, using demo data")
-                if character_name.lower() == "ray on":
-                    return {
-                        'name': 'Ray On',
-                        'level': 587,
-                        'vocation': 'Sorcerer',
-                        'world': 'Thibia',
-                        'last_login': '2026-01-20T22:00:00Z',
-                        'guild': 'Bloodborne Warhowl',
-                    }
-                # Return generic demo data for any character
-                return {
-                    'name': character_name,
-                    'level': 100,
-                    'vocation': 'Druid',
-                    'world': 'Thibia',
-                    'last_login': '2026-01-20T20:00:00Z',
-                    'guild': None,
-                }
-            
-            if response.status_code != 200:
-                logger.error(f"API error {response.status_code}: {response.text}")
-                raise TibiaAPIError(f"HTTP {response.status_code}")
-            
-            data = response.json()
-            
-            # TibiaData v4 response structure
-            if not data.get('character'):
-                logger.warning(f"Invalid response structure for {character_name}")
-                return None
-            
-            # TibiaData v4 has nested structure: data['character']['character']
-            character_data = data['character']
-            if 'character' in character_data:
-                character = character_data['character']
-            else:
-                character = character_data
-            
-            return {
-                'name': character.get('name'),
-                'level': character.get('level'),
-                'vocation': character.get('vocation'),
-                'world': character.get('world'),
-                'last_login': character.get('last_login'),
-                'guild': character.get('guild'),
-            }
-    
-    except httpx.TimeoutException:
-        logger.error(f"Timeout fetching character {character_name}")
-        raise TibiaAPIError("API timeout")
-    except Exception as e:
-        logger.error(f"Error fetching character {character_name}: {str(e)}")
-        raise TibiaAPIError(str(e))
+    if settings.USE_MOCK_DATA:
+        payload = dict(MOCK_CHARACTER)
+        payload["name"] = character_name
+        return payload
 
-async def get_worlds() -> Optional[list]:
-    """
-    Fetch list of available worlds from TibiaData API
-    TibiaData v4 endpoint: /worlds
-    """
+    url = f"{settings.TIBIADATA_BASE_URL}/character/{quote(character_name)}"
     try:
-        async with httpx.AsyncClient(timeout=TIMEOUT) as client:
-            url = f"{TIBIA_API_BASE}/worlds"
-            logger.info(f"Fetching worlds from {url}")
-            
-            try:
-                response = await client.get(url)
-            except (httpx.ConnectError, httpx.TimeoutException, OSError) as e:
-                logger.warning(f"API unreachable ({e}), using demo worlds data")
-                return [
-                    {"name": "Thibia", "status": "online"},
-                    {"name": "Furia", "status": "online"},
-                ]
-            
-            if response.status_code != 200:
-                logger.error(f"API error {response.status_code}: {response.text}")
-                raise TibiaAPIError(f"HTTP {response.status_code}")
-            
-            data = response.json()
-            # TibiaData v4 returns worlds under 'worlds' key
-            # 'worlds' contains: players_online, record_players, regular_worlds, tournament_worlds
-            worlds_data = data.get('worlds', {})
-            
-            # Combine regular and tournament worlds
-            all_worlds = []
-            
-            if isinstance(worlds_data, dict):
-                # TibiaData v4 structure
-                regular = worlds_data.get('regular_worlds', []) or []
-                tournament = worlds_data.get('tournament_worlds', []) or []
-                all_worlds = (regular if regular else []) + (tournament if tournament else [])
-            elif isinstance(worlds_data, list):
-                # Alternative structure
-                all_worlds = worlds_data
-            
-            # Convert to simplified format
-            return [
-                {
-                    'name': world.get('name'),
-                    'status': 'online' if world.get('status') == 'online' else 'offline'
-                }
-                for world in all_worlds
-            ]
-    
-    except Exception as e:
-        logger.error(f"Error fetching worlds: {str(e)}")
-        raise TibiaAPIError(str(e))
+        data = await _get_json(url)
+    except httpx.HTTPStatusError as exc:
+        if exc.response.status_code == 404:
+            logger.warning("tibiadata_missing entity=character name=%s", character_name)
+            return None
+        raise TibiaAPIError(str(exc)) from exc
+    except Exception as exc:
+        raise TibiaAPIError(str(exc)) from exc
+
+    payload = data.get("character") or {}
+    character = payload.get("character") or {}
+    if not character:
+        return None
+
+    missing_fields = [field for field in ["name", "level", "vocation", "world", "last_login"] if character.get(field) in (None, "")]
+    if missing_fields:
+        logger.warning("tibiadata_incomplete entity=character name=%s missing=%s", character_name, ",".join(missing_fields))
+
+    guild_data = character.get("guild") or {}
+    guild_name = guild_data.get("name") if isinstance(guild_data, dict) else guild_data
+    account_information = payload.get("account_information") or {}
+    return {
+        "name": character.get("name"),
+        "level": character.get("level"),
+        "vocation": character.get("vocation"),
+        "world": character.get("world"),
+        "last_login": character.get("last_login"),
+        "last_login_at": character.get("last_login"),
+        "guild": {
+            "name": guild_name,
+            "rank": guild_data.get("rank") if isinstance(guild_data, dict) else None,
+        } if guild_name else None,
+        "residence": character.get("residence"),
+        "sex": character.get("sex"),
+        "achievement_points": character.get("achievement_points") or account_information.get("achievement_points"),
+        "account_information": account_information,
+    }
+
+
+async def get_worlds() -> list[Dict[str, Any]]:
+    if settings.USE_MOCK_DATA:
+        return list(MOCK_WORLDS)
+
+    try:
+        worlds = (await _get_json(f"{settings.TIBIADATA_BASE_URL}/worlds")).get("worlds") or {}
+    except Exception as exc:
+        raise TibiaAPIError(str(exc)) from exc
+
+    regular = worlds.get("regular_worlds") or []
+    tournament = worlds.get("tournament_worlds") or []
+    return [
+        {
+            "name": world.get("name"),
+            "status": world.get("status"),
+            "location": world.get("location"),
+            "pvp_type": world.get("pvp_type"),
+        }
+        for world in [*regular, *tournament]
+    ]
+
 
 async def get_guild_info(guild_name: str) -> Optional[Dict[str, Any]]:
-    """
-    Fetch guild information from TibiaData API
-    TibiaData v4 endpoint: /guilds/{guildName}
-    """
+    if settings.USE_MOCK_DATA:
+        payload = dict(MOCK_GUILD)
+        payload["name"] = guild_name
+        return payload
+
+    url = f"{settings.TIBIADATA_BASE_URL}/guild/{quote(guild_name)}"
     try:
-        async with httpx.AsyncClient(timeout=TIMEOUT) as client:
-            # TibiaData uses URL encoding with %20 for spaces
-            encoded_name = guild_name.replace(' ', '%20')
-            # TibiaData v4 endpoint is /guild/{name}
-            url = f"{TIBIA_API_BASE}/guild/{encoded_name}"
-            logger.info(f"Fetching guild: {guild_name} from {url}")
-            
-            try:
-                response = await client.get(url)
-            except (httpx.ConnectError, httpx.TimeoutException, OSError) as e:
-                logger.warning(f"API unreachable ({e}), using demo data for {guild_name}")
-                if guild_name.lower() == "bloodborne warhowl":
-                    return {
-                        'name': 'Bloodborne Warhowl',
-                        'world': 'Thibia',
-                        'description': 'A legendary guild...',
-                        'founded': '2020-06-15',
-                        'members': [
-                            {'name': 'Eternal Oblivion', 'rank': 'Leader'},
-                            {'name': 'Bubble', 'rank': 'Vice Leader'},
-                            {'name': 'Cachero', 'rank': 'Member'},
-                            {'name': 'Mateusz Dragon Wielki', 'rank': 'Member'},
-                            {'name': 'Smoked', 'rank': 'Member'},
-                            {'name': 'Hesperides', 'rank': 'Member'},
-                            {'name': 'Vulfgar', 'rank': 'Member'},
-                            {'name': 'Ghazbaran', 'rank': 'Member'},
-                            {'name': 'Morgaroth', 'rank': 'Member'},
-                            {'name': 'Orshabaal', 'rank': 'Member'},
-                        ],
-                        'member_count': 10,
-                    }
-                return None
-            
-            if response.status_code == 404:
-                # Guild not found on API - try demo data as fallback
-                logger.warning(f"Guild not found on TibiaData API: {guild_name}, using demo data")
-                if guild_name.lower() == "bloodborne warhowl":
-                    return {
-                        'name': 'Bloodborne Warhowl',
-                        'world': 'Thibia',
-                        'description': 'A legendary guild...',
-                        'founded': '2020-06-15',
-                        'members': [
-                            {'name': 'Eternal Oblivion', 'rank': 'Leader'},
-                            {'name': 'Bubble', 'rank': 'Vice Leader'},
-                            {'name': 'Cachero', 'rank': 'Member'},
-                            {'name': 'Mateusz Dragon Wielki', 'rank': 'Member'},
-                            {'name': 'Smoked', 'rank': 'Member'},
-                            {'name': 'Hesperides', 'rank': 'Member'},
-                            {'name': 'Vulfgar', 'rank': 'Member'},
-                            {'name': 'Ghazbaran', 'rank': 'Member'},
-                            {'name': 'Morgaroth', 'rank': 'Member'},
-                            {'name': 'Orshabaal', 'rank': 'Member'},
-                        ],
-                        'member_count': 10,
-                    }
-                return None
-            
-            if response.status_code != 200:
-                logger.error(f"API error {response.status_code}: {response.text}")
-                raise TibiaAPIError(f"HTTP {response.status_code}")
-            
-            data = response.json()
-            
-            # TibiaData v4 response structure
-            if not data.get('guild'):
-                logger.warning(f"Invalid response structure for guild {guild_name}")
-                return None
-            
-            guild = data['guild']
-            members = guild.get('members', [])
-            
-            return {
-                'name': guild.get('name'),
-                'world': guild.get('world'),
-                'description': guild.get('description'),
-                'founded': guild.get('founded'),
-                'members': members,
-                'member_count': len(members),
-            }
-    except Exception as e:
-        logger.error(f"Error fetching guild {guild_name}: {str(e)}")
-        raise TibiaAPIError(str(e))
+        guild = (await _get_json(url)).get("guild") or {}
+    except httpx.HTTPStatusError as exc:
+        if exc.response.status_code == 404:
+            logger.warning("tibiadata_missing entity=guild name=%s", guild_name)
+            return None
+        raise TibiaAPIError(str(exc)) from exc
+    except Exception as exc:
+        raise TibiaAPIError(str(exc)) from exc
+
+    members = guild.get("members") or []
+    missing_fields = [field for field in ["name", "world", "members"] if guild.get(field) in (None, "")]
+    if missing_fields:
+        logger.warning("tibiadata_incomplete entity=guild name=%s missing=%s", guild_name, ",".join(missing_fields))
+
+    return {
+        "name": guild.get("name"),
+        "world": guild.get("world"),
+        "description": guild.get("description"),
+        "founded": guild.get("founded"),
+        "members": members,
+        "member_count": len(members),
+        "logo_url": guild.get("logo_url"),
+    }
 
 async def get_active_guild_members(guild_name: str, days_active: int = 10) -> list[dict[str, Any]]:
     """
     Fetch all guild members and filter by last login within X days.
     """
-    try:
-        logger.info(f"Getting active members for guild: {guild_name}")
-        guild_info = await get_guild_info(guild_name)
-        if not guild_info or 'members' not in guild_info:
-            logger.warning(f"Guild info not found or empty for {guild_name}")
-            return []
-        
-        all_members = guild_info['members'] # List of dicts with 'name'
-        logger.info(f"Found {len(all_members)} members in guild {guild_name}")
-        active_members = []
-        
-        # Limit concurrency to avoid rate limiting
-        semaphore = asyncio.Semaphore(10)
-        
-        async def check_member(member: dict):
-            async with semaphore:
-                try:
-                    char_info = await get_character_info(member['name'])
-                    if not char_info or not char_info.get('last_login'):
-                        return None
-                    
-                    last_login_str = char_info['last_login']
-                    # Handle ISO format. TibiaData usually returns "2024-01-01T12:00:00Z"
-                    # We need to handle potential format variations if any
-                    last_login_str = last_login_str.replace('Z', '+00:00')
-                    try:
-                        last_login = datetime.fromisoformat(last_login_str)
-                        # Make naive if necessary, or make now() aware
-                        if last_login.tzinfo is None:
-                            limit = datetime.utcnow() - timedelta(days=days_active)
-                        else:
-                            limit = datetime.now(last_login.tzinfo) - timedelta(days=days_active)
-                            
-                        if last_login >= limit:
-                            # Enrich member data with level/vocation from char_info if needed
-                            # The guild list has basic info, but char_info is freshest
-                            return {
-                                'name': char_info['name'],
-                                'level': char_info['level'],
-                                'vocation': char_info['vocation'],
-                                'last_login': char_info['last_login']
-                            }
-                        else:
-                            # Log for debug why user is skipped (too old)
-                            # logger.info(f"Member {member['name']} inactive. Last login: {last_login}, Limit: {limit}")
-                            pass
-                    except ValueError:
-                        logger.warning(f"Could not parse date {last_login_str} for {member['name']}")
-                        return None
-                except Exception as e:
-                    logger.warning(f"Failed to check member {member['name']}: {e}")
-                    return None
-        
-        tasks = [check_member(m) for m in all_members]
-        results = await asyncio.gather(*tasks)
-        
-        active_members = [r for r in results if r is not None]
-        return active_members
+    guild_info = await get_guild_info(guild_name)
+    if not guild_info:
+        return []
 
-    except Exception as e:
-        logger.error(f"Error getting active members for {guild_name}: {str(e)}")
-        raise TibiaAPIError(str(e))
+    semaphore = asyncio.Semaphore(10)
+
+    async def enrich_member(member: Dict[str, Any]) -> Optional[Dict[str, Any]]:
+        async with semaphore:
+            character_name = member.get("name")
+            if not character_name:
+                return None
+            try:
+                info = await get_character_info(character_name)
+                if not info or not info.get("last_login"):
+                    return None
+                last_login = datetime.fromisoformat(info["last_login"].replace("Z", "+00:00"))
+                cutoff = datetime.now(last_login.tzinfo) - timedelta(days=days_active)
+                if last_login < cutoff:
+                    return None
+                return {
+                    "name": info.get("name"),
+                    "level": info.get("level"),
+                    "vocation": info.get("vocation"),
+                    "world": info.get("world") or guild_info.get("world"),
+                    "last_login": info.get("last_login"),
+                    "guild_rank": member.get("rank") or member.get("title") or member.get("position"),
+                }
+            except Exception as exc:
+                logger.warning("tibiadata_member_check_failed name=%s error=%s", character_name, exc)
+                return None
+
+    results = await asyncio.gather(*(enrich_member(member) for member in guild_info.get("members") or []))
+    return [member for member in results if member is not None]

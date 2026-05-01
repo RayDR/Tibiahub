@@ -11,15 +11,21 @@ interface ProfileData {
     email: string;
     tibia_character_name: string;
     guild_rank?: string;
+    guild_name?: string;
+    world_name?: string;
+    residence?: string;
     vocation?: string;
     level?: number;
+    achievement_points?: number;
+    tibia_status?: string;
+    tibia_last_error?: string;
     is_active: boolean;
     join_date?: string;
     created_at: string;
 }
 
 export default function Profile() {
-    const { user, updateUser } = useAuth();
+    const { updateUser } = useAuth();
     const toast = useToast();
     const navigate = useNavigate();
     
@@ -214,6 +220,38 @@ export default function Profile() {
                         <div className="bg-slate-950/50 border border-slate-700 rounded px-3 py-2">
                             <span className="text-slate-300">{profileData.guild_rank || 'Not Ranked'}</span>
                         </div>
+                    </div>
+
+                    <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+                        <div>
+                            <label className="block text-sm font-medium text-slate-400 mb-2">Guild</label>
+                            <div className="bg-slate-950/50 border border-slate-700 rounded px-3 py-2 text-slate-300">
+                                {profileData.guild_name || 'Not available'}
+                            </div>
+                        </div>
+                        <div>
+                            <label className="block text-sm font-medium text-slate-400 mb-2">World</label>
+                            <div className="bg-slate-950/50 border border-slate-700 rounded px-3 py-2 text-slate-300">
+                                {profileData.world_name || 'Not available'}
+                            </div>
+                        </div>
+                        <div>
+                            <label className="block text-sm font-medium text-slate-400 mb-2">Residence</label>
+                            <div className="bg-slate-950/50 border border-slate-700 rounded px-3 py-2 text-slate-300">
+                                {profileData.residence || 'Not available'}
+                            </div>
+                        </div>
+                    </div>
+
+                    <div>
+                        <label className="block text-sm font-medium text-slate-400 mb-2">Tibia Sync</label>
+                        <div className="bg-slate-950/50 border border-slate-700 rounded px-3 py-2 text-slate-300">
+                            Status: {profileData.tibia_status || 'unknown'}
+                            {profileData.achievement_points !== undefined && profileData.achievement_points !== null ? ` · Achievement points: ${profileData.achievement_points}` : ''}
+                        </div>
+                        {profileData.tibia_last_error && (
+                            <p className="text-xs text-red-400 mt-2">{profileData.tibia_last_error}</p>
+                        )}
                     </div>
 
                     {/* Account Info */}

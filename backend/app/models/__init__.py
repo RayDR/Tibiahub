@@ -9,7 +9,9 @@ from app.models.user_character import UserCharacter
 from app.models.quest import Quest
 from app.models.settings import SystemSettings
 from app.models.guild import GuildEvent, EventAttendance, Announcement, Recruitment
-from app.models.events import Event, EventParticipant
+from app.models.events import Event, EventParticipant, PublicEventParticipant
+from app.models.entity_metadata import EntityMetadata
+from app.models.raffle import Raffle, RaffleParticipant, RafflePrize, RaffleWinner
 
 __all__ = [
     "Creature",
@@ -21,12 +23,18 @@ __all__ = [
     "UserCharacter",
     "Quest",
     "SystemSettings",
+    "EntityMetadata",
     "GuildEvent",
     "EventAttendance",
     "Announcement",
     "Recruitment",
     "Event",
     "EventParticipant",
+    "PublicEventParticipant",
+    "Raffle",
+    "RaffleParticipant",
+    "RafflePrize",
+    "RaffleWinner",
     "creature_weaknesses",
     "creature_resistances"
 ]

@@ -9,14 +9,16 @@ export interface Element {
 
 export interface Loot {
   id: number;
-  creature_id: number;
+  creature_id?: number;
   item_name: string;
   rarity?: string;
-  percentage?: number;
+  percentage?: number | null;
   min_amount: number;
   max_amount: number;
   item_value?: number;
   item_type?: string;
+  item_image_url?: string;
+  source_url?: string;
 }
 
 export interface LootWithCreature extends Loot {
@@ -45,15 +47,18 @@ export interface SpawnLocation {
 
 export interface CreatureSimple {
   id: number;
+  slug?: string;
   name: string;
   hitpoints: number;
   experience: number;
   difficulty?: string;
   image_url?: string;
+  source_url?: string;
 }
 
 export interface Creature {
   id: number;
+  slug?: string;
   name: string;
   article?: string;
   plural?: string;
@@ -62,8 +67,8 @@ export interface Creature {
   armor: number;
   speed: number;
   max_damage?: number;
-  summon_cost: number;
-  convince_cost: number;
+  summon_cost?: number | null;
+  convince_cost?: number | null;
   difficulty?: string;
   occurrence?: string;
   is_boss: boolean;
@@ -71,6 +76,16 @@ export interface Creature {
   description?: string;
   behavior?: string;
   image_url?: string;
+  bestiary_class?: string;
+  bestiary_level?: string;
+  charm_points?: number | null;
+  creature_class?: string;
+  primary_type?: string;
+  source_url?: string;
+  data_sources?: string[] | null;
+  missing_fields?: string[] | null;
+  related_tasks?: string[] | null;
+  locations?: string[] | null;
   loot_items: Loot[];
   spawn_locations: SpawnLocation[];
   weaknesses: Element[];
@@ -102,7 +117,26 @@ export interface HuntZone {
   location_y?: number;
   location_z?: number;
   map_image_url?: string;
+  source_url?: string;
+  creatures?: CreatureSimple[];
+  last_synced_at?: string;
+}
 
+export interface ItemDropCreature {
+  creature_id: number;
+  creature_name: string;
+  creature_slug?: string;
+  chance?: number | null;
+  rarity?: string | null;
+  hunt_zones: HuntZoneSimple[];
+}
+
+export interface ItemSearchResult {
+  item_name: string;
+  normalized_name: string;
+  item_image_url?: string | null;
+  source_url?: string | null;
+  drops: ItemDropCreature[];
 }
 
 export interface HuntRecommendation {

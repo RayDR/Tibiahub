@@ -1,319 +1,390 @@
-import { useState } from 'react';
-import { motion, AnimatePresence } from 'framer-motion';
-import { guildApi } from '../../services/guild';
-import { Loader2, Trophy, Coins, Users, Skull } from 'lucide-react';
+import { FormEvent, useEffect, useState } from 'react';
+import { Loader2, RefreshCcw, ShieldAlert, Trophy, Users } from 'lucide-react';
+
+import { useAuth } from '../../context/AuthContext';
 import { useToast } from '../../context/ToastContext';
+import { Raffle, raffleApi } from '../../services/raffle';
 
-interface Participant {
-    name: string;
-    level: number;
-    vocation: string;
-    last_login: string;
-}
+const emptyPrize = { name: '', reward: '' };
 
-export default function Raffle() {
-    const { success, error, info } = useToast();
+export default function RafflePage() {
+  const { user } = useAuth();
+  const toast = useToast();
 
-    // Configuration
-    const [guildName, setGuildName] = useState('Bloodborne Warhowl'); // Default or user's guild
-    const [activeDays, setActiveDays] = useState(10);
+  const [raffles, setRaffles] = useState<Raffle[]>([]);
+  const [selectedRaffleId, setSelectedRaffleId] = useState<number | null>(null);
+  const [loading, setLoading] = useState(true);
+  const [busyAction, setBusyAction] = useState<string | null>(null);
+  const [createForm, setCreateForm] = useState({
+    title: '',
+    description: '',
+    guild_name: '',
+    prizes: [
+      { name: 'Premio 1', reward: '10kk' },
+      { name: 'Premio 2', reward: '10kk' },
+      { name: 'Premio 3', reward: '5kk' },
+    ],
+  });
+  const [newPrize, setNewPrize] = useState(emptyPrize);
+  const [rerunReason, setRerunReason] = useState('');
 
-    // State
-    const [isLoading, setIsLoading] = useState(false);
-    const [participants, setParticipants] = useState<Participant[]>([]);
+  useEffect(() => {
+    void loadRaffles();
+  }, []);
 
-    // Game State
-    const [round, setRound] = useState(0); // 0: Init, 1: Round 1 (Discard), 2: Round 2 (Discard), 3: Round 3 (Winner)
-    const [spinning, setSpinning] = useState(false);
-    const [currentName, setCurrentName] = useState('???');
-    const [eliminated, setEliminated] = useState<Participant[]>([]);
-    const [winner, setWinner] = useState<Participant | null>(null);
+  const selectedRaffle = raffles.find((raffle) => raffle.id === selectedRaffleId) ?? null;
 
-    const fetchParticipants = async () => {
-        if (!guildName) return;
-        setIsLoading(true);
-        try {
-            const data = await guildApi.getRaffleParticipants(guildName, activeDays);
-            setParticipants(data);
-            setRound(0);
-            setEliminated([]);
-            setWinner(null);
-            success(`Loaded ${data.length} eligible participants!`);
-        } catch (err) {
-            console.error(err);
-            error('Failed to load participants. Check guild name.');
-        } finally {
-            setIsLoading(false);
-        }
-    };
-
-    const loadDemoData = () => {
-        const demoNames = [
-            "Eternal Oblivion", "Bubble", "Cachero", "Mateusz Dragon Wielki",
-            "Smoked", "Vulfgar", "Hesperides", "Ghazbaran", "Morgaroth",
-            "Ferumbras", "Orshabaal", "Apocalypse", "Infernatil", "Verminor",
-            "Zulazza", "Chizzoron", "Zoralurk", "Tiquandas Revenge", "Demodras"
-        ];
-        // Create full participant objects
-        const demoParticipants = demoNames.map(name => ({
-            name,
-            level: Math.floor(Math.random() * 1000) + 100,
-            vocation: ['Elite Knight', 'Master Sorcerer', 'Elder Druid', 'Royal Paladin'][Math.floor(Math.random() * 4)],
-            last_login: new Date().toISOString()
-        }));
-
-        setParticipants(demoParticipants);
-        setRound(0);
-        setEliminated([]);
-        setWinner(null);
-        info('Loaded Demo Data. Feel free to test the animation!');
-    };
-
-    const spin = (targetRound: number) => {
-        if (participants.length === 0) return;
-        setSpinning(true);
-        setRound(targetRound);
-
-        // Animation Logic
-        let counter = 0;
-        const maxSpins = 30 + Math.floor(Math.random() * 20); // Random duration
-        const speed = 100; // ms
-
-        const interval = setInterval(() => {
-            const randomIdx = Math.floor(Math.random() * participants.length);
-            setCurrentName(participants[randomIdx].name);
-            counter++;
-
-            if (counter > maxSpins) {
-                clearInterval(interval);
-                finishSpin(targetRound);
-            }
-        }, speed);
-    };
-
-    const finishSpin = (targetRound: number) => {
-        setSpinning(false);
-        // Select random person from remaining participants
-        // Note: In real discard mode, we remove them from the array.
-
-        // Get valid candidates (not already eliminated, not already won)
-        const candidates = participants.filter(p =>
-            !eliminated.find(e => e.name === p.name) &&
-            (!winner || winner.name !== p.name)
-        );
-
-        if (candidates.length === 0) {
-            error('No participants left!');
-            return;
-        }
-
-        const selectedIdx = Math.floor(Math.random() * candidates.length);
-        const selected = candidates[selectedIdx];
-        setCurrentName(selected.name);
-
-        if (targetRound === 1 || targetRound === 2) {
-            // Discard
-            setEliminated(prev => [...prev, selected]);
-            info(`${selected.name} has been eliminated!`);
-        } else {
-            // Winner
-            setWinner(selected);
-            success(`${selected.name} WINS THE RAFFLE!`);
-            // Launch confetti?
-        }
-    };
-
-    return (
-        <div className="min-h-screen bg-[#0d1117] text-slate-200 relative overflow-hidden">
-            {/* Background Decor */}
-            <div className="absolute top-0 left-0 w-full h-full pointer-events-none opacity-20 bg-[radial-gradient(ellipse_at_center,_var(--tw-gradient-stops))] from-amber-900/40 via-slate-900 to-slate-950"></div>
-
-            <div className="max-w-6xl mx-auto p-6 relative z-10">
-
-                {/* Header */}
-                <header className="mb-12 text-center">
-                    <motion.h1
-                        initial={{ y: -50, opacity: 0 }}
-                        animate={{ y: 0, opacity: 1 }}
-                        className="text-5xl md:text-7xl font-bold bg-clip-text text-transparent bg-gradient-to-b from-amber-300 to-amber-600 drop-shadow-sm font-cinzel"
-                    >
-                        GUILD RAFFLE
-                    </motion.h1>
-                    <p className="mt-4 text-slate-400 text-lg">Win 5,000,000 Gold! Sponsored by the Guild Bank.</p>
-                </header>
-
-                {/* Content Grid */}
-                <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
-
-                    {/* Left: Info & Controls */}
-                    <div className="space-y-6">
-                        <div className="bg-slate-900/50 border border-slate-700 rounded-lg p-6 backdrop-blur-sm">
-                            <h3 className="text-xl font-semibold text-amber-500 mb-4 flex items-center gap-2">
-                                <Trophy className="w-5 h-5" /> Event Details
-                            </h3>
-                            <div className="space-y-4 text-sm text-slate-300">
-                                <p><strong>Prize:</strong> 5,000,000 Gold</p>
-                                <p><strong>Draw Date:</strong> Today, 23/01/2026</p>
-                                <p><strong>Rules:</strong> Active members only (last 10 days). 1 ticket per player.</p>
-                                <div className="border-t border-slate-700 pt-4">
-                                    <label className="block text-xs uppercase text-slate-500 mb-1">Guild Name</label>
-                                    <input
-                                        type="text"
-                                        value={guildName}
-                                        onChange={(e) => setGuildName(e.target.value)}
-                                        className="w-full bg-slate-950 border border-slate-700 rounded p-2 text-slate-100 focus:border-amber-500 transition-colors"
-                                    />
-                                </div>
-                                <div>
-                                    <label className="block text-xs uppercase text-slate-500 mb-1">Active within (days)</label>
-                                    <input
-                                        type="number"
-                                        value={activeDays}
-                                        onChange={(e) => setActiveDays(Number(e.target.value))}
-                                        className="w-full bg-slate-950 border border-slate-700 rounded p-2 text-slate-100 focus:border-amber-500 transition-colors"
-                                    />
-                                </div>
-                                <button
-                                    onClick={fetchParticipants}
-                                    disabled={isLoading}
-                                    className="w-full bg-amber-600 hover:bg-amber-500 text-black font-bold py-3 rounded transition-all flex justify-center items-center gap-2"
-                                >
-                                    {isLoading ? <Loader2 className="animate-spin" /> : <Users />}
-                                    Load Participants
-                                </button>
-                                <button
-                                    onClick={loadDemoData}
-                                    className="w-full bg-slate-800 hover:bg-slate-700 text-slate-300 font-bold py-2 rounded transition-all text-sm border border-slate-700"
-                                >
-                                    Try Demo Simulation
-                                </button>
-                                <p className="text-xs text-slate-500 italic text-center mt-2">
-                                    * This tool runs locally in your browser. Refresh page to reset.
-                                    To show this to others, please <strong>share your screen</strong> (Discord/Stream).
-                                </p>
-                            </div>
-                        </div>
-
-                        {/* Participant Stats */}
-                        <div className="bg-slate-900/50 border border-slate-700 rounded-lg p-6 backdrop-blur-sm">
-                            <h3 className="text-sm font-semibold text-slate-400 uppercase mb-4">Stats</h3>
-                            <div className="flex justify-between items-center text-center">
-                                <div>
-                                    <div className="text-2xl font-bold text-slate-100">{participants.length}</div>
-                                    <div className="text-xs text-slate-500">Total</div>
-                                </div>
-                                <div>
-                                    <div className="text-2xl font-bold text-red-500">{eliminated.length}</div>
-                                    <div className="text-xs text-slate-500">Eliminated</div>
-                                </div>
-                                <div>
-                                    <div className="text-2xl font-bold text-green-500">{participants.length - eliminated.length}</div>
-                                    <div className="text-xs text-slate-500">Remaining</div>
-                                </div>
-                            </div>
-                        </div>
-                    </div>
-
-                    {/* Center: The Stage */}
-                    <div className="lg:col-span-2 space-y-8">
-
-                        {/* Main Display */}
-                        <div className="bg-black/40 border-2 border-amber-900/50 rounded-2xl p-8 min-h-[400px] flex flex-col items-center justify-center relative overflow-hidden group">
-                            <div className="absolute inset-0 bg-[url('https://tibiamaps.io/images/map-preview.png')] opacity-5 mix-blend-overlay bg-cover bg-center"></div>
-
-                            {/* Status Text */}
-                            <div className="mb-8 text-center">
-                                <AnimatePresence mode='wait'>
-                                    {round === 0 && <motion.div key="intro" initial={{ opacity: 0 }} animate={{ opacity: 1 }} className="text-2xl text-amber-200">Prepare for the Draw</motion.div>}
-                                    {round === 1 && <motion.div key="r1" initial={{ opacity: 0 }} animate={{ opacity: 1 }} className="text-2xl text-red-400 font-bold">ROUND 1: ELIMINATION</motion.div>}
-                                    {round === 2 && <motion.div key="r2" initial={{ opacity: 0 }} animate={{ opacity: 1 }} className="text-2xl text-red-400 font-bold">ROUND 2: ELIMINATION</motion.div>}
-                                    {round === 3 && <motion.div key="r3" initial={{ opacity: 0 }} animate={{ opacity: 1 }} className="text-4xl text-amber-400 font-bold tracking-widest">FINAL DRAW</motion.div>}
-                                </AnimatePresence>
-                            </div>
-
-                            {/* The Name Display */}
-                            <motion.div
-                                className={`text-5xl md:text-7xl font-bold text-center px-8 py-12 rounded-xl backdrop-blur-md border border-white/10 w-full ${winner ? 'bg-amber-500/20 text-amber-300 shadow-[0_0_50px_rgba(245,158,11,0.3)]' :
-                                    spinning ? 'bg-slate-800/50 text-slate-100' : 'bg-slate-900/50 text-slate-400'
-                                    }`}
-                                animate={spinning ? { scale: [1, 1.02, 1] } : {}}
-                                transition={{ repeat: Infinity, duration: 0.2 }}
-                            >
-                                {currentName}
-                            </motion.div>
-
-                            {/* Controls */}
-                            <div className="mt-12 flex gap-4">
-                                <button
-                                    disabled={participants.length === 0 || spinning || eliminationRoundDone(1)}
-                                    onClick={() => spin(1)}
-                                    className={`px-6 py-3 rounded font-bold border ${round > 1 ? 'opacity-50 grayscale' : ''} ${eliminationRoundDone(1) ? 'bg-slate-800 text-slate-500 border-slate-700' : 'bg-red-900/30 border-red-500 text-red-400 hover:bg-red-900/50'}`}
-                                >
-                                    <span className="flex items-center gap-2"><Skull size={18} /> Discard 1</span>
-                                </button>
-
-                                <button
-                                    disabled={!eliminationRoundDone(1) || spinning || eliminationRoundDone(2)}
-                                    onClick={() => spin(2)}
-                                    className={`px-6 py-3 rounded font-bold border ${round > 2 ? 'opacity-50 grayscale' : ''} ${eliminationRoundDone(2) ? 'bg-slate-800 text-slate-500 border-slate-700' : 'bg-red-900/30 border-red-500 text-red-400 hover:bg-red-900/50'}`}
-                                >
-                                    <span className="flex items-center gap-2"><Skull size={18} /> Discard 2</span>
-                                </button>
-
-                                <button
-                                    disabled={!eliminationRoundDone(2) || spinning || !!winner}
-                                    onClick={() => spin(3)}
-                                    className={`px-8 py-3 rounded font-bold border ${winner ? 'bg-amber-600 text-black border-amber-500' : 'bg-amber-900/30 border-amber-500 text-amber-400 hover:bg-amber-900/50 hover:shadow-[0_0_20px_rgba(245,158,11,0.2)]'}`}
-                                >
-                                    <span className="flex items-center gap-2"><Coins size={18} /> DRAW WINNER</span>
-                                </button>
-                            </div>
-
-                            {winner && (
-                                <motion.div
-                                    initial={{ scale: 0, rotate: -180 }}
-                                    animate={{ scale: 1, rotate: 0 }}
-                                    className="absolute inset-0 flex items-center justify-center bg-black/80 backdrop-blur-sm z-50 rounded-2xl"
-                                >
-                                    <div className="text-center p-8 bg-gradient-to-br from-amber-600 to-yellow-600 rounded-2xl shadow-2xl border-4 border-yellow-300">
-                                        <Trophy className="w-24 h-24 text-yellow-100 mx-auto mb-4" />
-                                        <h2 className="text-3xl font-bold text-white mb-2">WINNER!</h2>
-                                        <div className="text-4xl text-black font-extrabold bg-white/20 rounded px-6 py-2 mb-4">
-                                            {winner.name}
-                                        </div>
-                                        <p className="text-yellow-100">Congratulations! You won 5,000,000 Gold!</p>
-                                        <button onClick={() => setWinner(null)} className="mt-6 text-sm underline text-white/80 hover:text-white">Close</button>
-                                    </div>
-                                </motion.div>
-                            )}
-                        </div>
-
-                        {/* Participant List (Grid) */}
-                        <div className="grid grid-cols-2 md:grid-cols-4 gap-2 max-h-60 overflow-y-auto p-4 bg-slate-900/30 rounded border border-slate-800">
-                            {participants.map((p, i) => {
-                                const isEliminated = eliminated.find(e => e.name === p.name);
-                                const isWinner = winner?.name === p.name;
-
-                                return (
-                                    <div key={i} className={`p-2 rounded text-xs truncate transition-all ${isEliminated ? 'bg-red-900/20 text-red-700 decoration-line-through' :
-                                        isWinner ? 'bg-amber-500 text-black font-bold' :
-                                            'bg-slate-800 text-slate-400'
-                                        }`}>
-                                        {p.name}
-                                    </div>
-                                )
-                            })}
-                        </div>
-
-                    </div>
-                </div>
-            </div>
-        </div>
-    );
-
-    function eliminationRoundDone(r: number) {
-        if (r === 1) return eliminated.length >= 1;
-        if (r === 2) return eliminated.length >= 2;
-        return false;
+  async function loadRaffles(targetId?: number) {
+    setLoading(true);
+    try {
+      const data = await raffleApi.list();
+      setRaffles(data);
+      if (data.length > 0) {
+        setSelectedRaffleId(targetId ?? selectedRaffleId ?? data[0].id);
+      } else {
+        setSelectedRaffleId(null);
+      }
+    } catch (error: any) {
+      toast.error(error?.message || 'Failed to load raffles');
+    } finally {
+      setLoading(false);
     }
+  }
+
+  async function handleCreateRaffle(event: FormEvent) {
+    event.preventDefault();
+    setBusyAction('create');
+    try {
+      const raffle = await raffleApi.create({
+        title: createForm.title,
+        description: createForm.description || undefined,
+        guild_name: createForm.guild_name,
+        prizes: createForm.prizes.filter((prize) => prize.name && prize.reward),
+      });
+      toast.success('Raffle created');
+      setCreateForm({ title: '', description: '', guild_name: '', prizes: [
+        { name: 'Premio 1', reward: '10kk' },
+        { name: 'Premio 2', reward: '10kk' },
+        { name: 'Premio 3', reward: '5kk' },
+      ] });
+      await loadRaffles(raffle.id);
+    } catch (error: any) {
+      toast.error(error?.response?.data?.detail || error?.message || 'Failed to create raffle');
+    } finally {
+      setBusyAction(null);
+    }
+  }
+
+  async function refreshSelectedRaffle(raffleId: number) {
+    const updated = await raffleApi.get(raffleId);
+    setRaffles((current) => current.map((raffle) => raffle.id === raffleId ? updated : raffle));
+    setSelectedRaffleId(raffleId);
+  }
+
+  async function handleSyncParticipants() {
+    if (!selectedRaffle) return;
+    setBusyAction('sync');
+    try {
+      const updated = await raffleApi.syncParticipants(selectedRaffle.id);
+      setRaffles((current) => current.map((raffle) => raffle.id === updated.id ? updated : raffle));
+      toast.success(`Synced ${updated.participants.length} eligible accounts`);
+    } catch (error: any) {
+      toast.error(error?.response?.data?.detail || error?.message || 'Failed to sync participants');
+    } finally {
+      setBusyAction(null);
+    }
+  }
+
+  async function handleAddPrize(event: FormEvent) {
+    event.preventDefault();
+    if (!selectedRaffle) return;
+    setBusyAction('prize');
+    try {
+      const updated = await raffleApi.addPrize(selectedRaffle.id, newPrize);
+      setNewPrize(emptyPrize);
+      setRaffles((current) => current.map((raffle) => raffle.id === updated.id ? updated : raffle));
+      toast.success('Prize added');
+    } catch (error: any) {
+      toast.error(error?.response?.data?.detail || error?.message || 'Failed to add prize');
+    } finally {
+      setBusyAction(null);
+    }
+  }
+
+  async function handleDraw() {
+    if (!selectedRaffle) return;
+    setBusyAction('draw');
+    try {
+      await raffleApi.draw(selectedRaffle.id);
+      await refreshSelectedRaffle(selectedRaffle.id);
+      toast.success('Raffle executed');
+    } catch (error: any) {
+      toast.error(error?.response?.data?.detail || error?.message || 'Failed to execute raffle');
+    } finally {
+      setBusyAction(null);
+    }
+  }
+
+  async function handleRerun() {
+    if (!selectedRaffle) return;
+    setBusyAction('rerun');
+    try {
+      await raffleApi.rerun(selectedRaffle.id, rerunReason);
+      setRerunReason('');
+      await refreshSelectedRaffle(selectedRaffle.id);
+      toast.success('Raffle rerun completed');
+    } catch (error: any) {
+      toast.error(error?.response?.data?.detail || error?.message || 'Failed to rerun raffle');
+    } finally {
+      setBusyAction(null);
+    }
+  }
+
+  if (!user?.is_superuser) {
+    return (
+      <div className="rounded-2xl border border-red-500/20 bg-red-950/20 p-6 text-red-100">
+        <div className="mb-3 flex items-center gap-3 text-lg font-semibold">
+          <ShieldAlert className="h-5 w-5" />
+          Admin Access Required
+        </div>
+        <p className="text-sm text-red-200/80">
+          The guild raffle console only allows admin execution because it stores winners, rerun history, and weighted account-based selection.
+        </p>
+      </div>
+    );
+  }
+
+  return (
+    <div className="space-y-6">
+      <div className="rounded-2xl border border-slate-800 bg-slate-900/70 p-6">
+        <h1 className="mb-2 text-3xl font-semibold text-slate-100">Guild Raffle Console</h1>
+        <p className="max-w-3xl text-sm text-slate-400">
+          This raffle system is account-based. It syncs local users linked to characters that currently belong to the Tibia guild, applies a 10% weight bonus to vice leaders, excludes duplicate accounts automatically, and stores full rerun history.
+        </p>
+      </div>
+
+      <div className="grid gap-6 xl:grid-cols-[420px_minmax(0,1fr)]">
+        <form onSubmit={handleCreateRaffle} className="space-y-4 rounded-2xl border border-slate-800 bg-slate-900/70 p-6">
+          <h2 className="text-xl font-semibold text-slate-100">Create Raffle</h2>
+          <input
+            value={createForm.title}
+            onChange={(event) => setCreateForm((current) => ({ ...current, title: event.target.value }))}
+            placeholder="Guild weekly raffle"
+            className="w-full rounded-xl border border-slate-700 bg-slate-950 px-4 py-3 text-slate-100 outline-none focus:border-amber-500"
+            required
+          />
+          <input
+            value={createForm.guild_name}
+            onChange={(event) => setCreateForm((current) => ({ ...current, guild_name: event.target.value }))}
+            placeholder="Bloodborne Warhowl"
+            className="w-full rounded-xl border border-slate-700 bg-slate-950 px-4 py-3 text-slate-100 outline-none focus:border-amber-500"
+            required
+          />
+          <textarea
+            value={createForm.description}
+            onChange={(event) => setCreateForm((current) => ({ ...current, description: event.target.value }))}
+            placeholder="Optional description"
+            className="min-h-28 w-full rounded-xl border border-slate-700 bg-slate-950 px-4 py-3 text-slate-100 outline-none focus:border-amber-500"
+          />
+
+          <div className="space-y-3">
+            {createForm.prizes.map((prize, index) => (
+              <div key={index} className="grid gap-3 sm:grid-cols-2">
+                <input
+                  value={prize.name}
+                  onChange={(event) => setCreateForm((current) => ({
+                    ...current,
+                    prizes: current.prizes.map((item, itemIndex) => itemIndex === index ? { ...item, name: event.target.value } : item),
+                  }))}
+                  placeholder={`Prize ${index + 1}`}
+                  className="rounded-xl border border-slate-700 bg-slate-950 px-4 py-3 text-slate-100 outline-none focus:border-amber-500"
+                />
+                <input
+                  value={prize.reward}
+                  onChange={(event) => setCreateForm((current) => ({
+                    ...current,
+                    prizes: current.prizes.map((item, itemIndex) => itemIndex === index ? { ...item, reward: event.target.value } : item),
+                  }))}
+                  placeholder="10kk"
+                  className="rounded-xl border border-slate-700 bg-slate-950 px-4 py-3 text-slate-100 outline-none focus:border-amber-500"
+                />
+              </div>
+            ))}
+          </div>
+
+          <button
+            type="submit"
+            disabled={busyAction === 'create'}
+            className="inline-flex items-center gap-2 rounded-xl bg-amber-500 px-4 py-3 font-semibold text-slate-950 disabled:opacity-50"
+          >
+            {busyAction === 'create' && <Loader2 className="h-4 w-4 animate-spin" />}
+            Create Raffle
+          </button>
+        </form>
+
+        <div className="space-y-6">
+          <div className="rounded-2xl border border-slate-800 bg-slate-900/70 p-6">
+            <div className="mb-4 flex items-center justify-between">
+              <h2 className="text-xl font-semibold text-slate-100">Raffles</h2>
+              <button
+                onClick={() => void loadRaffles()}
+                className="inline-flex items-center gap-2 rounded-xl border border-slate-700 px-3 py-2 text-sm text-slate-300 hover:border-slate-500"
+              >
+                <RefreshCcw className="h-4 w-4" /> Refresh
+              </button>
+            </div>
+
+            {loading ? (
+              <div className="flex items-center gap-3 text-slate-400">
+                <Loader2 className="h-4 w-4 animate-spin" /> Loading raffles...
+              </div>
+            ) : raffles.length === 0 ? (
+              <div className="text-sm text-slate-400">No raffles created yet.</div>
+            ) : (
+              <div className="grid gap-3 md:grid-cols-2">
+                {raffles.map((raffle) => (
+                  <button
+                    key={raffle.id}
+                    onClick={() => setSelectedRaffleId(raffle.id)}
+                    className={`rounded-xl border p-4 text-left transition ${selectedRaffleId === raffle.id ? 'border-amber-500 bg-amber-500/10' : 'border-slate-800 bg-slate-950/60 hover:border-slate-600'}`}
+                  >
+                    <div className="mb-1 text-lg font-semibold text-slate-100">{raffle.title}</div>
+                    <div className="text-xs uppercase tracking-wide text-slate-500">{raffle.guild_name}</div>
+                    <div className="mt-3 flex gap-4 text-sm text-slate-400">
+                      <span>{raffle.participants.length} participants</span>
+                      <span>{raffle.prizes.length} prizes</span>
+                      <span>Run {raffle.current_run_number}</span>
+                    </div>
+                  </button>
+                ))}
+              </div>
+            )}
+          </div>
+
+          {selectedRaffle && (
+            <div className="space-y-6 rounded-2xl border border-slate-800 bg-slate-900/70 p-6">
+              <div className="flex flex-col gap-4 lg:flex-row lg:items-start lg:justify-between">
+                <div>
+                  <h2 className="text-2xl font-semibold text-slate-100">{selectedRaffle.title}</h2>
+                  <p className="mt-1 text-sm text-slate-400">{selectedRaffle.description || 'No description provided.'}</p>
+                  <div className="mt-3 flex flex-wrap gap-4 text-sm text-slate-400">
+                    <span>Status: {selectedRaffle.status}</span>
+                    <span>Guild: {selectedRaffle.guild_name}</span>
+                    <span>Reruns: {selectedRaffle.rerun_count}</span>
+                  </div>
+                </div>
+                <div className="flex flex-wrap gap-2">
+                  <button onClick={handleSyncParticipants} disabled={busyAction === 'sync'} className="rounded-xl border border-slate-700 px-4 py-2 text-sm text-slate-200 disabled:opacity-50">
+                    {busyAction === 'sync' ? 'Syncing...' : 'Sync Participants'}
+                  </button>
+                  <button onClick={handleDraw} disabled={busyAction === 'draw'} className="rounded-xl bg-emerald-500 px-4 py-2 text-sm font-semibold text-slate-950 disabled:opacity-50">
+                    {busyAction === 'draw' ? 'Drawing...' : 'Execute Draw'}
+                  </button>
+                </div>
+              </div>
+
+              <div className="grid gap-6 xl:grid-cols-2">
+                <div className="space-y-4">
+                  <div className="rounded-xl border border-slate-800 bg-slate-950/60 p-4">
+                    <div className="mb-3 flex items-center gap-2 text-slate-100">
+                      <Users className="h-4 w-4 text-amber-400" /> Participants ({selectedRaffle.participants.length})
+                    </div>
+                    <div className="max-h-72 space-y-2 overflow-y-auto pr-1 text-sm">
+                      {selectedRaffle.participants.map((participant) => (
+                        <div key={participant.id} className="flex items-center justify-between rounded-lg border border-slate-800 px-3 py-2 text-slate-300">
+                          <div>
+                            <div className="font-medium text-slate-100">{participant.character_name}</div>
+                            <div className="text-xs text-slate-500">{participant.username} · {participant.guild_rank || 'Member'}</div>
+                          </div>
+                          <div className="text-right text-xs text-slate-400">
+                            <div>weight {participant.weight.toFixed(1)}</div>
+                            <div>{participant.is_eligible ? 'eligible' : 'inactive'}</div>
+                          </div>
+                        </div>
+                      ))}
+                      {selectedRaffle.participants.length === 0 && <div className="text-slate-500">No synced participants yet.</div>}
+                    </div>
+                  </div>
+
+                  <form onSubmit={handleAddPrize} className="rounded-xl border border-slate-800 bg-slate-950/60 p-4">
+                    <div className="mb-3 text-slate-100">Add Prize</div>
+                    <div className="grid gap-3 sm:grid-cols-2">
+                      <input
+                        value={newPrize.name}
+                        onChange={(event) => setNewPrize((current) => ({ ...current, name: event.target.value }))}
+                        placeholder="Premio 4"
+                        className="rounded-xl border border-slate-700 bg-slate-900 px-3 py-2 text-slate-100 outline-none focus:border-amber-500"
+                        required
+                      />
+                      <input
+                        value={newPrize.reward}
+                        onChange={(event) => setNewPrize((current) => ({ ...current, reward: event.target.value }))}
+                        placeholder="2kk"
+                        className="rounded-xl border border-slate-700 bg-slate-900 px-3 py-2 text-slate-100 outline-none focus:border-amber-500"
+                        required
+                      />
+                    </div>
+                    <button type="submit" disabled={busyAction === 'prize'} className="mt-3 rounded-xl border border-slate-700 px-4 py-2 text-sm text-slate-200 disabled:opacity-50">
+                      Add Prize
+                    </button>
+                  </form>
+                </div>
+
+                <div className="space-y-4">
+                  <div className="rounded-xl border border-slate-800 bg-slate-950/60 p-4">
+                    <div className="mb-3 flex items-center gap-2 text-slate-100">
+                      <Trophy className="h-4 w-4 text-amber-400" /> Current Winners
+                    </div>
+                    <div className="space-y-2 text-sm">
+                      {selectedRaffle.current_winners.map((winner) => (
+                        <div key={winner.id} className="rounded-lg border border-slate-800 px-3 py-3 text-slate-300">
+                          <div className="font-medium text-slate-100">{winner.prize_name}: {winner.reward}</div>
+                          <div>{winner.character_name} ({winner.username})</div>
+                          <div className="text-xs text-slate-500">Run {winner.run_number}</div>
+                        </div>
+                      ))}
+                      {selectedRaffle.current_winners.length === 0 && <div className="text-slate-500">No draw executed yet.</div>}
+                    </div>
+                  </div>
+
+                  <div className="rounded-xl border border-slate-800 bg-slate-950/60 p-4">
+                    <div className="mb-3 text-slate-100">Rerun</div>
+                    <textarea
+                      value={rerunReason}
+                      onChange={(event) => setRerunReason(event.target.value)}
+                      placeholder="Reason for rerun"
+                      className="min-h-24 w-full rounded-xl border border-slate-700 bg-slate-900 px-3 py-2 text-slate-100 outline-none focus:border-amber-500"
+                    />
+                    <button
+                      onClick={handleRerun}
+                      disabled={!rerunReason || busyAction === 'rerun'}
+                      className="mt-3 rounded-xl bg-red-500 px-4 py-2 text-sm font-semibold text-white disabled:opacity-50"
+                    >
+                      {busyAction === 'rerun' ? 'Rerunning...' : 'Rerun as Admin'}
+                    </button>
+                  </div>
+
+                  <div className="rounded-xl border border-slate-800 bg-slate-950/60 p-4">
+                    <div className="mb-3 text-slate-100">History</div>
+                    <div className="max-h-72 space-y-2 overflow-y-auto pr-1 text-sm">
+                      {selectedRaffle.history.map((winner) => (
+                        <div key={winner.id} className="rounded-lg border border-slate-800 px-3 py-3 text-slate-300">
+                          <div className="font-medium text-slate-100">{winner.prize_name}: {winner.reward}</div>
+                          <div>{winner.character_name} ({winner.username})</div>
+                          <div className="text-xs text-slate-500">
+                            Run {winner.run_number}{winner.is_rerun ? ` · rerun · ${winner.rerun_reason || 'No reason'}` : ''}
+                          </div>
+                        </div>
+                      ))}
+                      {selectedRaffle.history.length === 0 && <div className="text-slate-500">No history yet.</div>}
+                    </div>
+                  </div>
+                </div>
+              </div>
+            </div>
+          )}
+        </div>
+      </div>
+    </div>
+  );
 }

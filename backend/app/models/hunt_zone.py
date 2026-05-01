@@ -1,8 +1,7 @@
-"""
-Hunt Zone model - Areas where players can hunt
-"""
-from sqlalchemy import Column, Integer, String, Float, Boolean, Text, ForeignKey
+"""Hunt Zone model - Areas where players can hunt."""
+from sqlalchemy import Boolean, Column, DateTime, ForeignKey, Integer, JSON, String, Text
 from sqlalchemy.orm import relationship
+from sqlalchemy.sql import func
 
 from app.db.database import Base
 
@@ -13,7 +12,10 @@ class HuntZone(Base):
     
     id = Column(Integer, primary_key=True, index=True)
     name = Column(String(100), unique=True, nullable=False, index=True)
+    normalized_name = Column(String(150), index=True)
     city = Column(String(100))  # Nearest city
+    source_name = Column(String(50), nullable=True, index=True)
+    source_url = Column(String(255), nullable=True)
     
     # Level recommendations
     min_level = Column(Integer, nullable=False)
@@ -51,6 +53,10 @@ class HuntZone(Base):
     location_y = Column(Integer)
     location_z = Column(Integer)
     map_image_url = Column(String(255))
+    raw_data = Column(JSON, nullable=True)
+    last_synced_at = Column(DateTime(timezone=True), nullable=True)
+    created_at = Column(DateTime(timezone=True), server_default=func.now())
+    updated_at = Column(DateTime(timezone=True), server_default=func.now(), onupdate=func.now())
     
     # Relationships
     creature_spawns = relationship("SpawnLocation", back_populates="hunt_zone", cascade="all, delete-orphan")

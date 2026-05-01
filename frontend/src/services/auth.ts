@@ -6,6 +6,13 @@ export interface User {
     email?: string;
     tibia_character_name?: string;
     guild_rank?: string;
+    guild_name?: string;
+    world_name?: string;
+    residence?: string;
+    vocation?: string;
+    level?: number;
+    achievement_points?: number;
+    tibia_status?: string;
     is_active: boolean;
     is_superuser: boolean;
 }

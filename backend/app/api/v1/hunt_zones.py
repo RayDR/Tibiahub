@@ -1,16 +1,39 @@
-"""
-Hunt Zones API endpoints
-"""
-from fastapi import APIRouter, Depends, HTTPException, Query
-from sqlalchemy.orm import Session
+"""Hunt Zones API endpoints."""
 from typing import List, Optional
 
+from fastapi import APIRouter, Depends, HTTPException, Query
+from sqlalchemy.orm import Session, selectinload
+
 from app.db.database import get_db
+from app.models.spawn_location import SpawnLocation
 from app.models import HuntZone as HuntZoneModel
 from app.schemas import HuntZone, HuntZoneCreate, HuntRecommendation
+from app.services.entity_metadata_service import EntityMetadataService
+from app.services.text_utils import normalize_search_text
 from app.services.hunt_service import HuntRecommendationService
 
 router = APIRouter(prefix="/hunt-zones", tags=["hunt-zones"])
+
+
+@router.get("/highlights", response_model=List[HuntZone])
+async def get_hunt_zone_highlights(
+    limit: int = Query(12, ge=1, le=50),
+    db: Session = Depends(get_db),
+):
+    metadata = EntityMetadataService.get_highlights(db, entity_type="hunt_zone", limit=limit)
+    zones = []
+    for record in metadata:
+        if record.entity_id is None:
+            continue
+        zone = (
+            db.query(HuntZoneModel)
+            .options(selectinload(HuntZoneModel.creature_spawns).selectinload(SpawnLocation.creature))
+            .filter(HuntZoneModel.id == record.entity_id)
+            .first()
+        )
+        if zone:
+            zones.append(zone)
+    return zones
 
 
 @router.get("/", response_model=List[HuntZone])
@@ -24,7 +47,7 @@ async def get_hunt_zones(
     db: Session = Depends(get_db)
 ):
     """Get list of hunt zones with optional filters"""
-    query = db.query(HuntZoneModel)
+    query = db.query(HuntZoneModel).options(selectinload(HuntZoneModel.creature_spawns).selectinload(SpawnLocation.creature))
     
     if min_level is not None:
         query = query.filter(HuntZoneModel.min_level >= min_level)
@@ -38,22 +61,43 @@ async def get_hunt_zones(
         query = query.filter(HuntZoneModel.city.ilike(f"%{city}%"))
 
     if search:
+        normalized_search = normalize_search_text(search)
         query = query.filter(
             (HuntZoneModel.name.ilike(f"%{search}%")) |
-            (HuntZoneModel.city.ilike(f"%{search}%"))
+            (HuntZoneModel.city.ilike(f"%{search}%")) |
+            (HuntZoneModel.normalized_name.contains(normalized_search))
         )
     
     zones = query.offset(skip).limit(limit).all()
+    if search:
+        EntityMetadataService.record_searches(
+            db,
+            entity_type="hunt_zone",
+            matches=[(zone.normalized_name or zone.name, zone.name, zone.id) for zone in zones[: min(len(zones), 5)]],
+        )
+        db.commit()
     return zones
 
 
 @router.get("/{zone_id}", response_model=HuntZone)
 async def get_hunt_zone(zone_id: int, db: Session = Depends(get_db)):
     """Get detailed information about a specific hunt zone"""
-    zone = db.query(HuntZoneModel).filter(HuntZoneModel.id == zone_id).first()
+    zone = (
+        db.query(HuntZoneModel)
+        .options(selectinload(HuntZoneModel.creature_spawns).selectinload(SpawnLocation.creature))
+        .filter(HuntZoneModel.id == zone_id)
+        .first()
+    )
     
     if not zone:
         raise HTTPException(status_code=404, detail="Hunt zone not found")
+
+    EntityMetadataService.record_searches(
+        db,
+        entity_type="hunt_zone",
+        matches=[(zone.normalized_name or zone.name, zone.name, zone.id)],
+    )
+    db.commit()
     
     return zone
 

@@ -1,7 +1,5 @@
-"""
-User model for Authentication and Admin privileges
-"""
-from sqlalchemy import Column, Integer, String, Boolean, DateTime
+"""User model for authentication and admin privileges."""
+from sqlalchemy import Boolean, Column, DateTime, Integer, String
 from sqlalchemy.orm import relationship
 from sqlalchemy.sql import func
 from app.db.database import Base
@@ -25,6 +23,13 @@ class User(Base):
     vocation = Column(String(50), nullable=True)  # Sorcerer, Druid, Paladin, Knight
     level = Column(Integer, nullable=True)
     tibia_character_name = Column(String(100), nullable=True, index=True)
+    world_name = Column(String(100), nullable=True)
+    guild_name = Column(String(200), nullable=True)
+    residence = Column(String(100), nullable=True)
+    achievement_points = Column(Integer, nullable=True)
+    last_login_at = Column(DateTime(timezone=True), nullable=True)
+    tibia_status = Column(String(50), nullable=True)
+    tibia_last_error = Column(String(255), nullable=True)
     last_updated = Column(DateTime(timezone=True), nullable=True)
     
     # Password reset fields

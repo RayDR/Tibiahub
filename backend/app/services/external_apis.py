@@ -1,289 +1,81 @@
 """
-Multi-source external API service for Tibia data
-Primary: TibiaWiki API (https://tibiawiki.dev/api/)
-Secondary: TibiaData API (https://api.tibiadata.com/v4/)
-Fallback: Local database
+Normalized external API access for TibiaHub.
 
-This service implements intelligent fallback: tries primary -> secondary -> local
+These helpers never fall back to silent demo data in production. If mock mode is
+explicitly enabled, the response is marked as mock so tests can assert on it.
 """
-import httpx
-import logging
-from typing import Optional, Dict, Any, List
+from __future__ import annotations
+
 from datetime import datetime
 from enum import Enum
+from typing import Any, Dict, Optional
 
-logger = logging.getLogger(__name__)
+from app.core.config import settings
+from app.services.bestiary_source import BestiarySourceError, get_creature_detail_by_name, list_creature_summaries, list_hunting_places, list_items, list_quests
+from app.services.mock_data import MOCK_CREATURE
 
-# API Endpoints
-TIBIAWIKI_BASE = "https://tibiawiki.dev/api"
-TIBIADATA_BASE = "https://api.tibiadata.com/v4"
-TIMEOUT = 15.0
 
 class APISource(str, Enum):
-    """Track which API source provided the data"""
     TIBIAWIKI = "tibiawiki"
     TIBIADATA = "tibiadata"
-    LOCAL = "local"
+    MOCK = "mock"
+
 
 class ExternalAPIError(Exception):
-    """Custom exception for external API errors"""
-    pass
+    """Raised when an external API call fails."""
+
 
 class APIResponse:
-    """Wrapper for API responses with source tracking"""
-    def __init__(self, data: Optional[Dict[str, Any]], source: APISource, error: Optional[str] = None):
+    def __init__(self, *, data: Optional[Any], source: APISource, error: Optional[str] = None, is_mock: bool = False):
         self.data = data
         self.source = source
         self.error = error
+        self.is_mock = is_mock
         self.timestamp = datetime.utcnow()
-    
+
     def success(self) -> bool:
-        return self.data is not None
-    
+        return self.data is not None and self.error is None
+
     def to_dict(self) -> Dict[str, Any]:
         return {
-            'data': self.data,
-            'source': self.source.value,
-            'error': self.error,
-            'timestamp': self.timestamp.isoformat(),
+            "data": self.data,
+            "source": self.source.value,
+            "error": self.error,
+            "is_mock": self.is_mock,
+            "timestamp": self.timestamp.isoformat(),
         }
 
-# ============ CREATURES ============
 
 async def get_creatures(expand: bool = False) -> APIResponse:
-    """
-    Fetch creatures from TibiaWiki API
-    Primary: TibiaWiki /api/creatures
-    Fallback: Demo data
-    """
-    try:
-        async with httpx.AsyncClient(timeout=TIMEOUT) as client:
-            # Try TibiaWiki (primary)
-            url = f"{TIBIAWIKI_BASE}/creatures"
-            params = {"expand": "true"} if expand else {}
-            
-            logger.info(f"Fetching creatures from TibiaWiki: {url}")
-            try:
-                response = await client.get(url, params=params)
-                if response.status_code == 200:
-                    data = response.json()
-                    logger.info(f"✅ Fetched {len(data)} creatures from TibiaWiki")
-                    return APIResponse(data=data, source=APISource.TIBIAWIKI)
-                else:
-                    logger.warning(f"TibiaWiki returned {response.status_code}")
-            except Exception as e:
-                logger.warning(f"TibiaWiki unavailable: {type(e).__name__}: {e}")
-            
-            # Return demo data
-            demo_creatures = {
-                "rotworm": {"name": "Rotworm", "type": "creature", "level": 2, "health": 5},
-                "spider": {"name": "Spider", "type": "creature", "level": 3, "health": 8},
-                "rat": {"name": "Rat", "type": "creature", "level": 1, "health": 3},
-            }
-            logger.info("Returning demo creatures")
-            return APIResponse(data=demo_creatures, source=APISource.LOCAL, error="Using demo data")
-    
-    except Exception as e:
-        logger.error(f"Error fetching creatures: {str(e)}")
-        return APIResponse(data={}, source=APISource.LOCAL, error=str(e))
+    if settings.USE_MOCK_DATA:
+        return APIResponse(data=[dict(MOCK_CREATURE)], source=APISource.MOCK, is_mock=True)
 
-# ============ ITEMS ============
+    try:
+        summaries = await list_creature_summaries(skip=0, limit=500)
+        if not expand:
+            return APIResponse(data=summaries, source=APISource.TIBIAWIKI)
+        detailed = [await get_creature_detail_by_name(item["name"]) for item in summaries]
+        return APIResponse(data=detailed, source=APISource.TIBIAWIKI)
+    except BestiarySourceError as exc:
+        return APIResponse(data=None, source=APISource.TIBIAWIKI, error=str(exc))
+
 
 async def get_items(expand: bool = False) -> APIResponse:
-    """
-    Fetch items from TibiaWiki API
-    Primary: TibiaWiki /api/items
-    """
     try:
-        async with httpx.AsyncClient(timeout=TIMEOUT) as client:
-            url = f"{TIBIAWIKI_BASE}/items"
-            params = {"expand": "true"} if expand else {}
-            
-            logger.info(f"Fetching items from TibiaWiki: {url}")
-            try:
-                response = await client.get(url, params=params)
-                if response.status_code == 200:
-                    data = response.json()
-                    logger.info(f"✅ Fetched {len(data)} items from TibiaWiki")
-                    return APIResponse(data=data, source=APISource.TIBIAWIKI)
-                else:
-                    logger.warning(f"TibiaWiki returned {response.status_code}")
-            except Exception as e:
-                logger.warning(f"TibiaWiki unavailable: {type(e).__name__}: {e}")
-            
-            # Return demo data
-            demo_items = {
-                "sword": {"name": "Sword", "type": "weapon", "value": 50},
-                "shield": {"name": "Shield", "type": "armor", "value": 100},
-                "health_potion": {"name": "Health Potion", "type": "potion", "value": 10},
-            }
-            logger.info("Returning demo items")
-            return APIResponse(data=demo_items, source=APISource.LOCAL, error="Using demo data")
-    
-    except Exception as e:
-        logger.error(f"Error fetching items: {str(e)}")
-        return APIResponse(data={}, source=APISource.LOCAL, error=str(e))
+        return APIResponse(data=await list_items(200 if expand else 100), source=APISource.TIBIAWIKI)
+    except BestiarySourceError as exc:
+        return APIResponse(data=None, source=APISource.TIBIAWIKI, error=str(exc))
 
-# ============ HUNTING PLACES ============
 
 async def get_hunting_places(expand: bool = False) -> APIResponse:
-    """
-    Fetch hunting places from TibiaWiki API
-    Primary: TibiaWiki /api/huntingplaces
-    """
     try:
-        async with httpx.AsyncClient(timeout=TIMEOUT) as client:
-            url = f"{TIBIAWIKI_BASE}/huntingplaces"
-            params = {"expand": "true"} if expand else {}
-            
-            logger.info(f"Fetching hunting places from TibiaWiki: {url}")
-            try:
-                response = await client.get(url, params=params)
-                if response.status_code == 200:
-                    data = response.json()
-                    logger.info(f"✅ Fetched {len(data)} hunting places from TibiaWiki")
-                    return APIResponse(data=data, source=APISource.TIBIAWIKI)
-                else:
-                    logger.warning(f"TibiaWiki returned {response.status_code}")
-            except Exception as e:
-                logger.warning(f"TibiaWiki unavailable: {type(e).__name__}: {e}")
-            
-            # Return demo data
-            demo_places = {
-                "rotworm_cave": {"name": "Rotworm Cave", "min_level": 2, "creatures": ["rotworm"]},
-                "spider_cave": {"name": "Spider Cave", "min_level": 3, "creatures": ["spider"]},
-            }
-            logger.info("Returning demo hunting places")
-            return APIResponse(data=demo_places, source=APISource.LOCAL, error="Using demo data")
-    
-    except Exception as e:
-        logger.error(f"Error fetching hunting places: {str(e)}")
-        return APIResponse(data={}, source=APISource.LOCAL, error=str(e))
+        return APIResponse(data=await list_hunting_places(200 if expand else 100), source=APISource.TIBIAWIKI)
+    except BestiarySourceError as exc:
+        return APIResponse(data=None, source=APISource.TIBIAWIKI, error=str(exc))
 
-# ============ QUESTS ============
 
 async def get_quests(expand: bool = False) -> APIResponse:
-    """
-    Fetch quests from TibiaWiki API
-    Primary: TibiaWiki /api/quests
-    """
     try:
-        async with httpx.AsyncClient(timeout=TIMEOUT) as client:
-            url = f"{TIBIAWIKI_BASE}/quests"
-            params = {"expand": "true"} if expand else {}
-            
-            logger.info(f"Fetching quests from TibiaWiki: {url}")
-            try:
-                response = await client.get(url, params=params)
-                if response.status_code == 200:
-                    data = response.json()
-                    logger.info(f"✅ Fetched {len(data)} quests from TibiaWiki")
-                    return APIResponse(data=data, source=APISource.TIBIAWIKI)
-                else:
-                    logger.warning(f"TibiaWiki returned {response.status_code}")
-            except Exception as e:
-                logger.warning(f"TibiaWiki unavailable: {type(e).__name__}: {e}")
-            
-            # Return demo data
-            demo_quests = {
-                "the_first_dragon": {"name": "The First Dragon", "min_level": 1, "exp_reward": 100},
-                "goblin_aid": {"name": "Goblin Aid", "min_level": 5, "exp_reward": 500},
-            }
-            logger.info("Returning demo quests")
-            return APIResponse(data=demo_quests, source=APISource.LOCAL, error="Using demo data")
-    
-    except Exception as e:
-        logger.error(f"Error fetching quests: {str(e)}")
-        return APIResponse(data={}, source=APISource.LOCAL, error=str(e))
-
-# ============ CHARACTERS ============
-
-async def get_character(character_name: str) -> APIResponse:
-    """
-    Fetch character info
-    Primary: TibiaData /v4/characters/{name}
-    Fallback: Local demo data
-    """
-    try:
-        async with httpx.AsyncClient(timeout=TIMEOUT) as client:
-            encoded_name = character_name.replace(' ', '%20')
-            
-            # Try TibiaData
-            url = f"{TIBIADATA_BASE}/character/{encoded_name}"
-            logger.info(f"Fetching character from TibiaData: {url}")
-            
-            try:
-                response = await client.get(url)
-                if response.status_code == 200:
-                    data = response.json()
-                    if data.get('character'):
-                        character = data['character']
-                        logger.info(f"✅ Fetched character {character_name} from TibiaData")
-                        return APIResponse(data=character, source=APISource.TIBIADATA)
-            except (httpx.ConnectError, httpx.TimeoutException, OSError) as e:
-                logger.warning(f"TibiaData unavailable: {e}")
-            
-            # Return demo data or not found
-            if character_name.lower() == "ray on":
-                demo_data = {
-                    'name': 'Ray On',
-                    'level': 587,
-                    'vocation': 'Sorcerer',
-                    'world': 'Thibia',
-                    'last_login': '2026-01-20T22:00:00Z',
-                    'guild': 'Bloodborne Warhowl',
-                }
-                logger.info(f"Using demo data for {character_name}")
-                return APIResponse(data=demo_data, source=APISource.LOCAL)
-            
-            return APIResponse(data=None, source=APISource.LOCAL, error=f"Character {character_name} not found")
-    
-    except Exception as e:
-        logger.error(f"Error fetching character {character_name}: {str(e)}")
-        return APIResponse(data=None, source=APISource.LOCAL, error=str(e))
-
-# ============ GUILDS ============
-
-async def get_guild(guild_name: str) -> APIResponse:
-    """
-    Fetch guild info
-    Primary: TibiaData /v4/guilds/{name}
-    Fallback: Local demo data
-    """
-    try:
-        async with httpx.AsyncClient(timeout=TIMEOUT) as client:
-            encoded_name = guild_name.replace(' ', '%20')
-            
-            # Try TibiaData
-            url = f"{TIBIADATA_BASE}/guilds/{encoded_name}"
-            logger.info(f"Fetching guild from TibiaData: {url}")
-            
-            try:
-                response = await client.get(url)
-                if response.status_code == 200:
-                    data = response.json()
-                    if data.get('guild'):
-                        guild = data['guild']
-                        logger.info(f"✅ Fetched guild {guild_name} from TibiaData")
-                        return APIResponse(data=guild, source=APISource.TIBIADATA)
-            except (httpx.ConnectError, httpx.TimeoutException, OSError) as e:
-                logger.warning(f"TibiaData unavailable: {e}")
-            
-            # Return demo data or not found
-            if guild_name.lower() == "bloodborne warhowl":
-                demo_data = {
-                    'name': 'Bloodborne Warhowl',
-                    'world': 'Thibia',
-                    'description': 'A legendary guild...',
-                    'founded': '2020-06-15',
-                    'members': [],
-                    'member_count': 50,
-                }
-                logger.info(f"Using demo data for guild {guild_name}")
-                return APIResponse(data=demo_data, source=APISource.LOCAL)
-            
-            return APIResponse(data=None, source=APISource.LOCAL, error=f"Guild {guild_name} not found")
-    
-    except Exception as e:
-        logger.error(f"Error fetching guild {guild_name}: {str(e)}")
-        return APIResponse(data=None, source=APISource.LOCAL, error=str(e))
+        return APIResponse(data=await list_quests(200 if expand else 100), source=APISource.TIBIAWIKI)
+    except BestiarySourceError as exc:
+        return APIResponse(data=None, source=APISource.TIBIAWIKI, error=str(exc))

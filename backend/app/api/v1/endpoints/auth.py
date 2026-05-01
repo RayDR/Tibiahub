@@ -1,6 +1,6 @@
+import logging
 from datetime import datetime, timedelta
 from typing import Any
-import requests
 from fastapi import APIRouter, Depends, HTTPException, status
 from fastapi.security import OAuth2PasswordRequestForm, OAuth2PasswordBearer
 from sqlalchemy.orm import Session
@@ -12,10 +12,11 @@ from app.models.user import User
 from app.models.user_character import UserCharacter
 from app.schemas.auth import UserCreate, UserResponse, Token, TokenData
 from app.services.tibia_validation_service import TibiaValidationService
-from app.services import tibia_api
+from app.services.tibia_sync_service import try_sync_user_character_snapshot
 
 router = APIRouter()
 oauth2_scheme = OAuth2PasswordBearer(tokenUrl="api/v1/auth/login")
+logger = logging.getLogger(__name__)
 
 def get_current_user(token: str = Depends(oauth2_scheme), db: Session = Depends(get_db)):
     credentials_exception = HTTPException(
@@ -44,7 +45,7 @@ def get_current_active_user(current_user: User = Depends(get_current_user)):
 
 def get_current_admin_user(current_user: User = Depends(get_current_active_user)):
     if not current_user.is_superuser and current_user.guild_rank not in ["Leader", "Vice Leader"]:
-         raise HTTPException(
+        raise HTTPException(
             status_code=403,
             detail="The user doesn't have enough privileges",
         )
@@ -72,22 +73,6 @@ def login_access_token(
     
     if not user.is_active:
         raise HTTPException(status_code=400, detail="Inactive user")
-    
-    # Update user info from Tibia API on each login
-    if user.tibia_character_name:
-        try:
-            import asyncio
-            char_info = asyncio.run(tibia_api.get_character_info(user.tibia_character_name))
-            if char_info:
-                user.vocation = char_info.get('vocation')
-                user.level = char_info.get('level')
-                user.last_updated = datetime.utcnow()
-                db.add(user)
-                db.commit()
-                db.refresh(user)
-        except Exception as e:
-            # Log but don't fail the login if Tibia API is unavailable
-            print(f"Warning: Could not update character info from Tibia API: {e}")
     
     access_token_expires = timedelta(minutes=config.settings.ACCESS_TOKEN_EXPIRE_MINUTES)
     return {
@@ -144,6 +129,12 @@ def register_user(
         email=user_in.email,
         hashed_password=security.get_password_hash(user_in.password),
         guild_rank="Member",
+        tibia_character_name=tibia_character_data.get("name") if tibia_character_data else user_in.tibia_character_name,
+        level=tibia_character_data.get("level") if tibia_character_data else None,
+        vocation=tibia_character_data.get("vocation") if tibia_character_data else None,
+        world_name=tibia_character_data.get("world") if tibia_character_data else None,
+        residence=tibia_character_data.get("residence") if tibia_character_data else None,
+        tibia_status="validated" if tibia_character_data else None,
         join_date=datetime.utcnow(),
         is_active=True,
         is_superuser=False
@@ -158,11 +149,20 @@ def register_user(
             user_id=user.id,
             character_name=tibia_character_data["name"] if tibia_character_data else user_in.tibia_character_name,
             level=tibia_character_data.get("level") if tibia_character_data else None,
-            vocation=tibia_character_data.get("vocation") if tibia_character_data else None
+            vocation=tibia_character_data.get("vocation") if tibia_character_data else None,
+            world_name=tibia_character_data.get("world") if tibia_character_data else None,
+            residence=tibia_character_data.get("residence") if tibia_character_data else None,
         )
         db.add(user_char)
         db.commit()
         db.refresh(user_char)
+
+    if user.tibia_character_name:
+        try:
+            import asyncio
+            asyncio.run(try_sync_user_character_snapshot(db, user))
+        except Exception as exc:
+            logger.warning("register_character_sync_skipped username=%s error=%s", user.username, exc)
     
     return user
 
