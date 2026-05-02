@@ -8,7 +8,7 @@ from app.db.database import get_db
 from app.models.user import User
 from app.models.user_character import UserCharacter
 from app.schemas.profile import ProfileResponse, ProfileUpdate
-from app.core.security import get_password_hash
+from app.core.security import get_password_hash, verify_password
 from app.api.v1.endpoints.auth import get_current_user
 
 router = APIRouter()
@@ -32,6 +32,7 @@ def get_my_profile(
     return ProfileResponse(
         username=current_user.username,
         email=current_user.email,
+        avatar_url=current_user.avatar_url,
         tibia_character_name=current_user.tibia_character_name,
         guild_rank=current_user.guild_rank,
         guild_name=current_user.guild_name,
@@ -71,9 +72,18 @@ def update_my_profile(
             raise HTTPException(status_code=400, detail="Email already in use")
         
         current_user.email = profile_in.email
-    
-    if profile_in.password is not None:
-        current_user.hashed_password = get_password_hash(profile_in.password)
+
+    if profile_in.avatar_url is not None:
+        current_user.avatar_url = profile_in.avatar_url or None
+
+    new_password = profile_in.new_password or profile_in.password
+    if new_password is not None:
+        if profile_in.new_password is not None:
+            if not profile_in.current_password:
+                raise HTTPException(status_code=400, detail="Current password is required")
+            if not verify_password(profile_in.current_password, current_user.hashed_password):
+                raise HTTPException(status_code=400, detail="Current password is invalid")
+        current_user.hashed_password = get_password_hash(new_password)
     
     db.add(current_user)
     db.commit()
@@ -89,6 +99,7 @@ def update_my_profile(
     return ProfileResponse(
         username=current_user.username,
         email=current_user.email,
+        avatar_url=current_user.avatar_url,
         tibia_character_name=current_user.tibia_character_name,
         guild_rank=current_user.guild_rank,
         guild_name=current_user.guild_name,

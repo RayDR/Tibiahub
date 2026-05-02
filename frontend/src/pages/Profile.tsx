@@ -3,12 +3,13 @@ import { useEffect, useState } from 'react';
 import { useAuth } from '../context/AuthContext';
 import { useToast } from '../context/ToastContext';
 import { useNavigate } from 'react-router-dom';
-import { User, Shield, Mail, Calendar, Edit2, Save, X, Loader2 } from 'lucide-react';
+import { User, Shield, Mail, Calendar, Edit2, Save, X, Loader2, Link2, Lock } from 'lucide-react';
 import api from '../services/api';
 
 interface ProfileData {
     username: string;
     email: string;
+    avatar_url?: string;
     tibia_character_name: string;
     guild_rank?: string;
     guild_name?: string;
@@ -35,7 +36,11 @@ export default function Profile() {
     const [profileData, setProfileData] = useState<ProfileData | null>(null);
     const [formData, setFormData] = useState({
         email: '',
+        avatar_url: '',
         tibia_character_name: '',
+        current_password: '',
+        new_password: '',
+        confirm_password: '',
     });
 
     useEffect(() => {
@@ -49,7 +54,11 @@ export default function Profile() {
             setProfileData(response.data);
             setFormData({
                 email: response.data.email || '',
+                avatar_url: response.data.avatar_url || '',
                 tibia_character_name: response.data.tibia_character_name || '',
+                current_password: '',
+                new_password: '',
+                confirm_password: '',
             });
         } catch (error) {
             console.error('Failed to load profile:', error);
@@ -60,9 +69,27 @@ export default function Profile() {
     };
 
     const handleSave = async () => {
+        if (formData.new_password && formData.new_password !== formData.confirm_password) {
+            toast.error('New password and confirmation do not match');
+            return;
+        }
+        if (formData.new_password && !formData.current_password) {
+            toast.error('Current password is required to set a new password');
+            return;
+        }
+
         setSaving(true);
         try {
-            const response = await api.put('/profile/me', formData);
+            const payload: Record<string, string> = {
+                email: formData.email,
+                avatar_url: formData.avatar_url,
+            };
+            if (formData.new_password) {
+                payload.current_password = formData.current_password;
+                payload.new_password = formData.new_password;
+            }
+
+            const response = await api.put('/profile/me', payload);
             setProfileData(response.data);
             setEditing(false);
             
@@ -86,7 +113,11 @@ export default function Profile() {
         if (profileData) {
             setFormData({
                 email: profileData.email || '',
+                avatar_url: profileData.avatar_url || '',
                 tibia_character_name: profileData.tibia_character_name || '',
+                current_password: '',
+                new_password: '',
+                confirm_password: '',
             });
         }
     };
@@ -155,6 +186,39 @@ export default function Profile() {
 
                 {/* Profile Fields */}
                 <div className="p-4 md:p-6 space-y-6">
+                    {/* Avatar URL */}
+                    <div>
+                        <label className="block text-sm font-medium text-slate-400 mb-2">
+                            <Link2 className="w-4 h-4 inline mr-1" />
+                            Avatar URL
+                        </label>
+                        {editing ? (
+                            <input
+                                type="url"
+                                value={formData.avatar_url}
+                                onChange={(e) => setFormData({ ...formData, avatar_url: e.target.value })}
+                                className="w-full bg-slate-950 border border-slate-700 rounded px-3 py-2 text-slate-200 focus:outline-none focus:border-amber-500"
+                                placeholder="https://.../avatar.png"
+                            />
+                        ) : (
+                            <div className="bg-slate-950/50 border border-slate-700 rounded px-3 py-2 text-slate-300 break-all">
+                                {profileData.avatar_url || 'Not set'}
+                            </div>
+                        )}
+                        {(editing ? formData.avatar_url : profileData.avatar_url) && (
+                            <div className="mt-3 h-16 w-16 overflow-hidden rounded-full border border-slate-700 bg-slate-950">
+                                <img
+                                    src={editing ? formData.avatar_url : profileData.avatar_url}
+                                    alt="Avatar"
+                                    className="h-full w-full object-cover"
+                                    onError={(event) => {
+                                        (event.target as HTMLImageElement).style.display = 'none';
+                                    }}
+                                />
+                            </div>
+                        )}
+                    </div>
+
                     {/* Username - Read only */}
                     <div>
                         <label className="block text-sm font-medium text-slate-400 mb-2">
@@ -244,7 +308,7 @@ export default function Profile() {
                     </div>
 
                     <div>
-                        <label className="block text-sm font-medium text-slate-400 mb-2">Tibia Sync</label>
+                        <label className="block text-sm font-medium text-slate-400 mb-2">Tibia Status</label>
                         <div className="bg-slate-950/50 border border-slate-700 rounded px-3 py-2 text-slate-300">
                             Status: {profileData.tibia_status || 'unknown'}
                             {profileData.achievement_points !== undefined && profileData.achievement_points !== null ? ` · Achievement points: ${profileData.achievement_points}` : ''}
@@ -281,6 +345,39 @@ export default function Profile() {
                             </div>
                         </div>
                     </div>
+
+                    {/* Password Change */}
+                    {editing && (
+                        <div className="rounded-lg border border-slate-700 bg-slate-950/40 p-4">
+                            <h3 className="mb-3 text-sm font-semibold text-slate-200 flex items-center gap-2">
+                                <Lock className="w-4 h-4 text-amber-500" />
+                                Change Password (Optional)
+                            </h3>
+                            <div className="space-y-3">
+                                <input
+                                    type="password"
+                                    value={formData.current_password}
+                                    onChange={(e) => setFormData({ ...formData, current_password: e.target.value })}
+                                    className="w-full bg-slate-950 border border-slate-700 rounded px-3 py-2 text-slate-200 focus:outline-none focus:border-amber-500"
+                                    placeholder="Current password"
+                                />
+                                <input
+                                    type="password"
+                                    value={formData.new_password}
+                                    onChange={(e) => setFormData({ ...formData, new_password: e.target.value })}
+                                    className="w-full bg-slate-950 border border-slate-700 rounded px-3 py-2 text-slate-200 focus:outline-none focus:border-amber-500"
+                                    placeholder="New password"
+                                />
+                                <input
+                                    type="password"
+                                    value={formData.confirm_password}
+                                    onChange={(e) => setFormData({ ...formData, confirm_password: e.target.value })}
+                                    className="w-full bg-slate-950 border border-slate-700 rounded px-3 py-2 text-slate-200 focus:outline-none focus:border-amber-500"
+                                    placeholder="Confirm new password"
+                                />
+                            </div>
+                        </div>
+                    )}
                 </div>
             </div>
         </div>

@@ -1,7 +1,8 @@
-import React, { useEffect, useState } from 'react';
+import React, { useEffect, useRef, useState } from 'react';
 import { motion } from 'framer-motion';
-import { AlertTriangle, ArrowDownAZ, ArrowUpAZ, Gem, Loader2, MapPin, Search, Sword } from 'lucide-react';
+import { AlertTriangle, ArrowDownAZ, ArrowUpAZ, Gem, Loader2, MapPin, Search, Sword, Sparkles } from 'lucide-react';
 import { useTranslation } from 'react-i18next';
+import axios from 'axios';
 
 import CreatureCard from '../components/CreatureCard';
 import TibiaMap from '../components/TibiaMap';
@@ -11,63 +12,127 @@ import { CreatureSimple, HuntZone, ItemSearchResult } from '../types';
 type SearchMode = 'creatures' | 'items' | 'zones';
 type CreatureSort = 'name' | 'experience' | 'hitpoints' | 'difficulty';
 type SortOrder = 'asc' | 'desc';
+type CreatureCategory = '' | 'Humanoid' | 'Undead' | 'Demon' | 'Beast' | 'Dragon' | 'Elemental' | 'Construct';
+const CREATURE_CATEGORIES: CreatureCategory[] = ['', 'Humanoid', 'Undead', 'Demon', 'Beast', 'Dragon', 'Elemental', 'Construct'];
+
+const mergeUniqueCreatures = (current: CreatureSimple[], incoming: CreatureSimple[]): CreatureSimple[] => {
+  if (incoming.length === 0) return current;
+  const seen = new Set(current.map((item) => item.id));
+  const merged = [...current];
+  for (const item of incoming) {
+    if (seen.has(item.id)) continue;
+    seen.add(item.id);
+    merged.push(item);
+  }
+  return merged;
+};
 
 const CreaturesPage: React.FC = () => {
+  const PAGE_SIZE = 20;
   const { t } = useTranslation();
   const [mode, setMode] = useState<SearchMode>('creatures');
   const [searchTerm, setSearchTerm] = useState('');
   const [creatureSort, setCreatureSort] = useState<CreatureSort>('name');
   const [sortOrder, setSortOrder] = useState<SortOrder>('asc');
+  const [creatureCategory, setCreatureCategory] = useState<CreatureCategory>('');
   const [creatures, setCreatures] = useState<CreatureSimple[]>([]);
   const [items, setItems] = useState<ItemSearchResult[]>([]);
   const [zones, setZones] = useState<HuntZone[]>([]);
   const [loading, setLoading] = useState(false);
   const [initialLoaded, setInitialLoaded] = useState(false);
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
+  const [skip, setSkip] = useState(0);
+  const [hasMore, setHasMore] = useState(false);
+  const [mapPreviewFailed, setMapPreviewFailed] = useState<Record<number, boolean>>({});
+  const [usedHighlightsSource, setUsedHighlightsSource] = useState(false);
+  const activeRequestRef = useRef<AbortController | null>(null);
 
-  useEffect(() => {
-    const timer = setTimeout(() => {
-      if (searchTerm || !initialLoaded || mode === 'creatures') {
-        void performSearch();
-      }
-    }, 350);
-    return () => clearTimeout(timer);
-  }, [searchTerm, mode, creatureSort, sortOrder]);
+  async function performSearch(reset: boolean = true) {
+    const normalized = searchTerm.trim();
+    const nextSkip = reset ? 0 : skip;
+    activeRequestRef.current?.abort();
+    const controller = new AbortController();
+    activeRequestRef.current = controller;
 
-  async function performSearch() {
     setLoading(true);
     setErrorMessage(null);
     try {
       if (mode === 'creatures') {
-        const data = searchTerm
-          ? await creaturesApi.getAll({
-              search: searchTerm || undefined,
-              limit: 100,
-              sort_by: creatureSort,
-              sort_order: sortOrder,
-            })
-          : await creaturesApi.getHighlights(18);
-        setCreatures(data);
+        const hasFilters = normalized.length > 0 || !!creatureCategory;
+        let data: CreatureSimple[] = [];
+
+        if (reset && !hasFilters) {
+          // Primary source for home-like bestiary view; backend falls back to local ordered list.
+          data = await creaturesApi.getHighlights(PAGE_SIZE);
+          if (data.length === 0) {
+            data = await creaturesApi.getAll(
+              {
+                skip: 0,
+                limit: PAGE_SIZE,
+                sort_by: creatureSort,
+                sort_order: sortOrder,
+              },
+              controller.signal,
+            );
+            setUsedHighlightsSource(false);
+          } else {
+            setUsedHighlightsSource(true);
+          }
+          setCreatures(data);
+          setSkip(data.length);
+          // Keep pagination available; next pages come from local list endpoint.
+          setHasMore(data.length > 0);
+          setItems([]);
+          setZones([]);
+          return;
+        }
+
+        const paginationSkip = !reset && usedHighlightsSource && !hasFilters ? creatures.length : nextSkip;
+        data = await creaturesApi.getAll(
+          {
+            skip: paginationSkip,
+            limit: PAGE_SIZE,
+            search: normalized || undefined,
+            sort_by: creatureSort,
+            sort_order: sortOrder,
+            category: creatureCategory || undefined,
+          },
+          controller.signal,
+        );
+
+        setCreatures((current) => (reset ? data : mergeUniqueCreatures(current, data)));
+        setSkip((reset ? 0 : paginationSkip) + data.length);
+        setHasMore(data.length === PAGE_SIZE);
+        if (hasFilters || !reset) {
+          setUsedHighlightsSource(false);
+        }
         setItems([]);
         setZones([]);
       } else if (mode === 'items') {
-        if (searchTerm.length > 1) {
-          const data = await itemsApi.search(searchTerm);
+        if (normalized.length > 1) {
+          const data = await itemsApi.search(normalized, 20, controller.signal);
           setItems(data);
+        } else if (normalized.length > 0) {
+          setItems([]);
         } else {
           setItems(await itemsApi.getHighlights(12));
         }
+        setHasMore(false);
         setCreatures([]);
         setZones([]);
       } else {
-        const data = searchTerm
-          ? await huntZonesApi.getAll({ search: searchTerm || undefined, limit: 50 })
+        const data = normalized
+          ? await huntZonesApi.getAll({ search: normalized || undefined, limit: 20 }, controller.signal)
           : await huntZonesApi.getHighlights(12);
         setZones(data);
+        setHasMore(false);
         setCreatures([]);
         setItems([]);
       }
     } catch (error: any) {
+      if (axios.isCancel(error) || error?.name === 'CanceledError' || error?.code === 'ERR_CANCELED') {
+        return;
+      }
       console.error(error);
       setErrorMessage(error?.response?.data?.detail || error?.message || 'Failed to load bestiary data');
     } finally {
@@ -75,6 +140,18 @@ const CreaturesPage: React.FC = () => {
       setInitialLoaded(true);
     }
   }
+
+  useEffect(() => {
+    const timer = setTimeout(() => {
+      if (searchTerm || !initialLoaded || mode === 'creatures') {
+        void performSearch(true);
+      }
+    }, 450);
+    return () => {
+      clearTimeout(timer);
+      activeRequestRef.current?.abort();
+    };
+  }, [searchTerm, mode, creatureSort, sortOrder, creatureCategory]);
 
   const isEmpty = !loading && creatures.length === 0 && items.length === 0 && zones.length === 0;
 
@@ -95,7 +172,7 @@ const CreaturesPage: React.FC = () => {
           transition={{ delay: 0.05 }}
           className="mx-auto max-w-2xl px-4 text-sm text-slate-300 md:text-base"
         >
-          Bestiary con datos reales de TibiaData y TibiaWiki. Si un campo no existe en la fuente externa, lo verás como Unknown o Not available, nunca inventado.
+          Discover creatures, loot, and hunting zones to plan your next adventure.
         </motion.p>
 
         <motion.div
@@ -134,7 +211,29 @@ const CreaturesPage: React.FC = () => {
             </div>
 
             {mode === 'creatures' && (
-              <div className="grid gap-2 sm:grid-cols-2 md:grid-cols-[1fr_1fr_auto]">
+              <div className="space-y-2">
+                <div className="grid grid-cols-2 gap-2 sm:grid-cols-4 md:grid-cols-8">
+                  {CREATURE_CATEGORIES.map((category) => {
+                    const active = creatureCategory === category;
+                    return (
+                      <button
+                        key={category || 'all'}
+                        onClick={() => setCreatureCategory(category)}
+                        className={`rounded-xl border px-3 py-2 text-xs font-semibold transition ${active ? 'border-amber-400 bg-amber-500/20 text-amber-200' : 'border-slate-700 bg-slate-950 text-slate-300 hover:border-slate-500'}`}
+                      >
+                        {category || 'All'}
+                      </button>
+                    );
+                  })}
+                </div>
+
+                {!searchTerm.trim() && !creatureCategory && (
+                  <div className="flex items-center gap-2 rounded-xl border border-amber-500/20 bg-amber-500/10 px-3 py-2 text-xs text-amber-200">
+                    <Sparkles size={14} /> Showing recommended creatures.
+                  </div>
+                )}
+
+                <div className="grid gap-2 sm:grid-cols-2 md:grid-cols-2">
                 <select value={creatureSort} onChange={(event) => setCreatureSort(event.target.value as CreatureSort)} className="rounded-xl border border-slate-700 bg-slate-950 px-4 py-3 text-sm text-slate-100 outline-none focus:border-amber-500">
                   <option value="name">Sort by name</option>
                   <option value="experience">Sort by experience</option>
@@ -145,6 +244,7 @@ const CreaturesPage: React.FC = () => {
                   {sortOrder === 'asc' ? <ArrowDownAZ size={16} /> : <ArrowUpAZ size={16} />}
                   {sortOrder === 'asc' ? 'Ascending' : 'Descending'}
                 </button>
+              </div>
               </div>
             )}
           </div>
@@ -161,9 +261,9 @@ const CreaturesPage: React.FC = () => {
         {!loading && errorMessage && (
           <div className="mx-auto mb-8 max-w-3xl rounded-2xl border border-red-500/20 bg-red-950/20 p-5 text-red-100">
             <div className="mb-2 flex items-center gap-2 font-semibold">
-              <AlertTriangle className="h-4 w-4" /> Data source error
+              <AlertTriangle className="h-4 w-4" /> Something went wrong
             </div>
-            <p className="text-sm text-red-200/80">{errorMessage}</p>
+            <p className="text-sm text-red-200/80">Please try again in a moment.</p>
           </div>
         )}
 
@@ -208,11 +308,21 @@ const CreaturesPage: React.FC = () => {
             {mode === 'zones' && zones.map((zone) => (
               <motion.div initial={{ opacity: 0, scale: 0.95 }} animate={{ opacity: 1, scale: 1 }} key={zone.id} className="overflow-hidden rounded-xl border border-slate-700/50 bg-slate-900/50">
                 <div className="relative h-40 bg-slate-950">
-                  <TibiaMap
-                    zoom={11}
-                    center={zone.location_x ? { x: zone.location_x, y: zone.location_y! } : undefined}
-                    markers={zone.location_x ? [{ x: zone.location_x, y: zone.location_y!, label: zone.name }] : []}
-                  />
+                  {zone.map_image_url && !mapPreviewFailed[zone.id] ? (
+                    <img
+                      src={huntZonesApi.getMapImageUrl(zone.id)}
+                      alt={zone.name}
+                      className="h-full w-full object-cover"
+                      loading="lazy"
+                      onError={() => setMapPreviewFailed((prev) => ({ ...prev, [zone.id]: true }))}
+                    />
+                  ) : (
+                    <TibiaMap
+                      zoom={11}
+                      center={zone.location_x ? { x: zone.location_x, y: zone.location_y! } : undefined}
+                      markers={zone.location_x ? [{ x: zone.location_x, y: zone.location_y!, label: zone.name }] : []}
+                    />
+                  )}
                   <div className="absolute inset-0 bg-transparent" />
                 </div>
                 <div className="p-6">
@@ -228,11 +338,22 @@ const CreaturesPage: React.FC = () => {
           </div>
         )}
 
+        {!loading && mode === 'creatures' && hasMore && creatures.length > 0 && (
+          <div className="mt-8 flex justify-center">
+            <button
+              onClick={() => void performSearch(false)}
+              className="rounded-xl border border-slate-700 bg-slate-900 px-5 py-3 text-sm font-semibold text-slate-200 hover:border-amber-500/60 hover:text-amber-300"
+            >
+              Load more
+            </button>
+          </div>
+        )}
+
         {isEmpty && !errorMessage && (
           <div className="py-20 text-center opacity-70">
             <div className="mb-4 text-6xl">📜</div>
-            <p className="font-serif text-xl text-slate-300">No results found for the current search.</p>
-            <p className="mt-2 text-sm text-slate-500">Try another monster name, or switch to loot and zones.</p>
+            <p className="font-serif text-xl text-slate-300">No creatures found.</p>
+            <p className="mt-2 text-sm text-slate-500">Try another search or category.</p>
           </div>
         )}
       </div>

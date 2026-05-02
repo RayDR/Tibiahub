@@ -97,4 +97,19 @@ export const raffleApi = {
     const response = await api.post(`/raffles/${raffleId}/rerun`, { reason });
     return response.data;
   },
+
+  async removeParticipant(raffleId: number, participantId: number): Promise<Raffle> {
+    const response = await api.delete(`/raffles/${raffleId}/participants/${participantId}`);
+    return response.data;
+  },
+
+  async getPublic(raffleId: number): Promise<Raffle> {
+    const response = await api.get(`/raffles/public/${raffleId}`);
+    return response.data;
+  },
+
+  async registerPublic(raffleId: number, characterName: string): Promise<Raffle> {
+    const response = await api.post(`/raffles/public/${raffleId}/register`, { character_name: characterName });
+    return response.data;
+  },
 };

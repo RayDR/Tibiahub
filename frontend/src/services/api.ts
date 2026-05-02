@@ -24,11 +24,12 @@ export const creaturesApi = {
     skip?: number;
     limit?: number;
     search?: string;
+    category?: string;
     difficulty?: string;
     sort_by?: 'name' | 'experience' | 'hitpoints' | 'difficulty';
     sort_order?: 'asc' | 'desc';
-  }): Promise<CreatureSimple[]> => {
-    const response = await api.get('/creatures/', { params });
+  }, signal?: AbortSignal): Promise<CreatureSimple[]> => {
+    const response = await api.get('/creatures/', { params, signal });
     return response.data;
   },
 
@@ -42,6 +43,11 @@ export const creaturesApi = {
     return response.data;
   },
 
+  getBySlug: async (slug: string): Promise<Creature> => {
+    const response = await api.get(`/creatures/${encodeURIComponent(slug)}`);
+    return response.data;
+  },
+
   getByName: async (name: string): Promise<Creature> => {
     const response = await api.get(`/creatures/name/${name}`);
     return response.data;
@@ -51,8 +57,8 @@ export const creaturesApi = {
 // Hunt Zones API
 // Hunt Zones API
 export const huntZonesApi = {
-  getAll: async (filters: { skip?: number; limit?: number; min_level?: number; max_level?: number; city?: string; search?: string } = {}): Promise<HuntZone[]> => {
-    const response = await api.get('/hunt-zones/', { params: filters });
+  getAll: async (filters: { skip?: number; limit?: number; min_level?: number; max_level?: number; city?: string; search?: string } = {}, signal?: AbortSignal): Promise<HuntZone[]> => {
+    const response = await api.get('/hunt-zones/', { params: filters, signal });
     return response.data;
   },
 
@@ -65,6 +71,8 @@ export const huntZonesApi = {
     const response = await api.get(`/hunt-zones/${id}`);
     return response.data;
   },
+
+  getMapImageUrl: (id: number): string => `${API_BASE_URL}/hunt-zones/${id}/map-image`,
 
   getRecommendations: async (
     vocation: Vocation,
@@ -111,8 +119,8 @@ export const huntZonesApi = {
 
 // Items API
 export const itemsApi = {
-  search: async (search: string, limit: number = 50): Promise<ItemSearchResult[]> => {
-    const response = await api.get('/items/', { params: { search, limit } });
+  search: async (search: string, limit: number = 50, signal?: AbortSignal): Promise<ItemSearchResult[]> => {
+    const response = await api.get('/items/', { params: { search, limit }, signal });
     return response.data;
   },
 

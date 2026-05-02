@@ -18,14 +18,16 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
     const [loading, setLoading] = useState(true);
     const navigate = useNavigate();
 
-    const fetchUser = async () => {
+    const fetchUser = async (): Promise<User | null> => {
         try {
             const userData = await authApi.getMe();
             setUser(userData);
+            return userData;
         } catch (error) {
             console.error('Failed to fetch user', error);
             localStorage.removeItem('token');
             setUser(null);
+            return null;
         } finally {
             setLoading(false);
         }
@@ -42,8 +44,12 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
 
     const login = async (token: string) => {
         localStorage.setItem('token', token);
-        await fetchUser();
-        navigate('/guild/dashboard'); // Redirect to dashboard after login
+        const profile = await fetchUser();
+        if (profile?.is_superuser) {
+            navigate('/admin', { replace: true });
+            return;
+        }
+        navigate('/guild/dashboard', { replace: true });
     };
 
     const logout = () => {

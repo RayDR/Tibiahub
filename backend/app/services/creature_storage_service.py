@@ -5,6 +5,7 @@ from datetime import datetime
 from typing import Any, Iterable, Optional
 
 from sqlalchemy.orm import Session, selectinload
+from sqlalchemy import or_
 
 from app.models import Creature, HuntZone, Loot, SpawnLocation
 from app.services.entity_metadata_service import EntityMetadataService
@@ -93,6 +94,7 @@ def upsert_creature_payload(db: Session, payload: dict[str, Any]) -> Creature:
         "bestiary_class",
         "bestiary_level",
         "charm_points",
+        "classification",
         "creature_class",
         "primary_type",
     ]:
@@ -171,11 +173,88 @@ def get_cached_creature_by_name(db: Session, creature_name: str) -> Optional[Cre
     )
 
 
-def list_cached_creatures(db: Session, *, search: Optional[str], skip: int, limit: int, sort_by: str, sort_order: str) -> list[Creature]:
+def get_cached_creature_by_slug(db: Session, creature_slug: str) -> Optional[Creature]:
+    normalized_slug = (creature_slug or "").strip().lower()
+    return (
+        db.query(Creature)
+        .options(
+            selectinload(Creature.loot_items),
+            selectinload(Creature.spawn_locations).selectinload(SpawnLocation.hunt_zone),
+        )
+        .filter(Creature.slug == normalized_slug)
+        .first()
+    )
+
+
+def resolve_cached_creature(db: Session, identifier: str) -> Optional[Creature]:
+    raw = (identifier or "").strip()
+    if not raw:
+        return None
+
+    if raw.isdigit():
+        creature = get_cached_creature_by_id(db, int(raw))
+        if creature:
+            return creature
+
+    slug_candidate = raw.replace(" ", "-").replace("_", "-").strip().lower()
+    slug_variants = {
+        slug_candidate,
+        slug_candidate.replace("-", "_"),
+        raw.strip().lower(),
+    }
+
+    creature = (
+        db.query(Creature)
+        .options(
+            selectinload(Creature.loot_items),
+            selectinload(Creature.spawn_locations).selectinload(SpawnLocation.hunt_zone),
+        )
+        .filter(or_(*[Creature.slug == variant for variant in slug_variants if variant]))
+        .first()
+    )
+    if creature:
+        return creature
+
+    normalized_name = normalize_search_text(raw.replace("-", " ").replace("_", " "))
+    creature = (
+        db.query(Creature)
+        .options(
+            selectinload(Creature.loot_items),
+            selectinload(Creature.spawn_locations).selectinload(SpawnLocation.hunt_zone),
+        )
+        .filter(Creature.normalized_name == normalized_name)
+        .first()
+    )
+    if creature:
+        return creature
+
+    return (
+        db.query(Creature)
+        .options(
+            selectinload(Creature.loot_items),
+            selectinload(Creature.spawn_locations).selectinload(SpawnLocation.hunt_zone),
+        )
+        .filter(Creature.name.ilike(raw))
+        .first()
+    )
+
+
+def list_cached_creatures(
+    db: Session,
+    *,
+    search: Optional[str],
+    category: Optional[str],
+    skip: int,
+    limit: int,
+    sort_by: str,
+    sort_order: str,
+) -> list[Creature]:
     query = db.query(Creature)
     if search:
         normalized = normalize_search_text(search)
         query = query.filter(Creature.normalized_name.contains(normalized))
+    if category:
+        query = query.filter(Creature.classification.ilike(category))
 
     sort_column = {
         "experience": Creature.experience,

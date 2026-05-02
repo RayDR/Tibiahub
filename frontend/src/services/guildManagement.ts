@@ -40,6 +40,8 @@ export interface SystemSettings {
     tibia_validation_strict: boolean;
     discord_webhook_url: string;
     discord_auto_post: boolean;
+    guild_raffles_enabled: boolean;
+    guild_contests_enabled: boolean;
 }
 
 export interface GuildSyncResult {
@@ -59,6 +61,11 @@ export interface GuildSyncResult {
 }
 
 export const guildManagementApi = {
+    getGuilds: async (): Promise<string[]> => {
+        const response = await api.get('/guild-management/guilds');
+        return response.data;
+    },
+
     // Get all users
     getUsers: async (skip = 0, limit = 100): Promise<GuildMember[]> => {
         const response = await api.get(`/guild-management/users?skip=${skip}&limit=${limit}`);

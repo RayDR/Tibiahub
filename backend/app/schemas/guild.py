@@ -79,3 +79,20 @@ class RecruitmentResponse(RecruitmentBase):
 
     class Config:
         from_attributes = True
+
+
+class GuildMemberSnapshotResponse(BaseModel):
+    character_name: str
+    level: Optional[int] = None
+    vocation: Optional[str] = None
+    rank: Optional[str] = None
+    role: Optional[str] = None
+    last_login: Optional[str] = None
+    world: Optional[str] = None
+    snapshot_at: datetime
+
+
+class GuildMemberSnapshotPayload(BaseModel):
+    guild_name: str
+    source: str
+    members: List[GuildMemberSnapshotResponse]

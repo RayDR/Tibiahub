@@ -114,3 +114,40 @@ class APISync(Base):
     
     created_at = Column(DateTime(timezone=True), server_default=func.now())
     updated_at = Column(DateTime(timezone=True), onupdate=func.now())
+
+
+class SyncJob(Base):
+    """Persistent async sync job status."""
+    __tablename__ = "sync_jobs"
+
+    id = Column(String(64), primary_key=True, index=True)
+    job_type = Column(String(100), nullable=False, index=True)
+    status = Column(String(30), nullable=False, index=True)  # pending|running|completed|failed|cancelled
+    progress = Column(Integer, nullable=False, default=0)
+    error = Column(Text, nullable=True)
+    cancel_requested = Column(Boolean, nullable=False, default=False)
+    started_at = Column(DateTime(timezone=True), nullable=True)
+    finished_at = Column(DateTime(timezone=True), nullable=True)
+    created_at = Column(DateTime(timezone=True), server_default=func.now())
+    updated_at = Column(DateTime(timezone=True), onupdate=func.now())
+
+
+class CachedResource(Base):
+    """Cached external resources metadata (images/maps/etc.)."""
+    __tablename__ = "cached_resources"
+
+    id = Column(Integer, primary_key=True, index=True)
+    resource_type = Column(String(50), nullable=False, index=True)
+    entity_type = Column(String(50), nullable=False, index=True)
+    entity_id = Column(Integer, nullable=True, index=True)
+    source_url = Column(String(1024), nullable=False)
+    resolved_url = Column(String(1024), nullable=True)
+    local_path = Column(String(1024), nullable=True)
+    content_type = Column(String(100), nullable=True)
+    size_bytes = Column(Integer, nullable=True)
+    etag_hash = Column(String(128), nullable=True)
+    status = Column(String(30), nullable=False, default="pending")
+    last_fetched_at = Column(DateTime(timezone=True), nullable=True)
+    error = Column(Text, nullable=True)
+    created_at = Column(DateTime(timezone=True), server_default=func.now())
+    updated_at = Column(DateTime(timezone=True), onupdate=func.now())

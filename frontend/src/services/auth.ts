@@ -4,6 +4,7 @@ export interface User {
     id: number;
     username: string;
     email?: string;
+    avatar_url?: string;
     tibia_character_name?: string;
     guild_rank?: string;
     guild_name?: string;

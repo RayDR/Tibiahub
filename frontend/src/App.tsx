@@ -1,5 +1,6 @@
 import { Routes, Route, useLocation, useNavigate, Navigate } from 'react-router-dom';
 import Navigation from './components/Navigation';
+import HomePage from './pages/HomePage';
 import CreaturesPage from './pages/CreaturesPage';
 import CreatureDetailPage from './pages/CreatureDetailPage';
 import HuntRecommendationsPage from './pages/HuntRecommendationsPage';
@@ -21,11 +22,13 @@ import Register from './pages/auth/Register';
 import GuildLayout from './layouts/GuildLayout';
 import AdminLayout from './layouts/AdminLayout';
 import GuildDashboard from './pages/guild/Dashboard';
+import GuildMembersPage from './pages/guild/Members';
 import Announcements from './pages/guild/Announcements';
 import Events from './pages/guild/Events';
 import Recruitment from './pages/guild/Recruitment';
 import HuntCatalog from './pages/guild/HuntCatalog';
 import Raffle from './pages/guild/Raffle';
+import RafflePublicPage from './pages/RafflePublicPage';
 import PublicRafflePage from './pages/PublicRafflePage';
 import NotFound from './pages/NotFound';
 
@@ -58,13 +61,15 @@ function App() {
 
           <div className="container mx-auto px-4">
             <Routes location={location} key={location.pathname}>
-              <Route path="/" element={<CreaturesPage />} />
-              <Route path="/creatures/:id" element={<CreatureDetailPage />} />
+              <Route path="/" element={<HomePage />} />
+              <Route path="/bestiary" element={<CreaturesPage />} />
+              <Route path="/creatures/:slug" element={<CreatureDetailPage />} />
               <Route path="/recommendations" element={<HuntRecommendationsPage />} />
               <Route path="/requests" element={<QuestViewerPage />} />
 
               {/* Public Event Route */}
               <Route path="/public/event/:uuid" element={<PublicRafflePage />} />
+              <Route path="/raffle/:id" element={<RafflePublicPage />} />
 
               {/* Auth Routes */}
               <Route path="/login" element={<Login />} />
@@ -76,6 +81,7 @@ function App() {
               <Route path="/guild" element={<GuildLayout />}>
                 <Route index element={<Navigate to="dashboard" replace />} />
                 <Route path="dashboard" element={<GuildDashboard />} />
+                <Route path="members" element={<GuildMembersPage />} />
                 <Route path="announcements" element={<Announcements />} />
                 <Route path="events" element={<Events />} />
                 <Route path="recruitment" element={<Recruitment />} />

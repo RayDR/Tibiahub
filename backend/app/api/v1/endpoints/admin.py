@@ -12,7 +12,10 @@ from app.db.database import get_db
 from app.models.user import User
 from app.models.user_character import UserCharacter
 from app.models.creature import Creature
+from app.models.events import Event
+from app.models.raffle import Raffle
 from app.api.v1.endpoints.auth import get_current_admin_user, get_current_user
+from app.core.permissions import can_manage_guild, is_global_admin
 from app.services.tibia_validation_service import TibiaValidationService
 from app.core import config, security
 from app.schemas.admin import (
@@ -27,10 +30,26 @@ from app.schemas.admin import (
 router = APIRouter()
 
 
+def _get_setting(db: Session, key: str, default: str = "") -> str:
+    from app.models.settings import SystemSettings as SettingsModel
+    value = db.query(SettingsModel).filter(SettingsModel.key == key).first()
+    return value.value if value and value.value is not None else default
+
+
+def _set_setting(db: Session, key: str, value: str, description: str = "") -> None:
+    from app.models.settings import SystemSettings as SettingsModel
+    setting = db.query(SettingsModel).filter(SettingsModel.key == key).first()
+    if setting:
+        setting.value = value
+        if description:
+            setting.description = description
+    else:
+        db.add(SettingsModel(key=key, value=value, description=description, is_active=True))
+
+
 def get_admin_or_guild_leader(current_user: User = Depends(get_current_user)):
-    """Allow superusers or guild leaders to manage shared settings."""
-    allowed_ranks = {"alpha warbringer", "bloodhowl marshal", "guild leader"}
-    if current_user.is_superuser or (current_user.guild_rank and current_user.guild_rank.lower() in allowed_ranks):
+    """Allow global admin or guild leaders."""
+    if is_global_admin(current_user) or can_manage_guild(current_user):
         return current_user
     raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Insufficient permissions")
 
@@ -168,6 +187,32 @@ def get_stats(
     }
 
 
+@router.get("/guilds")
+def get_registered_guilds(
+    current_user: User = Depends(get_admin_or_guild_leader),
+    db: Session = Depends(get_db),
+):
+    guilds: set[str] = set()
+    for (guild_name,) in db.query(User.guild_name).filter(User.guild_name.isnot(None)).all():
+        name = (guild_name or "").strip()
+        if name:
+            guilds.add(name)
+    for (guild_name,) in db.query(Event.guild_name).filter(Event.guild_name.isnot(None)).all():
+        name = (guild_name or "").strip()
+        if name:
+            guilds.add(name)
+    for (guild_name,) in db.query(Raffle.guild_name).filter(Raffle.guild_name.isnot(None)).all():
+        name = (guild_name or "").strip()
+        if name:
+            guilds.add(name)
+
+    if not is_global_admin(current_user):
+        own = (current_user.guild_name or "").strip()
+        return [own] if own else []
+
+    return sorted(guilds)
+
+
 @router.get("/settings", response_model=SystemSettings)
 def get_system_settings(
     db: Session = Depends(get_db),
@@ -182,12 +227,16 @@ def get_system_settings(
     # Get Discord settings from database
     discord_webhook = db.query(SettingsModel).filter(SettingsModel.key == "discord_webhook_url").first()
     discord_auto_post = db.query(SettingsModel).filter(SettingsModel.key == "discord_auto_post").first()
+    guild_raffles_enabled = _get_setting(db, "guild_raffles_enabled", "1") == "1"
+    guild_contests_enabled = _get_setting(db, "guild_contests_enabled", "1") == "1"
     
     return SystemSettings(
         tibia_validation_enabled=config.settings.TIBIA_VALIDATION_ENABLED,
         tibia_validation_strict=config.settings.TIBIA_VALIDATION_STRICT,
         discord_webhook_url=discord_webhook.value if discord_webhook else "",
         discord_auto_post=discord_auto_post.value == "1" if discord_auto_post else False,
+        guild_raffles_enabled=guild_raffles_enabled,
+        guild_contests_enabled=guild_contests_enabled,
         access_token_expire_minutes=config.settings.ACCESS_TOKEN_EXPIRE_MINUTES
     )
 
@@ -223,17 +272,41 @@ def update_system_settings(
         auto_post_setting = db.query(SettingsModel).filter(SettingsModel.key == "discord_auto_post").first()
         if auto_post_setting:
             auto_post_setting.value = "1" if settings_update.discord_auto_post else "0"
-        db.commit()
+        else:
+            db.add(SettingsModel(key="discord_auto_post", value="1" if settings_update.discord_auto_post else "0", description="Auto post announcements to Discord", is_active=True))
+
+    if settings_update.guild_raffles_enabled is not None:
+        _set_setting(
+            db,
+            "guild_raffles_enabled",
+            "1" if settings_update.guild_raffles_enabled else "0",
+            "Enable guild raffle features",
+        )
+
+    if settings_update.guild_contests_enabled is not None:
+        _set_setting(
+            db,
+            "guild_contests_enabled",
+            "1" if settings_update.guild_contests_enabled else "0",
+            "Enable guild contest/event features",
+        )
+
+    db.commit()
     
     # Get updated values
     discord_webhook = db.query(SettingsModel).filter(SettingsModel.key == "discord_webhook_url").first()
     discord_auto_post = db.query(SettingsModel).filter(SettingsModel.key == "discord_auto_post").first()
+    guild_raffles_enabled = _get_setting(db, "guild_raffles_enabled", "1") == "1"
+    guild_contests_enabled = _get_setting(db, "guild_contests_enabled", "1") == "1"
     
     return SystemSettings(
         tibia_validation_enabled=config.settings.TIBIA_VALIDATION_ENABLED,
         tibia_validation_strict=config.settings.TIBIA_VALIDATION_STRICT,
         discord_webhook_url=discord_webhook.value if discord_webhook else "",
-        discord_auto_post=discord_auto_post.value == "1" if discord_auto_post else False
+        discord_auto_post=discord_auto_post.value == "1" if discord_auto_post else False,
+        guild_raffles_enabled=guild_raffles_enabled,
+        guild_contests_enabled=guild_contests_enabled,
+        access_token_expire_minutes=config.settings.ACCESS_TOKEN_EXPIRE_MINUTES,
     )
 
 
@@ -414,7 +487,7 @@ def update_user_character(
 @router.post("/sync-guild", response_model=GuildSyncResult)
 def sync_guild_members(
     guild_name: str = "Bloodborne Warhowl",
-    current_user: User = Depends(get_current_admin_user),
+    current_user: User = Depends(get_admin_or_guild_leader),
     db: Session = Depends(get_db)
 ):
     """
@@ -422,12 +495,25 @@ def sync_guild_members(
     Fetches guild data and updates character information
     Requires admin privileges
     """
+    if not can_manage_guild(current_user, guild_name):
+        raise HTTPException(status_code=403, detail="You can only manage your own guild")
+
     try:
-        # Fetch guild data from Tibia API
-        response = requests.get(
-            f"https://api.tibiadata.com/v4/guild/{guild_name}",
-            timeout=15
-        )
+        # Fetch guild data from Tibia API with retry + bounded timeout.
+        response = None
+        last_error: Optional[str] = None
+        for _attempt in range(3):
+            try:
+                response = requests.get(
+                    f"https://api.tibiadata.com/v4/guild/{guild_name}",
+                    timeout=(5, 15),
+                )
+                break
+            except requests.exceptions.RequestException as exc:
+                last_error = str(exc)
+
+        if response is None:
+            raise HTTPException(status_code=503, detail=f"Guild sync provider unavailable: {last_error or 'timeout'}")
         
         if response.status_code != 200:
             raise HTTPException(
@@ -510,7 +596,7 @@ def sync_guild_members(
         
     except requests.exceptions.RequestException as e:
         raise HTTPException(
-            status_code=500,
+            status_code=503,
             detail=f"Error connecting to Tibia API: {str(e)}"
         )
     except Exception as e:

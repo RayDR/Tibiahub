@@ -1,7 +1,7 @@
 import logging
 from datetime import datetime, timedelta
 from typing import Any
-from fastapi import APIRouter, Depends, HTTPException, status
+from fastapi import APIRouter, BackgroundTasks, Depends, HTTPException, status
 from fastapi.security import OAuth2PasswordRequestForm, OAuth2PasswordBearer
 from sqlalchemy.orm import Session
 from jose import jwt, JWTError
@@ -13,6 +13,7 @@ from app.models.user_character import UserCharacter
 from app.schemas.auth import UserCreate, UserResponse, Token, TokenData
 from app.services.tibia_validation_service import TibiaValidationService
 from app.services.tibia_sync_service import try_sync_user_character_snapshot
+from app.core.permissions import is_global_admin, is_guild_leader
 
 router = APIRouter()
 oauth2_scheme = OAuth2PasswordBearer(tokenUrl="api/v1/auth/login")
@@ -44,10 +45,19 @@ def get_current_active_user(current_user: User = Depends(get_current_user)):
     return current_user
 
 def get_current_admin_user(current_user: User = Depends(get_current_active_user)):
-    if not current_user.is_superuser and current_user.guild_rank not in ["Leader", "Vice Leader"]:
+    if not is_global_admin(current_user):
         raise HTTPException(
             status_code=403,
-            detail="The user doesn't have enough privileges",
+            detail="Admin privileges required",
+        )
+    return current_user
+
+
+def get_current_manager_user(current_user: User = Depends(get_current_active_user)):
+    if not (is_global_admin(current_user) or is_guild_leader(current_user)):
+        raise HTTPException(
+            status_code=403,
+            detail="Manager privileges required",
         )
     return current_user
 
@@ -56,23 +66,43 @@ def login_access_token(
     db: Session = Depends(get_db),
     form_data: OAuth2PasswordRequestForm = Depends()
 ) -> Any:
-    # Try to find user by username first (for admin or regular users)
-    user = db.query(User).filter(User.username == form_data.username).first()
+    login_input = (form_data.username or "").strip()
+    logger.info("login_attempt login=%s", login_input)
+
+    # Try to find user by username first (case-insensitive for resilience)
+    user = db.query(User).filter(User.username.ilike(login_input)).first()
+
+    # If still not found by username, try email
+    if not user and "@" in login_input:
+        user = db.query(User).filter(User.email.ilike(login_input)).first()
     
     # If not found by username, try to find by character name
     if not user:
-        user_char = db.query(UserCharacter).filter(UserCharacter.character_name == form_data.username).first()
+        user_char = db.query(UserCharacter).filter(UserCharacter.character_name.ilike(login_input)).first()
         if user_char:
             user = user_char.user
-    
+
+    logger.info("login_user_found login=%s found=%s", login_input, bool(user))
     if not user:
-        raise HTTPException(status_code=400, detail="User or character not found")
-    
+        raise HTTPException(status_code=400, detail="Invalid username/email or password")
+
     if not security.verify_password(form_data.password, user.hashed_password):
-        raise HTTPException(status_code=400, detail="Incorrect password")
-    
+        logger.info("login_password_valid username=%s valid=false", user.username)
+        raise HTTPException(status_code=400, detail="Invalid username/email or password")
+
+    logger.info("login_password_valid username=%s valid=true", user.username)
+
     if not user.is_active:
+        logger.info("login_user_inactive username=%s", user.username)
         raise HTTPException(status_code=400, detail="Inactive user")
+
+    logger.info(
+        "login_user_state username=%s is_active=%s is_superuser=%s guild_rank=%s",
+        user.username,
+        user.is_active,
+        user.is_superuser,
+        user.guild_rank,
+    )
     
     access_token_expires = timedelta(minutes=config.settings.ACCESS_TOKEN_EXPIRE_MINUTES)
     return {
@@ -85,6 +115,7 @@ def register_user(
     *,
     db: Session = Depends(get_db),
     user_in: UserCreate,
+    background_tasks: BackgroundTasks,
 ) -> Any:
     # Check if username already exists
     user = db.query(User).filter(User.username == user_in.username).first()
@@ -158,11 +189,14 @@ def register_user(
         db.refresh(user_char)
 
     if user.tibia_character_name:
-        try:
-            import asyncio
-            asyncio.run(try_sync_user_character_snapshot(db, user))
-        except Exception as exc:
-            logger.warning("register_character_sync_skipped username=%s error=%s", user.username, exc)
+        def _sync_character():
+            try:
+                import asyncio
+                asyncio.run(try_sync_user_character_snapshot(db, user))
+            except Exception as exc:
+                logger.warning("register_character_sync_skipped username=%s error=%s", user.username, exc)
+        
+        background_tasks.add_task(_sync_character)
     
     return user
 

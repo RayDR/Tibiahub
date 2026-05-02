@@ -1,13 +1,41 @@
 
 import { Outlet, Link, useLocation, Navigate } from 'react-router-dom';
+import { useEffect, useMemo, useState } from 'react';
 import { useAuth } from '../context/AuthContext';
 import { useTranslation } from 'react-i18next';
 import { LayoutDashboard, Megaphone, CalendarClock, Users, LogOut, Shield, Compass, Sparkles, Coins } from 'lucide-react';
+import { guildApi } from '../services/guild';
 
 export default function GuildLayout() {
     const { t } = useTranslation();
     const { user, logout, loading, isAuthenticated } = useAuth();
     const location = useLocation();
+    const [featureFlags, setFeatureFlags] = useState({
+        guild_raffles_enabled: true,
+        guild_contests_enabled: true,
+    });
+
+    useEffect(() => {
+        const loadFlags = async () => {
+            try {
+                const flags = await guildApi.getFeatureFlags();
+                setFeatureFlags(flags);
+            } catch {
+                // keep defaults if endpoint is unavailable
+            }
+        };
+        void loadFlags();
+    }, []);
+
+    const navItems = useMemo(() => [
+        { name: t('guild.dashboard'), path: '/guild/dashboard', icon: LayoutDashboard, special: false },
+        { name: 'Members', path: '/guild/members', icon: Users, special: false },
+        { name: t('guild.announcements'), path: '/guild/announcements', icon: Megaphone, special: false },
+        { name: 'Guild Events', path: '/guild/events', icon: CalendarClock, special: false },
+        { name: t('guild.huntCatalog'), path: '/guild/hunts', icon: Compass, special: false },
+        { name: t('guild.recruitment'), path: '/guild/recruitment', icon: Users, special: true },
+        ...(featureFlags.guild_raffles_enabled ? [{ name: 'Guild Raffle', path: '/guild/raffle', icon: Coins, special: true }] : []),
+    ], [t, featureFlags.guild_raffles_enabled]);
 
     if (loading) {
         return <div className="text-center mt-20 text-slate-400">Loading guild data...</div>;
@@ -16,15 +44,6 @@ export default function GuildLayout() {
     if (!isAuthenticated) {
         return <Navigate to="/login" replace />;
     }
-
-    const navItems = [
-        { name: t('guild.dashboard'), path: '/guild/dashboard', icon: LayoutDashboard, special: false },
-        { name: t('guild.announcements'), path: '/guild/announcements', icon: Megaphone, special: false },
-        { name: t('guild.eventsHunts'), path: '/guild/events', icon: CalendarClock, special: false },
-        { name: t('guild.huntCatalog'), path: '/guild/hunts', icon: Compass, special: false },
-        { name: t('guild.recruitment'), path: '/guild/recruitment', icon: Users, special: true },
-        { name: 'Guild Raffle', path: '/guild/raffle', icon: Coins, special: true },
-    ];
 
     return (
         <div className="flex flex-col lg:flex-row min-h-[calc(100vh-100px)] gap-4 lg:gap-6 mt-6 sm:mt-8 px-2 sm:px-0">

@@ -9,6 +9,7 @@ import logging
 import re
 import time
 import zlib
+from threading import Lock
 from dataclasses import dataclass
 from typing import Any, Dict, List, Optional
 from urllib.parse import quote
@@ -16,6 +17,7 @@ from urllib.parse import quote
 import httpx
 
 from app.core.config import settings
+from app.services.external_resilience import request_json_with_resilience
 from app.services.mock_data import MOCK_CREATURE
 
 logger = logging.getLogger(__name__)
@@ -34,6 +36,16 @@ BESTIARY_CHARM_POINTS = {
     "Hard": 50,
 }
 
+CLASSIFICATION_KEYWORDS = {
+    "Humanoid": ["human", "humanoid", "orc", "barbarian", "pirate", "minotaur"],
+    "Undead": ["undead", "skeleton", "ghoul", "vampire", "lich", "zombie"],
+    "Demon": ["demon", "hellspawn"],
+    "Beast": ["beast", "mammal", "animal", "boar", "bear", "wolf", "tiger", "lion"],
+    "Dragon": ["dragon", "drake", "wyrm", "wyvern", "hydra"],
+    "Elemental": ["elemental", "fire", "ice", "earth", "energy", "stone golem"],
+    "Construct": ["construct", "golem", "automaton", "machine"],
+}
+
 
 class BestiarySourceError(Exception):
     """Raised when live bestiary data cannot be retrieved."""
@@ -46,20 +58,24 @@ class CacheEntry:
 
 
 _cache: Dict[str, CacheEntry] = {}
+_cache_lock = Lock()
 
 
 def _cache_get(cache_key: str) -> Optional[Any]:
-    entry = _cache.get(cache_key)
+    with _cache_lock:
+        entry = _cache.get(cache_key)
     if not entry:
         return None
     if entry.expires_at < time.time():
-        _cache.pop(cache_key, None)
+        with _cache_lock:
+            _cache.pop(cache_key, None)
         return None
     return entry.value
 
 
 def _cache_set(cache_key: str, value: Any, ttl_seconds: int) -> Any:
-    _cache[cache_key] = CacheEntry(expires_at=time.time() + ttl_seconds, value=value)
+    with _cache_lock:
+        _cache[cache_key] = CacheEntry(expires_at=time.time() + ttl_seconds, value=value)
     return value
 
 
@@ -190,6 +206,14 @@ def _to_bool(value: Optional[str]) -> bool:
     return str(value or "").strip().lower() in {"yes", "true", "1"}
 
 
+def _infer_classification(*, name: str, creature_class: Optional[str], bestiary_class: Optional[str]) -> Optional[str]:
+    haystack = " ".join([name or "", creature_class or "", bestiary_class or ""]).lower()
+    for label, keywords in CLASSIFICATION_KEYWORDS.items():
+        if any(keyword in haystack for keyword in keywords):
+            return label
+    return None
+
+
 async def _request_json(
     *,
     url: str,
@@ -203,17 +227,22 @@ async def _request_json(
         return cached
 
     headers = {"User-Agent": settings.TIBIAWIKI_USER_AGENT, "Accept": "application/json"}
-    async with httpx.AsyncClient(timeout=20.0, headers=headers) as client:
-        request = client.build_request("GET", url, params=params)
-        response = await client.send(request)
-        logger.info(
-            "external_request url=%s status=%s cache_hit=false fallback=false",
-            str(request.url),
-            response.status_code,
-        )
-        response.raise_for_status()
-        data = response.json()
-        return _cache_set(cache_key, data, ttl_seconds)
+    data = await request_json_with_resilience(
+        provider="tibiawiki",
+        url=url,
+        params=params,
+        headers=headers,
+        timeout_seconds=20.0,
+        retries=2,
+        retry_backoff_seconds=0.5,
+        circuit_failures=3,
+        circuit_cooldown_seconds=45,
+    )
+    logger.info(
+        "external_request url=%s cache_hit=false fallback=false",
+        f"{url}?{params}" if params else url,
+    )
+    return _cache_set(cache_key, data, ttl_seconds)
 
 
 async def get_category_members(category: str) -> List[str]:
@@ -328,6 +357,11 @@ def _build_creature_payload(name: str, wikitext: str) -> Dict[str, Any]:
         "source_url": _build_wiki_page_url(display_name),
         "data_sources": ["tibiawiki", "tibiadata"],
         "missing_fields": missing_fields,
+        "classification": _infer_classification(
+            name=display_name,
+            creature_class=_strip_markup(params.get("creatureclass") or "") or None,
+            bestiary_class=_strip_markup(params.get("bestiaryclass") or "") or None,
+        ),
     }
     if missing_fields:
         logger.warning("creature_incomplete name=%s missing=%s", display_name, ",".join(missing_fields))

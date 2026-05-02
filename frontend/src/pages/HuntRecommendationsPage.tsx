@@ -1,7 +1,9 @@
 import React, { useState } from 'react';
 import { huntZonesApi } from '../services/api';
-import { Plus, Trash2, Users, Map, Swords, TrendingUp, User, Shield, Zap, Sparkles, Scroll } from 'lucide-react';
+import { Plus, Trash2, Users, Map, Swords, TrendingUp, User, Shield, Zap, Sparkles, Scroll, Eye, X, Crown, Coins } from 'lucide-react';
 import { motion, AnimatePresence } from 'framer-motion';
+import { HuntZone } from '../types';
+import TibiaMap from '../components/TibiaMap';
 
 // Vocation Config
 const VOCATIONS = [
@@ -18,6 +20,20 @@ interface PartyMember {
   level: number;
 }
 
+interface RecommendationItem {
+  zone_id: number;
+  zone_name: string;
+  score: number;
+  reasons?: string[];
+  synergy_bonus?: number;
+  min_level?: number;
+  max_level?: number;
+  difficulty?: string;
+  estimated_exp_hour?: number;
+  estimated_profit_hour?: number;
+  requires_premium?: boolean;
+}
+
 const HuntRecommendationsPage: React.FC = () => {
   const [mode, setMode] = useState<'solo' | 'party'>('solo');
 
@@ -31,8 +47,12 @@ const HuntRecommendationsPage: React.FC = () => {
   ]);
 
   const [recommendations, setRecommendations] = useState<any | null>(null);
+  const [selectedZone, setSelectedZone] = useState<HuntZone | null>(null);
+  const [selectedRecommendation, setSelectedRecommendation] = useState<RecommendationItem | null>(null);
+  const [zoneLoading, setZoneLoading] = useState(false);
   const [loading, setLoading] = useState(false);
   const [goal, setGoal] = useState<'exp' | 'profit' | 'balanced'>('exp');
+  const [mapPreviewFailed, setMapPreviewFailed] = useState(false);
 
   // Handlers
   const addMember = () => {
@@ -52,6 +72,8 @@ const HuntRecommendationsPage: React.FC = () => {
   const findSpots = async () => {
     setLoading(true);
     setRecommendations(null);
+    setSelectedZone(null);
+    setSelectedRecommendation(null);
     try {
       if (mode === 'solo') {
         const data = await huntZonesApi.getRecommendations(soloVocation as any, soloLevel, 10);
@@ -77,6 +99,26 @@ const HuntRecommendationsPage: React.FC = () => {
     } finally {
       setLoading(false);
     }
+  };
+
+  const inspectZone = async (recommendation: RecommendationItem) => {
+    setSelectedRecommendation(recommendation);
+    setMapPreviewFailed(false);
+    setZoneLoading(true);
+    try {
+      const zone = await huntZonesApi.getById(recommendation.zone_id);
+      setSelectedZone(zone);
+    } catch (error) {
+      console.error('Failed to load zone details', error);
+      setSelectedZone(null);
+    } finally {
+      setZoneLoading(false);
+    }
+  };
+
+  const formatRate = (value?: number) => {
+    if (!value) return 'N/A';
+    return `${value.toLocaleString()}/h`;
   };
 
   return (
@@ -314,7 +356,7 @@ const HuntRecommendationsPage: React.FC = () => {
 
               {/* List */}
               <div className="space-y-4">
-                {recommendations.recommendations?.map((rec: any, i: number) => (
+                {recommendations.recommendations?.map((rec: RecommendationItem, i: number) => (
                   <motion.div
                     initial={{ opacity: 0, y: 20 }}
                     animate={{ opacity: 1, y: 0 }}
@@ -342,6 +384,21 @@ const HuntRecommendationsPage: React.FC = () => {
                       </div>
                     </div>
 
+                    <div className="mb-4 grid gap-2 sm:grid-cols-3">
+                      <div className="rounded-lg border border-slate-800 bg-slate-950/60 px-3 py-2">
+                        <div className="text-[10px] uppercase tracking-wide text-slate-500">Estimated Exp</div>
+                        <div className="text-sm font-semibold text-emerald-300">{formatRate(rec.estimated_exp_hour)}</div>
+                      </div>
+                      <div className="rounded-lg border border-slate-800 bg-slate-950/60 px-3 py-2">
+                        <div className="text-[10px] uppercase tracking-wide text-slate-500">Estimated Profit</div>
+                        <div className="text-sm font-semibold text-amber-300">{formatRate(rec.estimated_profit_hour)}</div>
+                      </div>
+                      <div className="rounded-lg border border-slate-800 bg-slate-950/60 px-3 py-2">
+                        <div className="text-[10px] uppercase tracking-wide text-slate-500">Access</div>
+                        <div className="text-sm font-semibold text-slate-200">{rec.requires_premium ? 'Premium' : 'Free Access'}</div>
+                      </div>
+                    </div>
+
                     {/* Reasons */}
                     <div className="flex flex-wrap gap-2 mb-4">
                       {rec.reasons?.map((reason: string, idx: number) => (
@@ -349,11 +406,20 @@ const HuntRecommendationsPage: React.FC = () => {
                           <TrendingUp size={12} className="text-emerald-500" /> {reason}
                         </span>
                       ))}
-                      {rec.synergy_bonus > 1 && (
+                      {(rec.synergy_bonus ?? 1) > 1 && (
                         <span className="bg-purple-500/10 text-purple-400 border border-purple-500/20 text-xs px-2 py-1 rounded-md flex items-center gap-1">
                           <Sparkles size={12} /> Synergy +{Math.round((rec.synergy_bonus - 1) * 100)}%
                         </span>
                       )}
+                    </div>
+
+                    <div className="flex justify-end">
+                      <button
+                        onClick={() => void inspectZone(rec)}
+                        className="inline-flex items-center gap-2 rounded-lg border border-slate-700 bg-slate-950/60 px-3 py-2 text-xs font-semibold text-slate-200 hover:border-amber-500/60 hover:text-amber-300"
+                      >
+                        <Eye size={14} /> Inspect Zone
+                      </button>
                     </div>
 
                   </motion.div>
@@ -365,6 +431,117 @@ const HuntRecommendationsPage: React.FC = () => {
                   </div>
                 )}
               </div>
+            </div>
+          )}
+
+          {(zoneLoading || selectedZone || selectedRecommendation) && (
+            <div className="mt-6 rounded-2xl border border-slate-700 bg-slate-900/80 p-5">
+              <div className="mb-4 flex items-center justify-between">
+                <h3 className="text-lg font-bold text-slate-100">Zone Inspector</h3>
+                <button
+                  onClick={() => {
+                    setSelectedZone(null);
+                    setSelectedRecommendation(null);
+                  }}
+                  className="rounded-md border border-slate-700 p-1.5 text-slate-400 hover:text-slate-200"
+                >
+                  <X size={14} />
+                </button>
+              </div>
+
+              {zoneLoading && (
+                <div className="rounded-xl border border-slate-800 bg-slate-950/60 p-6 text-sm text-slate-400">
+                  Loading zone details...
+                </div>
+              )}
+
+              {!zoneLoading && selectedRecommendation && (
+                <div className="space-y-4">
+                  <div className="grid gap-3 md:grid-cols-2">
+                    <div className="rounded-xl border border-slate-800 bg-slate-950/60 p-4">
+                      <div className="mb-2 text-xs uppercase tracking-wider text-slate-500">Recommended Zone</div>
+                      <div className="text-xl font-bold text-amber-300">{selectedRecommendation.zone_name}</div>
+                      <div className="mt-2 text-sm text-slate-400">
+                        Level {selectedRecommendation.min_level ?? 'N/A'}
+                        {selectedRecommendation.max_level ? ` - ${selectedRecommendation.max_level}` : '+'}
+                      </div>
+                      <div className="mt-3 flex flex-wrap gap-2">
+                        {selectedRecommendation.requires_premium && (
+                          <span className="inline-flex items-center gap-1 rounded-full border border-amber-500/30 bg-amber-500/10 px-2 py-1 text-[11px] font-semibold text-amber-300">
+                            <Crown size={12} /> Premium
+                          </span>
+                        )}
+                        {selectedRecommendation.difficulty && (
+                          <span className={`inline-flex items-center rounded-full border px-2 py-1 text-[11px] font-semibold ${REC_COLORS[selectedRecommendation.difficulty] || 'bg-slate-800 text-slate-400 border-slate-700'}`}>
+                            {selectedRecommendation.difficulty}
+                          </span>
+                        )}
+                      </div>
+                    </div>
+
+                    <div className="rounded-xl border border-slate-800 bg-slate-950/60 p-4">
+                      <div className="mb-2 text-xs uppercase tracking-wider text-slate-500">Expected Rates</div>
+                      <div className="space-y-2 text-sm">
+                        <div className="flex items-center justify-between rounded-lg border border-slate-800 bg-slate-900 px-3 py-2">
+                          <span className="text-slate-400">EXP</span>
+                          <span className="font-semibold text-emerald-300">{formatRate(selectedRecommendation.estimated_exp_hour)}</span>
+                        </div>
+                        <div className="flex items-center justify-between rounded-lg border border-slate-800 bg-slate-900 px-3 py-2">
+                          <span className="flex items-center gap-1 text-slate-400"><Coins size={13} /> Profit</span>
+                          <span className="font-semibold text-amber-300">{formatRate(selectedRecommendation.estimated_profit_hour)}</span>
+                        </div>
+                      </div>
+                    </div>
+                  </div>
+
+                  {selectedZone && (
+                    <div className="grid gap-3 md:grid-cols-2">
+                      <div className="rounded-xl border border-slate-800 bg-slate-950/60 p-4">
+                        <div className="mb-2 text-xs uppercase tracking-wider text-slate-500">Route & Notes</div>
+                        <div className="text-sm text-slate-300">
+                          <div>City: <span className="text-slate-100">{selectedZone.city || 'Unknown'}</span></div>
+                          <div className="mt-1">Size: <span className="text-slate-100">{selectedZone.size || 'Unknown'}</span></div>
+                          {selectedZone.requires_quest && (
+                            <div className="mt-1 text-amber-300">Quest required: {selectedZone.quest_name || 'Yes'}</div>
+                          )}
+                        </div>
+                        {selectedZone.description && (
+                          <p className="mt-3 text-xs leading-relaxed text-slate-400">{selectedZone.description}</p>
+                        )}
+                        {selectedZone.tips && (
+                          <p className="mt-3 rounded-lg border border-slate-800 bg-slate-900 px-3 py-2 text-xs leading-relaxed text-cyan-300">
+                            Tip: {selectedZone.tips}
+                          </p>
+                        )}
+                      </div>
+
+                      <div className="rounded-xl border border-slate-800 bg-slate-950/60 p-4">
+                        <div className="mb-2 text-xs uppercase tracking-wider text-slate-500">Map Context</div>
+                        {selectedZone.map_image_url && !mapPreviewFailed ? (
+                          <img
+                            src={huntZonesApi.getMapImageUrl(selectedZone.id)}
+                            alt={selectedZone.name}
+                            className="h-40 w-full rounded-lg border border-slate-800 object-cover"
+                            loading="lazy"
+                            onError={() => setMapPreviewFailed(true)}
+                          />
+                        ) : (
+                          <div className="h-40 overflow-hidden rounded-lg border border-slate-800 bg-slate-900">
+                            <TibiaMap
+                              zoom={11}
+                              center={selectedZone.location_x ? { x: selectedZone.location_x, y: selectedZone.location_y! } : undefined}
+                              markers={selectedZone.location_x ? [{ x: selectedZone.location_x, y: selectedZone.location_y!, label: selectedZone.name }] : []}
+                            />
+                          </div>
+                        )}
+                        <div className="mt-3 text-xs text-slate-400">
+                          Coordinates: {selectedZone.location_x ?? 'N/A'}, {selectedZone.location_y ?? 'N/A'}, {selectedZone.location_z ?? 'N/A'}
+                        </div>
+                      </div>
+                    </div>
+                  )}
+                </div>
+              )}
             </div>
           )}
         </div>

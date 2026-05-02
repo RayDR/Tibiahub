@@ -10,6 +10,7 @@ from urllib.parse import quote
 import httpx
 
 from app.core.config import settings
+from app.services.external_resilience import request_json_with_resilience
 from app.services.mock_data import MOCK_CHARACTER, MOCK_GUILD, MOCK_WORLDS
 
 logger = logging.getLogger(__name__)
@@ -22,11 +23,18 @@ class TibiaAPIError(Exception):
 
 
 async def _get_json(url: str) -> Dict[str, Any]:
-    async with httpx.AsyncClient(timeout=TIMEOUT, headers={"User-Agent": settings.TIBIAWIKI_USER_AGENT}) as client:
-        response = await client.get(url)
-        logger.info("tibiadata_request url=%s status=%s cache_hit=false fallback=false", url, response.status_code)
-        response.raise_for_status()
-        return response.json()
+    data = await request_json_with_resilience(
+        provider="tibiadata",
+        url=url,
+        headers={"User-Agent": settings.TIBIAWIKI_USER_AGENT},
+        timeout_seconds=TIMEOUT,
+        retries=2,
+        retry_backoff_seconds=0.5,
+        circuit_failures=3,
+        circuit_cooldown_seconds=30,
+    )
+    logger.info("tibiadata_request url=%s cache_hit=false fallback=false", url)
+    return data
 
 
 async def get_character_info(character_name: str) -> Optional[Dict[str, Any]]:

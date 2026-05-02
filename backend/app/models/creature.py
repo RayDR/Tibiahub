@@ -30,7 +30,7 @@ class Creature(Base):
     __tablename__ = "creatures"
     
     id = Column(Integer, primary_key=True, index=True)
-    name = Column(String(100), unique=True, index=True, nullable=False)
+    name = Column(String(100), index=True, nullable=False)
     normalized_name = Column(String(150), index=True)
     slug = Column(String(150), index=True)
     external_id = Column(String(100), nullable=True, index=True)
@@ -64,6 +64,7 @@ class Creature(Base):
     bestiary_class = Column(String(100), nullable=True)
     bestiary_level = Column(String(50), nullable=True)
     charm_points = Column(Integer, nullable=True)
+    classification = Column(String(50), nullable=True, index=True)
     creature_class = Column(String(100), nullable=True)
     primary_type = Column(String(100), nullable=True)
     

@@ -28,6 +28,7 @@ SQLITE_RUNTIME_MIGRATIONS = {
         "bestiary_class": "VARCHAR(100)",
         "bestiary_level": "VARCHAR(50)",
         "charm_points": "INTEGER",
+        "classification": "VARCHAR(50)",
         "creature_class": "VARCHAR(100)",
         "primary_type": "VARCHAR(100)",
         "data_sources": "TEXT",
@@ -56,6 +57,7 @@ SQLITE_RUNTIME_MIGRATIONS = {
         "updated_at": "DATETIME",
     },
     "users": {
+        "avatar_url": "VARCHAR(255)",
         "world_name": "VARCHAR(100)",
         "guild_name": "VARCHAR(200)",
         "residence": "VARCHAR(100)",
@@ -73,6 +75,36 @@ SQLITE_RUNTIME_MIGRATIONS = {
         "sex": "VARCHAR(20)",
         "last_login_at": "DATETIME",
     },
+    "announcements": {
+        "deleted_at": "DATETIME",
+        "deleted_by_user_id": "INTEGER",
+        "delete_reason": "TEXT",
+        "is_deleted": "BOOLEAN DEFAULT 0",
+    },
+    "guild_events": {
+        "deleted_at": "DATETIME",
+        "deleted_by_user_id": "INTEGER",
+        "delete_reason": "TEXT",
+        "is_deleted": "BOOLEAN DEFAULT 0",
+    },
+    "events": {
+        "deleted_at": "DATETIME",
+        "deleted_by_user_id": "INTEGER",
+        "delete_reason": "TEXT",
+        "is_deleted": "BOOLEAN DEFAULT 0",
+    },
+    "raffles": {
+        "deleted_at": "DATETIME",
+        "deleted_by_user_id": "INTEGER",
+        "delete_reason": "TEXT",
+        "is_deleted": "BOOLEAN DEFAULT 0",
+    },
+    "raffle_participants": {
+        "deleted_at": "DATETIME",
+        "deleted_by_user_id": "INTEGER",
+        "delete_reason": "TEXT",
+        "is_deleted": "BOOLEAN DEFAULT 0",
+    },
 }
 
 SQLITE_RUNTIME_INDEXES = (
@@ -80,6 +112,10 @@ SQLITE_RUNTIME_INDEXES = (
     "CREATE INDEX IF NOT EXISTS idx_loot_normalized_name ON loot(normalized_name)",
     "CREATE INDEX IF NOT EXISTS idx_hunt_zones_normalized_name ON hunt_zones(normalized_name)",
     "CREATE INDEX IF NOT EXISTS idx_users_tibia_character_name ON users(tibia_character_name)",
+    "CREATE INDEX IF NOT EXISTS idx_announcements_is_deleted ON announcements(is_deleted)",
+    "CREATE INDEX IF NOT EXISTS idx_guild_events_is_deleted ON guild_events(is_deleted)",
+    "CREATE INDEX IF NOT EXISTS idx_events_is_deleted ON events(is_deleted)",
+    "CREATE INDEX IF NOT EXISTS idx_raffles_is_deleted ON raffles(is_deleted)",
 )
 
 
@@ -132,6 +168,8 @@ def init_db():
         events,
         external_data,
         raffle,
+        guild_member_snapshot,
+        settings,
     )
     Base.metadata.create_all(bind=engine)
     _run_sqlite_runtime_migrations()

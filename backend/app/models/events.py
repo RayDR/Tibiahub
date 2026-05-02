@@ -49,6 +49,10 @@ class Event(Base):
     
     created_at = Column(DateTime, server_default=func.now())
     updated_at = Column(DateTime, server_default=func.now(), onupdate=func.now())
+    deleted_at = Column(DateTime, nullable=True)
+    deleted_by_user_id = Column(Integer, ForeignKey('users.id'), nullable=True)
+    delete_reason = Column(Text, nullable=True)
+    is_deleted = Column(Boolean, default=False, nullable=False)
     
     # Relationships
     participants = relationship("EventParticipant", back_populates="event", cascade="all, delete-orphan")
@@ -92,6 +96,10 @@ class PublicEventParticipant(Base):
     assigned_number = Column(Integer, nullable=True)  # For raffles
     is_auto_loaded = Column(Boolean, default=False)  # True if loaded from guild, False if manually added
     is_excluded = Column(Boolean, default=False)  # True if admin explicitly excluded from event
+    deleted_at = Column(DateTime, nullable=True)
+    deleted_by_user_id = Column(Integer, ForeignKey('users.id'), nullable=True)
+    delete_reason = Column(Text, nullable=True)
+    is_deleted = Column(Boolean, default=False, nullable=False)
     
     created_at = Column(DateTime, server_default=func.now())
     updated_at = Column(DateTime, server_default=func.now(), onupdate=func.now())

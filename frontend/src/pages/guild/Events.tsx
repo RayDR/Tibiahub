@@ -2,6 +2,7 @@ import React, { useState, useEffect } from 'react';
 import { useTranslation } from 'react-i18next';
 import { Calendar, Trophy, Users, Ticket, Gift, Plus, Trash2, ExternalLink, Loader2 } from 'lucide-react';
 import { eventsApi, Event, EventCreate } from '../../services/events';
+import { guildApi } from '../../services/guild';
 import { useAuth } from '../../context/AuthContext';
 import { useToast } from '../../context/ToastContext';
 
@@ -18,10 +19,36 @@ export const Events: React.FC = () => {
   const [isDrawing, setIsDrawing] = useState(false);
   const [winnerNumber, setWinnerNumber] = useState<number | null>(null);
   const [winnerName, setWinnerName] = useState<string | null>(null);
+  const [featureFlags, setFeatureFlags] = useState({
+    guild_raffles_enabled: true,
+    guild_contests_enabled: true,
+  });
+  const canManageEvents = Boolean(user?.is_superuser || ['leader', 'vice leader', 'guild leader', 'alpha warbringer', 'bloodhowl marshal'].includes((user?.guild_rank || '').toLowerCase()));
 
   useEffect(() => {
     loadEvents();
   }, [filter]);
+
+  useEffect(() => {
+    const loadFlags = async () => {
+      try {
+        const flags = await guildApi.getFeatureFlags();
+        setFeatureFlags(flags);
+      } catch {
+        setFeatureFlags({ guild_raffles_enabled: true, guild_contests_enabled: true });
+      }
+    };
+    void loadFlags();
+  }, []);
+
+  useEffect(() => {
+    if (!featureFlags.guild_contests_enabled && filter === 'contest') {
+      setFilter('all');
+    }
+    if (!featureFlags.guild_raffles_enabled && filter === 'raffle') {
+      setFilter('all');
+    }
+  }, [featureFlags, filter]);
 
   const loadEvents = async () => {
     try {
@@ -162,7 +189,7 @@ export const Events: React.FC = () => {
           <Trophy className="w-6 h-6 sm:w-8 sm:h-8 text-amber-500" />
           Events & Raffles
         </h1>
-        {user?.is_superuser && (
+        {canManageEvents && (
           <button
             onClick={() => setShowCreateModal(true)}
             className="flex items-center gap-2 bg-amber-600 hover:bg-amber-500 text-white px-3 sm:px-4 py-2 rounded-md transition-colors font-medium text-sm sm:text-base"
@@ -177,8 +204,8 @@ export const Events: React.FC = () => {
       <div className="flex flex-wrap gap-2 sm:gap-3">
         {[
           { key: 'all', label: 'All Events', icon: null },
-          { key: 'raffle', label: 'Raffles', icon: <Ticket size={16} /> },
-          { key: 'contest', label: 'Contests', icon: <Trophy size={16} /> },
+          ...(featureFlags.guild_raffles_enabled ? [{ key: 'raffle', label: 'Raffles', icon: <Ticket size={16} /> }] : []),
+          ...(featureFlags.guild_contests_enabled ? [{ key: 'contest', label: 'Contests', icon: <Trophy size={16} /> }] : []),
           { key: 'hunt', label: 'Hunts', icon: <Users size={16} /> },
           { key: 'quest', label: 'Quests', icon: <Calendar size={16} /> },
         ].map(({ key, label, icon }) => (
@@ -290,6 +317,8 @@ export const Events: React.FC = () => {
 
       {showCreateModal && (
         <CreateEventModal
+          contestsEnabled={featureFlags.guild_contests_enabled}
+          rafflesEnabled={featureFlags.guild_raffles_enabled}
           onClose={() => setShowCreateModal(false)}
           onCreate={handleCreateEvent}
         />
@@ -318,11 +347,13 @@ export const Events: React.FC = () => {
 };
 
 interface CreateEventModalProps {
+  contestsEnabled: boolean;
+  rafflesEnabled: boolean;
   onClose: () => void;
   onCreate: (event: EventCreate) => void;
 }
 
-const CreateEventModal: React.FC<CreateEventModalProps> = ({ onClose, onCreate }) => {
+const CreateEventModal: React.FC<CreateEventModalProps> = ({ contestsEnabled, rafflesEnabled, onClose, onCreate }) => {
   const [formData, setFormData] = useState<EventCreate>({
     type: 'raffle',
     title: '',
@@ -373,8 +404,8 @@ const CreateEventModal: React.FC<CreateEventModalProps> = ({ onClose, onCreate }
               required
               className="w-full bg-slate-950 border border-slate-700 rounded-md p-3 text-slate-200 focus:border-amber-500 focus:outline-none focus:ring-2 focus:ring-amber-500/20"
             >
-              <option value="raffle">Raffle</option>
-              <option value="contest">Contest</option>
+              {rafflesEnabled && <option value="raffle">Raffle</option>}
+              {contestsEnabled && <option value="contest">Contest</option>}
               <option value="hunt">Hunt</option>
               <option value="quest">Quest</option>
               <option value="custom">Custom</option>
@@ -615,6 +646,7 @@ const EventDetailModal: React.FC<EventDetailModalProps> = ({
   const [showLog, setShowLog] = useState(false);
   const [manualCharName, setManualCharName] = useState('');
   const [addingManual, setAddingManual] = useState(false);
+  const canManageEvent = Boolean(currentUser?.is_superuser || ['leader', 'vice leader', 'guild leader', 'alpha warbringer', 'bloodhowl marshal'].includes((currentUser?.guild_rank || '').toLowerCase()));
 
   const addLog = (message: string) => {
     setSyncLog(prev => [...prev, `[${new Date().toLocaleTimeString()}] ${message}`]);
@@ -636,22 +668,22 @@ const EventDetailModal: React.FC<EventDetailModalProps> = ({
   };
 
   const handleSyncParticipants = async () => {
-    if (!currentUser?.is_superuser) return;
+    if (!canManageEvent) return;
     setSyncLoading(true);
-    addLog('🔄 Starting participant sync...');
+    addLog('🔄 Refreshing participant list...');
     
     try {
-      addLog(`Fetching guild members from TibiaData API...`);
+      addLog(`Loading current guild roster...`);
       addLog(`Guild: ${event.guild_name || 'Not configured'}`);
       
       const result = await eventsApi.loadGuildParticipants(event.id, true);
       
-      addLog(`✅ Sync completed!`);
+      addLog(`✅ Update completed!`);
       addLog(`  - Loaded: ${result.loaded} new participants`);
       addLog(`  - Updated: ${result.updated} existing participants`);
       addLog(`  - Total: ${result.total} participants`);
       
-      toast.success?.(`Participants synced! ${result.total} total participants`);
+      toast.success?.(`Participants updated! ${result.total} total participants`);
       
       // Refresh event data without full reload
       setTimeout(() => {
@@ -660,7 +692,7 @@ const EventDetailModal: React.FC<EventDetailModalProps> = ({
     } catch (err: any) {
       const errorMsg = err.message || err.toString();
       addLog(`❌ Error: ${errorMsg}`);
-      toast.error?.(`Failed to sync: ${errorMsg}`);
+      toast.error?.(`Failed to refresh participants: ${errorMsg}`);
       console.error('Sync error:', err);
     } finally {
       setSyncLoading(false);
@@ -668,12 +700,12 @@ const EventDetailModal: React.FC<EventDetailModalProps> = ({
   };
 
   const handleAddManualParticipant = async () => {
-    if (!manualCharName.trim() || !currentUser?.is_superuser) return;
+    if (!manualCharName.trim() || !canManageEvent) return;
     setAddingManual(true);
     addLog(`Adding manual participant: ${manualCharName}...`);
     
     try {
-      addLog(`Validating character with TibiaData API...`);
+      addLog(`Validating character...`);
       const result = await eventsApi.addManualParticipant(event.id, { character_name: manualCharName });
       
       addLog(`✅ Participant added!`);
@@ -700,9 +732,9 @@ const EventDetailModal: React.FC<EventDetailModalProps> = ({
   };
 
   const handleExcludeParticipant = async (participantId: number, participantName: string) => {
-    if (!currentUser?.is_superuser) return;
+    if (!canManageEvent) return;
     
-    if (!confirm(`¿Marcar a ${participantName} como NO participante? No volverá a aparecer en syncs automáticos.`)) {
+    if (!confirm(`¿Marcar a ${participantName} como NO participante? No volverá a aparecer en actualizaciones automáticas.`)) {
       return;
     }
     
@@ -725,9 +757,9 @@ const EventDetailModal: React.FC<EventDetailModalProps> = ({
   };
 
   const handleDeleteParticipant = async (participantId: number, participantName: string) => {
-    if (!currentUser?.is_superuser) return;
+    if (!canManageEvent) return;
     
-    if (!confirm(`¿Eliminar a ${participantName}? Podrá volver a agregarse en el próximo sync.`)) {
+    if (!confirm(`¿Eliminar a ${participantName}? Podrá volver a agregarse en la próxima actualización.`)) {
       return;
     }
     
@@ -754,7 +786,7 @@ const EventDetailModal: React.FC<EventDetailModalProps> = ({
       <div className="bg-slate-900 border border-slate-700 rounded-lg w-full max-w-3xl max-h-[90vh] overflow-y-auto" onClick={e => e.stopPropagation()}>
         <div className="p-6 border-b border-slate-800 flex justify-between items-start sticky top-0 bg-slate-900 z-10">
           <h2 className="text-2xl font-bold text-slate-100">{event.title}</h2>
-          {currentUser?.is_superuser && (
+          {canManageEvent && (
             <button
               onClick={() => onDelete(event.id)}
               className="p-2 bg-red-900/30 hover:bg-red-900/50 text-red-400 border border-red-700/50 rounded-md transition-colors"
@@ -812,7 +844,7 @@ const EventDetailModal: React.FC<EventDetailModalProps> = ({
           )}
 
           {/* Admin Controls */}
-          {currentUser?.is_superuser && (
+          {canManageEvent && (
             <div className="bg-gradient-to-br from-indigo-900/20 to-slate-900 border border-indigo-700/50 rounded-lg p-6 space-y-4">
               <h3 className="text-lg font-semibold text-indigo-400 mb-3 flex items-center gap-2">
                 <Users size={18} />
@@ -822,7 +854,7 @@ const EventDetailModal: React.FC<EventDetailModalProps> = ({
               {/* Info Box for Public Events */}
               {isPublicEdit && (
                 <div className="p-3 bg-blue-900/20 border border-blue-700/30 rounded-md text-sm text-blue-300">
-                  ℹ️ Public events should be drawn from the public page. Participants will sync automatically.
+                  ℹ️ Public events should be drawn from the public page. Participants update automatically.
                 </div>
               )}
 
@@ -846,7 +878,7 @@ const EventDetailModal: React.FC<EventDetailModalProps> = ({
                 </button>
               </div>
 
-              {/* Guild Sync */}
+              {/* Guild Participants */}
               {event.is_public && (
                 <div className="space-y-3">
                   <div className="p-3 bg-slate-950/50 rounded-md">
@@ -865,12 +897,12 @@ const EventDetailModal: React.FC<EventDetailModalProps> = ({
                       {syncLoading ? (
                         <>
                           <Loader2 className="animate-spin" size={16} />
-                          Syncing...
+                          Refreshing...
                         </>
                       ) : (
                         <>
                           <Users size={16} />
-                          Sync Guild Participants
+                          Refresh Guild Participants
                         </>
                       )}
                     </button>
@@ -941,7 +973,7 @@ const EventDetailModal: React.FC<EventDetailModalProps> = ({
             </div>
           )}
 
-          {event.type === 'raffle' && !event.is_drawn && !event.is_public && currentUser?.is_superuser && (
+          {event.type === 'raffle' && !event.is_drawn && !event.is_public && canManageEvent && (
             <div className="bg-gradient-to-br from-slate-800 to-slate-900 border border-slate-700 rounded-lg p-6 text-center">
               <button
                 className="px-6 py-3 bg-amber-600 hover:bg-amber-500 text-white rounded-md font-bold text-lg transition-all disabled:opacity-50 disabled:cursor-not-allowed hover:scale-105 active:scale-95"
@@ -999,19 +1031,19 @@ const EventDetailModal: React.FC<EventDetailModalProps> = ({
                         </span>
                       )}
                     </div>
-                    {currentUser?.is_superuser && event.is_public && (
+                    {canManageEvent && event.is_public && (
                       <div className="flex gap-2">
                         <button
                           onClick={() => handleExcludeParticipant(p.id, p.username)}
                           className="px-2 py-1 bg-red-900/30 hover:bg-red-900/50 text-red-400 rounded text-xs border border-red-700/50 transition-colors"
-                          title="Excluir permanentemente (no volverá en syncs)"
+                          title="Excluir permanentemente (no volverá en actualizaciones automáticas)"
                         >
                           🚫
                         </button>
                         <button
                           onClick={() => handleDeleteParticipant(p.id, p.username)}
                           className="px-2 py-1 bg-slate-800 hover:bg-slate-700 text-slate-400 rounded text-xs border border-slate-600 transition-colors"
-                          title="Eliminar (puede volver en próximo sync)"
+                          title="Eliminar (puede volver en próxima actualización)"
                         >
                           🗑️
                         </button>

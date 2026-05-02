@@ -133,7 +133,10 @@ async def get_party_recommendations(
                 "estimated_exp_hour": rec['estimated_exp'],
                 "estimated_profit_hour": rec['estimated_profit'],
                 "min_level": rec['zone'].min_level,
+                "max_level": rec['zone'].max_level,
                 "difficulty": rec['zone'].difficulty,
+                "requires_premium": rec['zone'].requires_premium,
+                "city": rec['zone'].city,
             }
             for rec in recommendations
         ]

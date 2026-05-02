@@ -102,8 +102,13 @@ class RaffleService:
             if existing:
                 existing.character_name = selected_name
                 existing.guild_rank = member_data.get("rank") or member_data.get("title") or member_data.get("position")
-                existing.weight = weight
+                if existing.source != "manual_override":
+                    existing.weight = weight
                 existing.is_eligible = True
+                existing.is_deleted = False
+                existing.deleted_at = None
+                existing.deleted_by_user_id = None
+                existing.delete_reason = None
                 existing.source_data = member_data
                 synced.append(existing)
                 continue
@@ -116,6 +121,7 @@ class RaffleService:
                 weight=weight,
                 source="guild_sync",
                 source_data=member_data,
+                is_deleted=False,
             )
             db.add(participant)
             synced.append(participant)
@@ -130,6 +136,7 @@ class RaffleService:
             db.query(RaffleParticipant)
             .options(selectinload(RaffleParticipant.user))
             .filter(RaffleParticipant.raffle_id == raffle.id, RaffleParticipant.is_eligible == True)
+            .filter(RaffleParticipant.is_deleted == False)
             .all()
         )
         prizes = db.query(RafflePrize).filter(RafflePrize.raffle_id == raffle.id).order_by(RafflePrize.order_index.asc()).all()
@@ -219,6 +226,7 @@ class RaffleService:
                     "created_at": participant.created_at,
                 }
                 for participant in raffle.participants
+                if not participant.is_deleted
             ],
             "prizes": [
                 {

@@ -28,6 +28,28 @@ export interface Recruitment {
     recruiter?: User;
 }
 
+export interface GuildMember {
+    character_name: string;
+    level?: number;
+    vocation?: string;
+    rank?: string;
+    role?: string;
+    last_login?: string;
+    world?: string;
+    snapshot_at: string;
+}
+
+export interface GuildMembersPayload {
+    guild_name: string;
+    source: 'live' | 'snapshot';
+    members: GuildMember[];
+}
+
+export interface GuildFeatureFlags {
+    guild_raffles_enabled: boolean;
+    guild_contests_enabled: boolean;
+}
+
 export const guildApi = {
     getAnnouncements: async (skip: number = 0, limit: number = 10): Promise<Announcement[]> => {
         const response = await api.get('/guild/announcements', { params: { skip, limit } });
@@ -67,5 +89,24 @@ export const guildApi = {
     getRaffleParticipants: async (guildName: string, days: number = 10): Promise<any[]> => {
         const response = await api.get('/guild/raffle/participants', { params: { guild_name: guildName, days } });
         return response.data;
+    },
+
+    getGuildMembers: async (guildName: string, refresh: boolean = false): Promise<GuildMembersPayload> => {
+        const response = await api.get(`/guild/${encodeURIComponent(guildName)}/members`, { params: { refresh } });
+        return response.data;
+    },
+
+    syncGuildMembers: async (guildName: string): Promise<GuildMembersPayload> => {
+        const response = await api.post(`/guild/${encodeURIComponent(guildName)}/members/sync`);
+        return response.data;
+    },
+
+    getFeatureFlags: async (): Promise<GuildFeatureFlags> => {
+        const response = await api.get('/guild/features');
+        const payload = response.data || {};
+        return {
+            guild_raffles_enabled: payload.guild_raffles_enabled !== false,
+            guild_contests_enabled: payload.guild_contests_enabled !== false,
+        };
     }
 };

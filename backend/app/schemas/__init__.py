@@ -161,6 +161,7 @@ class CreatureBase(BaseModel):
     bestiary_class: Optional[str] = None
     bestiary_level: Optional[str] = None
     charm_points: Optional[int] = None
+    classification: Optional[str] = None
     creature_class: Optional[str] = None
     primary_type: Optional[str] = None
     source_url: Optional[str] = None
@@ -181,6 +182,7 @@ class CreatureSimple(BaseModel):
     hitpoints: int
     experience: int
     difficulty: Optional[str] = None
+    classification: Optional[str] = None
     image_url: Optional[str] = None
     source_url: Optional[str] = None
     

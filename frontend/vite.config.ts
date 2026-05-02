@@ -17,6 +17,7 @@ export default defineConfig({
   preview: {
     port: 5174,
     host: true,
+    allowedHosts: ['tibiahub.domoforge.com'],
     strictPort: true,
   },
   build: {

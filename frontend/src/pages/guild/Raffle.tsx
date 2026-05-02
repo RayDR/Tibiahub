@@ -3,6 +3,8 @@ import { Loader2, RefreshCcw, ShieldAlert, Trophy, Users } from 'lucide-react';
 
 import { useAuth } from '../../context/AuthContext';
 import { useToast } from '../../context/ToastContext';
+import { guildApi } from '../../services/guild';
+import { guildManagementApi } from '../../services/guildManagement';
 import { Raffle, raffleApi } from '../../services/raffle';
 
 const emptyPrize = { name: '', reward: '' };
@@ -15,6 +17,7 @@ export default function RafflePage() {
   const [selectedRaffleId, setSelectedRaffleId] = useState<number | null>(null);
   const [loading, setLoading] = useState(true);
   const [busyAction, setBusyAction] = useState<string | null>(null);
+  const [rafflesEnabled, setRafflesEnabled] = useState(true);
   const [createForm, setCreateForm] = useState({
     title: '',
     description: '',
@@ -27,10 +30,45 @@ export default function RafflePage() {
   });
   const [newPrize, setNewPrize] = useState(emptyPrize);
   const [rerunReason, setRerunReason] = useState('');
+  const [availableGuilds, setAvailableGuilds] = useState<string[]>([]);
+
+  const isLeader = ['leader', 'vice leader', 'guild leader', 'alpha warbringer', 'bloodhowl marshal'].includes((user?.guild_rank || '').toLowerCase());
+  const canManage = Boolean(user?.is_superuser || isLeader);
 
   useEffect(() => {
     void loadRaffles();
   }, []);
+
+  useEffect(() => {
+    const loadFeatureFlags = async () => {
+      try {
+        const flags = await guildApi.getFeatureFlags();
+        setRafflesEnabled(flags.guild_raffles_enabled);
+      } catch {
+        setRafflesEnabled(true);
+      }
+    };
+    void loadFeatureFlags();
+  }, []);
+
+  useEffect(() => {
+    const loadGuilds = async () => {
+      if (!canManage) return;
+      try {
+        const guilds = await guildManagementApi.getGuilds();
+        setAvailableGuilds(guilds);
+      } catch {
+        setAvailableGuilds([]);
+      }
+    };
+    void loadGuilds();
+  }, [canManage]);
+
+  useEffect(() => {
+    if (!createForm.guild_name && user?.guild_name) {
+      setCreateForm((current) => ({ ...current, guild_name: user.guild_name || '' }));
+    }
+  }, [user?.guild_name, createForm.guild_name]);
 
   const selectedRaffle = raffles.find((raffle) => raffle.id === selectedRaffleId) ?? null;
 
@@ -140,7 +178,21 @@ export default function RafflePage() {
     }
   }
 
-  if (!user?.is_superuser) {
+  async function handleRemoveParticipant(participantId: number) {
+    if (!selectedRaffle) return;
+    setBusyAction(`remove-${participantId}`);
+    try {
+      const updated = await raffleApi.removeParticipant(selectedRaffle.id, participantId);
+      setRaffles((current) => current.map((raffle) => raffle.id === updated.id ? updated : raffle));
+      toast.success('Participant removed');
+    } catch (error: any) {
+      toast.error(error?.response?.data?.detail || error?.message || 'Failed to remove participant');
+    } finally {
+      setBusyAction(null);
+    }
+  }
+
+  if (!canManage) {
     return (
       <div className="rounded-2xl border border-red-500/20 bg-red-950/20 p-6 text-red-100">
         <div className="mb-3 flex items-center gap-3 text-lg font-semibold">
@@ -148,8 +200,16 @@ export default function RafflePage() {
           Admin Access Required
         </div>
         <p className="text-sm text-red-200/80">
-          The guild raffle console only allows admin execution because it stores winners, rerun history, and weighted account-based selection.
+          You need global admin or leader permissions to manage raffles.
         </p>
+      </div>
+    );
+  }
+
+  if (!rafflesEnabled) {
+    return (
+      <div className="rounded-2xl border border-amber-500/20 bg-amber-950/20 p-6 text-amber-100">
+        Guild raffle features are currently disabled in settings.
       </div>
     );
   }
@@ -173,13 +233,27 @@ export default function RafflePage() {
             className="w-full rounded-xl border border-slate-700 bg-slate-950 px-4 py-3 text-slate-100 outline-none focus:border-amber-500"
             required
           />
-          <input
-            value={createForm.guild_name}
-            onChange={(event) => setCreateForm((current) => ({ ...current, guild_name: event.target.value }))}
-            placeholder="Bloodborne Warhowl"
-            className="w-full rounded-xl border border-slate-700 bg-slate-950 px-4 py-3 text-slate-100 outline-none focus:border-amber-500"
-            required
-          />
+          {user?.is_superuser && availableGuilds.length > 0 ? (
+            <select
+              value={createForm.guild_name}
+              onChange={(event) => setCreateForm((current) => ({ ...current, guild_name: event.target.value }))}
+              className="w-full rounded-xl border border-slate-700 bg-slate-950 px-4 py-3 text-slate-100 outline-none focus:border-amber-500"
+              required
+            >
+              <option value="">Select guild</option>
+              {availableGuilds.map((guildName) => (
+                <option key={guildName} value={guildName}>{guildName}</option>
+              ))}
+            </select>
+          ) : (
+            <input
+              value={createForm.guild_name}
+              onChange={(event) => setCreateForm((current) => ({ ...current, guild_name: event.target.value }))}
+              placeholder="Bloodborne Warhowl"
+              className="w-full rounded-xl border border-slate-700 bg-slate-950 px-4 py-3 text-slate-100 outline-none focus:border-amber-500"
+              required
+            />
+          )}
           <textarea
             value={createForm.description}
             onChange={(event) => setCreateForm((current) => ({ ...current, description: event.target.value }))}
@@ -272,6 +346,9 @@ export default function RafflePage() {
                     <span>Guild: {selectedRaffle.guild_name}</span>
                     <span>Reruns: {selectedRaffle.rerun_count}</span>
                   </div>
+                  <div className="mt-2 text-xs text-amber-300">
+                    Public URL: {window.location.origin}/raffle/{selectedRaffle.id}
+                  </div>
                 </div>
                 <div className="flex flex-wrap gap-2">
                   <button onClick={handleSyncParticipants} disabled={busyAction === 'sync'} className="rounded-xl border border-slate-700 px-4 py-2 text-sm text-slate-200 disabled:opacity-50">
@@ -299,6 +376,13 @@ export default function RafflePage() {
                           <div className="text-right text-xs text-slate-400">
                             <div>weight {participant.weight.toFixed(1)}</div>
                             <div>{participant.is_eligible ? 'eligible' : 'inactive'}</div>
+                            <button
+                              onClick={() => void handleRemoveParticipant(participant.id)}
+                              disabled={busyAction === `remove-${participant.id}`}
+                              className="mt-1 rounded border border-red-500/40 px-2 py-0.5 text-[10px] text-red-300 hover:bg-red-500/10 disabled:opacity-50"
+                            >
+                              Remove
+                            </button>
                           </div>
                         </div>
                       ))}

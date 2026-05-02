@@ -59,6 +59,14 @@ class SystemSettings(BaseModel):
         False,
         description="Automatically post new announcements to Discord"
     )
+    guild_raffles_enabled: bool = Field(
+        True,
+        description="Enable guild raffle features"
+    )
+    guild_contests_enabled: bool = Field(
+        True,
+        description="Enable guild contest/event features"
+    )
     access_token_expire_minutes: int = Field(
         ..., 
         description="JWT token expiration time in minutes"
@@ -82,6 +90,14 @@ class UpdateSystemSettings(BaseModel):
     discord_auto_post: Optional[bool] = Field(
         None,
         description="Automatically post new announcements to Discord"
+    )
+    guild_raffles_enabled: Optional[bool] = Field(
+        None,
+        description="Enable/disable guild raffle features"
+    )
+    guild_contests_enabled: Optional[bool] = Field(
+        None,
+        description="Enable/disable guild contest/event features"
     )
 
 

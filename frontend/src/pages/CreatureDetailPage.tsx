@@ -4,6 +4,7 @@ import { motion } from 'framer-motion';
 import { AlertTriangle, ArrowLeft, Gem, Heart, Info, Loader2, MapPin, Shield, Skull, Swords, Zap } from 'lucide-react';
 
 import { creaturesApi } from '../services/api';
+import LootDisplay from '../components/LootDisplay';
 import type { Creature } from '../types';
 
 const formatNumber = (value?: number | null): string => {
@@ -14,29 +15,64 @@ const formatNumber = (value?: number | null): string => {
 };
 
 const CreatureDetailPage: React.FC = () => {
-  const { id } = useParams<{ id: string }>();
+  const { slug } = useParams<{ slug: string }>();
   const navigate = useNavigate();
   const [creature, setCreature] = useState<Creature | null>(null);
   const [loading, setLoading] = useState(true);
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
+  const [showFullOverview, setShowFullOverview] = useState(false);
 
   useEffect(() => {
     const fetchCreature = async () => {
-      if (!id) return;
+      if (!slug) return;
       try {
         setLoading(true);
         setErrorMessage(null);
-        const data = await creaturesApi.getById(Number.parseInt(id, 10));
+        const response = await fetch(`/api/v1/creatures/${encodeURIComponent(slug)}`);
+        if (!response.ok) {
+          throw new Error("We couldn't find this creature.");
+        }
+        const data = await response.json();
         setCreature(data);
+
+        const canonicalSlug = response.headers.get('x-canonical-slug') || data.slug;
+
+        try {
+          const current = JSON.parse(localStorage.getItem('recentCreatures') || '[]') as Array<{
+            id: number;
+            slug?: string;
+            name: string;
+            image_url?: string;
+            viewed_at: string;
+          }>;
+          const deduped = current.filter((entry) => entry.id !== data.id);
+          const updated = [
+            {
+              id: data.id,
+              slug: data.slug,
+              name: data.name,
+              image_url: data.image_url,
+              viewed_at: new Date().toISOString(),
+            },
+            ...deduped,
+          ].slice(0, 20);
+          localStorage.setItem('recentCreatures', JSON.stringify(updated));
+        } catch {
+          // ignore storage errors
+        }
+
+        if (canonicalSlug && canonicalSlug !== slug) {
+          navigate(`/creatures/${canonicalSlug}`, { replace: true });
+        }
       } catch (error: any) {
         console.error('Failed to load creature details', error);
-        setErrorMessage(error?.response?.data?.detail || error?.message || 'Failed to load creature details');
+        setErrorMessage("We couldn't find this creature.");
       } finally {
         setLoading(false);
       }
     };
     void fetchCreature();
-  }, [id]);
+  }, [slug, navigate]);
 
   if (loading) {
     return (
@@ -60,12 +96,16 @@ const CreatureDetailPage: React.FC = () => {
     );
   }
 
+  const overview = creature.description || 'Not available';
+  const overviewNeedsToggle = overview.length > 300;
+  const overviewText = showFullOverview ? overview : `${overview.slice(0, 300)}${overviewNeedsToggle ? '...' : ''}`;
+
   return (
     <div className="min-h-screen pb-20 pt-28">
       <div className="relative mb-8">
         <div className="pointer-events-none absolute inset-0 bg-gradient-to-b from-amber-500/10 to-transparent" />
         <div className="container relative z-10 mx-auto px-4">
-          <button onClick={() => navigate('/')} className="group mb-6 flex items-center gap-2 text-slate-400 transition-colors hover:text-white">
+          <button onClick={() => navigate('/bestiary')} className="group mb-6 flex items-center gap-2 text-slate-400 transition-colors hover:text-white">
             <ArrowLeft size={18} className="transition-transform group-hover:-translate-x-1" />
             Back to Bestiary
           </button>
@@ -126,7 +166,15 @@ const CreatureDetailPage: React.FC = () => {
             <h2 className="mb-4 flex items-center gap-2 text-xl font-serif font-bold text-amber-500">
               <Info size={20} /> Overview
             </h2>
-            <p className="mb-4 text-lg leading-relaxed text-slate-300">{creature.description || 'Not available'}</p>
+            <p className="mb-2 text-lg leading-relaxed text-slate-300">{overviewText}</p>
+            {overviewNeedsToggle && (
+              <button
+                onClick={() => setShowFullOverview((value) => !value)}
+                className="mb-4 text-sm font-medium text-amber-300 transition hover:text-amber-200"
+              >
+                {showFullOverview ? 'Show less' : 'Show more'}
+              </button>
+            )}
             <p className="text-sm leading-relaxed text-slate-400">{creature.behavior || 'Behavior not available.'}</p>
           </div>
 
@@ -137,27 +185,7 @@ const CreatureDetailPage: React.FC = () => {
               </h2>
               <div className="text-sm text-slate-500">Source values are shown as-is. Unknown means the source did not expose an exact drop chance.</div>
             </div>
-            <div className="grid gap-4 md:grid-cols-2">
-              {creature.loot_items.length > 0 ? creature.loot_items.map((loot) => (
-                <div key={loot.id} className="rounded-xl border border-slate-800 bg-slate-950/50 p-4">
-                  <div className="mb-2 flex items-center gap-3">
-                    <div className="flex h-11 w-11 items-center justify-center rounded-lg bg-slate-800 text-lg">💎</div>
-                    <div>
-                      <div className="font-semibold text-slate-100">{loot.item_name}</div>
-                      <div className="text-xs text-slate-500">Rarity: {loot.rarity || 'Unknown'} · Chance: {loot.percentage ?? 'Not available'}</div>
-                    </div>
-                  </div>
-                  <div className="text-xs text-slate-400">Amount: {loot.min_amount} - {loot.max_amount}</div>
-                  {loot.source_url && (
-                    <a href={loot.source_url} target="_blank" rel="noreferrer" className="mt-2 inline-block text-xs text-amber-400 hover:text-amber-300">
-                      Source page
-                    </a>
-                  )}
-                </div>
-              )) : (
-                <div className="text-sm text-slate-500">No drop data available.</div>
-              )}
-            </div>
+            <LootDisplay items={creature.loot_items} />
           </div>
         </div>
 

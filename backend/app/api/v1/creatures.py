@@ -1,5 +1,8 @@
 """Creatures API endpoints."""
 import hashlib
+import logging
+import os
+from pathlib import Path
 from typing import List, Optional
 from urllib.parse import unquote, urlparse
 
@@ -9,14 +12,39 @@ from sqlalchemy.orm import Session
 
 from app.db.database import get_db
 from app.models import Creature as CreatureModel
+from app.models.external_data import CachedResource
 from app.schemas import Creature, CreatureCreate, CreatureSimple
-from app.services.bestiary_source import BestiarySourceError, get_creature_detail_by_id, get_creature_detail_by_name, list_creature_summaries
-from app.services.creature_storage_service import get_cached_creature_by_id, get_cached_creature_by_name, list_cached_creatures, upsert_creature_payload
+from app.services.creature_storage_service import get_cached_creature_by_id, get_cached_creature_by_name, list_cached_creatures, resolve_cached_creature
 from app.services.entity_metadata_service import EntityMetadataService
-from app.services.text_utils import normalize_search_text
 from app.core.config import settings
 
 router = APIRouter(prefix="/creatures", tags=["creatures"])
+logger = logging.getLogger(__name__)
+_IMAGE_CACHE_DIR = Path("backend/storage/cache/images")
+
+
+def _resource_key(url: str) -> str:
+    return hashlib.sha1(url.encode("utf-8")).hexdigest()
+
+
+def _ensure_cache_dir() -> None:
+    _IMAGE_CACHE_DIR.mkdir(parents=True, exist_ok=True)
+
+
+def _read_cached_image(resource: CachedResource) -> Optional[bytes]:
+    if not resource.local_path:
+        return None
+    path = Path(resource.local_path)
+    if not path.exists():
+        return None
+    return path.read_bytes()
+
+
+def _write_cached_image(*, key: str, content: bytes) -> str:
+    _ensure_cache_dir()
+    path = _IMAGE_CACHE_DIR / f"{key}.bin"
+    path.write_bytes(content)
+    return str(path)
 
 
 async def _resolve_fandom_image_url(image_url: str) -> Optional[str]:
@@ -64,7 +92,7 @@ async def get_creature_highlights(
             creatures.append(creature)
     if creatures:
         return creatures
-    return list_cached_creatures(db, search=None, skip=0, limit=limit, sort_by="name", sort_order="asc")
+    return list_cached_creatures(db, search=None, category=None, skip=0, limit=limit, sort_by="name", sort_order="asc")
 
 
 @router.get("/", response_model=List[CreatureSimple])
@@ -72,70 +100,65 @@ async def get_creatures(
     skip: int = Query(0, ge=0),
     limit: int = Query(100, ge=1, le=500),
     search: Optional[str] = None,
+    category: Optional[str] = None,
     difficulty: Optional[str] = None,
     sort_by: str = Query("name", pattern="^(name|experience|hitpoints|difficulty)$"),
     sort_order: str = Query("asc", pattern="^(asc|desc)$"),
     db: Session = Depends(get_db),
 ):
     """Get list of creatures with optional filters"""
-    if not search:
-        return list_cached_creatures(db, search=None, skip=skip, limit=limit, sort_by=sort_by, sort_order=sort_order)
+    safe_sort_by = sort_by if sort_by in {"name", "experience", "hitpoints", "difficulty"} else "name"
+    safe_sort_order = "desc" if sort_order == "desc" else "asc"
 
     try:
-        summaries = await list_creature_summaries(
+        cached_items = list_cached_creatures(
+            db,
+            search=search,
+            category=category,
             skip=skip,
             limit=limit,
-            search=search,
-            difficulty=difficulty,
-            sort_by=sort_by,
-            sort_order=sort_order,
+            sort_by=safe_sort_by,
+            sort_order=safe_sort_order,
         )
-        for item in summaries[: min(len(summaries), 10)]:
-            cached = db.query(CreatureModel).filter(CreatureModel.id == item["id"]).first()
-            if cached:
-                cached.hitpoints = item.get("hitpoints") or cached.hitpoints
-                cached.experience = item.get("experience") or cached.experience
-                cached.image_url = item.get("image_url") or cached.image_url
-                cached.slug = item.get("slug") or cached.slug
-                cached.normalized_name = normalize_search_text(item.get("name"))
-            else:
-                upsert_creature_payload(db, item)
-        EntityMetadataService.record_searches(
-            db,
-            entity_type="creature",
-            matches=[(item["name"], item["name"], item["id"]) for item in summaries[: min(len(summaries), 5)]],
-        )
-        db.commit()
-        return summaries
-    except BestiarySourceError as exc:
-        raise HTTPException(status_code=503, detail=str(exc)) from exc
+        if search and cached_items:
+            EntityMetadataService.record_searches(
+                db,
+                entity_type="creature",
+                matches=[
+                    (item.normalized_name or item.name, item.name, item.id)
+                    for item in cached_items[: min(len(cached_items), 5)]
+                ],
+            )
+            db.commit()
+        return cached_items
+    except Exception as exc:
+        db.rollback()
+        logger.exception("creatures_search_failed search=%s error=%s", search, exc)
+        return []
 
 
-@router.get("/{creature_id}", response_model=Creature)
-async def get_creature(creature_id: int, db: Session = Depends(get_db)):
-    """Get detailed information about a specific creature"""
-    cached = get_cached_creature_by_id(db, creature_id)
-    if cached and cached.loot_items:
+@router.get("/{creature_identifier}", response_model=Creature)
+async def get_creature(creature_identifier: str, response: Response, db: Session = Depends(get_db)):
+    """Get detailed information about a creature by slug or legacy numeric id."""
+    cached = resolve_cached_creature(db, creature_identifier)
+
+    if cached:
         EntityMetadataService.record_searches(
             db,
             entity_type="creature",
             matches=[(cached.normalized_name or cached.name, cached.name, cached.id)],
         )
         db.commit()
+        canonical_slug = cached.slug or ""
+        if canonical_slug:
+            response.headers["X-Canonical-Slug"] = canonical_slug
+        response.headers["X-Data-Status"] = "partial" if not cached.loot_items else "complete"
         return cached
-    try:
-        payload = await get_creature_detail_by_id(creature_id)
-        creature = upsert_creature_payload(db, payload)
-        EntityMetadataService.record_searches(
-            db,
-            entity_type="creature",
-            matches=[(creature.normalized_name or creature.name, creature.name, creature.id)],
-        )
-        db.commit()
-        db.refresh(creature)
-        return get_cached_creature_by_id(db, creature.id) or creature
-    except BestiarySourceError as exc:
-        raise HTTPException(status_code=404, detail=str(exc)) from exc
+
+    raise HTTPException(
+        status_code=404,
+        detail="We couldn't find this creature.",
+    )
 
 
 @router.get("/name/{creature_name}", response_model=Creature)
@@ -150,18 +173,10 @@ async def get_creature_by_name(creature_name: str, db: Session = Depends(get_db)
         )
         db.commit()
         return cached
-    try:
-        payload = await get_creature_detail_by_name(creature_name)
-        creature = upsert_creature_payload(db, payload)
-        EntityMetadataService.record_searches(
-            db,
-            entity_type="creature",
-            matches=[(creature.normalized_name or creature.name, creature.name, creature.id)],
-        )
-        db.commit()
-        return get_cached_creature_by_id(db, creature.id) or creature
-    except BestiarySourceError as exc:
-        raise HTTPException(status_code=404, detail=str(exc)) from exc
+    raise HTTPException(
+        status_code=404,
+        detail="We couldn't find this creature.",
+    )
 
 
 @router.post("/", response_model=Creature, status_code=201)
@@ -187,15 +202,41 @@ async def get_creature_image(creature_id: int, request: Request, db: Session = D
     try:
         creature = get_cached_creature_by_id(db, creature_id)
         if not creature:
-            payload = await get_creature_detail_by_id(creature_id)
-            creature = upsert_creature_payload(db, payload)
-            db.commit()
-    except BestiarySourceError as exc:
-        raise HTTPException(status_code=404, detail=str(exc)) from exc
+            raise HTTPException(status_code=404, detail="Creature not found in local cache")
+    except HTTPException:
+        raise
 
     image_url = creature.image_url if hasattr(creature, "image_url") else creature.get("image_url")
     if not image_url:
         raise HTTPException(status_code=404, detail="Image not found")
+
+    resource = (
+        db.query(CachedResource)
+        .filter(CachedResource.resource_type == "creature_image", CachedResource.entity_type == "creature", CachedResource.entity_id == creature_id)
+        .first()
+    )
+
+    if resource:
+        cached_content = _read_cached_image(resource)
+        if cached_content:
+            etag = resource.etag_hash or hashlib.sha1(cached_content).hexdigest()
+            if request.headers.get("if-none-match") == etag:
+                return Response(status_code=304, headers={
+                    "ETag": etag,
+                    "Cache-Control": f"public, max-age={settings.IMAGE_CACHE_MAX_AGE_SECONDS}",
+                })
+            media_type = resource.content_type or "image/gif"
+            return Response(
+                content=cached_content,
+                media_type=media_type,
+                headers={
+                    "Content-Type": media_type,
+                    "Content-Length": str(len(cached_content)),
+                    "Cache-Control": f"public, max-age={settings.IMAGE_CACHE_MAX_AGE_SECONDS}",
+                    "ETag": etag,
+                    "X-Image-Source": "local-cache",
+                },
+            )
 
     resolved_url = image_url
     try:
@@ -224,12 +265,46 @@ async def get_creature_image(creature_id: int, request: Request, db: Session = D
             })
 
         media_type = upstream.headers.get("content-type", "image/gif").split(";")[0]
+        cache_key = _resource_key(resolved_url)
+        local_path = _write_cached_image(key=cache_key, content=content)
+
+        if not resource:
+            resource = CachedResource(
+                resource_type="creature_image",
+                entity_type="creature",
+                entity_id=creature_id,
+                source_url=image_url,
+            )
+            db.add(resource)
+        resource.resolved_url = resolved_url
+        resource.local_path = local_path
+        resource.content_type = media_type
+        resource.size_bytes = len(content)
+        resource.etag_hash = etag
+        resource.status = "ready"
+        from datetime import datetime
+        resource.last_fetched_at = datetime.utcnow()
+        resource.error = None
+        db.commit()
+
         headers = {
             "Content-Type": media_type,
             "Content-Length": str(len(content)),
             "Cache-Control": f"public, max-age={settings.IMAGE_CACHE_MAX_AGE_SECONDS}",
             "ETag": etag,
+            "X-Image-Source": "external-fetch",
         }
         return Response(content=content, media_type=media_type, headers=headers)
     except Exception as exc:
-        raise HTTPException(status_code=404, detail=f"Image source unavailable: {str(exc)}") from exc
+        if resource:
+            cached_content = _read_cached_image(resource)
+            if cached_content:
+                media_type = resource.content_type or "image/gif"
+                return Response(content=cached_content, media_type=media_type, headers={
+                    "Content-Type": media_type,
+                    "Content-Length": str(len(cached_content)),
+                    "Cache-Control": f"public, max-age={settings.IMAGE_CACHE_MAX_AGE_SECONDS}",
+                    "ETag": resource.etag_hash or hashlib.sha1(cached_content).hexdigest(),
+                    "X-Image-Source": "stale-cache",
+                })
+        raise HTTPException(status_code=404, detail="Image source unavailable") from exc

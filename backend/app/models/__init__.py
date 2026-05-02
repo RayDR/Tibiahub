@@ -12,6 +12,7 @@ from app.models.guild import GuildEvent, EventAttendance, Announcement, Recruitm
 from app.models.events import Event, EventParticipant, PublicEventParticipant
 from app.models.entity_metadata import EntityMetadata
 from app.models.raffle import Raffle, RaffleParticipant, RafflePrize, RaffleWinner
+from app.models.guild_member_snapshot import GuildMemberSnapshot
 
 __all__ = [
     "Creature",
@@ -35,6 +36,7 @@ __all__ = [
     "RaffleParticipant",
     "RafflePrize",
     "RaffleWinner",
+    "GuildMemberSnapshot",
     "creature_weaknesses",
     "creature_resistances"
 ]

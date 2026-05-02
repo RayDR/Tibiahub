@@ -26,6 +26,10 @@ class Raffle(Base):
     is_active = Column(Boolean, nullable=False, default=True)
     created_at = Column(DateTime(timezone=True), server_default=func.now())
     updated_at = Column(DateTime(timezone=True), server_default=func.now(), onupdate=func.now())
+    deleted_at = Column(DateTime(timezone=True), nullable=True)
+    deleted_by_user_id = Column(Integer, ForeignKey("users.id"), nullable=True)
+    delete_reason = Column(Text, nullable=True)
+    is_deleted = Column(Boolean, nullable=False, default=False)
 
     created_by = relationship("User", foreign_keys=[created_by_id], backref="created_raffles")
     last_executed_by = relationship("User", foreign_keys=[last_executed_by_id], backref="executed_raffles")
@@ -52,9 +56,13 @@ class RaffleParticipant(Base):
     source_data = Column(JSON, nullable=True)
     created_at = Column(DateTime(timezone=True), server_default=func.now())
     updated_at = Column(DateTime(timezone=True), server_default=func.now(), onupdate=func.now())
+    deleted_at = Column(DateTime(timezone=True), nullable=True)
+    deleted_by_user_id = Column(Integer, ForeignKey("users.id"), nullable=True)
+    delete_reason = Column(Text, nullable=True)
+    is_deleted = Column(Boolean, nullable=False, default=False)
 
     raffle = relationship("Raffle", back_populates="participants")
-    user = relationship("User", backref="raffle_participations")
+    user = relationship("User", foreign_keys=[user_id], backref="raffle_participations")
     winners = relationship("RaffleWinner", back_populates="participant")
 
 

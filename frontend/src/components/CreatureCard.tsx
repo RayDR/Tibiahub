@@ -11,10 +11,11 @@ interface CreatureCardProps {
 const CreatureCard: React.FC<CreatureCardProps> = ({ creature, index }) => {
   // Staggered animation delay
   const style = { animationDelay: `${index * 50}ms` };
+  const creaturePath = creature.slug || String(creature.id);
 
   return (
     <Link
-      to={`/creatures/${creature.id}`}
+      to={`/creatures/${creaturePath}`}
       className="group relative bg-slate-900/40 border border-slate-700/50 rounded-xl overflow-hidden hover:border-amber-500/50 hover:shadow-lg hover:shadow-amber-500/10 transition-all duration-300 flex flex-col animate-fade-in-up"
       style={style}
     >
@@ -54,6 +55,12 @@ const CreatureCard: React.FC<CreatureCardProps> = ({ creature, index }) => {
         <h3 className="text-lg font-bold text-slate-100 group-hover:text-amber-400 transition-colors mb-4 font-serif">
           {creature.name}
         </h3>
+
+        {creature.classification && (
+          <div className="mb-3 inline-flex rounded-full border border-cyan-500/30 bg-cyan-500/10 px-2.5 py-1 text-[11px] font-semibold uppercase tracking-wide text-cyan-300">
+            {creature.classification}
+          </div>
+        )}
 
         <div className="space-y-3 mt-auto">
           {/* Stats Grid */}

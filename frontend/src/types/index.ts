@@ -52,6 +52,7 @@ export interface CreatureSimple {
   hitpoints: number;
   experience: number;
   difficulty?: string;
+  classification?: string;
   image_url?: string;
   source_url?: string;
 }
@@ -79,6 +80,7 @@ export interface Creature {
   bestiary_class?: string;
   bestiary_level?: string;
   charm_points?: number | null;
+  classification?: string;
   creature_class?: string;
   primary_type?: string;
   source_url?: string;

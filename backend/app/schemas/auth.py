@@ -23,6 +23,7 @@ class UserLogin(BaseModel):
 
 class UserResponse(UserBase):
     id: int
+    avatar_url: Optional[str] = None
     is_active: bool
     is_superuser: bool
     guild_rank: Optional[str] = None

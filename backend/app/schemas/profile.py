@@ -5,6 +5,7 @@ from datetime import datetime
 class ProfileResponse(BaseModel):
     username: str
     email: Optional[str] = None
+    avatar_url: Optional[str] = None
     tibia_character_name: str
     guild_rank: Optional[str] = None
     guild_name: Optional[str] = None
@@ -24,6 +25,9 @@ class ProfileResponse(BaseModel):
 
 class ProfileUpdate(BaseModel):
     email: Optional[EmailStr] = Field(None, description="New email address")
-    password: Optional[str] = Field(None, min_length=6, description="New password")
+    avatar_url: Optional[str] = Field(None, description="Avatar image URL")
+    current_password: Optional[str] = Field(None, min_length=6, description="Current password")
+    new_password: Optional[str] = Field(None, min_length=6, description="New password")
+    password: Optional[str] = Field(None, min_length=6, description="Legacy password field")
     model_config = ConfigDict(from_attributes=True)
 
