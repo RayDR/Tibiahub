@@ -16,7 +16,28 @@ class RaffleCreate(BaseModel):
     title: str
     description: Optional[str] = None
     guild_name: str = Field(..., min_length=1)
+    access_mode: str = "guild_only"
+    show_participants: bool = True
+    visibility: str = "public"
+    registration_enabled: bool = True
+    run_mode: str = "manual"
+    scheduled_run_at: Optional[datetime] = None
+    archive_after_days: int = 7
     prizes: List[RafflePrizeCreate] = []
+
+
+class RaffleUpdate(BaseModel):
+    title: Optional[str] = None
+    description: Optional[str] = None
+    guild_name: Optional[str] = None
+    access_mode: Optional[str] = None
+    show_participants: Optional[bool] = None
+    visibility: Optional[str] = None
+    registration_enabled: Optional[bool] = None
+    run_mode: Optional[str] = None
+    scheduled_run_at: Optional[datetime] = None
+    archive_after_days: Optional[int] = None
+    status: Optional[str] = None
 
 
 class RaffleParticipantResponse(BaseModel):
@@ -26,6 +47,7 @@ class RaffleParticipantResponse(BaseModel):
     character_name: str
     guild_rank: Optional[str] = None
     weight: float
+    weight_multiplier: float = 1.0
     is_eligible: bool
     created_at: datetime
 
@@ -44,7 +66,7 @@ class RafflePrizeResponse(BaseModel):
 
 
 class RaffleWinnerResponse(BaseModel):
-    id: int
+    id: Optional[int] = None
     prize_id: int
     prize_name: str
     reward: str
@@ -55,14 +77,24 @@ class RaffleWinnerResponse(BaseModel):
     run_number: int
     is_rerun: bool
     rerun_reason: Optional[str] = None
-    created_at: datetime
+    created_at: Optional[datetime] = None
 
 
 class RaffleResponse(BaseModel):
     id: int
+    public_code: str
     title: str
     description: Optional[str] = None
     guild_name: str
+    access_mode: str
+    show_participants: bool
+    participant_count: int
+    visibility: str
+    registration_enabled: bool
+    run_mode: str
+    scheduled_run_at: Optional[datetime] = None
+    archive_after_days: int
+    archived_at: Optional[datetime] = None
     status: str
     current_run_number: int
     rerun_count: int
@@ -79,7 +111,25 @@ class RaffleExecutionResponse(BaseModel):
     run_number: int
     winner_count: int
     winners: List[RaffleWinnerResponse]
+    simulation: bool = False
+    status: Optional[str] = None
+    access_mode: Optional[str] = None
+    eligible_count: Optional[int] = None
+    ineligible_count: Optional[int] = None
+    participant_count: Optional[int] = None
+    prizes: Optional[List[dict]] = None
+    eligible_participants: Optional[List[dict]] = None
+    ineligible_participants: Optional[List[dict]] = None
+    warnings: Optional[List[str]] = None
 
 
 class RaffleRerunRequest(BaseModel):
     reason: str = Field(..., min_length=3)
+
+
+class RaffleWeightUpdateRequest(BaseModel):
+    weight_multiplier: float = Field(..., ge=1.0, le=5.0)
+
+
+class RaffleDrawRequest(BaseModel):
+    dry_run: bool = False

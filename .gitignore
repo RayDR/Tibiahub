@@ -54,3 +54,8 @@ htmlcov/
 *.tmp
 *.temp
 .cache/
+
+# Image cache binaries
+backend/storage/cache/
+backend/backend/storage/cache/
+*.bak

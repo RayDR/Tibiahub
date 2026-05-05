@@ -12,6 +12,7 @@ class Event(Base):
 
     id = Column(Integer, primary_key=True, index=True)
     uuid = Column(String(36), default=lambda: str(uuid.uuid4()), unique=True, index=True)
+    public_code = Column(String(6), unique=True, index=True, nullable=True)
     type = Column(String(50), nullable=False)  # 'raffle', 'contest', 'hunt_event', 'custom'
     title = Column(String(200), nullable=False)
     description = Column(Text, nullable=False)
@@ -36,6 +37,9 @@ class Event(Base):
     status = Column(String(50), default='active')  # 'active', 'closed', 'completed', 'cancelled'
     is_active = Column(Boolean, default=True)
     is_public = Column(Boolean, default=False)
+    registration_enabled = Column(Boolean, default=True)
+    archive_after_days = Column(Integer, default=7)
+    archived_at = Column(DateTime, nullable=True)
     
     # Participant configuration
     participant_mode = Column(String(20), default='manual')  # 'manual', 'guild_auto'

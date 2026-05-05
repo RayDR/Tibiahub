@@ -3,6 +3,8 @@ Tibia Character Validation Service
 Handles validation of Tibia characters using the official Tibia Data API
 """
 import requests
+from requests.adapters import HTTPAdapter
+from urllib3.util.retry import Retry
 from typing import Optional, Dict, Any, Tuple
 from datetime import datetime, timedelta
 import logging
@@ -15,11 +17,29 @@ class TibiaValidationService:
     
     API_BASE_URL = "https://api.tibiadata.com/v4"
     TIMEOUT = 10  # seconds
+    CONNECT_TIMEOUT = 3
+    RETRY_ATTEMPTS = 2
     
     # Cache for API status checks
     _last_status_check: Optional[datetime] = None
     _cached_status: bool = True
     _cache_duration = timedelta(minutes=5)
+
+    @classmethod
+    def _session(cls) -> requests.Session:
+        session = requests.Session()
+        retry = Retry(
+            total=cls.RETRY_ATTEMPTS,
+            connect=cls.RETRY_ATTEMPTS,
+            read=cls.RETRY_ATTEMPTS,
+            backoff_factor=0.4,
+            status_forcelist=[429, 500, 502, 503, 504],
+            allowed_methods=["GET"],
+        )
+        adapter = HTTPAdapter(max_retries=retry)
+        session.mount("https://", adapter)
+        session.mount("http://", adapter)
+        return session
     
     @classmethod
     def check_api_status(cls) -> Dict[str, Any]:
@@ -40,10 +60,11 @@ class TibiaValidationService:
         start_time = datetime.now()
         try:
             # Try to fetch a known character (or worlds list) to test API
-            response = requests.get(
-                f"{cls.API_BASE_URL}/worlds",
-                timeout=cls.TIMEOUT
-            )
+            with cls._session() as session:
+                response = session.get(
+                    f"{cls.API_BASE_URL}/worlds",
+                    timeout=(cls.CONNECT_TIMEOUT, cls.TIMEOUT)
+                )
             
             latency = (datetime.now() - start_time).total_seconds() * 1000  # ms
             
@@ -106,10 +127,11 @@ class TibiaValidationService:
             Tuple of (is_valid, character_data, error_message)
         """
         try:
-            response = requests.get(
-                f"{cls.API_BASE_URL}/character/{character_name}",
-                timeout=cls.TIMEOUT
-            )
+            with cls._session() as session:
+                response = session.get(
+                    f"{cls.API_BASE_URL}/character/{character_name}",
+                    timeout=(cls.CONNECT_TIMEOUT, cls.TIMEOUT)
+                )
             
             if response.status_code == 200:
                 data = response.json()

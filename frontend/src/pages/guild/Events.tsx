@@ -5,17 +5,20 @@ import { eventsApi, Event, EventCreate } from '../../services/events';
 import { guildApi } from '../../services/guild';
 import { useAuth } from '../../context/AuthContext';
 import { useToast } from '../../context/ToastContext';
+import { useSearchParams } from 'react-router-dom';
 
 export const Events: React.FC = () => {
   useTranslation();
   const { user } = useAuth();
   const toast = useToast();
+  const [searchParams, setSearchParams] = useSearchParams();
   const [events, setEvents] = useState<Event[]>([]);
   const [loading, setLoading] = useState(true);
   const [showCreateModal, setShowCreateModal] = useState(false);
   const [showDetailModal, setShowDetailModal] = useState(false);
   const [selectedEvent, setSelectedEvent] = useState<Event | null>(null);
-  const [filter, setFilter] = useState<'all' | 'raffle' | 'contest' | 'hunt' | 'quest'>('all');
+  const initialFilter = (searchParams.get('type') as 'raffle' | 'contest' | 'hunt' | 'quest' | null) || 'all';
+  const [filter, setFilter] = useState<'all' | 'raffle' | 'contest' | 'hunt' | 'quest'>(initialFilter);
   const [isDrawing, setIsDrawing] = useState(false);
   const [winnerNumber, setWinnerNumber] = useState<number | null>(null);
   const [winnerName, setWinnerName] = useState<string | null>(null);
@@ -24,10 +27,21 @@ export const Events: React.FC = () => {
     guild_contests_enabled: true,
   });
   const canManageEvents = Boolean(user?.is_superuser || ['leader', 'vice leader', 'guild leader', 'alpha warbringer', 'bloodhowl marshal'].includes((user?.guild_rank || '').toLowerCase()));
+  const selectedGuild = (localStorage.getItem('selectedGuildName') || '').trim();
+  const scopedGuild = user?.is_superuser
+    ? (selectedGuild || user?.guild_name || 'Bloodborne Warhowl')
+    : (user?.guild_name || undefined);
+
+  useEffect(() => {
+    const queryType = (searchParams.get('type') as 'raffle' | 'contest' | 'hunt' | 'quest' | null) || 'all';
+    if (queryType !== filter) {
+      setFilter(queryType);
+    }
+  }, [searchParams]);
 
   useEffect(() => {
     loadEvents();
-  }, [filter]);
+  }, [filter, scopedGuild]);
 
   useEffect(() => {
     const loadFlags = async () => {
@@ -53,7 +67,7 @@ export const Events: React.FC = () => {
   const loadEvents = async () => {
     try {
       setLoading(true);
-      const data = await eventsApi.getEvents('active', filter === 'all' ? undefined : filter);
+      const data = await eventsApi.getEvents('active', filter === 'all' ? undefined : filter, scopedGuild);
       setEvents(data);
     } catch (error) {
       console.error('Failed to load events:', error);
@@ -64,7 +78,11 @@ export const Events: React.FC = () => {
 
   const handleCreateEvent = async (event: EventCreate) => {
     try {
-      await eventsApi.createEvent(event);
+      const payload: EventCreate = {
+        ...event,
+        guild_name: user?.is_superuser ? scopedGuild : (event.guild_name || user?.guild_name),
+      };
+      await eventsApi.createEvent(payload);
       setShowCreateModal(false);
       loadEvents();
       toast.success('Event created successfully!');
@@ -187,7 +205,7 @@ export const Events: React.FC = () => {
       <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 sm:gap-4">
         <h1 className="text-2xl sm:text-3xl font-serif text-slate-100 flex items-center gap-2 sm:gap-3">
           <Trophy className="w-6 h-6 sm:w-8 sm:h-8 text-amber-500" />
-          Events & Raffles
+          {filter === 'contest' ? 'Guild Contests' : 'Events & Raffles'}
         </h1>
         {canManageEvents && (
           <button
@@ -215,7 +233,16 @@ export const Events: React.FC = () => {
               ? 'bg-amber-600 text-white'
               : 'bg-slate-800/50 text-slate-300 hover:bg-slate-700/50 border border-slate-700'
               }`}
-            onClick={() => setFilter(key as any)}
+            onClick={() => {
+              setFilter(key as any);
+              if (key === 'all') {
+                const nextParams = new URLSearchParams(searchParams);
+                nextParams.delete('type');
+                setSearchParams(nextParams, { replace: true });
+              } else {
+                setSearchParams({ type: key }, { replace: true });
+              }
+            }}
           >
             {icon}
             {label}
@@ -319,6 +346,7 @@ export const Events: React.FC = () => {
         <CreateEventModal
           contestsEnabled={featureFlags.guild_contests_enabled}
           rafflesEnabled={featureFlags.guild_raffles_enabled}
+          defaultType={filter === 'contest' ? 'contest' : (filter === 'raffle' ? 'raffle' : 'raffle')}
           onClose={() => setShowCreateModal(false)}
           onCreate={handleCreateEvent}
         />
@@ -349,13 +377,14 @@ export const Events: React.FC = () => {
 interface CreateEventModalProps {
   contestsEnabled: boolean;
   rafflesEnabled: boolean;
+  defaultType: 'raffle' | 'contest';
   onClose: () => void;
   onCreate: (event: EventCreate) => void;
 }
 
-const CreateEventModal: React.FC<CreateEventModalProps> = ({ contestsEnabled, rafflesEnabled, onClose, onCreate }) => {
+const CreateEventModal: React.FC<CreateEventModalProps> = ({ contestsEnabled, rafflesEnabled, defaultType, onClose, onCreate }) => {
   const [formData, setFormData] = useState<EventCreate>({
-    type: 'raffle',
+    type: defaultType,
     title: '',
     description: '',
     rules: '',
@@ -647,6 +676,9 @@ const EventDetailModal: React.FC<EventDetailModalProps> = ({
   const [manualCharName, setManualCharName] = useState('');
   const [addingManual, setAddingManual] = useState(false);
   const canManageEvent = Boolean(currentUser?.is_superuser || ['leader', 'vice leader', 'guild leader', 'alpha warbringer', 'bloodhowl marshal'].includes((currentUser?.guild_rank || '').toLowerCase()));
+  const publicUrl = event.type === 'contest' && event.public_code
+    ? `https://tibiahub.domoforge.com/contests/${event.public_code}`
+    : `https://tibiahub.domoforge.com/public/event/${event.uuid}`;
 
   const addLog = (message: string) => {
     setSyncLog(prev => [...prev, `[${new Date().toLocaleTimeString()}] ${message}`]);
@@ -955,12 +987,12 @@ const EventDetailModal: React.FC<EventDetailModalProps> = ({
                       <div className="flex gap-2">
                         <input
                           type="text"
-                          value={`https://tibiahub.domoforge.com/public/event/${event.uuid}`}
+                          value={publicUrl}
                           readOnly
                           className="flex-1 bg-slate-950 border border-green-700/50 rounded p-2 text-green-300 text-xs font-mono"
                         />
                         <button
-                          onClick={() => navigator.clipboard.writeText(`https://tibiahub.domoforge.com/public/event/${event.uuid}`)}
+                          onClick={() => navigator.clipboard.writeText(publicUrl)}
                           className="px-3 py-2 bg-green-700 hover:bg-green-600 text-white rounded text-xs"
                         >
                           Copy

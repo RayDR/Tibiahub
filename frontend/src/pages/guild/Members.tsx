@@ -6,7 +6,10 @@ import { GuildMember, guildApi } from '../../services/guild';
 
 export default function GuildMembersPage() {
   const { user } = useAuth();
-  const guildName = user?.guild_name || 'Bloodborne Warhowl';
+  const selectedGuild = (localStorage.getItem('selectedGuildName') || '').trim();
+  const guildName = user?.is_superuser
+    ? (selectedGuild || user?.guild_name || 'Bloodborne Warhowl')
+    : (user?.guild_name || 'Bloodborne Warhowl');
 
   const [members, setMembers] = useState<GuildMember[]>([]);
   const [source, setSource] = useState<'live' | 'snapshot'>('snapshot');

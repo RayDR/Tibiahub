@@ -33,6 +33,7 @@ export default function APIMonitor() {
     const [data, setData] = useState<APIMonitorResponse | null>(null);
     const [expandedAPI, setExpandedAPI] = useState<string | null>(null);
     const [refreshing, setRefreshing] = useState(false);
+    const [syncingUp, setSyncingUp] = useState(false);
 
     // Check permissions
     useEffect(() => {
@@ -66,6 +67,24 @@ export default function APIMonitor() {
     const handleRefresh = () => {
         setRefreshing(true);
         loadAPIStatus();
+    };
+
+    const handleSyncUp = async () => {
+        try {
+            setSyncingUp(true);
+            const token = localStorage.getItem('token');
+            await axios.post(
+                `${import.meta.env.VITE_API_URL || 'http://localhost:8001/api/v1'}/admin/sync/bestiary/start?source=all&mode=auto`,
+                {},
+                {
+                    headers: { Authorization: `Bearer ${token}` }
+                }
+            );
+        } catch (error) {
+            console.error('Failed to trigger sync-up:', error);
+        } finally {
+            setSyncingUp(false);
+        }
     };
 
     const getStatusIcon = (status: string) => {
@@ -112,14 +131,24 @@ export default function APIMonitor() {
                     </h1>
                     <p className="text-slate-400">Monitor external APIs and database health</p>
                 </div>
-                <button
-                    onClick={handleRefresh}
-                    disabled={refreshing}
-                    className="flex items-center gap-2 px-4 py-2 bg-amber-600 hover:bg-amber-700 text-white rounded-lg transition-colors disabled:opacity-50"
-                >
-                    <RefreshCw className={`w-4 h-4 ${refreshing ? 'animate-spin' : ''}`} />
-                    Refresh
-                </button>
+                <div className="flex items-center gap-2">
+                    <button
+                        onClick={handleSyncUp}
+                        disabled={syncingUp}
+                        className="flex items-center gap-2 px-4 py-2 bg-blue-600 hover:bg-blue-700 text-white rounded-lg transition-colors disabled:opacity-50"
+                    >
+                        <RefreshCw className={`w-4 h-4 ${syncingUp ? 'animate-spin' : ''}`} />
+                        Sync-up
+                    </button>
+                    <button
+                        onClick={handleRefresh}
+                        disabled={refreshing}
+                        className="flex items-center gap-2 px-4 py-2 bg-amber-600 hover:bg-amber-700 text-white rounded-lg transition-colors disabled:opacity-50"
+                    >
+                        <RefreshCw className={`w-4 h-4 ${refreshing ? 'animate-spin' : ''}`} />
+                        Refresh
+                    </button>
+                </div>
             </div>
 
             {/* Summary Stats */}

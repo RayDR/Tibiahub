@@ -33,6 +33,8 @@ class EventBase(BaseModel):
     total_slots: Optional[int] = None
     entry_cost: Optional[str] = "Free"
     is_public: bool = False
+    registration_enabled: bool = True
+    archive_after_days: int = 7
     participant_mode: str = "manual"  # 'manual' or 'guild_auto'
     active_days_limit: int = 10  # For guild_auto mode
     guild_name: Optional[str] = None  # For guild_auto mode
@@ -52,6 +54,8 @@ class EventUpdate(BaseModel):
     draw_date: Optional[datetime] = None
     status: Optional[str] = None
     is_public: Optional[bool] = None
+    registration_enabled: Optional[bool] = None
+    archive_after_days: Optional[int] = None
     participant_mode: Optional[str] = None
     active_days_limit: Optional[int] = None
     guild_name: Optional[str] = None
@@ -61,8 +65,10 @@ class EventUpdate(BaseModel):
 class Event(EventBase):
     id: int
     uuid: Optional[str] = None
+    public_code: Optional[str] = None
     status: str
     is_active: bool
+    archived_at: Optional[datetime] = None
     creator_id: int
     creator_name: Optional[str] = None
     winner_id: Optional[int] = None

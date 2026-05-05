@@ -244,6 +244,7 @@ def list_cached_creatures(
     *,
     search: Optional[str],
     category: Optional[str],
+    is_boss: Optional[bool],
     skip: int,
     limit: int,
     sort_by: str,
@@ -255,6 +256,8 @@ def list_cached_creatures(
         query = query.filter(Creature.normalized_name.contains(normalized))
     if category:
         query = query.filter(Creature.classification.ilike(category))
+    if is_boss is not None:
+        query = query.filter(Creature.is_boss == is_boss)
 
     sort_column = {
         "experience": Creature.experience,

@@ -8,7 +8,7 @@ const Header: React.FC = () => {
         <div className="flex items-center justify-between">
           <Link to="/" className="flex items-center space-x-4">
             <h1 className="text-2xl md:text-3xl text-tibia-gold">
-              Tibia Bestiary
+              Tibia Cyclopedia
             </h1>
           </Link>
           

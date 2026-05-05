@@ -99,15 +99,17 @@ const CreatureDetailPage: React.FC = () => {
   const overview = creature.description || 'Not available';
   const overviewNeedsToggle = overview.length > 300;
   const overviewText = showFullOverview ? overview : `${overview.slice(0, 300)}${overviewNeedsToggle ? '...' : ''}`;
+  const accessRequirements = (creature.related_tasks || []).filter((task) => /quest|mission|access|required/i.test(task));
+  const displayRequirements = accessRequirements.length > 0 ? accessRequirements : (creature.related_tasks || []);
 
   return (
     <div className="min-h-screen pb-20 pt-28">
       <div className="relative mb-8">
         <div className="pointer-events-none absolute inset-0 bg-gradient-to-b from-amber-500/10 to-transparent" />
         <div className="container relative z-10 mx-auto px-4">
-          <button onClick={() => navigate('/bestiary')} className="group mb-6 flex items-center gap-2 text-slate-400 transition-colors hover:text-white">
+          <button onClick={() => navigate('/cyclopedia')} className="group mb-6 flex items-center gap-2 text-slate-400 transition-colors hover:text-white">
             <ArrowLeft size={18} className="transition-transform group-hover:-translate-x-1" />
-            Back to Bestiary
+            Back to Cyclopedia
           </button>
 
           <div className="flex flex-col items-start gap-8 md:flex-row">
@@ -126,9 +128,12 @@ const CreatureDetailPage: React.FC = () => {
                   {creature.name}
                 </motion.h1>
                 <div className="flex flex-wrap gap-3 text-sm">
+                  {creature.is_boss && (
+                    <span className="rounded-lg border border-red-500/30 bg-red-500/20 px-3 py-1 font-semibold text-red-300">Boss encounter</span>
+                  )}
                   <span className="rounded-lg border border-amber-500/20 bg-amber-500/10 px-3 py-1 font-semibold text-amber-300">{creature.difficulty || 'Unknown difficulty'}</span>
                   <span className="rounded-lg border border-slate-700 bg-slate-800 px-3 py-1 text-slate-300">{creature.occurrence || 'Unknown occurrence'}</span>
-                  <span className="rounded-lg border border-slate-700 bg-slate-800 px-3 py-1 text-slate-300">Bestiary: {creature.bestiary_class || 'Unknown'}</span>
+                  <span className="rounded-lg border border-slate-700 bg-slate-800 px-3 py-1 text-slate-300">Cyclopedia class: {creature.bestiary_class || 'Unknown'}</span>
                   <span className="rounded-lg border border-slate-700 bg-slate-800 px-3 py-1 text-slate-300">Charm points: {creature.charm_points ?? 'Unknown'}</span>
                 </div>
               </div>
@@ -142,7 +147,7 @@ const CreatureDetailPage: React.FC = () => {
                   { label: 'Max damage', value: formatNumber(creature.max_damage), icon: Swords, color: 'text-red-400' },
                   { label: 'Primary type', value: creature.primary_type || 'Unknown', icon: Info, color: 'text-cyan-300' },
                   { label: 'Creature class', value: creature.creature_class || 'Unknown', icon: Skull, color: 'text-purple-300' },
-                  { label: 'Bestiary level', value: creature.bestiary_level || 'Unknown', icon: Gem, color: 'text-emerald-300' },
+                  { label: 'Cyclopedia level', value: creature.bestiary_level || 'Unknown', icon: Gem, color: 'text-emerald-300' },
                 ].map((stat) => (
                   <div key={stat.label} className="flex items-center gap-4 rounded-xl border border-slate-800 bg-slate-900/50 p-4">
                     <div className={`rounded-lg bg-slate-950 p-2 ${stat.color}`}>
@@ -202,9 +207,9 @@ const CreatureDetailPage: React.FC = () => {
           </div>
 
           <div className="rounded-2xl border border-slate-700 bg-slate-900/80 p-6 backdrop-blur">
-            <h2 className="mb-4 text-lg font-bold text-white">Related Tasks</h2>
+            <h2 className="mb-4 text-lg font-bold text-white">{creature.is_boss ? 'Access Requirements (Missions/Quests)' : 'Related Tasks'}</h2>
             <div className="space-y-2 text-sm text-slate-300">
-              {creature.related_tasks?.length > 0 ? creature.related_tasks.map((task) => (
+              {displayRequirements.length > 0 ? displayRequirements.map((task) => (
                 <div key={task} className="rounded-lg border border-slate-800 bg-slate-950/60 px-3 py-2">{task}</div>
               )) : <div className="text-slate-500">Not available</div>}
             </div>

@@ -48,6 +48,12 @@ const CreatureCard: React.FC<CreatureCardProps> = ({ creature, index }) => {
             {creature.difficulty}
           </div>
         )}
+
+        {creature.is_boss && (
+          <div className="absolute top-3 left-3 rounded border border-red-500/40 bg-red-500/20 px-2 py-1 text-[10px] font-bold uppercase tracking-wider text-red-300">
+            Boss
+          </div>
+        )}
       </div>
 
       {/* Info Body */}
@@ -59,6 +65,12 @@ const CreatureCard: React.FC<CreatureCardProps> = ({ creature, index }) => {
         {creature.classification && (
           <div className="mb-3 inline-flex rounded-full border border-cyan-500/30 bg-cyan-500/10 px-2.5 py-1 text-[11px] font-semibold uppercase tracking-wide text-cyan-300">
             {creature.classification}
+          </div>
+        )}
+
+        {creature.is_boss && creature.related_tasks && creature.related_tasks.length > 0 && (
+          <div className="mb-3 line-clamp-2 rounded-lg border border-amber-500/20 bg-amber-500/10 px-2.5 py-2 text-[11px] text-amber-200">
+            Req: {creature.related_tasks[0]}
           </div>
         )}
 

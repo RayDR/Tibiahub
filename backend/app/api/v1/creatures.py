@@ -1,7 +1,7 @@
 """Creatures API endpoints."""
 import hashlib
 import logging
-import os
+import asyncio
 from pathlib import Path
 from typing import List, Optional
 from urllib.parse import unquote, urlparse
@@ -12,15 +12,28 @@ from sqlalchemy.orm import Session
 
 from app.db.database import get_db
 from app.models import Creature as CreatureModel
+from app.models.settings import SystemSettings as SettingsModel
 from app.models.external_data import CachedResource
 from app.schemas import Creature, CreatureCreate, CreatureSimple
-from app.services.creature_storage_service import get_cached_creature_by_id, get_cached_creature_by_name, list_cached_creatures, resolve_cached_creature
+from app.services.bestiary_source import get_creature_detail_by_name
+from app.services.creature_storage_service import get_cached_creature_by_id, get_cached_creature_by_name, list_cached_creatures, resolve_cached_creature, upsert_creature_payload
 from app.services.entity_metadata_service import EntityMetadataService
+from app.services.external_apis import get_creatures as get_external_creatures
 from app.core.config import settings
 
 router = APIRouter(prefix="/creatures", tags=["creatures"])
 logger = logging.getLogger(__name__)
 _IMAGE_CACHE_DIR = Path("backend/storage/cache/images")
+DETAIL_FALLBACK_TIMEOUT_SECONDS = 15.0
+
+
+def _get_setting(db: Session, key: str, default: str = "") -> str:
+    value = db.query(SettingsModel).filter(SettingsModel.key == key).first()
+    return value.value if value and value.value is not None else default
+
+
+def _is_external_detail_fallback_enabled(db: Session) -> bool:
+    return _get_setting(db, "bestiary_allow_external_detail_fallback", "1") == "1"
 
 
 def _resource_key(url: str) -> str:
@@ -57,7 +70,7 @@ async def _resolve_fandom_image_url(image_url: str) -> Optional[str]:
         return None
     file_title = asset_name[0].upper() + asset_name[1:]
 
-    async with httpx.AsyncClient(timeout=20.0, headers={"User-Agent": settings.TIBIAWIKI_USER_AGENT, "Accept": "application/json"}) as client:
+    async with httpx.AsyncClient(timeout=15.0, headers={"User-Agent": settings.TIBIAWIKI_USER_AGENT, "Accept": "application/json"}) as client:
         response = await client.get(
             settings.TIBIAWIKI_API_URL,
             params={
@@ -92,7 +105,7 @@ async def get_creature_highlights(
             creatures.append(creature)
     if creatures:
         return creatures
-    return list_cached_creatures(db, search=None, category=None, skip=0, limit=limit, sort_by="name", sort_order="asc")
+    return list_cached_creatures(db, search=None, category=None, is_boss=None, skip=0, limit=limit, sort_by="name", sort_order="asc")
 
 
 @router.get("/", response_model=List[CreatureSimple])
@@ -101,6 +114,7 @@ async def get_creatures(
     limit: int = Query(100, ge=1, le=500),
     search: Optional[str] = None,
     category: Optional[str] = None,
+    is_boss: Optional[bool] = Query(None),
     difficulty: Optional[str] = None,
     sort_by: str = Query("name", pattern="^(name|experience|hitpoints|difficulty)$"),
     sort_order: str = Query("asc", pattern="^(asc|desc)$"),
@@ -115,6 +129,7 @@ async def get_creatures(
             db,
             search=search,
             category=category,
+            is_boss=is_boss,
             skip=skip,
             limit=limit,
             sort_by=safe_sort_by,
@@ -137,6 +152,66 @@ async def get_creatures(
         return []
 
 
+@router.get("/bosses", response_model=List[CreatureSimple])
+async def get_bosses(
+    skip: int = Query(0, ge=0),
+    limit: int = Query(100, ge=1, le=500),
+    search: Optional[str] = None,
+    sort_by: str = Query("name", pattern="^(name|experience|hitpoints|difficulty)$"),
+    sort_order: str = Query("asc", pattern="^(asc|desc)$"),
+    db: Session = Depends(get_db),
+):
+    safe_sort_by = sort_by if sort_by in {"name", "experience", "hitpoints", "difficulty"} else "name"
+    safe_sort_order = "desc" if sort_order == "desc" else "asc"
+    cached = list_cached_creatures(
+        db,
+        search=search,
+        category=None,
+        is_boss=True,
+        skip=skip,
+        limit=limit,
+        sort_by=safe_sort_by,
+        sort_order=safe_sort_order,
+    )
+    if cached:
+        return cached
+
+    if _is_external_detail_fallback_enabled(db):
+        try:
+            external_response = await asyncio.wait_for(
+                get_external_creatures(expand=True),
+                timeout=DETAIL_FALLBACK_TIMEOUT_SECONDS,
+            )
+            if external_response.success() and isinstance(external_response.data, list):
+                bosses_payload = [
+                    item for item in external_response.data
+                    if bool(item.get("is_boss"))
+                ]
+                # Persist only the needed page window to avoid mass sync behavior.
+                page_slice = bosses_payload[skip: skip + limit]
+                for payload in page_slice:
+                    upsert_creature_payload(db, payload)
+                if page_slice:
+                    db.commit()
+                cached = list_cached_creatures(
+                    db,
+                    search=search,
+                    category=None,
+                    is_boss=True,
+                    skip=skip,
+                    limit=limit,
+                    sort_by=safe_sort_by,
+                    sort_order=safe_sort_order,
+                )
+                if cached:
+                    return cached
+        except Exception as exc:
+            db.rollback()
+            logger.warning("bosses_fallback_failed search=%s error=%s", search, exc)
+
+    return []
+
+
 @router.get("/{creature_identifier}", response_model=Creature)
 async def get_creature(creature_identifier: str, response: Response, db: Session = Depends(get_db)):
     """Get detailed information about a creature by slug or legacy numeric id."""
@@ -155,10 +230,37 @@ async def get_creature(creature_identifier: str, response: Response, db: Session
         response.headers["X-Data-Status"] = "partial" if not cached.loot_items else "complete"
         return cached
 
-    raise HTTPException(
-        status_code=404,
-        detail="We couldn't find this creature.",
-    )
+    if _is_external_detail_fallback_enabled(db):
+        guessed_name = creature_identifier.replace("-", " ").replace("_", " ").strip()
+        if guessed_name:
+            try:
+                payload = await asyncio.wait_for(
+                    get_creature_detail_by_name(guessed_name),
+                    timeout=DETAIL_FALLBACK_TIMEOUT_SECONDS,
+                )
+                upsert_creature_payload(db, payload)
+                db.commit()
+                cached = resolve_cached_creature(db, creature_identifier)
+                if not cached and payload.get("name"):
+                    cached = get_cached_creature_by_name(db, payload["name"])
+                if cached:
+                    EntityMetadataService.record_searches(
+                        db,
+                        entity_type="creature",
+                        matches=[(cached.normalized_name or cached.name, cached.name, cached.id)],
+                    )
+                    db.commit()
+                    canonical_slug = cached.slug or ""
+                    if canonical_slug:
+                        response.headers["X-Canonical-Slug"] = canonical_slug
+                    response.headers["X-Data-Status"] = "partial" if not cached.loot_items else "complete"
+                    response.headers["X-Data-Source"] = "external-fallback"
+                    return cached
+            except Exception as exc:
+                db.rollback()
+                logger.warning("creature_fallback_failed identifier=%s error=%s", creature_identifier, exc)
+
+    raise HTTPException(status_code=404, detail="We couldn't find this creature.")
 
 
 @router.get("/name/{creature_name}", response_model=Creature)
@@ -240,7 +342,7 @@ async def get_creature_image(creature_id: int, request: Request, db: Session = D
 
     resolved_url = image_url
     try:
-        async with httpx.AsyncClient(timeout=20.0, follow_redirects=True, headers={
+        async with httpx.AsyncClient(timeout=15.0, follow_redirects=True, headers={
             "User-Agent": settings.TIBIAWIKI_USER_AGENT,
             "Referer": settings.TIBIAWIKI_BASE_PAGE_URL,
         }) as client:

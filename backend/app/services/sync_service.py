@@ -78,6 +78,23 @@ class DatabaseSyncService:
     TIBIA_DATA_URL = "https://api.tibiadata.com/v4"
     TIBIA_WIKI_URL = "https://tibia.fandom.com/api.php"
     TIBIA_ME_URL = "https://tibiame.com/api"
+    CONNECT_TIMEOUT = 3
+    READ_TIMEOUT = 10
+
+    @staticmethod
+    def _get_with_resilience(url: str, **kwargs):
+        timeout = kwargs.pop("timeout", (DatabaseSyncService.CONNECT_TIMEOUT, DatabaseSyncService.READ_TIMEOUT))
+        attempts = 3
+        last_error = None
+        for _ in range(attempts):
+            try:
+                return requests.get(url, timeout=timeout, **kwargs)
+            except (requests.exceptions.Timeout, requests.exceptions.ConnectionError) as exc:
+                last_error = exc
+                continue
+        if last_error:
+            raise last_error
+        raise RuntimeError("Request failed without explicit exception")
     
     @staticmethod
     def backup_creatures(db: Session) -> Dict[str, Any]:
@@ -121,9 +138,8 @@ class DatabaseSyncService:
         """Fetch creature data from TibiaData API v4"""
         try:
             # Using TibiaData API v4 - /v4/creatures endpoint
-            response = requests.get(
+            response = DatabaseSyncService._get_with_resilience(
                 f"{DatabaseSyncService.TIBIA_DATA_URL}/creatures",
-                timeout=10,
                 headers={'User-Agent': 'TibiaWeeklyTasks/1.0'}
             )
             if response.status_code == 200:
@@ -166,9 +182,8 @@ class DatabaseSyncService:
         try:
             # Convert creature name to URL-safe format (lowercase, spaces to +)
             race_formatted = race.lower().replace(" ", "+")
-            response = requests.get(
+            response = DatabaseSyncService._get_with_resilience(
                 f"{DatabaseSyncService.TIBIA_DATA_URL}/creature/{race_formatted}",
-                timeout=10,
                 headers={'User-Agent': 'TibiaWeeklyTasks/1.0'}
             )
             if response.status_code == 200:
@@ -196,7 +211,7 @@ class DatabaseSyncService:
     def fetch_tibia_wiki_creatures() -> Dict[str, Any]:
         """Fetch creature data from TibiaWiki (Fandom) MediaWiki API"""
         try:
-            response = requests.get(
+            response = DatabaseSyncService._get_with_resilience(
                 DatabaseSyncService.TIBIA_WIKI_URL,
                 params={
                     "action": "query",
@@ -205,7 +220,6 @@ class DatabaseSyncService:
                     "cmtitle": "Category:Creatures",
                     "cmlimit": 100
                 },
-                timeout=10,
                 headers={'User-Agent': 'TibiaWeeklyTasks/1.0'}
             )
             if response.status_code == 200:

@@ -27,6 +27,8 @@ export default function GuildManagementDashboard() {
     const [newCharacterName, setNewCharacterName] = useState<string>('');
     const [syncResult, setSyncResult] = useState<GuildSyncResult | null>(null);
     const [syncing, setSyncing] = useState(false);
+    const [guilds, setGuilds] = useState<string[]>([]);
+    const [selectedGuild, setSelectedGuild] = useState<string>('Bloodborne Warhowl');
 
     // Check if user has permission
     useEffect(() => {
@@ -39,11 +41,40 @@ export default function GuildManagementDashboard() {
         loadAllData();
     }, []);
 
+    useEffect(() => {
+        if (user?.is_superuser) {
+            loadAllData();
+        }
+    }, [selectedGuild]);
+
+    useEffect(() => {
+        if (!user?.is_superuser) {
+            setSelectedGuild(user?.guild_name || 'Bloodborne Warhowl');
+        }
+    }, [user?.is_superuser, user?.guild_name]);
+
     const loadAllData = async () => {
         setLoading(true);
         try {
+            const guildsData = await guildManagementApi.getGuilds();
+            const normalizedGuilds = guildsData.filter((name) => Boolean(name && name.trim()));
+            setGuilds(normalizedGuilds);
+
+            const preferredGuild = normalizedGuilds.includes('Bloodborne Warhowl')
+                ? 'Bloodborne Warhowl'
+                : (normalizedGuilds[0] || selectedGuild || 'Bloodborne Warhowl');
+            const activeGuild = normalizedGuilds.includes(selectedGuild) ? selectedGuild : preferredGuild;
+            const guildForQuery = user?.is_superuser ? activeGuild : undefined;
+            if (user?.is_superuser && activeGuild !== selectedGuild) {
+                setSelectedGuild(activeGuild);
+            }
+
             const [usersData, statsData, statusData, settingsData] = await Promise.all([
-                guildManagementApi.getUsers(),
+                guildManagementApi.getUsers(0, 200, {
+                    guild_name: guildForQuery,
+                    include_inactive: false,
+                    exclude_test_accounts: true,
+                }),
                 guildManagementApi.getStats(),
                 guildManagementApi.getTibiaAPIStatus(),
                 guildManagementApi.getSettings(),
@@ -62,7 +93,7 @@ export default function GuildManagementDashboard() {
     const handleSyncGuild = async () => {
         setSyncing(true);
         try {
-            const result = await guildManagementApi.syncGuild();
+            const result = await guildManagementApi.syncGuild(selectedGuild || 'Bloodborne Warhowl');
             setSyncResult(result);
             loadAllData(); // Reload data after sync
             toast.success('Guild synced successfully!');
@@ -167,6 +198,20 @@ export default function GuildManagementDashboard() {
                     Guild Management
                 </h1>
                 <p className="text-slate-400">Manage your guild members, settings, and synchronization with Tibia</p>
+                {user?.is_superuser && guilds.length > 0 && (
+                    <div className="mt-3 flex items-center gap-2">
+                        <label className="text-sm text-slate-300">Managing guild:</label>
+                        <select
+                            value={selectedGuild}
+                            onChange={(e) => setSelectedGuild(e.target.value)}
+                            className="rounded-md border border-slate-700 bg-slate-900 px-3 py-1.5 text-sm text-slate-200"
+                        >
+                            {guilds.map((guildName) => (
+                                <option key={guildName} value={guildName}>{guildName}</option>
+                            ))}
+                        </select>
+                    </div>
+                )}
             </div>
 
             {/* Tabs */}
@@ -317,6 +362,7 @@ export default function GuildManagementDashboard() {
                                 <tr>
                                     <th className="text-left p-4 text-sm font-semibold text-slate-400">User</th>
                                     <th className="text-left p-4 text-sm font-semibold text-slate-400">Email</th>
+                                    <th className="text-left p-4 text-sm font-semibold text-slate-400">Guild</th>
                                     <th className="text-left p-4 text-sm font-semibold text-slate-400">Rank</th>
                                     <th className="text-left p-4 text-sm font-semibold text-slate-400">Characters</th>
                                     <th className="text-left p-4 text-sm font-semibold text-slate-400">Status</th>
@@ -356,6 +402,7 @@ export default function GuildManagementDashboard() {
                                                 member.email || 'N/A'
                                             )}
                                         </td>
+                                        <td className="p-4 text-sm text-slate-300">{member.guild_name || 'Unknown'}</td>
                                         <td className="p-4">
                                             {editingUser === member.id ? (
                                                 <input

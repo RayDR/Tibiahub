@@ -51,8 +51,10 @@ export interface CreatureSimple {
   name: string;
   hitpoints: number;
   experience: number;
+  is_boss: boolean;
   difficulty?: string;
   classification?: string;
+  related_tasks?: string[];
   image_url?: string;
   source_url?: string;
 }
@@ -139,6 +141,52 @@ export interface ItemSearchResult {
   item_image_url?: string | null;
   source_url?: string | null;
   drops: ItemDropCreature[];
+}
+
+export interface ItemDetail {
+  id: number;
+  item_name: string;
+  normalized_name: string;
+  item_image_url?: string | null;
+  source_url?: string | null;
+  rarity?: string | null;
+  drop_chance?: number | null;
+  drops: ItemDropCreature[];
+}
+
+export interface QuestSearchResult {
+  id?: number;
+  name: string;
+  description?: string;
+  min_level?: number;
+  max_level?: number;
+  experience_reward?: number;
+  location?: string;
+  npc?: string;
+  source_url?: string;
+}
+
+export interface QuestRelatedCreature {
+  creature_id: number;
+  creature_name: string;
+  creature_slug?: string;
+  is_boss: boolean;
+  classification?: string;
+  image_url?: string;
+}
+
+export interface QuestDetail {
+  id: number;
+  name: string;
+  description?: string;
+  min_level?: number;
+  max_level?: number;
+  experience_reward?: number;
+  location?: string;
+  npc?: string;
+  source_url?: string;
+  requirements: string[];
+  related_creatures: QuestRelatedCreature[];
 }
 
 export interface HuntRecommendation {

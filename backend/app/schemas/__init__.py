@@ -181,8 +181,10 @@ class CreatureSimple(BaseModel):
     name: str
     hitpoints: int
     experience: int
+    is_boss: bool = False
     difficulty: Optional[str] = None
     classification: Optional[str] = None
+    related_tasks: Optional[List[str]] = None
     image_url: Optional[str] = None
     source_url: Optional[str] = None
     
@@ -233,6 +235,52 @@ class ItemSearchResult(BaseModel):
     item_image_url: Optional[str] = None
     source_url: Optional[str] = None
     drops: List[ItemDropCreature] = []
+
+
+class ItemDetail(BaseModel):
+    id: int
+    item_name: str
+    normalized_name: str
+    item_image_url: Optional[str] = None
+    source_url: Optional[str] = None
+    rarity: Optional[str] = None
+    drop_chance: Optional[float] = None
+    drops: List[ItemDropCreature] = []
+
+
+class QuestSearchResult(BaseModel):
+    id: Optional[int] = None
+    name: str
+    description: Optional[str] = None
+    min_level: Optional[int] = None
+    max_level: Optional[int] = None
+    experience_reward: Optional[int] = None
+    location: Optional[str] = None
+    npc: Optional[str] = None
+    source_url: Optional[str] = None
+
+
+class QuestRelatedCreature(BaseModel):
+    creature_id: int
+    creature_name: str
+    creature_slug: Optional[str] = None
+    is_boss: bool = False
+    classification: Optional[str] = None
+    image_url: Optional[str] = None
+
+
+class QuestDetail(BaseModel):
+    id: int
+    name: str
+    description: Optional[str] = None
+    min_level: Optional[int] = None
+    max_level: Optional[int] = None
+    experience_reward: Optional[int] = None
+    location: Optional[str] = None
+    npc: Optional[str] = None
+    source_url: Optional[str] = None
+    requirements: List[str] = []
+    related_creatures: List[QuestRelatedCreature] = []
 
 
 class HomeHighlights(BaseModel):

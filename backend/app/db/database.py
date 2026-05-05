@@ -88,18 +88,32 @@ SQLITE_RUNTIME_MIGRATIONS = {
         "is_deleted": "BOOLEAN DEFAULT 0",
     },
     "events": {
+        "public_code": "VARCHAR(6)",
+        "registration_enabled": "BOOLEAN DEFAULT 1",
+        "archive_after_days": "INTEGER DEFAULT 7",
+        "archived_at": "DATETIME",
         "deleted_at": "DATETIME",
         "deleted_by_user_id": "INTEGER",
         "delete_reason": "TEXT",
         "is_deleted": "BOOLEAN DEFAULT 0",
     },
     "raffles": {
+        "public_code": "VARCHAR(6)",
+        "access_mode": "VARCHAR(20) DEFAULT 'guild_only'",
+        "show_participants": "BOOLEAN DEFAULT 1",
+        "visibility": "VARCHAR(20) DEFAULT 'public'",
+        "registration_enabled": "BOOLEAN DEFAULT 1",
+        "run_mode": "VARCHAR(20) DEFAULT 'manual'",
+        "scheduled_run_at": "DATETIME",
+        "archive_after_days": "INTEGER DEFAULT 7",
+        "archived_at": "DATETIME",
         "deleted_at": "DATETIME",
         "deleted_by_user_id": "INTEGER",
         "delete_reason": "TEXT",
         "is_deleted": "BOOLEAN DEFAULT 0",
     },
     "raffle_participants": {
+        "weight_multiplier": "FLOAT DEFAULT 1.0",
         "deleted_at": "DATETIME",
         "deleted_by_user_id": "INTEGER",
         "delete_reason": "TEXT",
@@ -116,6 +130,8 @@ SQLITE_RUNTIME_INDEXES = (
     "CREATE INDEX IF NOT EXISTS idx_guild_events_is_deleted ON guild_events(is_deleted)",
     "CREATE INDEX IF NOT EXISTS idx_events_is_deleted ON events(is_deleted)",
     "CREATE INDEX IF NOT EXISTS idx_raffles_is_deleted ON raffles(is_deleted)",
+    "CREATE UNIQUE INDEX IF NOT EXISTS idx_raffles_public_code ON raffles(public_code)",
+    "CREATE UNIQUE INDEX IF NOT EXISTS idx_events_public_code ON events(public_code)",
 )
 
 

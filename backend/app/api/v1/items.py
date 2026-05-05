@@ -1,5 +1,6 @@
 """Items/Loot API endpoints."""
 import hashlib
+import asyncio
 from difflib import SequenceMatcher
 from typing import List
 from urllib.parse import unquote, urlparse
@@ -12,13 +13,26 @@ from sqlalchemy.orm import Session, joinedload
 from app.core.config import settings
 from app.db.database import get_db
 from app.models.creature import Creature
+from app.models.settings import SystemSettings as SettingsModel
 from app.models import Loot as LootModel
+from app.models.external_data import Item as ExternalItemModel
 from app.models.spawn_location import SpawnLocation
-from app.schemas import ItemDropCreature, ItemSearchResult
+from app.schemas import ItemDetail, ItemDropCreature, ItemSearchResult
 from app.services.entity_metadata_service import EntityMetadataService
+from app.services.external_apis import get_items
 from app.services.text_utils import normalize_search_text
 
 router = APIRouter(prefix="/items", tags=["items"])
+DETAIL_FALLBACK_TIMEOUT_SECONDS = 15.0
+
+
+def _get_setting(db: Session, key: str, default: str = "") -> str:
+    value = db.query(SettingsModel).filter(SettingsModel.key == key).first()
+    return value.value if value and value.value is not None else default
+
+
+def _is_external_detail_fallback_enabled(db: Session) -> bool:
+    return _get_setting(db, "bestiary_allow_external_detail_fallback", "1") == "1"
 
 
 def _build_item_special_filepath(item_name: str) -> str:
@@ -37,7 +51,7 @@ async def _resolve_fandom_image_url(image_url: str) -> str | None:
     file_title = asset_name[0].upper() + asset_name[1:]
 
     async with httpx.AsyncClient(
-        timeout=20.0,
+        timeout=15.0,
         headers={"User-Agent": settings.TIBIAWIKI_USER_AGENT, "Accept": "application/json"},
     ) as client:
         response = await client.get(
@@ -74,7 +88,7 @@ async def get_item_image(item_id: int, request: Request, db: Session = Depends(g
 
     try:
         async with httpx.AsyncClient(
-            timeout=20.0,
+            timeout=15.0,
             follow_redirects=True,
             headers={
                 "User-Agent": settings.TIBIAWIKI_USER_AGENT,
@@ -161,7 +175,7 @@ async def get_item_highlights(
 
 @router.get("/", response_model=List[ItemSearchResult])
 async def search_items(
-    search: str = Query(..., min_length=2, description="Search term for item name"),
+    search: str | None = Query(None, min_length=2, description="Search term for item name"),
     skip: int = Query(0, ge=0),
     limit: int = Query(50, ge=1, le=100),
     db: Session = Depends(get_db)
@@ -170,6 +184,56 @@ async def search_items(
     Search for items/loot by name.
     Returns grouped results sorted by exactness and fuzzy similarity.
     """
+    if not search:
+        rows = (
+            db.query(LootModel)
+            .options(
+                joinedload(LootModel.creature)
+                .joinedload(Creature.spawn_locations)
+                .joinedload(SpawnLocation.hunt_zone)
+            )
+            .filter(LootModel.normalized_name.isnot(None))
+            .limit(500)
+            .all()
+        )
+        if not rows and _is_external_detail_fallback_enabled(db):
+            external_response = await asyncio.wait_for(get_items(expand=False), timeout=DETAIL_FALLBACK_TIMEOUT_SECONDS)
+            if external_response.success() and isinstance(external_response.data, list):
+                # Persist only requested page to avoid mass sync behavior.
+                page_slice = external_response.data[skip: skip + limit]
+                persisted: list[ItemSearchResult] = []
+                for entry in page_slice:
+                    name = (entry.get("name") or "").strip()
+                    if not name:
+                        continue
+                    existing = db.query(ExternalItemModel).filter(ExternalItemModel.name == name).first()
+                    if not existing:
+                        existing = ExternalItemModel(name=name)
+                        db.add(existing)
+                    existing.item_id = entry.get("item_id")
+                    existing.description = entry.get("description")
+                    existing.type = entry.get("type")
+                    existing.raw_data = entry
+                    persisted.append(
+                        ItemSearchResult(
+                            item_name=name,
+                            normalized_name=normalize_search_text(name),
+                            item_image_url=entry.get("image_url"),
+                            source_url=entry.get("source_url"),
+                            drops=[],
+                        )
+                    )
+                if persisted:
+                    db.commit()
+                    return persisted
+        grouped: dict[str, list[LootModel]] = {}
+        for row in rows:
+            key = row.normalized_name or normalize_search_text(row.item_name)
+            grouped.setdefault(key, []).append(row)
+        ranked_keys = sorted(grouped.keys(), key=lambda key: _rank_item(grouped[key][0].item_name, grouped[key][0].item_name))
+        selected_keys = ranked_keys[skip: skip + limit]
+        return [_build_item_result(grouped[key][0].item_name, grouped[key]) for key in selected_keys]
+
     normalized_search = normalize_search_text(search)
     query = (
         db.query(LootModel)
@@ -204,6 +268,38 @@ async def search_items(
         key=lambda key: _rank_item(search, grouped[key][0].item_name),
     )
     selected_keys = ranked_keys[skip: skip + limit]
+    if not selected_keys and _is_external_detail_fallback_enabled(db):
+        external_response = await asyncio.wait_for(get_items(expand=False), timeout=DETAIL_FALLBACK_TIMEOUT_SECONDS)
+        if external_response.success() and isinstance(external_response.data, list):
+            external_items = [entry for entry in external_response.data if entry.get("name")]
+            if external_items:
+                external_items.sort(key=lambda entry: _rank_item(search, entry.get("name", "")))
+                best_match = external_items[0]
+                if normalize_search_text(search) in normalize_search_text(best_match.get("name", "")):
+                    name = best_match.get("name")
+                    normalized_name = normalize_search_text(name)
+                    existing = db.query(ExternalItemModel).filter(ExternalItemModel.name == name).first()
+                    if not existing:
+                        existing = ExternalItemModel(name=name)
+                        db.add(existing)
+                    existing.description = best_match.get("description")
+                    existing.type = best_match.get("type")
+                    existing.raw_data = best_match
+                    EntityMetadataService.record_searches(
+                        db,
+                        entity_type="item",
+                        matches=[(normalized_name, name, None)],
+                    )
+                    db.commit()
+                    return [
+                        ItemSearchResult(
+                            item_name=name,
+                            normalized_name=normalized_name,
+                            item_image_url=best_match.get("image_url"),
+                            source_url=best_match.get("source_url"),
+                            drops=[],
+                        )
+                    ]
     EntityMetadataService.record_searches(
         db,
         entity_type="item",
@@ -211,6 +307,98 @@ async def search_items(
     )
     db.commit()
     return [_build_item_result(grouped[key][0].item_name, grouped[key]) for key in selected_keys]
+
+
+@router.get("/{item_id}", response_model=ItemDetail)
+async def get_item_detail(item_id: int, db: Session = Depends(get_db)):
+    """Get item detail from local cache first, then controlled external fallback."""
+    local_by_id = (
+        db.query(LootModel)
+        .options(
+            joinedload(LootModel.creature)
+            .joinedload(Creature.spawn_locations)
+            .joinedload(SpawnLocation.hunt_zone)
+        )
+        .filter(LootModel.id == item_id)
+        .first()
+    )
+
+    if not local_by_id:
+        local_by_id = (
+            db.query(LootModel)
+            .options(
+                joinedload(LootModel.creature)
+                .joinedload(Creature.spawn_locations)
+                .joinedload(SpawnLocation.hunt_zone)
+            )
+            .filter(LootModel.external_id == str(item_id))
+            .first()
+        )
+
+    if local_by_id:
+        all_rows = (
+            db.query(LootModel)
+            .options(
+                joinedload(LootModel.creature)
+                .joinedload(Creature.spawn_locations)
+                .joinedload(SpawnLocation.hunt_zone)
+            )
+            .filter(LootModel.normalized_name == local_by_id.normalized_name)
+            .all()
+        )
+        mapped = _build_item_result(local_by_id.item_name, all_rows)
+        top_drop = max((drop.chance for drop in mapped.drops if drop.chance is not None), default=None)
+        rarity = next((drop.rarity for drop in mapped.drops if drop.rarity), None)
+        return ItemDetail(
+            id=local_by_id.id,
+            item_name=mapped.item_name,
+            normalized_name=mapped.normalized_name,
+            item_image_url=mapped.item_image_url,
+            source_url=mapped.source_url,
+            rarity=rarity,
+            drop_chance=top_drop,
+            drops=mapped.drops,
+        )
+
+    if _is_external_detail_fallback_enabled(db):
+        external_response = await asyncio.wait_for(get_items(expand=True), timeout=DETAIL_FALLBACK_TIMEOUT_SECONDS)
+        if external_response.success() and isinstance(external_response.data, list):
+            best = next(
+                (
+                    entry for entry in external_response.data
+                    if entry.get("item_id") == item_id
+                    or str(entry.get("item_id") or "") == str(item_id)
+                ),
+                None,
+            )
+            if best:
+                name = (best.get("name") or "").strip()
+                if not name:
+                    raise HTTPException(status_code=404, detail="Item not found")
+
+                normalized_name = normalize_search_text(name)
+                existing = db.query(ExternalItemModel).filter(ExternalItemModel.name == name).first()
+                if not existing:
+                    existing = ExternalItemModel(name=name)
+                    db.add(existing)
+                existing.item_id = best.get("item_id")
+                existing.description = best.get("description")
+                existing.type = best.get("type")
+                existing.raw_data = best
+                db.commit()
+
+                return ItemDetail(
+                    id=existing.id,
+                    item_name=name,
+                    normalized_name=normalized_name,
+                    item_image_url=best.get("image_url"),
+                    source_url=best.get("source_url"),
+                    rarity=None,
+                    drop_chance=None,
+                    drops=[],
+                )
+
+    raise HTTPException(status_code=404, detail="Item not found")
 
 
 def _build_item_result(item_name: str, drops: list[LootModel]) -> ItemSearchResult:

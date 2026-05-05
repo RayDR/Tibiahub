@@ -3,6 +3,7 @@ import Navigation from './components/Navigation';
 import HomePage from './pages/HomePage';
 import CreaturesPage from './pages/CreaturesPage';
 import CreatureDetailPage from './pages/CreatureDetailPage';
+import QuestDetailPage from './pages/QuestDetailPage';
 import HuntRecommendationsPage from './pages/HuntRecommendationsPage';
 import QuestViewerPage from './pages/QuestViewerPage';
 import GuildManagementDashboard from './pages/Admin/GuildManagementDashboard';
@@ -14,6 +15,7 @@ import DataSyncPanel from './pages/DataSyncPanel';
 import Profile from './pages/Profile';
 import PasswordReset from './pages/PasswordReset';
 import { useEffect } from 'react';
+import { useState } from 'react';
 
 import { AuthProvider } from './context/AuthContext';
 import { ToastProvider } from './context/ToastContext';
@@ -25,16 +27,17 @@ import GuildDashboard from './pages/guild/Dashboard';
 import GuildMembersPage from './pages/guild/Members';
 import Announcements from './pages/guild/Announcements';
 import Events from './pages/guild/Events';
-import Recruitment from './pages/guild/Recruitment';
 import HuntCatalog from './pages/guild/HuntCatalog';
 import Raffle from './pages/guild/Raffle';
 import RafflePublicPage from './pages/RafflePublicPage';
 import PublicRafflePage from './pages/PublicRafflePage';
 import NotFound from './pages/NotFound';
+import { systemApi } from './services/api';
 
 function App() {
   const location = useLocation();
   const navigate = useNavigate();
+  const [latestDataVersion, setLatestDataVersion] = useState<string>('Latest data version unavailable');
 
   // Keyboard shortcut listener for Ctrl+Alt+G (Guild) and Ctrl+Alt+A (Admin)
   useEffect(() => {
@@ -53,6 +56,21 @@ function App() {
     return () => window.removeEventListener('keydown', handleKeyDown);
   }, [navigate]);
 
+  useEffect(() => {
+    const controller = new AbortController();
+    void systemApi.getHealth(controller.signal)
+      .then((payload) => {
+        const version = payload?.external_sync?.latest_data_version;
+        if (version) {
+          setLatestDataVersion(version);
+        }
+      })
+      .catch(() => {
+        // Keep graceful fallback text when health endpoint is unreachable.
+      });
+    return () => controller.abort();
+  }, []);
+
   return (
     <AuthProvider>
       <ToastProvider>
@@ -62,14 +80,18 @@ function App() {
           <div className="container mx-auto px-4">
             <Routes location={location} key={location.pathname}>
               <Route path="/" element={<HomePage />} />
-              <Route path="/bestiary" element={<CreaturesPage />} />
+              <Route path="/cyclopedia" element={<CreaturesPage />} />
+              <Route path="/bestiary" element={<Navigate to="/cyclopedia" replace />} />
               <Route path="/creatures/:slug" element={<CreatureDetailPage />} />
+              <Route path="/quests/:questId" element={<QuestDetailPage />} />
               <Route path="/recommendations" element={<HuntRecommendationsPage />} />
               <Route path="/requests" element={<QuestViewerPage />} />
 
               {/* Public Event Route */}
               <Route path="/public/event/:uuid" element={<PublicRafflePage />} />
               <Route path="/raffle/:id" element={<RafflePublicPage />} />
+              <Route path="/raffles/:publicCode" element={<RafflePublicPage />} />
+              <Route path="/contests/:publicCode" element={<PublicRafflePage />} />
 
               {/* Auth Routes */}
               <Route path="/login" element={<Login />} />
@@ -84,7 +106,7 @@ function App() {
                 <Route path="members" element={<GuildMembersPage />} />
                 <Route path="announcements" element={<Announcements />} />
                 <Route path="events" element={<Events />} />
-                <Route path="recruitment" element={<Recruitment />} />
+                <Route path="recruitment" element={<Navigate to="/guild/events?type=contest" replace />} />
                 <Route path="hunts" element={<HuntCatalog />} />
                 <Route path="raffle" element={<Raffle />} />
               </Route>
@@ -107,7 +129,7 @@ function App() {
           {/* Footer */}
           <footer className="mt-24 text-center border-t border-slate-800 pt-8 pb-8">
             <div className="inline-block">
-              <p className="text-slate-400 text-sm">Tibia Bestiary - Fan-made project (Winter Update 2025)</p>
+              <p className="text-slate-400 text-sm">Tibia Cyclopedia - Fan-made project ({latestDataVersion})</p>
               <p className="mt-2 text-slate-600 text-xs">
                 Tibia is a registered trademark of CipSoft GmbH
               </p>

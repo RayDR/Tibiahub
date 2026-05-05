@@ -28,6 +28,7 @@ class UserWithCharacters(BaseModel):
     id: int
     username: str
     email: Optional[str] = None
+    guild_name: Optional[str] = None
     guild_rank: Optional[str] = None
     discord_id: Optional[str] = None
     discord_username: Optional[str] = None

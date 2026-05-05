@@ -1,3 +1,5 @@
+import { fetchJson } from './http';
+
 const API_URL = import.meta.env.VITE_API_URL || '/api/v1';
 
 export interface EventParticipant {
@@ -13,6 +15,7 @@ export interface EventParticipant {
 export interface Event {
   id: number;
   uuid: string;
+  public_code?: string;
   type: 'raffle' | 'contest' | 'hunt_event' | 'custom';
   title: string;
   description?: string;
@@ -75,172 +78,120 @@ const getAuthHeaders = () => {
 };
 
 export const eventsApi = {
-  async getEvents(status?: string, type?: string): Promise<Event[]> {
+  async getEvents(status?: string, type?: string, guildName?: string): Promise<Event[]> {
     const params = new URLSearchParams();
     if (status) params.append('status', status);
     if (type) params.append('type', type);
+    if (guildName) params.append('guild_name', guildName);
 
-    const response = await fetch(`${API_URL}/events?${params}`, {
+    return fetchJson<Event[]>(`${API_URL}/events?${params}`, {
       headers: getAuthHeaders(),
     });
-
-    if (!response.ok) {
-      throw new Error('Failed to fetch events');
-    }
-
-    return response.json();
   },
 
   async getEvent(id: number): Promise<Event> {
-    const response = await fetch(`${API_URL}/events/${id}`, {
+    return fetchJson<Event>(`${API_URL}/events/${id}`, {
       headers: getAuthHeaders(),
     });
-
-    if (!response.ok) {
-      throw new Error('Failed to fetch event');
-    }
-
-    return response.json();
   },
 
   async createEvent(event: EventCreate): Promise<Event> {
-    const response = await fetch(`${API_URL}/events`, {
+    return fetchJson<Event>(`${API_URL}/events`, {
       method: 'POST',
       headers: getAuthHeaders(),
       body: JSON.stringify(event),
+      timeoutMode: 'admin',
     });
-
-    if (!response.ok) {
-      throw new Error('Failed to create event');
-    }
-
-    return response.json();
   },
 
   async updateEvent(id: number, event: Partial<EventCreate>): Promise<Event> {
-    const response = await fetch(`${API_URL}/events/${id}`, {
+    return fetchJson<Event>(`${API_URL}/events/${id}`, {
       method: 'PUT',
       headers: getAuthHeaders(),
       body: JSON.stringify(event),
+      timeoutMode: 'admin',
     });
-
-    if (!response.ok) {
-      throw new Error('Failed to update event');
-    }
-
-    return response.json();
   },
 
   async deleteEvent(id: number): Promise<void> {
-    const response = await fetch(`${API_URL}/events/${id}`, {
+    await fetchJson(`${API_URL}/events/${id}`, {
       method: 'DELETE',
       headers: getAuthHeaders(),
+      timeoutMode: 'admin',
     });
-
-    if (!response.ok) {
-      throw new Error('Failed to delete event');
-    }
   },
 
   async joinEvent(id: number): Promise<EventParticipant> {
-    const response = await fetch(`${API_URL}/events/${id}/join`, {
+    return fetchJson<EventParticipant>(`${API_URL}/events/${id}/join`, {
       method: 'POST',
       headers: getAuthHeaders(),
     });
-
-    if (!response.ok) {
-      const error = await response.json();
-      throw new Error(error.detail || 'Failed to join event');
-    }
-
-    return response.json();
   },
 
   async drawWinner(id: number): Promise<DrawWinnerResponse> {
-    const response = await fetch(`${API_URL}/events/${id}/draw`, {
+    return fetchJson<DrawWinnerResponse>(`${API_URL}/events/${id}/draw`, {
       method: 'POST',
       headers: getAuthHeaders(),
+      timeoutMode: 'admin',
     });
-
-    if (!response.ok) {
-      const error = await response.json();
-      throw new Error(error.detail || 'Failed to draw winner');
-    }
-
-    return response.json();
   },
 
   async getPublicEvent(uuid: string): Promise<Event> {
-    const response = await fetch(`${API_URL}/events/public/${uuid}`, {
+    return fetchJson<Event>(`${API_URL}/events/public/${uuid}`, {
       headers: { 'Content-Type': 'application/json' },
     });
-    if (!response.ok) throw new Error('Failed to fetch public event');
-    return response.json();
+  },
+
+  async getPublicEventByCode(publicCode: string): Promise<Event> {
+    return fetchJson<Event>(`${API_URL}/events/public/code/${publicCode}`, {
+      headers: { 'Content-Type': 'application/json' },
+    });
   },
 
   async getRaffleStatus(uuid: string): Promise<any> {
-    const response = await fetch(`${API_URL}/events/${uuid}/raffle/status`, {
+    return fetchJson<any>(`${API_URL}/events/${uuid}/raffle/status`, {
       headers: { 'Content-Type': 'application/json' },
     });
-    if (!response.ok) throw new Error('Failed to fetch status');
-    return response.json();
   },
 
   async autoDrawRaffle(uuid: string): Promise<any> {
-    const response = await fetch(`${API_URL}/events/${uuid}/raffle/draw`, {
+    return fetchJson<any>(`${API_URL}/events/${uuid}/raffle/draw`, {
       method: 'POST',
       headers: getAuthHeaders(),
+      timeoutMode: 'admin',
     });
-    if (!response.ok) throw new Error('Failed to auto draw');
-    return response.json();
   },
 
   async addManualParticipant(eventId: number, participantData: { character_name: string }): Promise<any> {
-    const response = await fetch(`${API_URL}/events/${eventId}/participants/manual`, {
+    return fetchJson<any>(`${API_URL}/events/${eventId}/participants/manual`, {
       method: 'POST',
       headers: getAuthHeaders(),
       body: JSON.stringify(participantData),
+      timeoutMode: 'admin',
     });
-    if (!response.ok) {
-      const error = await response.json();
-      throw new Error(error.detail || 'Failed to add participant');
-    }
-    return response.json();
   },
 
   async loadGuildParticipants(eventId: number, force: boolean = false): Promise<any> {
-    const response = await fetch(`${API_URL}/events/${eventId}/participants/load-guild?force=${force}`, {
+    return fetchJson<any>(`${API_URL}/events/${eventId}/participants/load-guild?force=${force}`, {
       method: 'POST',
       headers: getAuthHeaders(),
+      timeoutMode: 'admin',
     });
-    if (!response.ok) {
-      const error = await response.json();
-      throw new Error(error.detail || 'Failed to load guild participants');
-    }
-    return response.json();
   },
 
   async deleteParticipant(eventId: number, participantId: number): Promise<any> {
-    const response = await fetch(`${API_URL}/events/${eventId}/participants/${participantId}`, {
+    return fetchJson<any>(`${API_URL}/events/${eventId}/participants/${participantId}`, {
       method: 'DELETE',
       headers: getAuthHeaders(),
+      timeoutMode: 'admin',
     });
-    if (!response.ok) {
-      const error = await response.json();
-      throw new Error(error.detail || 'Failed to delete participant');
-    }
-    return response.json();
   },
 
   async excludeParticipant(eventId: number, participantId: number): Promise<any> {
-    const response = await fetch(`${API_URL}/events/${eventId}/participants/${participantId}/exclude`, {
+    return fetchJson<any>(`${API_URL}/events/${eventId}/participants/${participantId}/exclude`, {
       method: 'PATCH',
       headers: getAuthHeaders(),
+      timeoutMode: 'admin',
     });
-    if (!response.ok) {
-      const error = await response.json();
-      throw new Error(error.detail || 'Failed to exclude participant');
-    }
-    return response.json();
   },
 };

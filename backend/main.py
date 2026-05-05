@@ -1,13 +1,21 @@
 """
 Tibia Bestiary API - Main Application
 """
+import logging
+import time
+
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
+from fastapi.routing import APIRoute
 from contextlib import asynccontextmanager
 
 from app.core.config import settings
 from app.db.database import init_db
 from app.api.v1.router import api_router
+
+
+logger = logging.getLogger("app.slow_requests")
+SLOW_REQUEST_MS = 1500
 
 
 @asynccontextmanager
@@ -34,6 +42,29 @@ app.add_middleware(
     allow_methods=["*"],
     allow_headers=["*"],
 )
+
+
+@app.middleware("http")
+async def slow_request_logger(request, call_next):
+    start = time.perf_counter()
+    response = await call_next(request)
+    elapsed_ms = int((time.perf_counter() - start) * 1000)
+
+    route_name = request.url.path
+    if request.scope.get("route") and isinstance(request.scope["route"], APIRoute):
+        route_name = request.scope["route"].path
+
+    if elapsed_ms >= SLOW_REQUEST_MS:
+        logger.warning(
+            "slow_request method=%s path=%s route=%s status=%s duration_ms=%s",
+            request.method,
+            request.url.path,
+            route_name,
+            response.status_code,
+            elapsed_ms,
+        )
+
+    return response
 
 # Include API routes
 app.include_router(api_router, prefix="/api/v1")

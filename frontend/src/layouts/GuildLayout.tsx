@@ -5,6 +5,8 @@ import { useAuth } from '../context/AuthContext';
 import { useTranslation } from 'react-i18next';
 import { LayoutDashboard, Megaphone, CalendarClock, Users, LogOut, Shield, Compass, Sparkles, Coins } from 'lucide-react';
 import { guildApi } from '../services/guild';
+import { guildManagementApi } from '../services/guildManagement';
+import { REQUEST_TIMEOUT_MS } from '../services/api';
 
 export default function GuildLayout() {
     const { t } = useTranslation();
@@ -14,30 +16,109 @@ export default function GuildLayout() {
         guild_raffles_enabled: true,
         guild_contests_enabled: true,
     });
+    const [availableGuilds, setAvailableGuilds] = useState<string[]>([]);
+    const [selectedGuild, setSelectedGuild] = useState('');
+    const [authTimedOut, setAuthTimedOut] = useState(false);
 
     useEffect(() => {
+        let cancelled = false;
+        const controller = new AbortController();
+
         const loadFlags = async () => {
             try {
-                const flags = await guildApi.getFeatureFlags();
-                setFeatureFlags(flags);
+                const flags = await guildApi.getFeatureFlags(controller.signal, 3000);
+                if (!cancelled) {
+                    setFeatureFlags(flags);
+                }
             } catch {
                 // keep defaults if endpoint is unavailable
             }
         };
         void loadFlags();
+
+        return () => {
+            cancelled = true;
+            controller.abort();
+        };
     }, []);
+
+    useEffect(() => {
+        if (!loading) {
+            setAuthTimedOut(false);
+            return;
+        }
+
+        const timer = window.setTimeout(() => {
+            setAuthTimedOut(true);
+        }, REQUEST_TIMEOUT_MS + 2000);
+
+        return () => {
+            window.clearTimeout(timer);
+        };
+    }, [loading]);
 
     const navItems = useMemo(() => [
         { name: t('guild.dashboard'), path: '/guild/dashboard', icon: LayoutDashboard, special: false },
         { name: 'Members', path: '/guild/members', icon: Users, special: false },
         { name: t('guild.announcements'), path: '/guild/announcements', icon: Megaphone, special: false },
         { name: 'Guild Events', path: '/guild/events', icon: CalendarClock, special: false },
+        { name: 'Contests', path: '/guild/events?type=contest', icon: Shield, special: true },
         { name: t('guild.huntCatalog'), path: '/guild/hunts', icon: Compass, special: false },
-        { name: t('guild.recruitment'), path: '/guild/recruitment', icon: Users, special: true },
         ...(featureFlags.guild_raffles_enabled ? [{ name: 'Guild Raffle', path: '/guild/raffle', icon: Coins, special: true }] : []),
     ], [t, featureFlags.guild_raffles_enabled]);
 
+    useEffect(() => {
+        const loadGuildSelector = async () => {
+            if (!user?.is_superuser) {
+                const ownGuild = (user?.guild_name || '').trim();
+                if (ownGuild) {
+                    localStorage.setItem('selectedGuildName', ownGuild);
+                    setSelectedGuild(ownGuild);
+                }
+                return;
+            }
+
+            try {
+                const guilds = await guildManagementApi.getGuilds();
+                const normalizedGuilds = guilds.filter((name) => Boolean(name && name.trim()));
+                setAvailableGuilds(normalizedGuilds);
+
+                const saved = (localStorage.getItem('selectedGuildName') || '').trim();
+                const defaultGuild = normalizedGuilds.includes('Bloodborne Warhowl')
+                    ? 'Bloodborne Warhowl'
+                    : normalizedGuilds[0] || 'Bloodborne Warhowl';
+                const nextGuild = normalizedGuilds.includes(saved) ? saved : defaultGuild;
+
+                if (nextGuild) {
+                    setSelectedGuild(nextGuild);
+                    localStorage.setItem('selectedGuildName', nextGuild);
+                }
+            } catch {
+                const fallbackGuild = (user?.guild_name || 'Bloodborne Warhowl').trim();
+                if (fallbackGuild) {
+                    setSelectedGuild(fallbackGuild);
+                    localStorage.setItem('selectedGuildName', fallbackGuild);
+                }
+            }
+        };
+
+        void loadGuildSelector();
+    }, [user?.is_superuser, user?.guild_name]);
+
     if (loading) {
+        if (authTimedOut) {
+            return (
+                <div className="mt-20 text-center text-slate-300">
+                    <p className="mb-3">Unable to load guild data right now.</p>
+                    <button
+                        onClick={() => window.location.reload()}
+                        className="rounded-md border border-red-500/30 bg-red-600/20 px-4 py-2 text-sm hover:bg-red-600/30"
+                    >
+                        Retry
+                    </button>
+                </div>
+            );
+        }
         return <div className="text-center mt-20 text-slate-400">Loading guild data...</div>;
     }
 
@@ -61,11 +142,33 @@ export default function GuildLayout() {
                         <span className="text-xs text-primary/80 uppercase tracking-widest font-semibold text-[10px]">
                             {user?.guild_rank || 'Not Ranked'}
                         </span>
+                        {user?.is_superuser && availableGuilds.length > 0 && (
+                            <div className="mt-3">
+                                <label className="mb-1 block text-[10px] uppercase tracking-wider text-slate-500">Managing guild</label>
+                                <select
+                                    value={selectedGuild}
+                                    onChange={(e) => {
+                                        const nextGuild = e.target.value;
+                                        setSelectedGuild(nextGuild);
+                                        localStorage.setItem('selectedGuildName', nextGuild);
+                                    }}
+                                    className="w-full rounded-md border border-slate-700 bg-slate-950 px-2 py-1 text-xs text-slate-200"
+                                >
+                                    {availableGuilds.map((guildName) => (
+                                        <option key={guildName} value={guildName}>{guildName}</option>
+                                    ))}
+                                </select>
+                            </div>
+                        )}
                     </div>
 
                     <nav className="p-2 space-y-1">
                         {navItems.map((item) => {
-                            const isActive = location.pathname === item.path;
+                            const eventType = new URLSearchParams(location.search).get('type');
+                            const isContestShortcut = item.path === '/guild/events?type=contest';
+                            const isActive = isContestShortcut
+                                ? (location.pathname === '/guild/events' && eventType === 'contest')
+                                : location.pathname === item.path;
                             const Icon = item.icon;
                             return (
                                 <Link

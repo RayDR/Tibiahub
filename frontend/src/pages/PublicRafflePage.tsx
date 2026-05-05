@@ -13,7 +13,7 @@ interface Participant {
 }
 
 export default function PublicRafflePage() {
-    const { uuid } = useParams();
+    const { uuid, publicCode } = useParams();
     const { user } = useAuth();
     const { t } = useTranslation();
 
@@ -33,12 +33,12 @@ export default function PublicRafflePage() {
     useEffect(() => {
         const init = async () => {
             try {
-                if (!uuid) return;
-                const event = await eventsApi.getPublicEvent(uuid);
+                if (!uuid && !publicCode) return;
+                const event = publicCode ? await eventsApi.getPublicEventByCode(publicCode) : await eventsApi.getPublicEvent(uuid);
                 setEventData(event);
 
                 // Get participants status
-                const status = await eventsApi.getRaffleStatus(uuid);
+                const status = await eventsApi.getRaffleStatus(publicCode ? event.uuid : uuid);
                 setParticipants(status.participants);
 
                 if (status.is_drawn && status.winner_number && status.winner_name) {
@@ -63,8 +63,8 @@ export default function PublicRafflePage() {
                 setLoading(false);
             }
         };
-        if (uuid) init();
-    }, [uuid]);
+        if (uuid || publicCode) init();
+    }, [uuid, publicCode]);
 
     // Timer & Auto-Start Logic
     useEffect(() => {
@@ -78,8 +78,9 @@ export default function PublicRafflePage() {
 
             // Re-check status
             try {
-                if (uuid) {
-                    const status = await eventsApi.getRaffleStatus(uuid);
+                const statusKey = publicCode ? eventData?.uuid : uuid;
+                if (statusKey) {
+                    const status = await eventsApi.getRaffleStatus(statusKey);
                     if (status.is_drawn && !winner) {
                         // It was drawn! Start animation sequence locally
                         setWinner({ name: status.winner_name });
@@ -103,7 +104,7 @@ export default function PublicRafflePage() {
         }, 1000);
 
         return () => clearInterval(interval);
-    }, [eventData, stage, winner, uuid]);
+    }, [eventData, stage, winner, uuid, publicCode]);
 
     const startAnimationSequence = async (winName: string) => {
         if (!winName || participants.length === 0) {
@@ -206,7 +207,7 @@ export default function PublicRafflePage() {
                                 {user?.is_superuser && stage === 'waiting' && !winner && (
                                     <div className="mt-8 pt-4 border-t border-slate-800">
                                         <button
-                                            onClick={() => uuid && eventsApi.autoDrawRaffle(uuid)}
+                                            onClick={() => (eventData?.uuid || uuid) && eventsApi.autoDrawRaffle((eventData?.uuid || uuid) as string)}
                                             className="text-xs text-slate-700 hover:text-slate-500 underline"
                                         >
                                             {t('raffle.devForceStart', 'dev: force start')}
@@ -221,7 +222,7 @@ export default function PublicRafflePage() {
                             {/* Participants list - always visible */}
                             <div className="bg-slate-900/20 border border-slate-800 rounded-2xl p-6">
                                 <h3 className="text-slate-400 mb-4 flex items-center gap-2">
-                                    <Users className="w-4 h-4" /> {t('raffle.participants', 'Participants')} ({participants.length})
+                                    <Users className="w-4 h-4" /> {t('raffle.liveParticipants', 'Participants')} ({participants.length})
                                 </h3>
                                 <div className="grid grid-cols-2 md:grid-cols-4 gap-2 max-h-[300px] overflow-y-auto pr-2 custom-scrollbar">
                                     {participants.map((p, i) => {

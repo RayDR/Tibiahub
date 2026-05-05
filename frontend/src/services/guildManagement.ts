@@ -1,10 +1,11 @@
 // Guild Management API Service
-import api from './api';
+import api, { ADMIN_ACTION_TIMEOUT_MS } from './api';
 
 export interface GuildMember {
     id: number;
     username: string;
     email?: string;
+    guild_name?: string;
     guild_rank?: string;
     is_active: boolean;
     is_superuser: boolean;
@@ -66,9 +67,21 @@ export const guildManagementApi = {
         return response.data;
     },
 
-    // Get all users
-    getUsers: async (skip = 0, limit = 100): Promise<GuildMember[]> => {
-        const response = await api.get(`/guild-management/users?skip=${skip}&limit=${limit}`);
+    // Get users with safe defaults (active, non-test accounts)
+    getUsers: async (
+        skip = 0,
+        limit = 100,
+        options?: { guild_name?: string; include_inactive?: boolean; exclude_test_accounts?: boolean }
+    ): Promise<GuildMember[]> => {
+        const params = new URLSearchParams();
+        params.set('skip', String(skip));
+        params.set('limit', String(limit));
+        params.set('include_inactive', String(options?.include_inactive === true));
+        params.set('exclude_test_accounts', String(options?.exclude_test_accounts !== false));
+        if (options?.guild_name) {
+            params.set('guild_name', options.guild_name);
+        }
+        const response = await api.get(`/guild-management/users?${params.toString()}`);
         return response.data;
     },
 
@@ -129,7 +142,11 @@ export const guildManagementApi = {
 
     // Sync guild with Tibia API
     syncGuild: async (guildName = 'Ashclaw'): Promise<GuildSyncResult> => {
-        const response = await api.post(`/guild-management/sync-guild?guild_name=${guildName}`);
+        const response = await api.post(
+            `/guild-management/sync-guild?guild_name=${guildName}`,
+            undefined,
+            { timeout: ADMIN_ACTION_TIMEOUT_MS }
+        );
         return response.data;
     },
 };

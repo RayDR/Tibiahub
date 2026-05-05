@@ -25,6 +25,7 @@ from app.api.v1.endpoints.auth import get_current_manager_user
 from app.core.permissions import can_manage_guild, is_global_admin
 
 from app.services.tibia_api import get_active_guild_members, get_character_info, get_guild_info
+from app.services.public_code import generate_unique_code
 import asyncio
 
 router = APIRouter()
@@ -36,10 +37,21 @@ def _require_event_management(current_user: User, event: Event) -> None:
     raise HTTPException(status_code=403, detail="Insufficient permissions for this guild event")
 
 
+def _is_event_registration_open(event: Event) -> bool:
+    if event.is_deleted or event.status in {"archived", "deleted"}:
+        return False
+    if event.status != "active":
+        return False
+    if not event.registration_enabled:
+        return False
+    return True
+
+
 @router.get("/", response_model=List[EventSchema])
 def get_events(
     status: Optional[str] = None,
     type: Optional[str] = None,
+    guild_name: Optional[str] = None,
     skip: int = 0,
     limit: int = 20,
     db: Session = Depends(get_db),
@@ -53,6 +65,16 @@ def get_events(
         query = query.filter(Event.status == status)
     if type:
         query = query.filter(Event.type == type)
+
+    requested_guild = (guild_name or "").strip()
+    if is_global_admin(current_user):
+        if requested_guild:
+            query = query.filter(func.lower(Event.guild_name) == requested_guild.lower())
+    else:
+        own_guild = (current_user.guild_name or "").strip()
+        if not own_guild:
+            return []
+        query = query.filter(func.lower(Event.guild_name) == own_guild.lower())
     
     events = query.order_by(desc(Event.created_at)).offset(skip).limit(limit).all()
     
@@ -133,6 +155,7 @@ def create_event(
     """Create a new event (admin only)"""
     new_event = Event(
         **event.dict(),
+        public_code=generate_unique_code(db, Event),
         creator_id=current_user.id
     )
     
@@ -162,6 +185,10 @@ def update_event(
     _require_event_management(current_user, event)
     
     update_data = event_update.dict(exclude_unset=True)
+    if "status" in update_data and update_data["status"] not in {"active", "disabled", "completed", "archived", "cancelled"}:
+        raise HTTPException(status_code=400, detail="Invalid event status")
+    if "archive_after_days" in update_data and update_data["archive_after_days"] is not None:
+        update_data["archive_after_days"] = max(1, min(365, update_data["archive_after_days"]))
     for key, value in update_data.items():
         setattr(event, key, value)
     
@@ -190,6 +217,7 @@ def delete_event(
     event.deleted_at = datetime.utcnow()
     event.deleted_by_user_id = current_user.id
     event.delete_reason = reason
+    event.status = 'deleted'
     db.commit()
     return
 
@@ -209,6 +237,7 @@ def restore_event(
     event.deleted_at = None
     event.deleted_by_user_id = None
     event.delete_reason = None
+    event.status = 'active'
     db.commit()
     db.refresh(event)
     return get_event(event_id, db, current_user)
@@ -224,6 +253,12 @@ def join_event(
     event = db.query(Event).filter(Event.id == event_id, Event.is_active == True).first()
     if not event:
         raise HTTPException(status_code=404, detail="Event not found")
+
+    if not _is_event_registration_open(event):
+        raise HTTPException(status_code=400, detail="Event registration is closed")
+
+    if event.is_public is False and event.guild_name and (current_user.guild_name or "").strip().lower() != event.guild_name.strip().lower() and not current_user.is_superuser:
+        raise HTTPException(status_code=403, detail="Private event restricted to guild members")
     
     if event.status != 'active':
         raise HTTPException(status_code=400, detail="Event is not active")
@@ -589,6 +624,34 @@ def get_public_event(
     event_dict['participants'] = participants
         
     return EventSchema(**event_dict)
+
+
+@router.get("/public/code/{public_code}", response_model=EventSchema)
+def get_public_event_by_code(
+    public_code: str,
+    db: Session = Depends(get_db)
+):
+    event = db.query(Event).filter(Event.public_code == public_code, Event.is_active == True, Event.is_deleted == False).first()
+    if not event:
+        raise HTTPException(status_code=404, detail="Event not found")
+    if not event.is_public:
+        raise HTTPException(status_code=403, detail="This event is not public")
+    return get_public_event(event.uuid, db)
+
+
+@router.get("/{event_id}/share")
+def share_event(
+    event_id: int,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_manager_user),
+):
+    event = db.query(Event).filter(Event.id == event_id).first()
+    if not event:
+        raise HTTPException(status_code=404, detail="Event not found")
+    _require_event_management(current_user, event)
+    if event.type == "contest":
+        return {"public_code": event.public_code, "url": f"https://tibiahub.domoforge.com/contests/{event.public_code}"}
+    return {"public_code": event.public_code, "url": f"https://tibiahub.domoforge.com/public/event/{event.uuid}"}
 
 @router.get("/{uuid}/raffle/status")
 async def get_raffle_status(

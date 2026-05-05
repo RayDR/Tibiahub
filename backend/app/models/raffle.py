@@ -17,7 +17,16 @@ class Raffle(Base):
     id = Column(Integer, primary_key=True, index=True)
     title = Column(String(200), nullable=False)
     description = Column(Text, nullable=True)
+    public_code = Column(String(6), nullable=False, unique=True, index=True)
     guild_name = Column(String(200), nullable=False)
+    access_mode = Column(String(20), nullable=False, default="guild_only")  # guild_only|world_only|public
+    show_participants = Column(Boolean, nullable=False, default=True)
+    visibility = Column(String(20), nullable=False, default="public")  # public|private
+    registration_enabled = Column(Boolean, nullable=False, default=True)
+    run_mode = Column(String(20), nullable=False, default="manual")  # manual|automatic
+    scheduled_run_at = Column(DateTime(timezone=True), nullable=True)
+    archive_after_days = Column(Integer, nullable=False, default=7)
+    archived_at = Column(DateTime(timezone=True), nullable=True)
     status = Column(String(50), nullable=False, default="draft")
     created_by_id = Column(Integer, ForeignKey("users.id"), nullable=False)
     last_executed_by_id = Column(Integer, ForeignKey("users.id"), nullable=True)
@@ -51,6 +60,7 @@ class RaffleParticipant(Base):
     character_name = Column(String(100), nullable=False, index=True)
     guild_rank = Column(String(100), nullable=True)
     weight = Column(Float, nullable=False, default=1.0)
+    weight_multiplier = Column(Float, nullable=False, default=1.0)
     is_eligible = Column(Boolean, nullable=False, default=True)
     source = Column(String(50), nullable=False, default="guild_sync")
     source_data = Column(JSON, nullable=True)

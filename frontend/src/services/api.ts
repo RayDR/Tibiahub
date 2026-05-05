@@ -1,10 +1,13 @@
 import axios from 'axios';
-import type { Creature, CreatureSimple, HuntZone, HuntRecommendation, ItemSearchResult, Vocation } from '../types';
+import type { Creature, CreatureSimple, HuntZone, HuntRecommendation, ItemDetail, ItemSearchResult, QuestDetail, QuestSearchResult, Vocation } from '../types';
 
 const API_BASE_URL = import.meta.env.VITE_API_URL || '/api/v1';
+export const REQUEST_TIMEOUT_MS = 10000;
+export const ADMIN_ACTION_TIMEOUT_MS = 25000;
 
 const api = axios.create({
   baseURL: API_BASE_URL,
+  timeout: REQUEST_TIMEOUT_MS,
   headers: {
     'Content-Type': 'application/json',
   },
@@ -25,6 +28,7 @@ export const creaturesApi = {
     limit?: number;
     search?: string;
     category?: string;
+    is_boss?: boolean;
     difficulty?: string;
     sort_by?: 'name' | 'experience' | 'hitpoints' | 'difficulty';
     sort_order?: 'asc' | 'desc';
@@ -33,8 +37,19 @@ export const creaturesApi = {
     return response.data;
   },
 
-  getHighlights: async (limit: number = 18): Promise<CreatureSimple[]> => {
-    const response = await api.get('/creatures/highlights', { params: { limit } });
+  getHighlights: async (limit: number = 18, signal?: AbortSignal): Promise<CreatureSimple[]> => {
+    const response = await api.get('/creatures/highlights', { params: { limit }, signal });
+    return response.data;
+  },
+
+  getBosses: async (params?: {
+    skip?: number;
+    limit?: number;
+    search?: string;
+    sort_by?: 'name' | 'experience' | 'hitpoints' | 'difficulty';
+    sort_order?: 'asc' | 'desc';
+  }, signal?: AbortSignal): Promise<CreatureSimple[]> => {
+    const response = await api.get('/creatures/bosses', { params, signal });
     return response.data;
   },
 
@@ -62,8 +77,8 @@ export const huntZonesApi = {
     return response.data;
   },
 
-  getHighlights: async (limit: number = 12): Promise<HuntZone[]> => {
-    const response = await api.get('/hunt-zones/highlights', { params: { limit } });
+  getHighlights: async (limit: number = 12, signal?: AbortSignal): Promise<HuntZone[]> => {
+    const response = await api.get('/hunt-zones/highlights', { params: { limit }, signal });
     return response.data;
   },
 
@@ -124,8 +139,47 @@ export const itemsApi = {
     return response.data;
   },
 
-  getHighlights: async (limit: number = 12): Promise<ItemSearchResult[]> => {
-    const response = await api.get('/items/highlights', { params: { limit } });
+  list: async (params?: { skip?: number; limit?: number }, signal?: AbortSignal): Promise<ItemSearchResult[]> => {
+    const response = await api.get('/items/', { params, signal });
+    return response.data;
+  },
+
+  getById: async (id: number, signal?: AbortSignal): Promise<ItemDetail> => {
+    const response = await api.get(`/items/${id}`, { signal });
+    return response.data;
+  },
+
+  getHighlights: async (limit: number = 12, signal?: AbortSignal): Promise<ItemSearchResult[]> => {
+    const response = await api.get('/items/highlights', { params: { limit }, signal });
+    return response.data;
+  },
+};
+
+export const questsApi = {
+  list: async (params?: { skip?: number; limit?: number }, signal?: AbortSignal): Promise<QuestSearchResult[]> => {
+    const response = await api.get('/quests/', { params, signal });
+    return response.data;
+  },
+
+  search: async (search: string, limit: number = 50, signal?: AbortSignal): Promise<QuestSearchResult[]> => {
+    const response = await api.get('/quests/', { params: { search, limit }, signal });
+    return response.data;
+  },
+
+  getById: async (id: number, signal?: AbortSignal): Promise<QuestDetail> => {
+    const response = await api.get(`/quests/${id}`, { signal });
+    return response.data;
+  },
+};
+
+export const systemApi = {
+  getHealth: async (signal?: AbortSignal): Promise<{
+    external_sync?: {
+      latest_data_version?: string | null;
+      latest_success_at?: string | null;
+    };
+  }> => {
+    const response = await api.get('/health', { signal });
     return response.data;
   },
 };

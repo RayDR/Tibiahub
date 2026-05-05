@@ -11,7 +11,7 @@ i18n
                 translation: {
                     "nav": {
                         "home": "Home",
-                        "search": "Bestiary",
+                        "search": "Cyclopedia",
                         "planner": "Team Planner",
                         "quests": "Quests",
                         "guild": "Guild",
@@ -19,7 +19,7 @@ i18n
                         "management": "Management"
                     },
                     "hero": {
-                        "title": "Tibia Bestiary",
+                        "title": "Tibia Cyclopedia",
                         "subtitle": "The ultimate companion for your adventures."
                     },
                     "search": {
@@ -181,11 +181,208 @@ i18n
                         "autoUpdate": "The event changes will appear automatically. Sit tight!",
                         "drawingProcess": "The raffle mechanism is running...",
                         "devForceStart": "dev: force start",
-                        "participants": "Participants",
+                        "liveParticipants": "Participants",
                         "eliminating": "ELIMINATING...",
                         "drawingWinner": "DRAWING WINNER",
                         "transparencyId": "Transparency ID",
-                        "timestamp": "Timestamp"
+                        "timestamp": "Timestamp",
+                        "console": {
+                            "title": "Guild Raffle Console",
+                            "subtitle": "Account-based raffle system. Vice leaders receive a 10% weight bonus. One winner per account.",
+                            "disabled": "Guild raffle features are currently disabled in settings.",
+                            "noAccess": "Admin Access Required",
+                            "noAccessDesc": "You need global admin or leader permissions to manage raffles."
+                        },
+                        "create": {
+                            "title": "New Raffle",
+                            "titlePlaceholder": "Guild weekly raffle",
+                            "guildPlaceholder": "Guild name",
+                            "selectGuild": "Select guild",
+                            "accessModeLabel": "Who can join?",
+                            "showParticipantsLabel": "Show participant list publicly",
+                            "descriptionPlaceholder": "Optional description",
+                            "prizeName": "Prize name",
+                            "prizeReward": "Reward (e.g. 10kk)",
+                            "submit": "Create Raffle",
+                            "submitting": "Creating...",
+                            "success": "Raffle created successfully",
+                            "error": "Failed to create raffle"
+                        },
+                        "list": {
+                            "title": "Raffles",
+                            "refresh": "Refresh",
+                            "empty": "No raffles created yet.",
+                            "participants": "participants",
+                            "prizes": "prizes",
+                            "run": "Run"
+                        },
+                        "detail": {
+                            "noDescription": "No description provided.",
+                            "guild": "Guild",
+                            "world": "World",
+                            "accessMode": "Access",
+                            "reruns": "Reruns",
+                            "tabs": {
+                                "overview": "Overview",
+                                "participants": "Participants",
+                                "prizes": "Prizes",
+                                "winners": "Winners",
+                                "admin": "Admin Tools"
+                            }
+                        },
+                        "actions": {
+                            "share": "Copy share URL",
+                            "edit": "Edit raffle settings",
+                            "closeEdit": "Close edit mode",
+                            "delete": "Delete raffle",
+                            "sync": "Sync guild participants",
+                            "draw": "Execute draw",
+                            "simulate": "Simulate draw (dry-run)",
+                            "rerun": "Rerun as admin",
+                            "addParticipant": "Add participant",
+                            "removeParticipant": "Remove participant",
+                            "addPrize": "Add prize",
+                            "save": "Save changes"
+                        },
+                        "actionLabels": {
+                            "sharing": "Copying...",
+                            "deleting": "Deleting...",
+                            "syncing": "Syncing...",
+                            "drawing": "Drawing...",
+                            "simulating": "Simulating...",
+                            "rerunning": "Rerunning...",
+                            "adding": "Adding...",
+                            "saving": "Saving..."
+                        },
+                        "participants": {
+                            "title": "Participants",
+                            "add": "Add participant",
+                            "characterPlaceholder": "Character name",
+                            "empty": "No synced participants yet.",
+                            "eligible": "eligible",
+                            "ineligible": "ineligible",
+                            "weight": "weight",
+                            "removeConfirm": "Remove this participant?",
+                            "addSuccess": "Participant added",
+                            "addError": "Failed to add participant",
+                            "removeSuccess": "Participant removed",
+                            "removeError": "Failed to remove participant",
+                            "syncSuccess": "Synced {{count}} eligible accounts",
+                            "syncError": "Failed to sync participants",
+                            "weightError": "Failed to update weight"
+                        },
+                        "prizes": {
+                            "title": "Prizes",
+                            "namePlaceholder": "Prize name",
+                            "rewardPlaceholder": "2kk",
+                            "add": "Add Prize",
+                            "empty": "No prizes configured.",
+                            "success": "Prize added",
+                            "error": "Failed to add prize"
+                        },
+                        "winners": {
+                            "title": "Current Winners",
+                            "empty": "No draw executed yet.",
+                            "history": "Draw History",
+                            "historyEmpty": "No history yet.",
+                            "run": "Run",
+                            "rerun": "rerun",
+                            "noReason": "No reason"
+                        },
+                        "simulation": {
+                            "title": "Simulation Result",
+                            "eligible": "Eligible",
+                            "ineligible": "Ineligible",
+                            "wouldWin": "Would Win",
+                            "error": "Simulation failed",
+                            "warnings": "Warnings",
+                            "noWarnings": "No warnings detected.",
+                            "prizes": "Prize order"
+                        },
+                        "rerun": {
+                            "title": "Rerun Draw",
+                            "reasonPlaceholder": "Reason for rerun (required)",
+                            "success": "Raffle rerun completed",
+                            "error": "Failed to rerun raffle"
+                        },
+                        "edit": {
+                            "titleLabel": "Title",
+                            "accessMode": "Who can join?",
+                            "showParticipants": "Participant visibility",
+                            "showParticipantsEnabled": "Show names publicly",
+                            "showParticipantsDisabled": "Hide names publicly",
+                            "statusLabel": "Status",
+                            "statusDraft": "Draft",
+                            "statusOpen": "Open",
+                            "statusClosed": "Closed",
+                            "statusCompleted": "Completed",
+                            "statusCancelled": "Cancelled",
+                            "accessModeHelpGuild": "Only members of this guild can join.",
+                            "accessModeHelpWorld": "Any character from this world can join.",
+                            "accessModeHelpPublic": "Any valid Tibia character can join.",
+                            "saveSuccess": "Raffle updated",
+                            "saveError": "Failed to update raffle"
+                        },
+                        "accessModes": {
+                            "guild_only": "Guild only",
+                            "world_only": "Same world",
+                            "public": "Anyone"
+                        },
+                        "statusBadge": {
+                            "draft": "Draft",
+                            "open": "Open",
+                            "closed": "Closed",
+                            "active": "Active",
+                            "disabled": "Disabled",
+                            "completed": "Completed",
+                            "archived": "Archived",
+                            "cancelled": "Cancelled",
+                            "deleted": "Deleted",
+                            "public": "Public",
+                            "private": "Private"
+                        },
+                        "share": {
+                            "success": "Public URL copied to clipboard",
+                            "error": "Failed to copy URL"
+                        },
+                        "delete": {
+                            "confirm": "Soft-delete this raffle? It can be restored by an admin.",
+                            "success": "Raffle deleted",
+                            "error": "Failed to delete raffle"
+                        },
+                        "draw": {
+                            "success": "Draw executed successfully",
+                            "error": "Failed to execute draw"
+                        },
+                        "publicPage": {
+                            "loading": "Loading raffle...",
+                            "invalidCode": "Invalid raffle code",
+                            "notFound": "Raffle not found",
+                            "descriptionFallback": "Public guild raffle",
+                            "guildLabel": "Guild",
+                            "worldLabel": "World",
+                            "joinTitle": "Register character",
+                            "joinSubtitle": "One character per account. One winner per account.",
+                            "joinInputPlaceholder": "Character name",
+                            "joinButton": "Register",
+                            "joining": "Registering...",
+                            "registered": "Character registered successfully.",
+                            "loadError": "Failed to load raffle",
+                            "registerError": "Could not register character",
+                            "closedBanner": "This raffle is not accepting participants.",
+                            "draftBanner": "This raffle is not publicly available yet.",
+                            "cancelledBanner": "This raffle was cancelled.",
+                            "completedBanner": "This raffle has already been completed.",
+                            "participantsTitle": "Participants",
+                            "participantsHidden": "{{count}} participants registered",
+                            "participantsVisible": "Participants ({{count}})",
+                            "noParticipants": "No participants yet.",
+                            "prizesTitle": "Prizes",
+                            "noPrizes": "No prizes configured.",
+                            "winnersTitle": "Winners",
+                            "winnersEmpty": "Winners not drawn yet.",
+                            "winnerRun": "Run {{run}}"
+                        }
                     }
                 }
             },
@@ -193,7 +390,7 @@ i18n
                 translation: {
                     "nav": {
                         "home": "Inicio",
-                        "search": "Bestiario",
+                        "search": "Cyclopedia",
                         "planner": "Planeador",
                         "quests": "Misiones",
                         "guild": "Gremio",
@@ -201,7 +398,7 @@ i18n
                         "management": "Administración"
                     },
                     "hero": {
-                        "title": "Bestiario de Tibia",
+                        "title": "Cyclopedia de Tibia",
                         "subtitle": "El compañero definitivo para tus aventuras."
                     },
                     "search": {
@@ -362,11 +559,209 @@ i18n
                         "autoUpdate": "El evento se actualizará automáticamente. ¡Mantente atento!",
                         "drawingProcess": "El mecanismo de sorteo está corriendo...",
                         "devForceStart": "dev: forzar inicio",
-                        "participants": "Participantes",
+                        "liveParticipants": "Participantes",
                         "eliminating": "ELIMINANDO...",
                         "drawingWinner": "SORTEANDO GANADOR",
                         "transparencyId": "ID de Transparencia",
-                        "timestamp": "Marca de Tiempo"                    }
+                        "timestamp": "Marca de Tiempo",
+                        "console": {
+                            "title": "Consola de Rifas del Gremio",
+                            "subtitle": "Sistema de rifas basado en cuentas. Los vice-líderes reciben un 10% de bonificación de peso. Un ganador por cuenta.",
+                            "disabled": "Las rifas del gremio están deshabilitadas en la configuración.",
+                            "noAccess": "Acceso de Administrador Requerido",
+                            "noAccessDesc": "Necesitas permisos de administrador global o líder para gestionar rifas."
+                        },
+                        "create": {
+                            "title": "Nueva Rifa",
+                            "titlePlaceholder": "Rifa semanal del gremio",
+                            "guildPlaceholder": "Nombre del gremio",
+                            "selectGuild": "Seleccionar gremio",
+                            "accessModeLabel": "¿Quién puede entrar?",
+                            "showParticipantsLabel": "Mostrar la lista de participantes públicamente",
+                            "descriptionPlaceholder": "Descripción opcional",
+                            "prizeName": "Nombre del premio",
+                            "prizeReward": "Recompensa (ej: 10kk)",
+                            "submit": "Crear Rifa",
+                            "submitting": "Creando...",
+                            "success": "Rifa creada correctamente",
+                            "error": "Error al crear la rifa"
+                        },
+                        "list": {
+                            "title": "Rifas",
+                            "refresh": "Actualizar",
+                            "empty": "No hay rifas creadas aún.",
+                            "participants": "participantes",
+                            "prizes": "premios",
+                            "run": "Sorteo"
+                        },
+                        "detail": {
+                            "noDescription": "Sin descripción.",
+                            "guild": "Gremio",
+                            "world": "Mundo",
+                            "accessMode": "Acceso",
+                            "reruns": "Repeticiones",
+                            "tabs": {
+                                "overview": "Resumen",
+                                "participants": "Participantes",
+                                "prizes": "Premios",
+                                "winners": "Ganadores",
+                                "admin": "Herramientas Admin"
+                            }
+                        },
+                        "actions": {
+                            "share": "Copiar URL pública",
+                            "edit": "Editar configuración",
+                            "closeEdit": "Cerrar edición",
+                            "delete": "Eliminar rifa",
+                            "sync": "Sincronizar participantes del gremio",
+                            "draw": "Ejecutar sorteo",
+                            "simulate": "Simular sorteo (prueba)",
+                            "rerun": "Repetir como admin",
+                            "addParticipant": "Agregar participante",
+                            "removeParticipant": "Eliminar participante",
+                            "addPrize": "Agregar premio",
+                            "save": "Guardar cambios"
+                        },
+                        "actionLabels": {
+                            "sharing": "Copiando...",
+                            "deleting": "Eliminando...",
+                            "syncing": "Sincronizando...",
+                            "drawing": "Sorteando...",
+                            "simulating": "Simulando...",
+                            "rerunning": "Repitiendo...",
+                            "adding": "Agregando...",
+                            "saving": "Guardando..."
+                        },
+                        "participants": {
+                            "title": "Participantes",
+                            "add": "Agregar participante",
+                            "characterPlaceholder": "Nombre del personaje",
+                            "empty": "Aún no hay participantes sincronizados.",
+                            "eligible": "elegible",
+                            "ineligible": "no elegible",
+                            "weight": "peso",
+                            "removeConfirm": "¿Eliminar este participante?",
+                            "addSuccess": "Participante agregado",
+                            "addError": "Error al agregar participante",
+                            "removeSuccess": "Participante eliminado",
+                            "removeError": "Error al eliminar participante",
+                            "syncSuccess": "{{count}} cuentas elegibles sincronizadas",
+                            "syncError": "Error al sincronizar participantes",
+                            "weightError": "Error al actualizar el peso"
+                        },
+                        "prizes": {
+                            "title": "Premios",
+                            "namePlaceholder": "Nombre del premio",
+                            "rewardPlaceholder": "2kk",
+                            "add": "Agregar Premio",
+                            "empty": "Sin premios configurados.",
+                            "success": "Premio agregado",
+                            "error": "Error al agregar premio"
+                        },
+                        "winners": {
+                            "title": "Ganadores Actuales",
+                            "empty": "Aún no se ha ejecutado ningún sorteo.",
+                            "history": "Historial de Sorteos",
+                            "historyEmpty": "Sin historial aún.",
+                            "run": "Sorteo",
+                            "rerun": "repetición",
+                            "noReason": "Sin razón"
+                        },
+                        "simulation": {
+                            "title": "Resultado de Simulación",
+                            "eligible": "Elegibles",
+                            "ineligible": "No Elegibles",
+                            "wouldWin": "Ganaría",
+                            "error": "Error al simular el sorteo",
+                            "warnings": "Advertencias",
+                            "noWarnings": "No se detectaron advertencias.",
+                            "prizes": "Orden de premios"
+                        },
+                        "rerun": {
+                            "title": "Repetir Sorteo",
+                            "reasonPlaceholder": "Razón de la repetición (requerida)",
+                            "success": "Repetición del sorteo completada",
+                            "error": "Error al repetir el sorteo"
+                        },
+                        "edit": {
+                            "titleLabel": "Título",
+                            "accessMode": "¿Quién puede entrar?",
+                            "showParticipants": "Visibilidad de participantes",
+                            "showParticipantsEnabled": "Mostrar nombres públicamente",
+                            "showParticipantsDisabled": "Ocultar nombres públicamente",
+                            "statusLabel": "Estado",
+                            "statusDraft": "Borrador",
+                            "statusOpen": "Abierta",
+                            "statusClosed": "Cerrada",
+                            "statusCompleted": "Completada",
+                            "statusCancelled": "Cancelada",
+                            "accessModeHelpGuild": "Solo miembros de esta guild pueden entrar.",
+                            "accessModeHelpWorld": "Cualquier personaje de este mundo puede entrar.",
+                            "accessModeHelpPublic": "Cualquier personaje válido de Tibia puede entrar.",
+                            "saveSuccess": "Rifa actualizada",
+                            "saveError": "Error al actualizar la rifa"
+                        },
+                        "accessModes": {
+                            "guild_only": "Solo guild",
+                            "world_only": "Mismo mundo",
+                            "public": "Cualquiera"
+                        },
+                        "statusBadge": {
+                            "draft": "Borrador",
+                            "open": "Abierta",
+                            "closed": "Cerrada",
+                            "active": "Activa",
+                            "disabled": "Deshabilitada",
+                            "completed": "Completada",
+                            "archived": "Archivada",
+                            "cancelled": "Cancelada",
+                            "deleted": "Eliminada",
+                            "public": "Pública",
+                            "private": "Privada"
+                        },
+                        "share": {
+                            "success": "URL pública copiada al portapapeles",
+                            "error": "Error al copiar URL"
+                        },
+                        "delete": {
+                            "confirm": "¿Eliminar esta rifa? Puede restaurarse por un admin.",
+                            "success": "Rifa eliminada",
+                            "error": "Error al eliminar la rifa"
+                        },
+                        "draw": {
+                            "success": "Sorteo ejecutado correctamente",
+                            "error": "Error al ejecutar el sorteo"
+                        },
+                        "publicPage": {
+                            "loading": "Cargando rifa...",
+                            "invalidCode": "Código de rifa inválido",
+                            "notFound": "Rifa no encontrada",
+                            "descriptionFallback": "Rifa pública del gremio",
+                            "guildLabel": "Guild",
+                            "worldLabel": "Mundo",
+                            "joinTitle": "Registrar personaje",
+                            "joinSubtitle": "Un personaje por cuenta. Un ganador por cuenta.",
+                            "joinInputPlaceholder": "Nombre del personaje",
+                            "joinButton": "Registrar",
+                            "joining": "Registrando...",
+                            "registered": "Personaje registrado correctamente.",
+                            "loadError": "Error al cargar la rifa",
+                            "registerError": "No se pudo registrar el personaje",
+                            "closedBanner": "Esta rifa no está aceptando participantes.",
+                            "draftBanner": "Esta rifa todavía no está disponible públicamente.",
+                            "cancelledBanner": "Esta rifa fue cancelada.",
+                            "completedBanner": "Esta rifa ya fue completada.",
+                            "participantsTitle": "Participantes",
+                            "participantsHidden": "{{count}} participantes registrados",
+                            "participantsVisible": "Participantes ({{count}})",
+                            "noParticipants": "Todavía no hay participantes.",
+                            "prizesTitle": "Premios",
+                            "noPrizes": "No hay premios configurados.",
+                            "winnersTitle": "Ganadores",
+                            "winnersEmpty": "Todavía no se han sorteado ganadores.",
+                            "winnerRun": "Sorteo {{run}}"
+                        }
+                    }
                 }
             }
         },

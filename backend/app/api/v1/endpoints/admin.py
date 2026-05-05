@@ -30,6 +30,26 @@ from app.schemas.admin import (
 router = APIRouter()
 
 
+def _looks_like_test_account(user: User) -> bool:
+    username = (user.username or "").strip().lower()
+    email = (user.email or "").strip().lower()
+    test_markers = (
+        "test",
+        "demo",
+        "guest",
+        "temp",
+        "dummy",
+        "sample",
+        "qa",
+        "bot",
+    )
+    if any(marker in username for marker in test_markers):
+        return True
+    if email and any(marker in email for marker in test_markers):
+        return True
+    return False
+
+
 def _get_setting(db: Session, key: str, default: str = "") -> str:
     from app.models.settings import SystemSettings as SettingsModel
     value = db.query(SettingsModel).filter(SettingsModel.key == key).first()
@@ -78,13 +98,31 @@ def get_all_users(
     current_user: User = Depends(get_current_admin_user),
     db: Session = Depends(get_db),
     skip: int = 0,
-    limit: int = 100
+    limit: int = 100,
+    include_inactive: bool = False,
+    exclude_test_accounts: bool = True,
+    guild_name: Optional[str] = None,
 ):
     """
     Get list of all users with their linked characters
     Requires admin privileges
     """
-    users = db.query(User).offset(skip).limit(limit).all()
+    query = db.query(User)
+    if not include_inactive:
+        query = query.filter(User.is_active == True)
+
+    requested_guild = (guild_name or "").strip()
+    if requested_guild:
+        if not is_global_admin(current_user):
+            own_guild = (current_user.guild_name or "").strip().lower()
+            if own_guild != requested_guild.lower():
+                raise HTTPException(status_code=403, detail="You can only access users from your guild")
+        query = query.filter(func.lower(User.guild_name) == requested_guild.lower())
+
+    users = query.order_by(User.created_at.desc()).offset(skip).limit(limit).all()
+
+    if exclude_test_accounts:
+        users = [user for user in users if not _looks_like_test_account(user)]
     
     result = []
     for user in users:
@@ -97,6 +135,7 @@ def get_all_users(
                 id=user.id,
                 username=user.username,
                 email=user.email,
+                guild_name=user.guild_name,
                 guild_rank=user.guild_rank,
                 is_active=user.is_active,
                 is_superuser=user.is_superuser,
@@ -140,6 +179,7 @@ def get_user_detail(
         id=user.id,
         username=user.username,
         email=user.email,
+        guild_name=user.guild_name,
         guild_rank=user.guild_rank,
         is_active=user.is_active,
         is_superuser=user.is_superuser,
@@ -193,15 +233,15 @@ def get_registered_guilds(
     db: Session = Depends(get_db),
 ):
     guilds: set[str] = set()
-    for (guild_name,) in db.query(User.guild_name).filter(User.guild_name.isnot(None)).all():
+    for (guild_name,) in db.query(User.guild_name).filter(User.guild_name.isnot(None), User.is_active == True).all():
         name = (guild_name or "").strip()
         if name:
             guilds.add(name)
-    for (guild_name,) in db.query(Event.guild_name).filter(Event.guild_name.isnot(None)).all():
+    for (guild_name,) in db.query(Event.guild_name).filter(Event.guild_name.isnot(None), Event.is_deleted == False).all():
         name = (guild_name or "").strip()
         if name:
             guilds.add(name)
-    for (guild_name,) in db.query(Raffle.guild_name).filter(Raffle.guild_name.isnot(None)).all():
+    for (guild_name,) in db.query(Raffle.guild_name).filter(Raffle.guild_name.isnot(None), Raffle.is_deleted == False).all():
         name = (guild_name or "").strip()
         if name:
             guilds.add(name)
@@ -359,6 +399,7 @@ def update_user(
         id=user.id,
         username=user.username,
         email=user.email,
+        guild_name=user.guild_name,
         guild_rank=user.guild_rank,
         is_active=user.is_active,
         is_superuser=user.is_superuser,

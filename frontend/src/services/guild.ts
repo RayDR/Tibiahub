@@ -101,8 +101,8 @@ export const guildApi = {
         return response.data;
     },
 
-    getFeatureFlags: async (): Promise<GuildFeatureFlags> => {
-        const response = await api.get('/guild/features');
+    getFeatureFlags: async (signal?: AbortSignal, timeout: number = 3000): Promise<GuildFeatureFlags> => {
+        const response = await api.get('/guild/features', { signal, timeout });
         const payload = response.data || {};
         return {
             guild_raffles_enabled: payload.guild_raffles_enabled !== false,

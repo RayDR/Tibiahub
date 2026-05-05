@@ -14,6 +14,7 @@ interface RecentCreature {
 }
 
 const HomePage: React.FC = () => {
+  const [cyclopediaSection, setCyclopediaSection] = useState<'creatures' | 'bosses' | 'quests'>('creatures');
   const [featuredCreatures, setFeaturedCreatures] = useState<CreatureSimple[]>([]);
   const [topItems, setTopItems] = useState<ItemSearchResult[]>([]);
   const [topZones, setTopZones] = useState<HuntZone[]>([]);
@@ -53,11 +54,20 @@ const HomePage: React.FC = () => {
       <section className="mb-10 rounded-2xl border border-slate-700 bg-slate-900/70 p-6">
         <h1 className="text-3xl font-bold text-amber-200 md:text-4xl">TibiaHub Home</h1>
         <p className="mt-3 max-w-3xl text-slate-300">
-          Explora destacados sin cargar todo el bestiary. Usa la vista completa para buscar criaturas, loot y zonas.
+          Explora destacados sin cargar toda la Cyclopedia. Usa la vista completa para buscar criaturas, bosses, quests, loot y zonas.
         </p>
         <div className="mt-6 flex flex-wrap gap-3">
-          <Link to="/bestiary" className="rounded-lg bg-amber-500 px-4 py-2 text-sm font-semibold text-slate-950 hover:bg-amber-400">
-            Open Bestiary
+          <select
+            value={cyclopediaSection}
+            onChange={(event) => setCyclopediaSection(event.target.value as 'creatures' | 'bosses' | 'quests')}
+            className="rounded-lg border border-slate-700 bg-slate-900 px-4 py-2 text-sm text-slate-100"
+          >
+            <option value="creatures">Creatures</option>
+            <option value="bosses">Bosses</option>
+            <option value="quests">Quests</option>
+          </select>
+          <Link to={`/cyclopedia?section=${cyclopediaSection}`} className="rounded-lg bg-amber-500 px-4 py-2 text-sm font-semibold text-slate-950 hover:bg-amber-400">
+            Open Cyclopedia
           </Link>
         </div>
       </section>
