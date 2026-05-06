@@ -161,26 +161,26 @@ async def get_item_highlights(
     limit: int = Query(12, ge=1, le=50),
     db: Session = Depends(get_db),
 ):
-    metadata = EntityMetadataService.get_highlights(db, entity_type="item", limit=limit)
-    if not metadata:
-        return []
+    try:
+        metadata = EntityMetadataService.get_highlights(db, entity_type="item", limit=limit)
+        if not metadata:
+            return []
 
-    response: list[ItemSearchResult] = []
-    for record in metadata:
-        drops = (
-            db.query(LootModel)
-            .options(
-                joinedload(LootModel.creature)
-                .joinedload(Creature.spawn_locations)
-                .joinedload(SpawnLocation.hunt_zone)
+        response: list[ItemSearchResult] = []
+        for record in metadata:
+            drops = (
+                db.query(LootModel)
+                .options(joinedload(LootModel.creature))
+                .filter(LootModel.normalized_name == record.entity_key)
+                .limit(40)
+                .all()
             )
-            .filter(LootModel.normalized_name == record.entity_key)
-            .all()
-        )
-        if not drops:
-            continue
-        response.append(_build_item_result(drops[0].item_name, drops))
-    return response
+            if not drops:
+                continue
+            response.append(_build_item_result(drops[0].item_name, drops, include_hunt_zones=False, max_drops=8))
+        return response
+    except Exception:
+        return []
 
 
 @router.get("/", response_model=List[ItemSearchResult])
@@ -411,25 +411,34 @@ async def get_item_detail(item_id: int, db: Session = Depends(get_db)):
     raise HTTPException(status_code=404, detail="Item not found")
 
 
-def _build_item_result(item_name: str, drops: list[LootModel]) -> ItemSearchResult:
+def _build_item_result(
+    item_name: str,
+    drops: list[LootModel],
+    *,
+    include_hunt_zones: bool = True,
+    max_drops: int | None = None,
+) -> ItemSearchResult:
     related_drops: list[ItemDropCreature] = []
     seen_creature_ids: set[int] = set()
     for drop in sorted(drops, key=lambda item: (item.percentage is None, -(item.percentage or 0))):
+        if max_drops is not None and len(related_drops) >= max_drops:
+            break
         if not drop.creature or drop.creature.id in seen_creature_ids:
             continue
         seen_creature_ids.add(drop.creature.id)
         hunt_zones = []
-        for spawn in drop.creature.spawn_locations or []:
-            if spawn.hunt_zone:
-                hunt_zones.append({
-                    "id": spawn.hunt_zone.id,
-                    "name": spawn.hunt_zone.name,
-                    "city": spawn.hunt_zone.city,
-                    "min_level": None if spawn.hunt_zone.min_level == 0 else spawn.hunt_zone.min_level,
-                    "max_level": spawn.hunt_zone.max_level,
-                    "difficulty": spawn.hunt_zone.difficulty,
-                    "source_url": getattr(spawn.hunt_zone, "source_url", None),
-                })
+        if include_hunt_zones:
+            for spawn in drop.creature.spawn_locations or []:
+                if spawn.hunt_zone:
+                    hunt_zones.append({
+                        "id": spawn.hunt_zone.id,
+                        "name": spawn.hunt_zone.name,
+                        "city": spawn.hunt_zone.city,
+                        "min_level": None if spawn.hunt_zone.min_level == 0 else spawn.hunt_zone.min_level,
+                        "max_level": spawn.hunt_zone.max_level,
+                        "difficulty": spawn.hunt_zone.difficulty,
+                        "source_url": getattr(spawn.hunt_zone, "source_url", None),
+                    })
         related_drops.append(ItemDropCreature(
             creature_id=drop.creature.id,
             creature_name=drop.creature.name,

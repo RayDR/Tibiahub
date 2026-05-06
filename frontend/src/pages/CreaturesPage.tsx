@@ -17,6 +17,8 @@ import AppInput from '../components/ui/AppInput';
 import AppCard from '../components/ui/AppCard';
 import { cyclopediaSections, modeToTab, tabToMode } from '../config/cyclopediaSections';
 import { iconByCategory } from '../components/icons/CategoryIcons';
+import { useAuth } from '../context/AuthContext';
+import { activityApi } from '../services/activity';
 
 type SearchMode = 'creatures' | 'bosses' | 'items' | 'quests' | 'zones';
 type CreatureSort = 'name' | 'experience' | 'hitpoints' | 'difficulty';
@@ -66,6 +68,8 @@ const CreaturesPage: React.FC = () => {
   const [usedHighlightsSource, setUsedHighlightsSource] = useState(false);
   const [showCategories, setShowCategories] = useState(true);
   const activeRequestRef = useRef<AbortController | null>(null);
+  const lastSearchSignatureRef = useRef<string>('');
+  const { isAuthenticated } = useAuth();
 
   const recentCreatures = useMemo<RecentCreature[]>(() => {
     try {
@@ -85,6 +89,26 @@ const CreaturesPage: React.FC = () => {
     if (mode === 'quests') return t('search.questsPlaceholder');
     return t('search.zonesPlaceholder');
   })();
+
+  const resetResults = () => {
+    setCreatures([]);
+    setItems([]);
+    setQuests([]);
+    setZones([]);
+    setSkip(0);
+    setHasMore(false);
+    setUsedHighlightsSource(false);
+    setErrorMessage(null);
+  };
+
+  const errorTitle = mode === 'bosses' ? 'Boss search failed' : 'Something went wrong';
+  const errorSubtitle = mode === 'bosses'
+    ? 'Unable to load bosses right now. Please try again in a moment.'
+    : 'Please try again in a moment.';
+  const emptyTitle = mode === 'bosses' ? 'No bosses found.' : 'No creatures found.';
+  const emptySubtitle = mode === 'bosses'
+    ? 'Try another boss name or clear the search.'
+    : 'Try another search or category.';
 
   useEffect(() => {
     const stored = localStorage.getItem('cyclopediaShowCategories');
@@ -221,11 +245,26 @@ const CreaturesPage: React.FC = () => {
         setItems([]);
         setQuests([]);
       }
+
+      if (isAuthenticated && normalized.length > 1) {
+        const signature = `${mode}:${normalized.toLowerCase()}`;
+        if (lastSearchSignatureRef.current !== signature) {
+          lastSearchSignatureRef.current = signature;
+          void activityApi.record({
+            activity_type: 'search',
+            entity_type: mode,
+            query: normalized,
+          }).catch(() => {
+            // Keep search flow unaffected if activity endpoint fails.
+          });
+        }
+      }
     } catch (error: any) {
       if (axios.isCancel(error) || error?.name === 'CanceledError' || error?.code === 'ERR_CANCELED') {
         return;
       }
       console.error(error);
+      resetResults();
       setErrorMessage(error?.response?.data?.detail || error?.message || 'Failed to load cyclopedia data');
     } finally {
       setLoading(false);
@@ -237,6 +276,7 @@ const CreaturesPage: React.FC = () => {
     const tabParam = (searchParams.get('tab') || searchParams.get('section') || '').toLowerCase();
     const nextMode = tabToMode(tabParam);
     if (nextMode) {
+      resetResults();
       setMode(nextMode);
     }
   }, [searchParams]);
@@ -289,7 +329,10 @@ const CreaturesPage: React.FC = () => {
               <AppTabs
                 className="min-w-0 lg:flex-1"
                 activeKey={mode}
-                onChange={(key) => setMode(key as SearchMode)}
+                onChange={(key) => {
+                  resetResults();
+                  setMode(key as SearchMode);
+                }}
                 items={cyclopediaSections.map((section) => ({
                   key: section.mode,
                   label: t(section.i18nLabel),
@@ -397,9 +440,9 @@ const CreaturesPage: React.FC = () => {
         {!loading && errorMessage && (
           <div className="mx-auto mb-8 max-w-3xl rounded-2xl border border-red-500/20 bg-red-950/20 p-5 text-red-100">
             <div className="mb-2 flex items-center gap-2 font-semibold">
-              <AlertTriangle className="h-4 w-4" /> Something went wrong
+              <AlertTriangle className="h-4 w-4" /> {errorTitle}
             </div>
-            <p className="text-sm text-red-200/80">Please try again in a moment.</p>
+            <p className="text-sm text-red-200/80">{errorSubtitle}</p>
             <button
               onClick={() => void performSearch(true)}
               className="mt-3 rounded-lg border border-red-400/30 bg-red-500/20 px-3 py-1.5 text-sm text-red-100 hover:bg-red-500/30"
@@ -538,8 +581,8 @@ const CreaturesPage: React.FC = () => {
         {isEmpty && !errorMessage && (
           <div className="py-20 text-center opacity-70">
             <div className="mb-4 text-5xl text-[color:var(--color-primary)]"><FontAwesomeIcon icon={faScroll} /></div>
-            <p className="font-serif text-xl text-slate-300">No creatures found.</p>
-            <p className="mt-2 text-sm text-slate-500">Try another search or category.</p>
+            <p className="font-serif text-xl text-slate-300">{emptyTitle}</p>
+            <p className="mt-2 text-sm text-slate-500">{emptySubtitle}</p>
           </div>
         )}
       </div>

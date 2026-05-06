@@ -81,13 +81,14 @@ function App() {
             <Routes location={location} key={location.pathname}>
               <Route path="/" element={<HomePage />} />
               <Route path="/cyclopedia" element={<CreaturesPage />} />
-              <Route path="/bestiary" element={<Navigate to="/cyclopedia" replace />} />
+              <Route path="/bestiary" element={<Navigate to="/cyclopedia?tab=creatures" replace />} />
               <Route path="/quests" element={<Navigate to="/cyclopedia?tab=quests" replace />} />
+              <Route path="/missions" element={<Navigate to="/cyclopedia?tab=quests" replace />} />
               <Route path="/creatures/:slug" element={<CreatureDetailPage />} />
               <Route path="/quests/:questId" element={<QuestDetailPage />} />
-              <Route path="/recommendations" element={<HuntRecommendationsPage />} />
-              <Route path="/planner" element={<Navigate to="/recommendations" replace />} />
-              <Route path="/hunt" element={<Navigate to="/recommendations" replace />} />
+              <Route path="/planner" element={<HuntRecommendationsPage />} />
+              <Route path="/recommendations" element={<Navigate to="/planner" replace />} />
+              <Route path="/hunt" element={<Navigate to="/planner" replace />} />
               <Route path="/requests" element={<QuestViewerPage />} />
 
               {/* Public Event Route */}
@@ -101,6 +102,7 @@ function App() {
               <Route path="/register" element={<Register />} />
               <Route path="/reset-password" element={<PasswordReset />} />
               <Route path="/profile" element={<Profile />} />
+              <Route path="/settings" element={<Navigate to="/profile" replace />} />
 
               {/* Guild Routes */}
               <Route path="/guild" element={<GuildLayout />}>

@@ -1,9 +1,11 @@
 import logging
+import time
 from datetime import datetime, timedelta
 from typing import Any
 from fastapi import APIRouter, BackgroundTasks, Depends, HTTPException, status
 from fastapi.security import OAuth2PasswordRequestForm, OAuth2PasswordBearer
 from sqlalchemy.orm import Session
+from sqlalchemy.exc import OperationalError, SQLAlchemyError, TimeoutError as SATimeoutError
 from jose import jwt, JWTError
 
 from app.core import security, config
@@ -41,7 +43,7 @@ def get_current_user(token: str = Depends(oauth2_scheme), db: Session = Depends(
 
 def get_current_active_user(current_user: User = Depends(get_current_user)):
     if not current_user.is_active:
-        raise HTTPException(status_code=400, detail="Inactive user")
+        raise HTTPException(status_code=403, detail="Your account is inactive. Please contact an administrator.")
     return current_user
 
 def get_current_admin_user(current_user: User = Depends(get_current_active_user)):
@@ -66,49 +68,93 @@ def login_access_token(
     db: Session = Depends(get_db),
     form_data: OAuth2PasswordRequestForm = Depends()
 ) -> Any:
+    start = time.perf_counter()
     login_input = (form_data.username or "").strip()
-    logger.info("login_attempt login=%s", login_input)
+    logger.warning("login_request_started login=%s", login_input)
 
-    # Try to find user by username first (case-insensitive for resilience)
-    user = db.query(User).filter(User.username.ilike(login_input)).first()
+    try:
+        lookup_start = time.perf_counter()
 
-    # If still not found by username, try email
-    if not user and "@" in login_input:
-        user = db.query(User).filter(User.email.ilike(login_input)).first()
-    
-    # If not found by username, try to find by character name
-    if not user:
-        user_char = db.query(UserCharacter).filter(UserCharacter.character_name.ilike(login_input)).first()
-        if user_char:
-            user = user_char.user
+        # Try username first (case-insensitive for resilience).
+        user = db.query(User).filter(User.username.ilike(login_input)).first()
 
-    logger.info("login_user_found login=%s found=%s", login_input, bool(user))
-    if not user:
-        raise HTTPException(status_code=400, detail="Invalid username/email or password")
+        # If still not found by username, try email.
+        if not user and "@" in login_input:
+            user = db.query(User).filter(User.email.ilike(login_input)).first()
 
-    if not security.verify_password(form_data.password, user.hashed_password):
-        logger.info("login_password_valid username=%s valid=false", user.username)
-        raise HTTPException(status_code=400, detail="Invalid username/email or password")
+        # If not found by username/email, try linked character name.
+        if not user:
+            user_char = db.query(UserCharacter).filter(UserCharacter.character_name.ilike(login_input)).first()
+            if user_char:
+                user = user_char.user
 
-    logger.info("login_password_valid username=%s valid=true", user.username)
+        lookup_ms = int((time.perf_counter() - lookup_start) * 1000)
+        logger.warning("login_user_lookup_done login=%s found=%s duration_ms=%s", login_input, bool(user), lookup_ms)
 
-    if not user.is_active:
-        logger.info("login_user_inactive username=%s", user.username)
-        raise HTTPException(status_code=400, detail="Inactive user")
+        if not user:
+            total_ms = int((time.perf_counter() - start) * 1000)
+            logger.warning("login_failed category=invalid_credentials status=401 total_ms=%s", total_ms)
+            raise HTTPException(status_code=401, detail="Invalid username or password.")
 
-    logger.info(
-        "login_user_state username=%s is_active=%s is_superuser=%s guild_rank=%s",
-        user.username,
-        user.is_active,
-        user.is_superuser,
-        user.guild_rank,
-    )
-    
-    access_token_expires = timedelta(minutes=config.settings.ACCESS_TOKEN_EXPIRE_MINUTES)
-    return {
-        "access_token": security.create_access_token(user.username, expires_delta=access_token_expires),
-        "token_type": "bearer",
-    }
+        verify_start = time.perf_counter()
+        password_valid = security.verify_password(form_data.password, user.hashed_password)
+        verify_ms = int((time.perf_counter() - verify_start) * 1000)
+        logger.warning("login_password_verify_done username=%s valid=%s duration_ms=%s", user.username, password_valid, verify_ms)
+
+        if not password_valid:
+            total_ms = int((time.perf_counter() - start) * 1000)
+            logger.warning("login_failed category=invalid_credentials status=401 username=%s total_ms=%s", user.username, total_ms)
+            raise HTTPException(status_code=401, detail="Invalid username or password.")
+
+        if not user.is_active:
+            total_ms = int((time.perf_counter() - start) * 1000)
+            logger.warning("login_failed category=inactive_user status=403 username=%s total_ms=%s", user.username, total_ms)
+            raise HTTPException(status_code=403, detail="Your account is inactive. Please contact an administrator.")
+
+        token_start = time.perf_counter()
+        access_token_expires = timedelta(minutes=config.settings.ACCESS_TOKEN_EXPIRE_MINUTES)
+        token = security.create_access_token(user.username, expires_delta=access_token_expires)
+        token_ms = int((time.perf_counter() - token_start) * 1000)
+
+        total_ms = int((time.perf_counter() - start) * 1000)
+        logger.warning(
+            "login_success username=%s lookup_ms=%s verify_ms=%s token_ms=%s total_ms=%s",
+            user.username,
+            lookup_ms,
+            verify_ms,
+            token_ms,
+            total_ms,
+        )
+
+        return {
+            "access_token": token,
+            "token_type": "bearer",
+        }
+    except HTTPException:
+        raise
+    except SATimeoutError as exc:
+        db.rollback()
+        total_ms = int((time.perf_counter() - start) * 1000)
+        logger.error("login_failed category=database_timeout status=503 total_ms=%s error=%s", total_ms, exc)
+        raise HTTPException(status_code=503, detail="The server is temporarily unavailable. Please try again later.") from exc
+    except OperationalError as exc:
+        db.rollback()
+        total_ms = int((time.perf_counter() - start) * 1000)
+        logger.error("login_failed category=database_error status=503 total_ms=%s error=%s", total_ms, exc)
+        raise HTTPException(status_code=503, detail="The server is temporarily unavailable. Please try again later.") from exc
+    except SQLAlchemyError as exc:
+        db.rollback()
+        total_ms = int((time.perf_counter() - start) * 1000)
+        logger.error("login_failed category=database_error status=503 total_ms=%s error=%s", total_ms, exc)
+        raise HTTPException(status_code=503, detail="The server is temporarily unavailable. Please try again later.") from exc
+    except TimeoutError as exc:
+        total_ms = int((time.perf_counter() - start) * 1000)
+        logger.error("login_failed category=server_timeout status=503 total_ms=%s error=%s", total_ms, exc)
+        raise HTTPException(status_code=503, detail="The server is temporarily unavailable. Please try again later.") from exc
+    except Exception as exc:
+        total_ms = int((time.perf_counter() - start) * 1000)
+        logger.exception("login_failed category=unexpected_error status=500 total_ms=%s error=%s", total_ms, exc)
+        raise HTTPException(status_code=500, detail="The server is temporarily unavailable. Please try again later.") from exc
 
 @router.post("/register", response_model=UserResponse)
 def register_user(

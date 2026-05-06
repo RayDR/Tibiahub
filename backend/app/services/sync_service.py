@@ -12,36 +12,63 @@ import asyncio
 import hashlib
 import json
 import logging
+import os
+from collections import defaultdict
 from concurrent.futures import ThreadPoolExecutor
 from datetime import datetime
 from pathlib import Path
 from typing import Any
 
 import httpx
-from sqlalchemy import desc
+from sqlalchemy import desc, text
 from sqlalchemy.orm import Session
 
 from app.core.config import settings
 from app.db.database import SessionLocal
 from app.models.creature import Creature
-from app.models.external_data import CachedResource, SyncJob
+from app.models.external_data import CachedResource, Item, SyncJob, SyncJobError, TibiaWikiQuest
 from app.models.hunt_zone import HuntZone
 from app.models.loot import Loot
 from app.models.settings import SystemSettings
 from app.models.user import User
+from app.services.bestiary_source import get_category_members, get_creature_detail_by_name
 from app.services.creature_storage_service import upsert_creature_payload
 from app.services.email_service import EmailService
-from app.services.external_apis import get_creatures
-from app.services.external_sync_service import ExternalSyncService
+from app.services.text_utils import normalize_search_text
 
 logger = logging.getLogger(__name__)
 _CACHE_DIR = Path("backend/storage/cache")
 _IMAGE_DIR = _CACHE_DIR / "images"
 _EXECUTOR = ThreadPoolExecutor(max_workers=2, thread_name_prefix="tibiahub-sync")
+_FORCE_FAIL_NAME = (os.getenv("SYNC_FORCE_FAIL_NAME") or "").strip().lower()
+_FORCE_FATAL_AFTER = int(os.getenv("SYNC_FORCE_FATAL_AFTER") or "0")
+_SYNC_STALE_RUNNING_MINUTES = int(os.getenv("SYNC_STALE_RUNNING_MINUTES") or "45")
+_SYNC_HEARTBEAT_EVERY_ITEMS = max(1, int(os.getenv("SYNC_HEARTBEAT_EVERY_ITEMS") or "25"))
 
 
 class SyncService:
     SYNC_TARGETS = {"full", "creatures", "bosses", "items", "quests", "hunt-zones", "images"}
+
+    SUMMARY_KEYS = [
+        "creatures_created",
+        "creatures_updated",
+        "creatures_failed",
+        "bosses_created",
+        "bosses_updated",
+        "bosses_failed",
+        "items_created",
+        "items_updated",
+        "items_failed",
+        "quests_created",
+        "quests_updated",
+        "quests_failed",
+        "hunt_zones_created",
+        "hunt_zones_updated",
+        "hunt_zones_failed",
+        "images_cached",
+        "images_failed",
+        "total_processed",
+    ]
 
     @staticmethod
     def _get_setting(db: Session, key: str, default: str) -> str:
@@ -76,8 +103,19 @@ class SyncService:
         db.commit()
 
     @staticmethod
-    def create_job(db: Session, *, job_type: str, requester: str | None = None, requested_by_user_id: int | None = None) -> SyncJob:
+    def create_job(
+        db: Session,
+        *,
+        job_type: str,
+        requester: str | None = None,
+        requested_by_user_id: int | None = None,
+        job_limit: int | None = None,
+        batch_size: int = 100,
+        max_retries: int = 3,
+        external_timeout_seconds: int = 15,
+    ) -> SyncJob:
         SyncService.ensure_default_settings(db)
+        SyncService.recover_stale_running_jobs(db, reason="stale after backend recovery")
         if job_type not in SyncService.SYNC_TARGETS:
             raise ValueError(f"Unknown sync target '{job_type}'")
 
@@ -103,7 +141,15 @@ class SyncService:
             message="Job queued",
             requester=requester,
             requested_by_user_id=requested_by_user_id,
+            job_limit=job_limit,
             cancel_requested=False,
+            current_offset=0,
+            processed_count=0,
+            failed_count=0,
+            checkpoint={},
+            batch_size=max(10, min(batch_size, 500)),
+            max_retries=max(0, min(max_retries, 10)),
+            external_timeout_seconds=max(5, min(external_timeout_seconds, 120)),
         )
         db.add(job)
         db.commit()
@@ -111,8 +157,107 @@ class SyncService:
         return job
 
     @staticmethod
-    def queue_job(job_id: str, *, force: bool = False, skip_images: bool = False, limit: int | None = None) -> None:
-        _EXECUTOR.submit(SyncService._run_job_sync, job_id, force, skip_images, limit)
+    def recover_stale_running_jobs(
+        db: Session,
+        *,
+        stale_minutes: int | None = None,
+        reason: str = "stale after backend recovery",
+    ) -> list[str]:
+        threshold_minutes = stale_minutes if stale_minutes is not None else _SYNC_STALE_RUNNING_MINUTES
+        now = datetime.utcnow()
+        now_str = now.strftime("%Y-%m-%d %H:%M:%S")
+        stale_ids: list[str] = []
+
+        try:
+            rows = db.execute(
+                text(
+                    """
+                    SELECT id, COALESCE(updated_at, started_at, created_at) AS heartbeat_at
+                    FROM sync_jobs
+                    WHERE status = 'running'
+                    """
+                )
+            ).mappings().all()
+
+            for row in rows:
+                heartbeat_raw = row.get("heartbeat_at")
+                if heartbeat_raw is None:
+                    continue
+
+                if isinstance(heartbeat_raw, datetime):
+                    heartbeat = heartbeat_raw
+                else:
+                    heartbeat_text = str(heartbeat_raw).replace("T", " ").replace("Z", "")
+                    try:
+                        heartbeat = datetime.fromisoformat(heartbeat_text)
+                    except ValueError:
+                        continue
+
+                elapsed_minutes = (now - heartbeat).total_seconds() / 60
+                if elapsed_minutes < threshold_minutes:
+                    continue
+
+                db.execute(
+                    text(
+                        """
+                        UPDATE sync_jobs
+                        SET status = 'failed',
+                            cancel_requested = 1,
+                            message = :reason,
+                            error = :reason,
+                            error_message = :reason,
+                            finished_at = :now,
+                            updated_at = :now
+                        WHERE id = :job_id
+                        """
+                    ),
+                    {"reason": reason, "now": now_str, "job_id": row["id"]},
+                )
+                stale_ids.append(row["id"])
+
+            if stale_ids:
+                db.commit()
+        except Exception:
+            db.rollback()
+            logger.exception("sync_stale_recovery_failed")
+        return stale_ids
+
+    @staticmethod
+    def _heartbeat(db: Session, job: SyncJob, *, message: str | None = None) -> None:
+        job.updated_at = datetime.utcnow()
+        if message is not None:
+            job.message = message
+        db.add(job)
+        db.commit()
+
+    @staticmethod
+    def queue_job(
+        job_id: str,
+        *,
+        force: bool = False,
+        skip_images: bool = False,
+        limit: int | None = None,
+        resume: bool = False,
+    ) -> None:
+        _EXECUTOR.submit(SyncService._run_job_sync, job_id, force, skip_images, limit, resume)
+
+    @staticmethod
+    def resume_job(db: Session, job_id: str) -> SyncJob | None:
+        job = SyncService.get_job(db, job_id)
+        if not job:
+            return None
+        if job.status not in {"failed", "cancelled"}:
+            raise RuntimeError("Only failed/cancelled jobs can be resumed")
+        job.status = "pending"
+        job.cancel_requested = False
+        job.error = None
+        job.error_message = None
+        job.message = "Resume requested"
+        db.add(job)
+        db.commit()
+        db.refresh(job)
+        SyncService.queue_job(job.id, limit=job.job_limit, resume=True)
+        return job
 
     @staticmethod
     def list_jobs(db: Session, limit: int = 50) -> list[SyncJob]:
@@ -137,80 +282,84 @@ class SyncService:
         return job
 
     @staticmethod
-    def _run_job_sync(job_id: str, force: bool, skip_images: bool, limit: int | None) -> None:
-        asyncio.run(SyncService._run_job_async(job_id, force=force, skip_images=skip_images, limit=limit))
+    def _run_job_sync(job_id: str, force: bool, skip_images: bool, limit: int | None, resume: bool = False) -> None:
+        asyncio.run(SyncService._run_job_async(job_id, force=force, skip_images=skip_images, limit=limit, resume=resume))
 
     @staticmethod
-    async def _run_job_async(job_id: str, *, force: bool, skip_images: bool, limit: int | None) -> None:
+    async def _run_job_async(job_id: str, *, force: bool, skip_images: bool, limit: int | None, resume: bool) -> None:
         db = SessionLocal()
         try:
             job = SyncService.get_job(db, job_id)
             if not job:
                 return
 
-            timeout_seconds = int(SyncService._get_setting(db, "sync_request_timeout_seconds", "30") or "30")
-            retry_count = max(0, int(SyncService._get_setting(db, "sync_retry_count", "2") or "2"))
+            timeout_seconds = job.external_timeout_seconds or int(SyncService._get_setting(db, "sync_request_timeout_seconds", "30") or "30")
+            retry_count = job.max_retries if job.max_retries is not None else max(0, int(SyncService._get_setting(db, "sync_retry_count", "2") or "2"))
 
             job.status = "running"
             job.started_at = datetime.utcnow()
-            job.current_step = "starting"
-            job.message = "Sync started"
+            job.updated_at = datetime.utcnow()
+            if not resume:
+                job.current_step = "starting"
+                job.message = "Sync started"
+                job.result_summary = SyncService._empty_summary()
+                job.current_offset = 0
+                job.processed_count = 0
+                job.failed_count = 0
+                job.last_successful_external_id = None
+                job.checkpoint = {}
             db.commit()
 
             plan = [job.job_type] if job.job_type != "full" else ["creatures", "bosses", "items", "quests", "hunt-zones", "images"]
             if skip_images:
                 plan = [step for step in plan if step != "images"]
 
-            total_steps = len(plan)
-            results: dict[str, Any] = {}
+            checkpoint = job.checkpoint or {}
+            resume_step = checkpoint.get("current_entity_type") if resume else None
+            step_start_index = plan.index(resume_step) if resume_step in plan else 0
+            summary = dict(job.result_summary or SyncService._empty_summary())
 
-            for index, step in enumerate(plan, start=1):
+            for step in plan[step_start_index:]:
                 db.refresh(job)
                 if job.cancel_requested:
+                    SyncService._save_checkpoint(
+                        db,
+                        job,
+                        entity_type=step,
+                        offset=job.current_offset or 0,
+                        message="Sync cancelled by user",
+                    )
                     job.status = "cancelled"
                     job.finished_at = datetime.utcnow()
                     job.message = "Sync cancelled by user"
                     db.commit()
                     return
 
-                SyncService._update_job_progress(
+                SyncService._heartbeat(db, job, message=f"Running {step}")
+
+                result = await SyncService._run_segment(
                     db,
                     job,
-                    progress_current=index - 1,
-                    progress_total=total_steps,
-                    current_step=f"sync:{step}",
-                    message=f"Running {step} sync",
+                    step,
+                    force=force,
+                    limit=limit,
+                    retry_count=retry_count,
+                    timeout_seconds=timeout_seconds,
                 )
-
-                attempt = 0
-                while True:
-                    try:
-                        result = await asyncio.wait_for(
-                            SyncService._run_segment(db, step, force=force, limit=limit),
-                            timeout=timeout_seconds,
-                        )
-                        results[step] = result
-                        break
-                    except Exception:
-                        attempt += 1
-                        if attempt > retry_count:
-                            raise
-
-                SyncService._update_job_progress(
-                    db,
-                    job,
-                    progress_current=index,
-                    progress_total=total_steps,
-                    current_step=f"completed:{step}",
-                    message=f"Completed {step}",
-                )
+                summary = SyncService._merge_summary(summary, result.get("summary") or {})
+                summary["total_processed"] = int(summary.get("total_processed") or 0) + int(result.get("processed") or 0)
+                job.result_summary = summary
+                job.current_step = f"completed:{step}"
+                job.message = f"Completed {step}"
+                db.add(job)
+                db.commit()
 
             finished_at = datetime.utcnow()
             job.status = "completed"
             job.finished_at = finished_at
             job.current_step = "done"
             job.message = "Sync completed successfully"
-            job.result_summary = results
+            job.checkpoint = {}
             job.progress = 100
             job.progress_percent = 100
             SyncService._set_setting(db, "sync_last_success_at", finished_at.isoformat(), "Last successful sync timestamp")
@@ -252,37 +401,411 @@ class SyncService:
         db.commit()
 
     @staticmethod
-    async def _run_segment(db: Session, target: str, *, force: bool, limit: int | None) -> dict[str, Any]:
-        if target == "creatures":
-            return await ExternalSyncService.sync_creatures(db, mode="auto" if force else "compare")
-        if target == "items":
-            return await ExternalSyncService.sync_items(db)
-        if target == "quests":
-            return await ExternalSyncService.sync_quests(db)
-        if target == "hunt-zones":
-            return await ExternalSyncService.sync_hunting_places(db)
-        if target == "bosses":
-            return await SyncService.sync_bosses(db, limit=limit)
+    def _empty_summary() -> dict[str, int]:
+        return {key: 0 for key in SyncService.SUMMARY_KEYS}
+
+    @staticmethod
+    def _merge_summary(base: dict[str, Any], delta: dict[str, Any]) -> dict[str, Any]:
+        merged = dict(base)
+        for key, value in delta.items():
+            if isinstance(value, int):
+                merged[key] = int(merged.get(key) or 0) + value
+            else:
+                merged[key] = value
+        return merged
+
+    @staticmethod
+    def _save_checkpoint(
+        db: Session,
+        job: SyncJob,
+        *,
+        entity_type: str,
+        offset: int,
+        message: str | None = None,
+        last_successful_external_id: str | None = None,
+    ) -> None:
+        checkpoint = {
+            "current_entity_type": entity_type,
+            "current_offset": max(0, offset),
+            "processed_count": int(job.processed_count or 0),
+            "failed_count": int(job.failed_count or 0),
+            "last_successful_external_id": last_successful_external_id or job.last_successful_external_id,
+            "batch_size": int(job.batch_size or 100),
+            "updated_at": datetime.utcnow().isoformat(),
+        }
+        job.current_entity_type = entity_type
+        job.current_offset = max(0, offset)
+        if last_successful_external_id:
+            job.last_successful_external_id = last_successful_external_id
+        job.checkpoint = checkpoint
+        if message:
+            job.message = message
+        db.add(job)
+        db.commit()
+
+    @staticmethod
+    def _upsert_item(db: Session, payload: dict[str, Any]) -> str:
+        name = payload.get("name")
+        if not name:
+            raise ValueError("Missing item name")
+        existing = db.query(Item).filter(Item.name == name).first()
+        created = existing is None
+        if not existing:
+            existing = Item(name=name)
+            db.add(existing)
+        existing.item_id = payload.get("item_id") or existing.item_id
+        existing.description = payload.get("description") or existing.description
+        existing.type = payload.get("type") or existing.type
+        existing.weight = payload.get("weight") if payload.get("weight") is not None else existing.weight
+        existing.value = payload.get("value") if payload.get("value") is not None else existing.value
+        existing.attack = payload.get("attack") if payload.get("attack") is not None else existing.attack
+        existing.defense = payload.get("defense") if payload.get("defense") is not None else existing.defense
+        existing.armor = payload.get("armor") if payload.get("armor") is not None else existing.armor
+        existing.level_required = payload.get("levelrequired") if payload.get("levelrequired") is not None else existing.level_required
+        existing.vocation_required = payload.get("vocationrequired") or existing.vocation_required
+        existing.tradeable = payload.get("tradeable", existing.tradeable)
+        existing.stackable = payload.get("stackable", existing.stackable)
+        existing.raw_data = payload
+        existing.updated_at = datetime.utcnow()
+        return "created" if created else "updated"
+
+    @staticmethod
+    def _upsert_quest(db: Session, payload: dict[str, Any]) -> str:
+        name = payload.get("name")
+        if not name:
+            raise ValueError("Missing quest name")
+        existing = db.query(TibiaWikiQuest).filter(TibiaWikiQuest.name == name).first()
+        created = existing is None
+        if not existing:
+            existing = TibiaWikiQuest(name=name)
+            db.add(existing)
+        existing.description = payload.get("description") or existing.description
+        existing.min_level = payload.get("min_level") if payload.get("min_level") is not None else existing.min_level
+        existing.max_level = payload.get("max_level") if payload.get("max_level") is not None else existing.max_level
+        existing.experience_reward = payload.get("experience_reward") if payload.get("experience_reward") is not None else existing.experience_reward
+        existing.treasure = payload.get("treasure") or existing.treasure
+        existing.location = payload.get("location") or existing.location
+        existing.npc = payload.get("npc") or existing.npc
+        existing.raw_data = payload
+        return "created" if created else "updated"
+
+    @staticmethod
+    def _upsert_hunt_zone(db: Session, payload: dict[str, Any]) -> str:
+        name = payload.get("name")
+        if not name:
+            raise ValueError("Missing hunt zone name")
+        normalized_name = normalize_search_text(name)
+        zone = db.query(HuntZone).filter(HuntZone.normalized_name == normalized_name).first()
+        created = zone is None
+        if not zone:
+            zone = HuntZone(name=name, normalized_name=normalized_name, min_level=0)
+            db.add(zone)
+        zone.name = name
+        zone.normalized_name = normalized_name
+        zone.city = payload.get("location") or zone.city
+        zone.description = payload.get("description") or zone.description
+        zone.source_name = "tibiawiki"
+        zone.source_url = payload.get("source_url") or zone.source_url
+        zone.raw_data = payload
+        zone.last_synced_at = datetime.utcnow()
+        return "created" if created else "updated"
+
+    @staticmethod
+    async def _run_segment(
+        db: Session,
+        job: SyncJob,
+        target: str,
+        *,
+        force: bool,
+        limit: int | None,
+        retry_count: int,
+        timeout_seconds: int,
+    ) -> dict[str, Any]:
         if target == "images":
-            return await SyncService.sync_images(db, limit=limit)
+            result = await SyncService.sync_images(db, limit=limit)
+            return {
+                "processed": int(result.get("total") or 0),
+                "summary": {
+                    "images_cached": int(result.get("created") or 0) + int(result.get("updated") or 0),
+                    "images_failed": int(result.get("errors") or 0),
+                },
+            }
+
+        if target == "creatures":
+            return await SyncService._sync_creatures_batched(
+                db,
+                job,
+                only_bosses=False,
+                limit=limit,
+                retry_count=retry_count,
+                timeout_seconds=timeout_seconds,
+                force=force,
+            )
+
+        if target == "bosses":
+            return await SyncService._sync_creatures_batched(
+                db,
+                job,
+                only_bosses=True,
+                limit=limit,
+                retry_count=retry_count,
+                timeout_seconds=timeout_seconds,
+                force=force,
+            )
+
+        if target in {"items", "quests", "hunt-zones"}:
+            return await SyncService._sync_catalog_batched(
+                db,
+                job,
+                target=target,
+                limit=limit,
+                retry_count=retry_count,
+                timeout_seconds=timeout_seconds,
+            )
+
         raise ValueError(f"Unknown sync segment: {target}")
 
     @staticmethod
-    async def sync_bosses(db: Session, *, limit: int | None = None) -> dict[str, Any]:
-        response = await get_creatures(expand=True)
-        if not response.success() or not isinstance(response.data, list):
-            return {"status": "error", "error": response.error or "Unable to fetch bosses", "processed": 0}
-
-        payloads = [item for item in response.data if bool(item.get("is_boss"))]
+    async def _sync_creatures_batched(
+        db: Session,
+        job: SyncJob,
+        *,
+        only_bosses: bool,
+        limit: int | None,
+        retry_count: int,
+        timeout_seconds: int,
+        force: bool,
+    ) -> dict[str, Any]:
+        _ = force
+        names = await get_category_members("Creatures")
         if limit is not None and limit > 0:
-            payloads = payloads[:limit]
+            names = names[:limit]
 
-        created_or_updated = 0
-        for payload in payloads:
-            upsert_creature_payload(db, payload)
-            created_or_updated += 1
+        total = len(names)
+        checkpoint = job.checkpoint or {}
+        offset = int(checkpoint.get("current_offset") or 0) if checkpoint.get("current_entity_type") in {"creatures", "bosses"} else 0
+        processed = 0
+        counters = defaultdict(int)
+        batch_size = int(job.batch_size or 100)
+        key_prefix = "bosses" if only_bosses else "creatures"
+
+        while offset < total:
+            db.refresh(job)
+            if job.cancel_requested:
+                SyncService._save_checkpoint(db, job, entity_type="bosses" if only_bosses else "creatures", offset=offset)
+                break
+
+            batch_names = names[offset: offset + batch_size]
+            if not batch_names:
+                break
+
+            for name in batch_names:
+                operation = "updated"
+                normalized_name = normalize_search_text(name)
+                if not db.query(Creature).filter(Creature.normalized_name == normalized_name).first():
+                    operation = "created"
+
+                success = False
+                last_error: Exception | None = None
+                for attempt in range(retry_count + 1):
+                    try:
+                        if _FORCE_FAIL_NAME and _FORCE_FAIL_NAME in name.lower():
+                            raise RuntimeError(f"Injected sync failure for '{name}'")
+                        payload = await asyncio.wait_for(get_creature_detail_by_name(name), timeout=timeout_seconds)
+                        if only_bosses and not bool(payload.get("is_boss")):
+                            success = True
+                            break
+                        upsert_creature_payload(db, payload)
+                        counters[f"{key_prefix}_{operation}"] += 1
+                        job.last_successful_external_id = payload.get("slug") or payload.get("name") or name
+                        success = True
+                        break
+                    except Exception as exc:
+                        last_error = exc
+                        if attempt >= retry_count:
+                            break
+                        await asyncio.sleep(min(2 ** attempt, 4))
+
+                processed += 1
+                job.processed_count = int(job.processed_count or 0) + 1
+                if not success:
+                    counters[f"{key_prefix}_failed"] += 1
+                    job.failed_count = int(job.failed_count or 0) + 1
+                    db.add(
+                        SyncJobError(
+                            job_id=job.id,
+                            entity_type="boss" if only_bosses else "creature",
+                            external_id=name,
+                            entity_name=name,
+                            error_message=str(last_error) if last_error else "Unknown sync failure",
+                            retry_count=retry_count,
+                            status="failed",
+                        )
+                    )
+
+                db.add(job)
+                if processed % _SYNC_HEARTBEAT_EVERY_ITEMS == 0:
+                    SyncService._heartbeat(db, job)
+
+            offset += len(batch_names)
+            db.commit()
+
+            SyncService._update_job_progress(
+                db,
+                job,
+                progress_current=offset,
+                progress_total=max(total, 1),
+                current_step=f"sync:{key_prefix}",
+                message=f"{key_prefix} {offset}/{total}",
+            )
+            SyncService._save_checkpoint(
+                db,
+                job,
+                entity_type="bosses" if only_bosses else "creatures",
+                offset=offset,
+                last_successful_external_id=job.last_successful_external_id,
+            )
+            if _FORCE_FATAL_AFTER > 0 and processed >= _FORCE_FATAL_AFTER:
+                raise RuntimeError("Injected fatal sync stop after checkpoint")
+
         db.commit()
-        return {"status": "success", "processed": created_or_updated, "total": len(payloads)}
+        return {"processed": processed, "summary": dict(counters)}
+
+    @staticmethod
+    async def _sync_catalog_batched(
+        db: Session,
+        job: SyncJob,
+        *,
+        target: str,
+        limit: int | None,
+        retry_count: int,
+        timeout_seconds: int,
+    ) -> dict[str, Any]:
+        _ = timeout_seconds
+        category = {
+            "items": "Items",
+            "quests": "Quests",
+            "hunt-zones": "Hunting Places",
+        }[target]
+        names = await get_category_members(category)
+        if limit is not None and limit > 0:
+            names = names[:limit]
+
+        total = len(names)
+        checkpoint = job.checkpoint or {}
+        offset = int(checkpoint.get("current_offset") or 0) if checkpoint.get("current_entity_type") == target else 0
+        processed = 0
+        counters = defaultdict(int)
+        batch_size = int(job.batch_size or 100)
+        summary_prefix = {
+            "items": "items",
+            "quests": "quests",
+            "hunt-zones": "hunt_zones",
+        }[target]
+
+        while offset < total:
+            db.refresh(job)
+            if job.cancel_requested:
+                SyncService._save_checkpoint(db, job, entity_type=target, offset=offset)
+                break
+
+            batch_names = names[offset: offset + batch_size]
+            if not batch_names:
+                break
+
+            for name in batch_names:
+                payload = {
+                    "name": name,
+                    "description": None,
+                    "location": None,
+                    "min_level": None,
+                    "max_level": None,
+                    "experience_reward": None,
+                    "treasure": [],
+                    "npc": None,
+                    "item_id": None,
+                    "type": None,
+                    "weight": None,
+                    "value": None,
+                    "attack": None,
+                    "defense": None,
+                    "armor": None,
+                    "levelrequired": None,
+                    "vocationrequired": None,
+                    "tradeable": True,
+                    "stackable": False,
+                }
+
+                success = False
+                last_error: Exception | None = None
+                for attempt in range(retry_count + 1):
+                    try:
+                        if _FORCE_FAIL_NAME and _FORCE_FAIL_NAME in name.lower():
+                            raise RuntimeError(f"Injected sync failure for '{name}'")
+                        if target == "items":
+                            outcome = SyncService._upsert_item(db, payload)
+                        elif target == "quests":
+                            outcome = SyncService._upsert_quest(db, payload)
+                        else:
+                            outcome = SyncService._upsert_hunt_zone(db, payload)
+                        counters[f"{summary_prefix}_{outcome}"] += 1
+                        job.last_successful_external_id = name
+                        success = True
+                        break
+                    except Exception as exc:
+                        last_error = exc
+                        if attempt >= retry_count:
+                            break
+                        await asyncio.sleep(min(2 ** attempt, 4))
+
+                processed += 1
+                job.processed_count = int(job.processed_count or 0) + 1
+                if not success:
+                    counters[f"{summary_prefix}_failed"] += 1
+                    job.failed_count = int(job.failed_count or 0) + 1
+                    db.add(
+                        SyncJobError(
+                            job_id=job.id,
+                            entity_type=target,
+                            external_id=name,
+                            entity_name=name,
+                            error_message=str(last_error) if last_error else "Unknown sync failure",
+                            retry_count=retry_count,
+                            status="failed",
+                        )
+                    )
+
+                db.add(job)
+                if processed % _SYNC_HEARTBEAT_EVERY_ITEMS == 0:
+                    SyncService._heartbeat(db, job)
+
+            offset += len(batch_names)
+            db.commit()
+            SyncService._update_job_progress(
+                db,
+                job,
+                progress_current=offset,
+                progress_total=max(total, 1),
+                current_step=f"sync:{target}",
+                message=f"{target} {offset}/{total}",
+            )
+            SyncService._save_checkpoint(
+                db,
+                job,
+                entity_type=target,
+                offset=offset,
+                last_successful_external_id=job.last_successful_external_id,
+            )
+            if _FORCE_FATAL_AFTER > 0 and processed >= _FORCE_FATAL_AFTER:
+                raise RuntimeError("Injected fatal sync stop after checkpoint")
+
+        db.commit()
+        return {"processed": processed, "summary": dict(counters)}
+
+    @staticmethod
+    async def sync_bosses(db: Session, *, limit: int | None = None) -> dict[str, Any]:
+        _ = (db, limit)
+        return {"status": "deprecated", "processed": 0, "total": 0}
 
     @staticmethod
     async def sync_images(db: Session, *, limit: int | None = None) -> dict[str, Any]:

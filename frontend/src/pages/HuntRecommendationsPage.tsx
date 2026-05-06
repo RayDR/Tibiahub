@@ -10,6 +10,8 @@ import AppTabs from '../components/ui/AppTabs';
 import AppButton from '../components/ui/AppButton';
 import AppCard from '../components/ui/AppCard';
 import AppInput from '../components/ui/AppInput';
+import { useAuth } from '../context/AuthContext';
+import { activityApi } from '../services/activity';
 
 // Vocation Config
 const VOCATIONS = [
@@ -59,6 +61,7 @@ const HuntRecommendationsPage: React.FC = () => {
   const [loading, setLoading] = useState(false);
   const [goal, setGoal] = useState<'exp' | 'profit' | 'balanced'>('exp');
   const [mapPreviewFailed, setMapPreviewFailed] = useState(false);
+  const { isAuthenticated } = useAuth();
 
   // Handlers
   const addMember = () => {
@@ -100,6 +103,23 @@ const HuntRecommendationsPage: React.FC = () => {
         const data = await huntZonesApi.getPartyRecommendations(payload, goal);
         setRecommendations(data);
       }
+
+      if (isAuthenticated) {
+        void activityApi.record({
+          activity_type: 'hunt_search',
+          entity_type: mode,
+          query: mode === 'solo' ? `${soloVocation}:${soloLevel}` : `party:${party.length}`,
+          metadata: {
+            mode,
+            goal,
+            solo_vocation: soloVocation,
+            solo_level: soloLevel,
+            party_size: party.length,
+          },
+        }).catch(() => {
+          // Non-blocking history event.
+        });
+      }
     } catch (err) {
       console.error(err);
     } finally {
@@ -114,6 +134,18 @@ const HuntRecommendationsPage: React.FC = () => {
     try {
       const zone = await huntZonesApi.getById(recommendation.zone_id);
       setSelectedZone(zone);
+      if (isAuthenticated) {
+        void activityApi.record({
+          activity_type: 'view_zone',
+          entity_type: 'zone',
+          entity_id: String(recommendation.zone_id),
+          metadata: {
+            name: recommendation.zone_name,
+          },
+        }).catch(() => {
+          // Non-blocking history event.
+        });
+      }
     } catch (error) {
       console.error('Failed to load zone details', error);
       setSelectedZone(null);

@@ -102,17 +102,18 @@ async def get_creature_highlights(
     limit: int = Query(18, ge=1, le=50),
     db: Session = Depends(get_db),
 ):
-    metadata = EntityMetadataService.get_highlights(db, entity_type="creature", limit=limit)
-    creatures: list[CreatureSimple] = []
-    for record in metadata:
-        if record.entity_id is None:
-            continue
-        creature = db.query(CreatureModel).filter(CreatureModel.id == record.entity_id).first()
-        if creature:
-            creatures.append(creature)
-    if creatures:
-        return creatures
-    return list_cached_creatures(db, search=None, category=None, is_boss=None, skip=0, limit=limit, sort_by="name", sort_order="asc")
+    try:
+        metadata = EntityMetadataService.get_highlights(db, entity_type="creature", limit=limit)
+        creature_ids = [record.entity_id for record in metadata if record.entity_id is not None]
+        if creature_ids:
+            raw_creatures = db.query(CreatureModel).filter(CreatureModel.id.in_(creature_ids)).all()
+            by_id = {creature.id: creature for creature in raw_creatures}
+            creatures = [by_id[creature_id] for creature_id in creature_ids if creature_id in by_id]
+            if creatures:
+                return creatures
+        return list_cached_creatures(db, search=None, category=None, is_boss=None, skip=0, limit=limit, sort_by="name", sort_order="asc")
+    except Exception:
+        return []
 
 
 @router.get("/", response_model=List[CreatureSimple])
