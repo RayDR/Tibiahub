@@ -25,7 +25,10 @@ def _get_setting(db: Session, key: str, default: str = "") -> str:
 
 
 def _is_external_detail_fallback_enabled(db: Session) -> bool:
-    return _get_setting(db, "bestiary_allow_external_detail_fallback", "1") == "1"
+    return (
+        _get_setting(db, "external_auto_fallback_enabled", "0") == "1"
+        or _get_setting(db, "bestiary_allow_external_detail_fallback", "0") == "1"
+    )
 
 
 def _rank_quest(query: str, quest_name: str) -> tuple[int, float, str]:

@@ -1,20 +1,28 @@
 import React, { useEffect, useMemo, useRef, useState } from 'react';
 import { Link, useSearchParams } from 'react-router-dom';
 import { motion } from 'framer-motion';
-import { AlertTriangle, ArrowDownAZ, ArrowUpAZ, Crown, Gem, Loader2, MapPin, ScrollText, Search, Sword, Sparkles } from 'lucide-react';
+import { AlertTriangle, ArrowDownAZ, ArrowUpAZ, Crown, Loader2, ScrollText, Sparkles } from 'lucide-react';
 import { useTranslation } from 'react-i18next';
 import axios from 'axios';
+import { FontAwesomeIcon } from '@fortawesome/react-fontawesome';
+import { faBook, faGem, faScroll } from '@fortawesome/free-solid-svg-icons';
 
 import CreatureCard from '../components/CreatureCard';
 import TibiaMap from '../components/TibiaMap';
 import { creaturesApi, huntZonesApi, itemsApi, questsApi } from '../services/api';
 import { CreatureSimple, HuntZone, ItemSearchResult, QuestSearchResult } from '../types';
+import PageHeader from '../components/ui/PageHeader';
+import AppTabs from '../components/ui/AppTabs';
+import AppInput from '../components/ui/AppInput';
+import AppCard from '../components/ui/AppCard';
+import { cyclopediaSections, modeToTab, tabToMode } from '../config/cyclopediaSections';
+import { iconByCategory } from '../components/icons/CategoryIcons';
 
 type SearchMode = 'creatures' | 'bosses' | 'items' | 'quests' | 'zones';
 type CreatureSort = 'name' | 'experience' | 'hitpoints' | 'difficulty';
 type SortOrder = 'asc' | 'desc';
-type CreatureCategory = '' | 'Humanoid' | 'Undead' | 'Demon' | 'Beast' | 'Dragon' | 'Elemental' | 'Construct';
-const CREATURE_CATEGORIES: CreatureCategory[] = ['', 'Humanoid', 'Undead', 'Demon', 'Beast', 'Dragon', 'Elemental', 'Construct'];
+type CreatureCategory = '' | 'Amphibic' | 'Aquatic' | 'Bird' | 'Construct' | 'Demon' | 'Dragon' | 'Elemental' | 'Fey' | 'Giant' | 'Human' | 'Humanoid' | 'Lycanthrope' | 'Magical' | 'Mammal' | 'Undead' | 'Beast';
+const CREATURE_CATEGORIES: CreatureCategory[] = ['', 'Amphibic', 'Aquatic', 'Bird', 'Construct', 'Demon', 'Dragon', 'Elemental', 'Fey', 'Giant', 'Human', 'Humanoid', 'Lycanthrope', 'Magical', 'Mammal', 'Undead', 'Beast'];
 
 interface RecentCreature {
   id: number;
@@ -56,6 +64,7 @@ const CreaturesPage: React.FC = () => {
   const [hasMore, setHasMore] = useState(false);
   const [mapPreviewFailed, setMapPreviewFailed] = useState<Record<number, boolean>>({});
   const [usedHighlightsSource, setUsedHighlightsSource] = useState(false);
+  const [showCategories, setShowCategories] = useState(true);
   const activeRequestRef = useRef<AbortController | null>(null);
 
   const recentCreatures = useMemo<RecentCreature[]>(() => {
@@ -68,6 +77,35 @@ const CreaturesPage: React.FC = () => {
       return [];
     }
   }, [initialLoaded]);
+
+  const searchPlaceholder = (() => {
+    if (mode === 'creatures') return t('search.creaturesPlaceholder');
+    if (mode === 'bosses') return t('search.bossesPlaceholder');
+    if (mode === 'items') return t('search.lootPlaceholder');
+    if (mode === 'quests') return t('search.questsPlaceholder');
+    return t('search.zonesPlaceholder');
+  })();
+
+  useEffect(() => {
+    const stored = localStorage.getItem('cyclopediaShowCategories');
+    if (stored === '0') {
+      setShowCategories(false);
+      return;
+    }
+    if (stored === '1') {
+      setShowCategories(true);
+      return;
+    }
+    setShowCategories(window.innerWidth >= 1024);
+  }, []);
+
+  const toggleCategories = () => {
+    setShowCategories((current) => {
+      const next = !current;
+      localStorage.setItem('cyclopediaShowCategories', next ? '1' : '0');
+      return next;
+    });
+  };
 
   async function performSearch(reset: boolean = true) {
     const normalized = searchTerm.trim();
@@ -196,17 +234,20 @@ const CreaturesPage: React.FC = () => {
   }
 
   useEffect(() => {
-    const section = (searchParams.get('section') || '').toLowerCase();
-    if (section === 'creatures' || section === 'bosses' || section === 'quests') {
-      setMode(section);
+    const tabParam = (searchParams.get('tab') || searchParams.get('section') || '').toLowerCase();
+    const nextMode = tabToMode(tabParam);
+    if (nextMode) {
+      setMode(nextMode);
     }
   }, [searchParams]);
 
   useEffect(() => {
-    const currentSection = (searchParams.get('section') || '').toLowerCase();
-    if (currentSection !== mode) {
+    const urlTab = (searchParams.get('tab') || '').toLowerCase();
+    const modeTab = modeToTab(mode);
+    if (urlTab !== modeTab) {
       const next = new URLSearchParams(searchParams);
-      next.set('section', mode);
+      next.set('tab', modeTab);
+      next.delete('section');
       setSearchParams(next, { replace: true });
     }
   }, [mode, searchParams, setSearchParams]);
@@ -226,93 +267,90 @@ const CreaturesPage: React.FC = () => {
   return (
     <div className="min-h-screen">
       <div className="relative space-y-6 py-12 text-center md:py-20">
-        <motion.h1
+        <motion.div
           initial={{ opacity: 0, y: 20 }}
           animate={{ opacity: 1, y: 0 }}
-          className="text-4xl font-serif font-bold text-transparent bg-clip-text bg-gradient-to-r from-amber-200 via-amber-400 to-amber-600 drop-shadow-[0_2px_10px_rgba(245,158,11,0.3)] md:text-6xl"
         >
-          {t('hero.title')}
-        </motion.h1>
-
-        <motion.p
-          initial={{ opacity: 0, y: 20 }}
-          animate={{ opacity: 1, y: 0 }}
-          transition={{ delay: 0.05 }}
-          className="mx-auto max-w-2xl px-4 text-sm text-slate-300 md:text-base"
-        >
-          Explore the Tibia Cyclopedia your way: by classification first, by direct search, or by your latest viewed creatures.
-        </motion.p>
+          <PageHeader
+            title={t('hero.title')}
+            subtitle={t('hero.subtitle')}
+            icon={faBook}
+          />
+        </motion.div>
 
         <motion.div
           initial={{ opacity: 0, y: 20 }}
           animate={{ opacity: 1, y: 0 }}
           transition={{ delay: 0.1 }}
-          className="relative z-20 mx-auto max-w-4xl px-4"
+          className="relative z-20 mx-auto max-w-6xl px-4"
         >
-          <div className="flex flex-col gap-2 rounded-2xl border border-slate-700 bg-slate-900/80 p-2 shadow-2xl backdrop-blur-xl">
-            <div className="flex flex-col gap-2 md:flex-row">
-              <div className="md:min-w-[220px]">
-                <select
-                  value={mode}
-                  onChange={(event) => setMode(event.target.value as SearchMode)}
-                  className="h-full w-full rounded-xl border border-slate-700 bg-slate-950 px-4 py-3 text-sm text-slate-100 outline-none focus:border-amber-500"
-                >
-                  <option value="creatures">Creatures</option>
-                  <option value="bosses">Bosses</option>
-                  <option value="quests">Quests</option>
-                  <option value="items">Loot</option>
-                  <option value="zones">Zones</option>
-                </select>
-              </div>
+          <AppCard className="flex flex-col gap-2 p-2 shadow-2xl">
+            <div className="flex min-w-0 flex-col gap-2 lg:flex-row lg:items-center">
+              <AppTabs
+                className="min-w-0 lg:flex-1"
+                activeKey={mode}
+                onChange={(key) => setMode(key as SearchMode)}
+                items={cyclopediaSections.map((section) => ({
+                  key: section.mode,
+                  label: t(section.i18nLabel),
+                  icon: <FontAwesomeIcon icon={section.icon} className="w-4" />,
+                }))}
+              />
 
-              <div className="flex shrink-0 overflow-x-auto rounded-xl bg-slate-950 p-1">
-                <button onClick={() => setMode('creatures')} className={`flex items-center gap-2 rounded-lg px-4 py-3 font-medium transition-all ${mode === 'creatures' ? 'bg-amber-500 text-white shadow-lg' : 'text-slate-400 hover:text-white'}`}>
-                  <Sword size={18} />
-                  <span className="hidden sm:inline">Creatures</span>
-                </button>
-                <button onClick={() => setMode('bosses')} className={`flex items-center gap-2 rounded-lg px-4 py-3 font-medium transition-all ${mode === 'bosses' ? 'bg-amber-500 text-white shadow-lg' : 'text-slate-400 hover:text-white'}`}>
-                  <Crown size={18} />
-                  <span className="hidden sm:inline">Bosses</span>
-                </button>
-                <button onClick={() => setMode('items')} className={`flex items-center gap-2 rounded-lg px-4 py-3 font-medium transition-all ${mode === 'items' ? 'bg-amber-500 text-white shadow-lg' : 'text-slate-400 hover:text-white'}`}>
-                  <Gem size={18} />
-                  <span className="hidden sm:inline">Loot</span>
-                </button>
-                <button onClick={() => setMode('quests')} className={`flex items-center gap-2 rounded-lg px-4 py-3 font-medium transition-all ${mode === 'quests' ? 'bg-amber-500 text-white shadow-lg' : 'text-slate-400 hover:text-white'}`}>
-                  <ScrollText size={18} />
-                  <span className="hidden sm:inline">Quests</span>
-                </button>
-                <button onClick={() => setMode('zones')} className={`flex items-center gap-2 rounded-lg px-4 py-3 font-medium transition-all ${mode === 'zones' ? 'bg-amber-500 text-white shadow-lg' : 'text-slate-400 hover:text-white'}`}>
-                  <MapPin size={18} />
-                  <span className="hidden sm:inline">Zones</span>
-                </button>
-              </div>
-
-              <div className="relative flex-1">
-                <input
+              <div className="min-w-0 lg:w-[min(420px,40vw)]">
+                <AppInput
+                  search
                   type="text"
-                  placeholder={mode === 'creatures' ? 'Search creatures (or use classification buttons below)...' : t('search.placeholder')}
+                  placeholder={searchPlaceholder}
                   value={searchTerm}
                   onChange={(event) => setSearchTerm(event.target.value)}
-                  className="h-full w-full rounded-xl bg-slate-800/50 pl-12 pr-4 text-white outline-none transition-colors placeholder:text-slate-500 focus:bg-slate-800"
+                  onKeyDown={(event) => {
+                    if (event.key === 'Enter') {
+                      event.preventDefault();
+                      void performSearch(true);
+                    }
+                  }}
+                  onSearch={() => {
+                    void performSearch(true);
+                  }}
+                  searchAriaLabel={t('a11y.search')}
+                  className="h-12"
                 />
-                <Search className="absolute left-4 top-1/2 -translate-y-1/2 text-slate-500" size={20} />
               </div>
             </div>
 
             {(mode === 'creatures' || mode === 'bosses') && (
               <div className="space-y-2">
                 {mode === 'creatures' && (
-                  <div className="grid grid-cols-2 gap-2 sm:grid-cols-4 md:grid-cols-8">
+                  <div className="flex justify-end">
+                    <button
+                      type="button"
+                      onClick={toggleCategories}
+                      className="app-button-ghost h-9 px-3 text-xs"
+                    >
+                      {showCategories ? t('cyclopedia.categories.hide') : t('cyclopedia.categories.show')}
+                    </button>
+                  </div>
+                )}
+
+                {mode === 'creatures' && showCategories && (
+                  <div className="grid grid-cols-2 gap-2 sm:grid-cols-3 md:grid-cols-5 lg:grid-cols-8">
                     {CREATURE_CATEGORIES.map((category) => {
                       const active = creatureCategory === category;
+                      const CategoryIcon = iconByCategory(category);
                       return (
                         <button
                           key={category || 'all'}
                           onClick={() => setCreatureCategory(category)}
-                          className={`rounded-xl border px-3 py-2 text-xs font-semibold transition ${active ? 'border-amber-400 bg-amber-500/20 text-amber-200' : 'border-slate-700 bg-slate-950 text-slate-300 hover:border-slate-500'}`}
+                          className={`app-stone-panel rounded-xl px-3 py-2 text-left text-xs transition ${active ? 'ring-1 ring-[color:var(--color-primary)] text-[color:var(--color-text)]' : 'text-[color:var(--color-text-muted)] hover:text-[color:var(--color-text)]'}`}
                         >
-                          {category || 'All'}
+                          <div className="mb-1 flex items-center gap-1.5">
+                            <CategoryIcon className="text-[color:var(--color-primary)]" />
+                            <span className="truncate font-semibold">{category || t('cyclopedia.categories.all')}</span>
+                          </div>
+                          <div className="text-[10px] uppercase tracking-wide opacity-75">
+                            {category ? t('cyclopedia.categories.browse') : t('cyclopedia.categories.overview')}
+                          </div>
                         </button>
                       );
                     })}
@@ -320,32 +358,32 @@ const CreaturesPage: React.FC = () => {
                 )}
 
                 {mode === 'creatures' && !searchTerm.trim() && !creatureCategory && (
-                  <div className="flex items-center gap-2 rounded-xl border border-amber-500/20 bg-amber-500/10 px-3 py-2 text-xs text-amber-200">
-                    <Sparkles size={14} /> Classification-first mode active. Pick a category or search directly.
+                  <div className="flex items-center gap-2 rounded-xl border border-[color:var(--color-border)] bg-[color:var(--color-surface-alt)] px-3 py-2 text-xs text-[color:var(--color-text-muted)]">
+                    <Sparkles size={14} /> {t('cyclopedia.helpers.classification')}
                   </div>
                 )}
 
                 {mode === 'bosses' && (
                   <div className="flex items-center gap-2 rounded-xl border border-red-500/20 bg-red-500/10 px-3 py-2 text-xs text-red-200">
-                    <Crown size={14} /> Search and browse boss encounters.
+                    <Crown size={14} /> {t('cyclopedia.helpers.bosses')}
                   </div>
                 )}
 
                 <div className="grid gap-2 sm:grid-cols-2 md:grid-cols-2">
-                <select value={creatureSort} onChange={(event) => setCreatureSort(event.target.value as CreatureSort)} className="rounded-xl border border-slate-700 bg-slate-950 px-4 py-3 text-sm text-slate-100 outline-none focus:border-amber-500">
+                <select value={creatureSort} onChange={(event) => setCreatureSort(event.target.value as CreatureSort)} className="app-input">
                   <option value="name">Sort by name</option>
                   <option value="experience">Sort by experience</option>
                   <option value="hitpoints">Sort by hitpoints</option>
                   <option value="difficulty">Sort by difficulty</option>
                 </select>
-                <button onClick={() => setSortOrder((current) => current === 'asc' ? 'desc' : 'asc')} className="inline-flex items-center justify-center gap-2 rounded-xl border border-slate-700 bg-slate-950 px-4 py-3 text-sm text-slate-100 hover:border-slate-500">
+                <button onClick={() => setSortOrder((current) => current === 'asc' ? 'desc' : 'asc')} className="app-button-ghost inline-flex items-center justify-center gap-2">
                   {sortOrder === 'asc' ? <ArrowDownAZ size={16} /> : <ArrowUpAZ size={16} />}
                   {sortOrder === 'asc' ? 'Ascending' : 'Descending'}
                 </button>
               </div>
               </div>
             )}
-          </div>
+          </AppCard>
         </motion.div>
       </div>
 
@@ -402,7 +440,7 @@ const CreaturesPage: React.FC = () => {
                   {item.item_image_url ? (
                     <img src={item.item_image_url} alt={item.item_name} className="h-12 w-12 rounded-lg bg-slate-950/60 object-contain p-1" loading="lazy" />
                   ) : (
-                    <div className="flex h-12 w-12 items-center justify-center rounded-lg bg-slate-950/60 text-xl">💎</div>
+                    <div className="flex h-12 w-12 items-center justify-center rounded-lg bg-slate-950/60 text-[color:var(--color-primary)]"><FontAwesomeIcon icon={faGem} /></div>
                   )}
                   <div>
                     <div className="text-xl font-bold text-amber-100">{item.item_name}</div>
@@ -499,7 +537,7 @@ const CreaturesPage: React.FC = () => {
 
         {isEmpty && !errorMessage && (
           <div className="py-20 text-center opacity-70">
-            <div className="mb-4 text-6xl">📜</div>
+            <div className="mb-4 text-5xl text-[color:var(--color-primary)]"><FontAwesomeIcon icon={faScroll} /></div>
             <p className="font-serif text-xl text-slate-300">No creatures found.</p>
             <p className="mt-2 text-sm text-slate-500">Try another search or category.</p>
           </div>

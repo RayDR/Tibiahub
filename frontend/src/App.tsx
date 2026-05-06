@@ -74,7 +74,7 @@ function App() {
   return (
     <AuthProvider>
       <ToastProvider>
-        <div className="min-h-screen bg-slate-950 text-slate-200 font-sans selection:bg-amber-500/30 pt-20">
+        <div className="min-h-screen text-[color:var(--color-text)] font-sans pt-20" style={{ backgroundColor: 'var(--color-bg)' }}>
           <Navigation />
 
           <div className="container mx-auto px-4">
@@ -82,9 +82,12 @@ function App() {
               <Route path="/" element={<HomePage />} />
               <Route path="/cyclopedia" element={<CreaturesPage />} />
               <Route path="/bestiary" element={<Navigate to="/cyclopedia" replace />} />
+              <Route path="/quests" element={<Navigate to="/cyclopedia?tab=quests" replace />} />
               <Route path="/creatures/:slug" element={<CreatureDetailPage />} />
               <Route path="/quests/:questId" element={<QuestDetailPage />} />
               <Route path="/recommendations" element={<HuntRecommendationsPage />} />
+              <Route path="/planner" element={<Navigate to="/recommendations" replace />} />
+              <Route path="/hunt" element={<Navigate to="/recommendations" replace />} />
               <Route path="/requests" element={<QuestViewerPage />} />
 
               {/* Public Event Route */}

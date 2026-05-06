@@ -14,16 +14,60 @@ i18n
                         "search": "Cyclopedia",
                         "planner": "Team Planner",
                         "quests": "Quests",
+                        "creatures": "Creatures",
+                        "bosses": "Bosses",
+                        "loot": "Loot",
+                        "zones": "Zones",
                         "guild": "Guild",
                         "admin": "Admin",
                         "management": "Management"
                     },
                     "hero": {
                         "title": "Tibia Cyclopedia",
-                        "subtitle": "The ultimate companion for your adventures."
+                        "subtitle": "Complete your weekly tasks, find your next hunt, and plan your next set."
                     },
                     "search": {
-                        "placeholder": "Search creatures, loot, or zones..."
+                        "placeholder": "Search...",
+                        "creaturesPlaceholder": "Search creatures...",
+                        "bossesPlaceholder": "Search bosses...",
+                        "lootPlaceholder": "Search loot...",
+                        "questsPlaceholder": "Search quests...",
+                        "zonesPlaceholder": "Search zones..."
+                    },
+                    "themes": {
+                        "default": "Default",
+                        "defaultDescription": "Modern blue dark theme",
+                        "medieval": "Medieval",
+                        "medievalDescription": "Gold accents with deep blue",
+                        "tibiaStone": "Tibia Stone",
+                        "tibiaStoneDescription": "Stone and metal inspired"
+                    },
+                    "cyclopedia": {
+                        "categories": {
+                            "all": "All",
+                            "overview": "Overview",
+                            "browse": "Browse",
+                            "show": "Show categories",
+                            "hide": "Hide categories"
+                        },
+                        "helpers": {
+                            "classification": "Classification-first mode active. Pick a category or search directly.",
+                            "bosses": "Search and browse boss encounters."
+                        }
+                    },
+                    "language": {
+                        "english": "English",
+                        "spanish": "Spanish",
+                        "regionUS": "EN · US",
+                        "regionMX": "ES · Mexico"
+                    },
+                    "a11y": {
+                        "openCyclopediaMenu": "Open Cyclopedia menu",
+                        "search": "Search",
+                        "languageSelector": "Language selector",
+                        "switchLanguageTo": "Switch language to {{language}}",
+                        "themeSelector": "Theme selector",
+                        "switchThemeTo": "Switch theme to {{theme}}"
                     },
                     "creature": {
                         "hp": "Hitpoints",
@@ -226,7 +270,11 @@ i18n
                                 "overview": "Overview",
                                 "participants": "Participants",
                                 "prizes": "Prizes",
-                                "winners": "Winners",
+                                "quests": "Quests",
+                                "creatures": "Creaturas",
+                                "bosses": "Bosses",
+                                "loot": "Loot",
+                                "zones": "Zonas",
                                 "admin": "Admin Tools"
                             }
                         },
@@ -391,18 +439,62 @@ i18n
                     "nav": {
                         "home": "Inicio",
                         "search": "Cyclopedia",
-                        "planner": "Planeador",
-                        "quests": "Misiones",
+                        "planner": "Planner",
+                        "quests": "Quests",
+                        "creatures": "Creaturas",
+                        "bosses": "Bosses",
+                        "loot": "Loot",
+                        "zones": "Zonas",
                         "guild": "Gremio",
                         "admin": "Admin",
                         "management": "Administración"
                     },
                     "hero": {
                         "title": "Cyclopedia de Tibia",
-                        "subtitle": "El compañero definitivo para tus aventuras."
+                        "subtitle": "Completa tus weekly tasks, encuentra tu próxima hunt y consigue tu próximo set."
                     },
                     "search": {
-                        "placeholder": "Buscar criaturas, botín o zonas..."
+                        "placeholder": "Buscar...",
+                        "creaturesPlaceholder": "Buscar creaturas...",
+                        "bossesPlaceholder": "Buscar bosses...",
+                        "lootPlaceholder": "Buscar loot...",
+                        "questsPlaceholder": "Buscar quests...",
+                        "zonesPlaceholder": "Buscar zonas..."
+                    },
+                    "themes": {
+                        "default": "Default",
+                        "defaultDescription": "Tema oscuro azul moderno",
+                        "medieval": "Medieval",
+                        "medievalDescription": "Acentos dorados con azul profundo",
+                        "tibiaStone": "Tibia Stone",
+                        "tibiaStoneDescription": "Inspirado en piedra y metal"
+                    },
+                    "cyclopedia": {
+                        "categories": {
+                            "all": "Todas",
+                            "overview": "Vista general",
+                            "browse": "Explorar",
+                            "show": "Mostrar categorías",
+                            "hide": "Ocultar categorías"
+                        },
+                        "helpers": {
+                            "classification": "Modo por clasificación activo. Elige una categoría o busca directamente.",
+                            "bosses": "Busca y explora encuentros de bosses."
+                        }
+                    },
+                    "language": {
+                        "english": "Inglés",
+                        "spanish": "Español",
+                        "regionUS": "EN · US",
+                        "regionMX": "ES · México"
+                    },
+                    "a11y": {
+                        "openCyclopediaMenu": "Abrir menú de Cyclopedia",
+                        "search": "Buscar",
+                        "languageSelector": "Selector de idioma",
+                        "switchLanguageTo": "Cambiar idioma a {{language}}",
+                        "themeSelector": "Selector de tema",
+                        "switchThemeTo": "Cambiar tema a {{theme}}"
                     },
                     "creature": {
                         "hp": "Vida",

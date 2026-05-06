@@ -4,6 +4,12 @@ import { Plus, Trash2, Users, Map, Swords, TrendingUp, User, Shield, Zap, Sparkl
 import { motion, AnimatePresence } from 'framer-motion';
 import { HuntZone } from '../types';
 import TibiaMap from '../components/TibiaMap';
+import { faCompass } from '@fortawesome/free-solid-svg-icons';
+import PageHeader from '../components/ui/PageHeader';
+import AppTabs from '../components/ui/AppTabs';
+import AppButton from '../components/ui/AppButton';
+import AppCard from '../components/ui/AppCard';
+import AppInput from '../components/ui/AppInput';
 
 // Vocation Config
 const VOCATIONS = [
@@ -126,12 +132,11 @@ const HuntRecommendationsPage: React.FC = () => {
 
       {/* Hero Section */}
       <div className="container mx-auto px-4 mb-12 text-center">
-        <h1 className="text-5xl font-serif font-bold text-amber-500 mb-4 drop-shadow-[0_2px_10px_rgba(245,158,11,0.3)]">
-          Hunt Finder
-        </h1>
-        <p className="text-slate-400 text-lg max-w-2xl mx-auto">
-          Advanced algorithmic recommendations based on vocation synergy, level optimization, and loot data.
-        </p>
+        <PageHeader
+          title="Hunt Finder"
+          subtitle="Advanced recommendations based on vocation synergy, levels and loot efficiency."
+          icon={faCompass}
+        />
       </div>
 
       <div className="container mx-auto px-4 grid lg:grid-cols-12 gap-8">
@@ -140,25 +145,19 @@ const HuntRecommendationsPage: React.FC = () => {
         <div className="lg:col-span-4 space-y-6">
 
           {/* Mode Switch */}
-          <div className="bg-slate-900/80 border border-slate-700 p-1 rounded-xl flex">
-            <button
-              onClick={() => { setMode('solo'); setRecommendations(null); }}
-              className={`flex-1 py-2 rounded-lg text-sm font-bold transition-all ${mode === 'solo' ? 'bg-amber-600 text-white shadow-lg' : 'text-slate-500 hover:text-slate-300'}`}
-            >
-              Solo Hunt
-            </button>
-            <button
-              onClick={() => { setMode('party'); setRecommendations(null); }}
-              className={`flex-1 py-2 rounded-lg text-sm font-bold transition-all ${mode === 'party' ? 'bg-amber-600 text-white shadow-lg' : 'text-slate-500 hover:text-slate-300'}`}
-            >
-              Party Team
-            </button>
-          </div>
+          <AppTabs
+            activeKey={mode}
+            onChange={(key) => {
+              setMode(key as 'solo' | 'party');
+              setRecommendations(null);
+            }}
+            items={[
+              { key: 'solo', label: 'Solo Hunt' },
+              { key: 'party', label: 'Party Team' },
+            ]}
+          />
 
-          <motion.div
-            layout
-            className="bg-slate-900/80 border border-slate-700 rounded-2xl p-6 backdrop-blur shadow-2xl"
-          >
+          <AppCard className="p-6 shadow-2xl">
             <div className="flex items-center justify-between mb-6">
               <h2 className="text-xl font-bold text-white flex items-center gap-2">
                 {mode === 'solo' ? <User className="text-amber-500" /> : <Users className="text-amber-500" />}
@@ -192,11 +191,11 @@ const HuntRecommendationsPage: React.FC = () => {
 
                 <div>
                   <label className="text-xs text-slate-500 uppercase font-bold mb-2 block">Level</label>
-                  <input
+                  <AppInput
                     type="number"
                     value={soloLevel}
                     onChange={(e) => setSoloLevel(Number(e.target.value))}
-                    className="w-full bg-slate-950 border border-slate-700 rounded-lg px-4 py-3 text-white focus:border-amber-500 outline-none font-mono text-lg"
+                    className="font-mono text-lg"
                   />
                 </div>
               </div>
@@ -277,13 +276,14 @@ const HuntRecommendationsPage: React.FC = () => {
 
               {mode === 'party' && (
                 <>
-                  <button
+                  <AppButton
                     onClick={addMember}
                     disabled={party.length >= 4}
-                    className="w-full py-3 border-2 border-dashed border-slate-700 rounded-xl text-slate-500 hover:text-amber-500 hover:border-amber-500/50 transition-colors flex items-center justify-center gap-2 text-sm font-bold disabled:opacity-50 disabled:cursor-not-allowed"
+                    variant="ghost"
+                    className="w-full border-2 border-dashed text-sm disabled:opacity-50 disabled:cursor-not-allowed"
                   >
                     <Plus size={16} /> Add Party Member
-                  </button>
+                  </AppButton>
 
                   <div className="mt-6 p-4 bg-slate-950/50 rounded-xl border border-dashed border-slate-700">
                     <h3 className="text-sm font-bold text-slate-400 mb-2 flex items-center gap-2">
@@ -309,16 +309,16 @@ const HuntRecommendationsPage: React.FC = () => {
                 </>
               )}
 
-              <button
+              <AppButton
                 onClick={findSpots}
                 disabled={loading}
-                className="w-full py-4 bg-gradient-to-r from-amber-600 to-amber-500 hover:from-amber-500 hover:to-amber-400 text-white font-bold rounded-xl shadow-lg shadow-amber-900/20 active:scale-95 transition-all flex items-center justify-center gap-2"
+                className="w-full h-14 inline-flex items-center justify-center gap-2"
               >
-                {loading ? <div className="animate-spin">⚔️</div> : <Map size={20} />}
+                {loading ? <div className="animate-spin">...</div> : <Map size={20} />}
                 Find Hunting Spots
-              </button>
+              </AppButton>
             </div>
-          </motion.div>
+          </AppCard>
         </div>
 
         {/* Results Area */}
@@ -332,7 +332,7 @@ const HuntRecommendationsPage: React.FC = () => {
 
           {loading && (
             <div className="h-full flex flex-col items-center justify-center text-amber-500 min-h-[400px]">
-              <div className="animate-bounce text-4xl mb-4">🐉</div>
+              <Map size={42} className="mb-4 animate-pulse" />
               <p className="font-serif text-lg">Scouting optimal locations...</p>
             </div>
           )}

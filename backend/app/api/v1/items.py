@@ -32,7 +32,14 @@ def _get_setting(db: Session, key: str, default: str = "") -> str:
 
 
 def _is_external_detail_fallback_enabled(db: Session) -> bool:
-    return _get_setting(db, "bestiary_allow_external_detail_fallback", "1") == "1"
+    return (
+        _get_setting(db, "external_auto_fallback_enabled", "0") == "1"
+        or _get_setting(db, "bestiary_allow_external_detail_fallback", "0") == "1"
+    )
+
+
+def _is_image_autofetch_enabled(db: Session) -> bool:
+    return _get_setting(db, "auto_fetch_missing_images_enabled", "0") == "1"
 
 
 def _build_item_special_filepath(item_name: str) -> str:
@@ -81,6 +88,9 @@ async def get_item_image(item_id: int, request: Request, db: Session = Depends(g
         loot = db.query(LootModel).filter(LootModel.external_id == str(item_id)).first()
     if not loot:
         raise HTTPException(status_code=404, detail="Item not found")
+
+    if not _is_image_autofetch_enabled(db):
+        raise HTTPException(status_code=404, detail="Image not cached locally")
 
     resolved_url = loot.item_image_url
     if not resolved_url:

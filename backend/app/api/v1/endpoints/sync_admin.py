@@ -1,28 +1,74 @@
-"""Admin endpoints for data synchronization and local metadata curation."""
-from typing import Any, List, Optional
-import asyncio
-from threading import Lock
-from uuid import uuid4
+"""Admin sync endpoints backed by centralized SyncService."""
+from __future__ import annotations
 
-from fastapi import APIRouter, BackgroundTasks, Depends, HTTPException, Query, status
-from sqlalchemy.orm import Session
-from pydantic import BaseModel
-
-from app.db.database import SessionLocal, get_db
-from app.models.user import User
-from app.api.v1.endpoints.auth import get_current_admin_user
-from app.services.external_sync_service import ExternalSyncService
-from app.models.external_data import APISync, Item, HuntingPlace, TibiaWikiQuest, SyncJob
-from app.models.creature import Creature
-from app.services.entity_metadata_service import EntityMetadataService
 from datetime import datetime
+from typing import Any, Optional
+
+from fastapi import APIRouter, Depends, HTTPException, Query
+from pydantic import BaseModel
+from sqlalchemy.orm import Session
+
+from app.api.v1.endpoints.auth import get_current_admin_user
+from app.db.database import get_db
+from app.models.creature import Creature
+from app.models.external_data import SyncJob
+from app.models.hunt_zone import HuntZone
+from app.models.loot import Loot
 from app.models.settings import SystemSettings as SettingsModel
+from app.models.quest import Quest
+from app.models.user import User
+from app.services.sync_service import SyncService
 
 router = APIRouter()
-_SYNC_JOB_STORE: dict[str, dict[str, Any]] = {}
-_SYNC_LOCK = Lock()
-_RUNNING_SOURCES: set[str] = set()
-SYNC_STEP_TIMEOUT_SECONDS = 60
+
+
+class SyncJobResponse(BaseModel):
+    job_id: str
+    job_type: str
+    status: str
+    progress_current: int
+    progress_total: int
+    progress_percent: int
+    current_step: Optional[str] = None
+    message: Optional[str] = None
+    cancel_requested: bool
+    started_at: Optional[str] = None
+    finished_at: Optional[str] = None
+    created_at: Optional[str] = None
+    error: Optional[str] = None
+    summary: Optional[dict[str, Any]] = None
+
+
+class SyncRuntimeSettings(BaseModel):
+    # Legacy keys still consumed by existing DataSyncPanel.
+    bestiary_cache_only_reads: bool
+    bestiary_allow_external_detail_fallback: bool
+    bestiary_search_page_size: int
+    sync_cooldown_minutes: int
+
+    # New canonical keys.
+    external_auto_fallback_enabled: bool
+    auto_fetch_missing_images_enabled: bool
+    scheduled_sync_enabled: bool
+    sync_request_timeout_seconds: int
+    sync_retry_count: int
+    sync_notify_email_enabled: bool
+
+
+class SyncRuntimeSettingsUpdate(BaseModel):
+    # Legacy patch keys accepted for backward compatibility.
+    bestiary_cache_only_reads: Optional[bool] = None
+    bestiary_allow_external_detail_fallback: Optional[bool] = None
+    bestiary_search_page_size: Optional[int] = None
+    sync_cooldown_minutes: Optional[int] = None
+
+    # New canonical patch keys.
+    external_auto_fallback_enabled: Optional[bool] = None
+    auto_fetch_missing_images_enabled: Optional[bool] = None
+    scheduled_sync_enabled: Optional[bool] = None
+    sync_request_timeout_seconds: Optional[int] = None
+    sync_retry_count: Optional[int] = None
+    sync_notify_email_enabled: Optional[bool] = None
 
 
 def _get_setting(db: Session, key: str, default: str = "") -> str:
@@ -39,330 +85,243 @@ def _set_setting(db: Session, key: str, value: str, description: str = "") -> No
     else:
         db.add(SettingsModel(key=key, value=value, description=description, is_active=True))
 
-class SyncResponse(BaseModel):
-    """Response from sync operations"""
-    api: str
-    status: str
-    source: Optional[str] = None
-    created: int = 0
-    updated: int = 0
-    errors: int = 0
-    total: int = 0
-    error: Optional[str] = None
-    sync_id: int
-    message: Optional[str] = None
-    conflicts: Optional[List[dict[str, Any]]] = None
 
-class SyncLogResponse(BaseModel):
-    """Sync log entry"""
-    id: int
-    api_name: str
-    endpoint: str
-    status: str
-    source: Optional[str]
-    total_items: Optional[int]
-    processed_items: int
-    error_count: int
-    message: Optional[str]
-    error_details: Optional[str]
-    started_at: datetime
-    completed_at: Optional[datetime]
-
-class SyncStats(BaseModel):
-    """Sync statistics"""
-    creatures: int
-    items: int
-    hunting_places: int
-    quests: int
-    sync_logs: int
-
-class DataComparison(BaseModel):
-    """Comparison between old and new data"""
-    field: str
-    old_value: Any
-    new_value: Any
-    different: bool
-
-class ConflictItem(BaseModel):
-    """Item with conflicts"""
-    api_name: str
-    item_name: str
-    conflicts: List[DataComparison]
-    action: str = "pending"
-
-class ConflictResolution(BaseModel):
-    """Resolution for conflicts"""
-    conflicts: List[ConflictItem]
-    action: str  # 'skip_all' or 'overwrite_all'
+def _to_job_response(job) -> SyncJobResponse:
+    # Keep legacy status names expected by frontend polling logic.
+    status_map = {
+        "completed": "success",
+        "failed": "error",
+    }
+    return SyncJobResponse(
+        job_id=job.id,
+        job_type=job.job_type,
+        status=status_map.get(job.status, job.status),
+        progress_current=job.progress_current or 0,
+        progress_total=job.progress_total or 0,
+        progress_percent=job.progress_percent or job.progress or 0,
+        current_step=job.current_step,
+        message=job.message,
+        cancel_requested=bool(job.cancel_requested),
+        started_at=job.started_at.isoformat() if job.started_at else None,
+        finished_at=job.finished_at.isoformat() if job.finished_at else None,
+        created_at=job.created_at.isoformat() if job.created_at else None,
+        error=job.error_message or job.error,
+        summary=job.result_summary,
+    )
 
 
-class MetadataFlagRequest(BaseModel):
-    entity_type: str
-    entity_key: str
-    display_name: str
-    entity_id: Optional[int] = None
-    is_featured: Optional[bool] = None
-    is_pinned: Optional[bool] = None
-    is_favorite: Optional[bool] = None
-    notes: Optional[str] = None
+def _to_legacy_log(job) -> dict[str, Any]:
+    mapped_status = _to_job_response(job).status
+    return {
+        "id": job.id,
+        "api_name": job.job_type,
+        "endpoint": f"/sync/{job.job_type}",
+        "status": mapped_status,
+        "source": job.job_type,
+        "total_items": job.progress_total or 0,
+        "processed_items": job.progress_current or 0,
+        "error_count": 1 if mapped_status == "error" else 0,
+        "message": job.message,
+        "error_details": job.error_message or job.error,
+        "started_at": (job.started_at or job.created_at).isoformat() if (job.started_at or job.created_at) else "",
+        "completed_at": job.finished_at.isoformat() if job.finished_at else None,
+    }
 
 
-class SyncRuntimeSettings(BaseModel):
-    bestiary_cache_only_reads: bool
-    bestiary_allow_external_detail_fallback: bool
-    bestiary_search_page_size: int
-    sync_cooldown_minutes: int
+def _normalize_target(target: str) -> str:
+    value = (target or "").strip().lower()
+    aliases = {
+        "all": "full",
+        "full": "full",
+        "creatures": "creatures",
+        "creature": "creatures",
+        "bosses": "bosses",
+        "items": "items",
+        "item": "items",
+        "quests": "quests",
+        "quest": "quests",
+        "hunting_places": "hunt-zones",
+        "hunting-places": "hunt-zones",
+        "hunt-zones": "hunt-zones",
+        "zones": "hunt-zones",
+        "images": "images",
+    }
+    normalized = aliases.get(value)
+    if not normalized:
+        raise HTTPException(status_code=404, detail=f"Unknown sync target '{target}'")
+    return normalized
 
 
-class SyncRuntimeSettingsUpdate(BaseModel):
-    bestiary_cache_only_reads: Optional[bool] = None
-    bestiary_allow_external_detail_fallback: Optional[bool] = None
-    bestiary_search_page_size: Optional[int] = None
-    sync_cooldown_minutes: Optional[int] = None
-
-
-def _normalize_sync_source(api_name: str) -> str:
-    api = (api_name or "").strip().lower()
-    if api in {"creatures", "creature"}:
-        return "creatures"
-    if api in {"items", "item"}:
-        return "items"
-    if api in {"hunting-places", "hunting_places", "zones", "hunt-zones"}:
-        return "hunting-places"
-    if api in {"quests", "quest"}:
-        return "quests"
-    if api in {"all", "bestiary"}:
-        return "all"
-    raise HTTPException(status_code=404, detail=f"Unknown sync api '{api_name}'")
-
-
-def _set_job(job_id: str, **kwargs: Any) -> None:
-    with _SYNC_LOCK:
-        entry = _SYNC_JOB_STORE.get(job_id, {})
-        entry.update(kwargs)
-        _SYNC_JOB_STORE[job_id] = entry
-
-
-def _syncjob_set_status(db: Session, job_id: str, **kwargs: Any) -> None:
-    row = db.query(SyncJob).filter(SyncJob.id == job_id).first()
-    if not row:
-        return
-    for key, value in kwargs.items():
-        setattr(row, key, value)
-    db.add(row)
-    db.commit()
-
-
-def _is_cancel_requested(db: Session, job_id: str) -> bool:
-    row = db.query(SyncJob).filter(SyncJob.id == job_id).first()
-    return bool(row and row.cancel_requested)
-
-
-class SyncCancelledError(Exception):
-    pass
-
-
-def _get_running_sources_for_target(target: str) -> list[str]:
-    if target == "all":
-        return [source for source in ["creatures", "items", "hunting-places", "quests"] if source in _RUNNING_SOURCES]
-    return [target] if target in _RUNNING_SOURCES else []
-
-
-def _execute_sync_job(job_id: str, target: str, mode: str) -> None:
-    _set_job(job_id, status="running", started_at=datetime.utcnow().isoformat(), progress=5)
-    db = SessionLocal()
+def _start_job(
+    db: Session,
+    *,
+    target: str,
+    requester: User,
+    force: bool,
+    skip_images: bool,
+    limit: int | None,
+) -> dict[str, Any]:
     try:
-        _syncjob_set_status(db, job_id, status="running", started_at=datetime.utcnow(), progress=5)
-        if _is_cancel_requested(db, job_id):
-            raise SyncCancelledError("Cancellation requested before execution")
-
-        results: dict[str, Any] = {}
-        if target in {"creatures", "all"}:
-            results["creatures"] = asyncio.run(
-                asyncio.wait_for(ExternalSyncService.sync_creatures(db, mode=mode), timeout=SYNC_STEP_TIMEOUT_SECONDS)
-            )
-            _set_job(job_id, progress=30)
-            _syncjob_set_status(db, job_id, progress=30)
-            if _is_cancel_requested(db, job_id):
-                raise SyncCancelledError("Cancellation requested")
-        if target in {"items", "all"}:
-            results["items"] = asyncio.run(
-                asyncio.wait_for(ExternalSyncService.sync_items(db), timeout=SYNC_STEP_TIMEOUT_SECONDS)
-            )
-            _set_job(job_id, progress=55)
-            _syncjob_set_status(db, job_id, progress=55)
-            if _is_cancel_requested(db, job_id):
-                raise SyncCancelledError("Cancellation requested")
-        if target in {"hunting-places", "all"}:
-            results["hunting_places"] = asyncio.run(
-                asyncio.wait_for(ExternalSyncService.sync_hunting_places(db), timeout=SYNC_STEP_TIMEOUT_SECONDS)
-            )
-            _set_job(job_id, progress=80)
-            _syncjob_set_status(db, job_id, progress=80)
-            if _is_cancel_requested(db, job_id):
-                raise SyncCancelledError("Cancellation requested")
-        if target in {"quests", "all"}:
-            results["quests"] = asyncio.run(
-                asyncio.wait_for(ExternalSyncService.sync_quests(db), timeout=SYNC_STEP_TIMEOUT_SECONDS)
-            )
-
-        if _is_cancel_requested(db, job_id):
-            raise SyncCancelledError("Cancellation requested")
-
-        _set_job(job_id, status="completed", finished_at=datetime.utcnow().isoformat(), results=results, progress=100)
-        _syncjob_set_status(db, job_id, status="completed", finished_at=datetime.utcnow(), progress=100, error=None)
-    except SyncCancelledError as exc:
-        _set_job(job_id, status="cancelled", finished_at=datetime.utcnow().isoformat(), error=str(exc))
-        _syncjob_set_status(db, job_id, status="cancelled", finished_at=datetime.utcnow(), error=str(exc))
-    except asyncio.TimeoutError:
-        message = f"Sync step timeout after {SYNC_STEP_TIMEOUT_SECONDS}s"
-        _set_job(job_id, status="failed", finished_at=datetime.utcnow().isoformat(), error=message)
-        _syncjob_set_status(db, job_id, status="failed", finished_at=datetime.utcnow(), error=message)
-    except Exception as exc:
-        _set_job(job_id, status="failed", finished_at=datetime.utcnow().isoformat(), error=str(exc))
-        _syncjob_set_status(db, job_id, status="failed", finished_at=datetime.utcnow(), error=str(exc))
-    finally:
-        with _SYNC_LOCK:
-            if target == "all":
-                _RUNNING_SOURCES.discard("creatures")
-                _RUNNING_SOURCES.discard("items")
-                _RUNNING_SOURCES.discard("hunting-places")
-                _RUNNING_SOURCES.discard("quests")
-            else:
-                _RUNNING_SOURCES.discard(target)
-        db.close()
-
-
-def _start_sync_job(background_tasks: BackgroundTasks, target: str, mode: str) -> dict[str, Any]:
-    with _SYNC_LOCK:
-        already_running = _get_running_sources_for_target(target)
-        if already_running:
-            raise HTTPException(status_code=409, detail=f"Sync already running for: {', '.join(already_running)}")
-
-        if target == "all":
-            _RUNNING_SOURCES.update({"creatures", "items", "hunting-places", "quests"})
-        else:
-            _RUNNING_SOURCES.add(target)
-
-        job_id = uuid4().hex
-        _SYNC_JOB_STORE[job_id] = {
-            "job_id": job_id,
-            "target": target,
-            "mode": mode,
-            "status": "pending",
-            "progress": 0,
-            "created_at": datetime.utcnow().isoformat(),
-        }
-
-        db = SessionLocal()
-        try:
-            db.add(
-                SyncJob(
-                    id=job_id,
-                    job_type=target,
-                    status="pending",
-                    progress=0,
-                    cancel_requested=False,
-                )
-            )
-            db.commit()
-        finally:
-            db.close()
-
-    background_tasks.add_task(_execute_sync_job, job_id, target, mode)
-    return _SYNC_JOB_STORE[job_id]
-
-# ============ SYNC ENDPOINTS ============
-
-@router.post("/sync/creatures", response_model=SyncResponse)
-async def sync_creatures(
-    mode: str = Query("compare", description="Sync mode: 'auto' or 'compare'"),
-    background_tasks: BackgroundTasks = None,
-    db: Session = Depends(get_db),
-    current_user: User = Depends(get_current_admin_user)
-):
-    """
-    Sync creatures from TibiaWiki API
-    Runs in background, returns sync ID to track progress
-    Mode: 'auto' (overwrite without asking) or 'compare' (check conflicts first)
-    """
-    _ = (current_user, db)
-    if background_tasks is None:
-        raise HTTPException(status_code=500, detail="Background runner unavailable")
-    if mode == "compare":
-        conflicts = await ExternalSyncService.check_creature_conflicts(db)
-        if conflicts:
-            return SyncResponse(api="creatures", status="conflicts_found", sync_id=0, message=f"Found {len(conflicts)} conflicts. Resolve them first.", conflicts=conflicts)
-    job = _start_sync_job(background_tasks, target="creatures", mode=mode)
-    return SyncResponse(api="creatures", status="queued", sync_id=0, message=f"Sync started. job_id={job['job_id']}")
-
-@router.post("/sync/items", response_model=SyncResponse)
-async def sync_items(
-    background_tasks: BackgroundTasks = None,
-    db: Session = Depends(get_db),
-    current_user: User = Depends(get_current_admin_user)
-):
-    """
-    Sync items from TibiaWiki API
-    Runs in background
-    """
-    _ = (current_user, db)
-    if background_tasks is None:
-        raise HTTPException(status_code=500, detail="Background runner unavailable")
-    job = _start_sync_job(background_tasks, target="items", mode="auto")
-    return SyncResponse(api="items", status="queued", sync_id=0, message=f"Sync started. job_id={job['job_id']}")
-
-@router.post("/sync/hunting-places", response_model=SyncResponse)
-async def sync_hunting_places(
-    background_tasks: BackgroundTasks = None,
-    db: Session = Depends(get_db),
-    current_user: User = Depends(get_current_admin_user)
-):
-    """
-    Sync hunting places from TibiaWiki API
-    Runs in background
-    """
-    _ = (current_user, db)
-    if background_tasks is None:
-        raise HTTPException(status_code=500, detail="Background runner unavailable")
-    job = _start_sync_job(background_tasks, target="hunting-places", mode="auto")
-    return SyncResponse(api="hunting_places", status="queued", sync_id=0, message=f"Sync started. job_id={job['job_id']}")
-
-@router.post("/sync/quests", response_model=SyncResponse)
-async def sync_quests(
-    background_tasks: BackgroundTasks = None,
-    db: Session = Depends(get_db),
-    current_user: User = Depends(get_current_admin_user)
-):
-    """
-    Sync quests from TibiaWiki API
-    Runs in background
-    """
-    _ = (current_user, db)
-    if background_tasks is None:
-        raise HTTPException(status_code=500, detail="Background runner unavailable")
-    job = _start_sync_job(background_tasks, target="quests", mode="auto")
-    return SyncResponse(api="quests", status="queued", sync_id=0, message=f"Sync started. job_id={job['job_id']}")
-
-@router.post("/sync/all", response_model=dict)
-async def sync_all(
-    background_tasks: BackgroundTasks = None,
-    db: Session = Depends(get_db),
-    current_user: User = Depends(get_current_admin_user)
-):
-    """
-    Sync all external APIs in background
-    Returns status for each sync
-    """
-    _ = (current_user, db)
-    if background_tasks is None:
-        raise HTTPException(status_code=500, detail="Background runner unavailable")
-    job = _start_sync_job(background_tasks, target="all", mode="auto")
+        job = SyncService.create_job(
+            db,
+            job_type=target,
+            requester=requester.username,
+            requested_by_user_id=requester.id,
+        )
+    except RuntimeError as exc:
+        raise HTTPException(status_code=409, detail=str(exc)) from exc
+    SyncService.queue_job(job.id, force=force, skip_images=skip_images, limit=limit)
     return {
         "status": "queued",
-        "apis": ["creatures", "items", "hunting_places", "quests"],
-        "job_id": job["job_id"],
+        "job_id": job.id,
+        "target": target,
+        "queued_at": datetime.utcnow().isoformat() + "Z",
     }
+
+
+@router.post("/full")
+def start_full_sync(
+    force: bool = Query(False),
+    skip_images: bool = Query(False),
+    limit: Optional[int] = Query(None, ge=1),
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_admin_user),
+):
+    return _start_job(db, target="full", requester=current_user, force=force, skip_images=skip_images, limit=limit)
+
+
+@router.post("/creatures")
+def start_creatures_sync(
+    force: bool = Query(False),
+    limit: Optional[int] = Query(None, ge=1),
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_admin_user),
+):
+    return _start_job(db, target="creatures", requester=current_user, force=force, skip_images=False, limit=limit)
+
+
+@router.post("/bosses")
+def start_bosses_sync(
+    force: bool = Query(False),
+    limit: Optional[int] = Query(None, ge=1),
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_admin_user),
+):
+    return _start_job(db, target="bosses", requester=current_user, force=force, skip_images=False, limit=limit)
+
+
+@router.post("/items")
+def start_items_sync(
+    force: bool = Query(False),
+    limit: Optional[int] = Query(None, ge=1),
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_admin_user),
+):
+    return _start_job(db, target="items", requester=current_user, force=force, skip_images=False, limit=limit)
+
+
+@router.post("/quests")
+def start_quests_sync(
+    force: bool = Query(False),
+    limit: Optional[int] = Query(None, ge=1),
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_admin_user),
+):
+    return _start_job(db, target="quests", requester=current_user, force=force, skip_images=False, limit=limit)
+
+
+@router.post("/hunt-zones")
+def start_hunt_zones_sync(
+    force: bool = Query(False),
+    limit: Optional[int] = Query(None, ge=1),
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_admin_user),
+):
+    return _start_job(db, target="hunt-zones", requester=current_user, force=force, skip_images=False, limit=limit)
+
+
+@router.post("/images")
+def start_images_sync(
+    force: bool = Query(False),
+    limit: Optional[int] = Query(None, ge=1),
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_admin_user),
+):
+    return _start_job(db, target="images", requester=current_user, force=force, skip_images=False, limit=limit)
+
+
+@router.get("/jobs", response_model=list[SyncJobResponse])
+def list_sync_jobs(
+    limit: int = Query(50, ge=1, le=200),
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_admin_user),
+):
+    _ = current_user
+    jobs = SyncService.list_jobs(db, limit=limit)
+    return [_to_job_response(job) for job in jobs]
+
+
+@router.get("/logs")
+def legacy_logs(
+    limit: int = Query(100, ge=1, le=500),
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_admin_user),
+):
+    _ = current_user
+    jobs = SyncService.list_jobs(db, limit=limit)
+    return [_to_legacy_log(job) for job in jobs]
+
+
+@router.get("/stats")
+def legacy_stats(
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_admin_user),
+):
+    _ = current_user
+    return {
+        "creatures": db.query(Creature).count(),
+        "items": db.query(Loot).count(),
+        "hunting_places": db.query(HuntZone).count(),
+        "quests": db.query(Quest).count(),
+        "sync_logs": db.query(SyncJob).count(),
+    }
+
+
+@router.post("/resolve-conflicts")
+def legacy_resolve_conflicts(
+    payload: dict[str, Any],
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_admin_user),
+):
+    _ = (db, current_user, payload)
+    # Conflicts are no-op with the centralized sync flow; keep endpoint for legacy UI.
+    return {"status": "ok", "resolved": 0}
+
+
+@router.get("/jobs/{job_id}", response_model=SyncJobResponse)
+def get_sync_job(
+    job_id: str,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_admin_user),
+):
+    _ = current_user
+    job = SyncService.get_job(db, job_id)
+    if not job:
+        raise HTTPException(status_code=404, detail="Job not found")
+    return _to_job_response(job)
+
+
+@router.post("/jobs/{job_id}/cancel")
+def cancel_sync_job(
+    job_id: str,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_admin_user),
+):
+    _ = current_user
+    job = SyncService.request_cancel(db, job_id)
+    if not job:
+        raise HTTPException(status_code=404, detail="Job not found")
+    return _to_job_response(job)
 
 
 @router.get("/settings", response_model=SyncRuntimeSettings)
@@ -371,11 +330,23 @@ def get_sync_runtime_settings(
     current_user: User = Depends(get_current_admin_user),
 ):
     _ = current_user
+    SyncService.ensure_default_settings(db)
+    external_fallback = _get_setting(db, "external_auto_fallback_enabled", "0") == "1"
+    image_autofetch = _get_setting(db, "auto_fetch_missing_images_enabled", "0") == "1"
+    cache_only_reads = _get_setting(db, "bestiary_cache_only_reads", "1") == "1"
+    bestiary_page_size = int(_get_setting(db, "bestiary_search_page_size", "20") or "20")
+    full_sync_cooldown = int(_get_setting(db, "sync_full_cooldown_minutes", "30") or "30")
     return SyncRuntimeSettings(
-        bestiary_cache_only_reads=_get_setting(db, "bestiary_cache_only_reads", "1") == "1",
-        bestiary_allow_external_detail_fallback=_get_setting(db, "bestiary_allow_external_detail_fallback", "0") == "1",
-        bestiary_search_page_size=int(_get_setting(db, "bestiary_search_page_size", "20") or "20"),
-        sync_cooldown_minutes=int(_get_setting(db, "sync_cooldown_minutes", "30") or "30"),
+        bestiary_cache_only_reads=cache_only_reads,
+        bestiary_allow_external_detail_fallback=external_fallback,
+        bestiary_search_page_size=bestiary_page_size,
+        sync_cooldown_minutes=full_sync_cooldown,
+        external_auto_fallback_enabled=external_fallback,
+        auto_fetch_missing_images_enabled=image_autofetch,
+        scheduled_sync_enabled=_get_setting(db, "scheduled_sync_enabled", "0") == "1",
+        sync_request_timeout_seconds=int(_get_setting(db, "sync_request_timeout_seconds", "30") or "30"),
+        sync_retry_count=int(_get_setting(db, "sync_retry_count", "2") or "2"),
+        sync_notify_email_enabled=_get_setting(db, "sync_notify_email_enabled", "0") == "1",
     )
 
 
@@ -386,369 +357,106 @@ def update_sync_runtime_settings(
     current_user: User = Depends(get_current_admin_user),
 ):
     _ = current_user
+    SyncService.ensure_default_settings(db)
+
     if payload.bestiary_cache_only_reads is not None:
-        _set_setting(
-            db,
-            "bestiary_cache_only_reads",
-            "1" if payload.bestiary_cache_only_reads else "0",
-            "When enabled, creatures GET endpoints use local DB cache only",
-        )
+        _set_setting(db, "bestiary_cache_only_reads", "1" if payload.bestiary_cache_only_reads else "0")
     if payload.bestiary_allow_external_detail_fallback is not None:
         _set_setting(
             db,
-            "bestiary_allow_external_detail_fallback",
+            "external_auto_fallback_enabled",
             "1" if payload.bestiary_allow_external_detail_fallback else "0",
-            "Allow on-demand external fallback for missing creature details",
         )
     if payload.bestiary_search_page_size is not None:
-        page_size = max(10, min(100, payload.bestiary_search_page_size))
-        _set_setting(
-            db,
-            "bestiary_search_page_size",
-            str(page_size),
-            "Default bestiary page size used by frontend/admin",
-        )
+        _set_setting(db, "bestiary_search_page_size", str(max(5, min(100, payload.bestiary_search_page_size))))
     if payload.sync_cooldown_minutes is not None:
-        cooldown = max(1, min(1440, payload.sync_cooldown_minutes))
-        _set_setting(
-            db,
-            "sync_cooldown_minutes",
-            str(cooldown),
-            "Minimum interval in minutes between manual sync runs",
-        )
+        _set_setting(db, "sync_full_cooldown_minutes", str(max(1, min(1440, payload.sync_cooldown_minutes))))
+
+    if payload.external_auto_fallback_enabled is not None:
+        _set_setting(db, "external_auto_fallback_enabled", "1" if payload.external_auto_fallback_enabled else "0")
+    if payload.auto_fetch_missing_images_enabled is not None:
+        _set_setting(db, "auto_fetch_missing_images_enabled", "1" if payload.auto_fetch_missing_images_enabled else "0")
+    if payload.scheduled_sync_enabled is not None:
+        _set_setting(db, "scheduled_sync_enabled", "1" if payload.scheduled_sync_enabled else "0")
+    if payload.sync_request_timeout_seconds is not None:
+        _set_setting(db, "sync_request_timeout_seconds", str(max(5, min(600, payload.sync_request_timeout_seconds))))
+    if payload.sync_retry_count is not None:
+        _set_setting(db, "sync_retry_count", str(max(0, min(10, payload.sync_retry_count))))
+    if payload.sync_notify_email_enabled is not None:
+        _set_setting(db, "sync_notify_email_enabled", "1" if payload.sync_notify_email_enabled else "0")
+
+    # Legacy setting aliases for backward compatibility in public endpoints.
+    _set_setting(
+        db,
+        "bestiary_allow_external_detail_fallback",
+        _get_setting(db, "external_auto_fallback_enabled", "0"),
+        "Legacy alias of external_auto_fallback_enabled",
+    )
+    _set_setting(
+        db,
+        "sync_cooldown_minutes",
+        _get_setting(db, "sync_full_cooldown_minutes", "30"),
+        "Legacy alias of sync_full_cooldown_minutes",
+    )
+
     db.commit()
     return get_sync_runtime_settings(db=db, current_user=current_user)
 
 
-@router.post("/manual/{api_name}", response_model=SyncResponse)
-async def run_manual_sync(
-    api_name: str,
-    mode: str = Query("compare", description="Sync mode: 'auto' or 'compare'"),
-    background_tasks: BackgroundTasks = None,
+# Legacy aliases kept for existing admin panel routes.
+@router.post("/sync/{target}")
+def legacy_sync_target(
+    target: str,
+    force: bool = Query(False),
+    limit: Optional[int] = Query(None, ge=1),
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_admin_user),
 ):
-    _ = (current_user, db)
-    if background_tasks is None:
-        raise HTTPException(status_code=500, detail="Background runner unavailable")
+    normalized = _normalize_target(target)
+    return _start_job(db, target=normalized, requester=current_user, force=force, skip_images=False, limit=limit)
 
-    target = _normalize_sync_source(api_name)
-    if target == "all":
-        target = "creatures"
 
-    if target == "creatures" and mode == "compare":
-        conflicts = await ExternalSyncService.check_creature_conflicts(db)
-        if conflicts:
-            return SyncResponse(api="creatures", status="conflicts_found", sync_id=0, message=f"Found {len(conflicts)} conflicts. Resolve them first.", conflicts=conflicts)
-
-    job = _start_sync_job(background_tasks, target=target, mode=mode)
-    return SyncResponse(
-        api=target,
-        status="queued",
-        source=None,
-        created=0,
-        updated=0,
-        errors=0,
-        total=0,
-        sync_id=0,
-        message=f"Sync started. job_id={job['job_id']}",
-    )
+@router.post("/manual/{api_name}")
+def legacy_manual(
+    api_name: str,
+    force: bool = Query(False),
+    limit: Optional[int] = Query(None, ge=1),
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_admin_user),
+):
+    normalized = _normalize_target(api_name)
+    if normalized == "full":
+        normalized = "creatures"
+    return _start_job(db, target=normalized, requester=current_user, force=force, skip_images=False, limit=limit)
 
 
 @router.post("/bestiary/start")
-def start_bestiary_sync(
-    source: str = Query("creatures", description="creatures|items|hunting-places|quests|all"),
-    mode: str = Query("auto", description="Sync mode: auto|compare"),
-    background_tasks: BackgroundTasks = None,
+def legacy_bestiary_start(
+    source: str = Query("creatures"),
+    force: bool = Query(False),
+    limit: Optional[int] = Query(None, ge=1),
+    db: Session = Depends(get_db),
     current_user: User = Depends(get_current_admin_user),
 ):
-    _ = current_user
-    if background_tasks is None:
-        raise HTTPException(status_code=500, detail="Background runner unavailable")
-    target = _normalize_sync_source(source)
-    return _start_sync_job(background_tasks, target=target, mode=mode)
-
-
-@router.get("/jobs/{job_id}")
-def get_sync_job(job_id: str, current_user: User = Depends(get_current_admin_user)):
-    _ = current_user
-    job = _SYNC_JOB_STORE.get(job_id)
-    if job:
-        return job
-
-    db = SessionLocal()
-    try:
-        row = db.query(SyncJob).filter(SyncJob.id == job_id).first()
-        if not row:
-            raise HTTPException(status_code=404, detail="Job not found")
-        return {
-            "job_id": row.id,
-            "target": row.job_type,
-            "status": row.status,
-            "progress": row.progress,
-            "error": row.error,
-            "cancel_requested": row.cancel_requested,
-            "started_at": row.started_at.isoformat() if row.started_at else None,
-            "finished_at": row.finished_at.isoformat() if row.finished_at else None,
-        }
-    finally:
-        db.close()
-
-
-@router.post("/jobs/{job_id}/cancel")
-def cancel_sync_job(job_id: str, current_user: User = Depends(get_current_admin_user)):
-    _ = current_user
-    with _SYNC_LOCK:
-        entry = _SYNC_JOB_STORE.get(job_id)
-        if entry:
-            if entry.get("status") in {"completed", "failed", "cancelled"}:
-                return {"job_id": job_id, "status": entry.get("status"), "message": "Job already finished"}
-            entry["cancel_requested"] = True
-            _SYNC_JOB_STORE[job_id] = entry
-
-    db = SessionLocal()
-    try:
-        row = db.query(SyncJob).filter(SyncJob.id == job_id).first()
-        if not row:
-            raise HTTPException(status_code=404, detail="Job not found")
-        if row.status in {"completed", "failed", "cancelled"}:
-            return {"job_id": job_id, "status": row.status, "message": "Job already finished"}
-        row.cancel_requested = True
-        if row.status == "pending":
-            row.status = "cancelled"
-            row.finished_at = datetime.utcnow()
-        db.add(row)
-        db.commit()
-        return {
-            "job_id": row.id,
-            "status": row.status,
-            "cancel_requested": row.cancel_requested,
-        }
-    finally:
-        db.close()
-
-
-    
+    normalized = _normalize_target(source)
+    return _start_job(db, target=normalized, requester=current_user, force=force, skip_images=False, limit=limit)
 
 
 @router.get("/status")
-def get_sync_status(current_user: User = Depends(get_current_admin_user)):
-    _ = current_user
-    with _SYNC_LOCK:
-        running_sources = sorted(_RUNNING_SOURCES)
-        queued_or_running = [
-            job for job in _SYNC_JOB_STORE.values()
-            if job.get("status") in {"pending", "running"}
-        ]
-        failed_jobs = [job for job in _SYNC_JOB_STORE.values() if job.get("status") == "failed"]
-        cancelled_jobs = [job for job in _SYNC_JOB_STORE.values() if job.get("status") == "cancelled"]
-        completed_jobs = [job for job in _SYNC_JOB_STORE.values() if job.get("status") == "completed"]
-    return {
-        "running_sources": running_sources,
-        "active_jobs": queued_or_running,
-        "failed_jobs": failed_jobs,
-        "cancelled_jobs": cancelled_jobs,
-        "completed_jobs": completed_jobs,
-    }
-
-# ============ LOGS ENDPOINTS ============
-
-@router.get("/sync/logs", response_model=List[SyncLogResponse])
-def get_sync_logs(
-    api_name: Optional[str] = None,
-    limit: int = 50,
-    db: Session = Depends(get_db),
-    current_user: User = Depends(get_current_admin_user)
-):
-    """
-    Get synchronization logs
-    Filter by API name if provided
-    """
-    logs = ExternalSyncService.get_sync_logs(db, api_name=api_name, limit=limit)
-    
-    return [
-        SyncLogResponse(
-            id=log.id,
-            api_name=log.api_name,
-            endpoint=log.endpoint,
-            status=log.status,
-            source=log.source,
-            total_items=log.total_items,
-            processed_items=log.processed_items,
-            error_count=log.error_count,
-            message=log.message,
-            error_details=log.error_details,
-            started_at=log.started_at,
-            completed_at=log.completed_at
-        )
-        for log in logs
-    ]
-
-@router.get("/sync/logs/{sync_id}", response_model=SyncLogResponse)
-def get_sync_log(
-    sync_id: int,
-    db: Session = Depends(get_db),
-    current_user: User = Depends(get_current_admin_user)
-):
-    """
-    Get specific sync log details
-    """
-    log = db.query(APISync).filter(APISync.id == sync_id).first()
-    
-    if not log:
-        raise HTTPException(status_code=404, detail="Sync log not found")
-    
-    return SyncLogResponse(
-        id=log.id,
-        api_name=log.api_name,
-        endpoint=log.endpoint,
-        status=log.status,
-        source=log.source,
-        total_items=log.total_items,
-        processed_items=log.processed_items,
-        error_count=log.error_count,
-        message=log.message,
-        error_details=log.error_details,
-        started_at=log.started_at,
-        completed_at=log.completed_at
-    )
-
-@router.get("/sync/logs/{sync_id}/progress")
-def get_sync_progress(
-    sync_id: int,
-    db: Session = Depends(get_db),
-    current_user: User = Depends(get_current_admin_user)
-):
-    """
-    Get current progress of a sync operation
-    """
-    log = db.query(APISync).filter(APISync.id == sync_id).first()
-    
-    if not log:
-        raise HTTPException(status_code=404, detail="Sync log not found")
-    
-    percentage = 0
-    if log.total_items and log.total_items > 0:
-        percentage = int((log.processed_items / log.total_items) * 100)
-    
-    return {
-        "sync_id": log.id,
-        "api": log.api_name,
-        "status": log.status,
-        "total": log.total_items,
-        "processed": log.processed_items,
-        "percentage": percentage,
-        "errors": log.error_count,
-        "message": log.message
-    }
-
-# ============ STATISTICS ENDPOINTS ============
-
-@router.get("/sync/stats", response_model=SyncStats)
-def get_sync_stats(
-    db: Session = Depends(get_db),
-    current_user: User = Depends(get_current_admin_user)
-):
-    """
-    Get statistics about synced data
-    """
-    stats = ExternalSyncService.get_sync_stats(db)
-    return SyncStats(**stats)
-
-@router.get("/data/creatures", response_model=dict)
-def get_creatures_stats(
-    db: Session = Depends(get_db),
-    current_user: User = Depends(get_current_admin_user)
-):
-    """Get creature statistics"""
-    total = db.query(Creature).count()
-    by_level = db.query(Creature.level).filter(Creature.level != None).all()
-    
-    return {
-        "total": total,
-        "levels": [level[0] for level in by_level]
-    }
-
-@router.get("/data/items", response_model=dict)
-def get_items_stats(
-    db: Session = Depends(get_db),
-    current_user: User = Depends(get_current_admin_user)
-):
-    """Get item statistics"""
-    total = db.query(Item).count()
-    by_type = {}
-    
-    items = db.query(Item.type).all()
-    for item_type in items:
-        if item_type[0]:
-            by_type[item_type[0]] = by_type.get(item_type[0], 0) + 1
-    
-    return {
-        "total": total,
-        "by_type": by_type
-    }
-
-# ============ CONFLICT RESOLUTION ENDPOINTS ============
-
-@router.post("/resolve-conflicts")
-async def resolve_conflicts(
-    resolution: ConflictResolution,
-    db: Session = Depends(get_db),
-    current_user: User = Depends(get_current_admin_user)
-):
-    """
-    Resolve conflicts by applying the chosen action
-    Actions: 'skip_all' (keep existing) or 'overwrite_all' (use new data)
-    """
-    try:
-        result = await ExternalSyncService.resolve_conflicts(
-            db, 
-            resolution.conflicts, 
-            resolution.action
-        )
-        return {
-            "status": "success",
-            "message": f"Applied {resolution.action} to {len(resolution.conflicts)} items",
-            "applied": result.get("applied", 0),
-            "skipped": result.get("skipped", 0)
-        }
-    except Exception as e:
-        raise HTTPException(
-            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            detail=str(e)
-        )
-
-
-@router.post("/metadata/flags")
-def set_entity_metadata_flags(
-    payload: MetadataFlagRequest,
+def legacy_status(
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_admin_user),
 ):
     _ = current_user
-    record = EntityMetadataService.set_flags(
-        db,
-        entity_type=payload.entity_type,
-        entity_key=payload.entity_key,
-        display_name=payload.display_name,
-        entity_id=payload.entity_id,
-        is_featured=payload.is_featured,
-        is_pinned=payload.is_pinned,
-        is_favorite=payload.is_favorite,
-        notes=payload.notes,
-    )
-    db.commit()
-    db.refresh(record)
+    jobs = SyncService.list_jobs(db, limit=50)
+    active = [_to_job_response(job) for job in jobs if job.status in {"pending", "running"}]
+    failed = [_to_job_response(job) for job in jobs if job.status == "failed"]
+    completed = [_to_job_response(job) for job in jobs if job.status == "completed"]
+    cancelled = [_to_job_response(job) for job in jobs if job.status == "cancelled"]
     return {
-        "status": "success",
-        "id": record.id,
-        "entity_type": record.entity_type,
-        "entity_key": record.entity_key,
-        "display_name": record.display_name,
-        "entity_id": record.entity_id,
-        "is_featured": record.is_featured,
-        "is_pinned": record.is_pinned,
-        "is_favorite": record.is_favorite,
-        "search_count": record.search_count,
-        "notes": record.notes,
+        "running_sources": sorted(list({job.job_type for job in jobs if job.status == "running"})),
+        "active_jobs": active,
+        "failed_jobs": failed,
+        "completed_jobs": completed,
+        "cancelled_jobs": cancelled,
     }

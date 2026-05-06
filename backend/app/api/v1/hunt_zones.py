@@ -12,12 +12,22 @@ from app.core.config import settings
 from app.db.database import get_db
 from app.models.spawn_location import SpawnLocation
 from app.models import HuntZone as HuntZoneModel
+from app.models.settings import SystemSettings as SettingsModel
 from app.schemas import HuntZone, HuntZoneCreate, HuntRecommendation
 from app.services.entity_metadata_service import EntityMetadataService
 from app.services.text_utils import normalize_search_text
 from app.services.hunt_service import HuntRecommendationService
 
 router = APIRouter(prefix="/hunt-zones", tags=["hunt-zones"])
+
+
+def _get_setting(db: Session, key: str, default: str = "") -> str:
+    value = db.query(SettingsModel).filter(SettingsModel.key == key).first()
+    return value.value if value and value.value is not None else default
+
+
+def _is_image_autofetch_enabled(db: Session) -> bool:
+    return _get_setting(db, "auto_fetch_missing_images_enabled", "0") == "1"
 
 
 async def _resolve_fandom_image_url(image_url: str) -> str | None:
@@ -150,6 +160,8 @@ async def get_hunt_zone_map_image(zone_id: int, request: Request, db: Session = 
     map_url = zone.map_image_url
     if not map_url:
         raise HTTPException(status_code=404, detail="Map image not available")
+    if not _is_image_autofetch_enabled(db):
+        raise HTTPException(status_code=404, detail="Map image not cached locally")
 
     resolved_url = map_url
     try:

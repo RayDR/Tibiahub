@@ -33,7 +33,14 @@ def _get_setting(db: Session, key: str, default: str = "") -> str:
 
 
 def _is_external_detail_fallback_enabled(db: Session) -> bool:
-    return _get_setting(db, "bestiary_allow_external_detail_fallback", "1") == "1"
+    return (
+        _get_setting(db, "external_auto_fallback_enabled", "0") == "1"
+        or _get_setting(db, "bestiary_allow_external_detail_fallback", "0") == "1"
+    )
+
+
+def _is_image_autofetch_enabled(db: Session) -> bool:
+    return _get_setting(db, "auto_fetch_missing_images_enabled", "0") == "1"
 
 
 def _resource_key(url: str) -> str:
@@ -339,6 +346,9 @@ async def get_creature_image(creature_id: int, request: Request, db: Session = D
                     "X-Image-Source": "local-cache",
                 },
             )
+
+    if not _is_image_autofetch_enabled(db):
+        raise HTTPException(status_code=404, detail="Image not cached locally")
 
     resolved_url = image_url
     try:

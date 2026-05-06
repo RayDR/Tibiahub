@@ -66,7 +66,7 @@ const HomePage: React.FC = () => {
             <option value="bosses">Bosses</option>
             <option value="quests">Quests</option>
           </select>
-          <Link to={`/cyclopedia?section=${cyclopediaSection}`} className="rounded-lg bg-amber-500 px-4 py-2 text-sm font-semibold text-slate-950 hover:bg-amber-400">
+          <Link to={`/cyclopedia?tab=${cyclopediaSection === 'quests' ? 'quests' : cyclopediaSection}`} className="rounded-lg bg-amber-500 px-4 py-2 text-sm font-semibold text-slate-950 hover:bg-amber-400">
             Open Cyclopedia
           </Link>
         </div>

@@ -119,6 +119,23 @@ SQLITE_RUNTIME_MIGRATIONS = {
         "delete_reason": "TEXT",
         "is_deleted": "BOOLEAN DEFAULT 0",
     },
+    "sync_jobs": {
+        "progress_current": "INTEGER DEFAULT 0",
+        "progress_total": "INTEGER DEFAULT 0",
+        "progress_percent": "INTEGER DEFAULT 0",
+        "current_step": "VARCHAR(255)",
+        "message": "TEXT",
+        "result_summary": "TEXT",
+        "requester": "VARCHAR(255)",
+        "requested_by_user_id": "INTEGER",
+        "error_message": "TEXT",
+    },
+    "cached_resources": {
+        "resource_key": "VARCHAR(128)",
+        "checksum": "VARCHAR(128)",
+        "fetch_attempts": "INTEGER DEFAULT 0",
+        "error_message": "TEXT",
+    },
 }
 
 SQLITE_RUNTIME_INDEXES = (
@@ -132,6 +149,8 @@ SQLITE_RUNTIME_INDEXES = (
     "CREATE INDEX IF NOT EXISTS idx_raffles_is_deleted ON raffles(is_deleted)",
     "CREATE UNIQUE INDEX IF NOT EXISTS idx_raffles_public_code ON raffles(public_code)",
     "CREATE UNIQUE INDEX IF NOT EXISTS idx_events_public_code ON events(public_code)",
+    "CREATE INDEX IF NOT EXISTS idx_sync_jobs_requested_by_user_id ON sync_jobs(requested_by_user_id)",
+    "CREATE INDEX IF NOT EXISTS idx_cached_resources_resource_key ON cached_resources(resource_key)",
 )
 
 

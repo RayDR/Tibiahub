@@ -1,0 +1,235 @@
+:root,
+[data-theme="default"] {
+  --color-primary: #3b82f6;
+  --color-primary-alt: #1d4ed8;
+  --color-secondary: #0f172a;
+  --color-secondary-alt: #1e293b;
+  --color-tertiary: #334155;
+  --color-tertiary-alt: #475569;
+  --color-bg: #020617;
+  --color-surface: rgba(15, 23, 42, 0.8);
+  --color-surface-alt: rgba(30, 41, 59, 0.72);
+  --color-border: rgba(148, 163, 184, 0.28);
+  --color-text: #f8fafc;
+  --color-text-muted: #94a3b8;
+  --color-success: #10b981;
+  --color-warning: #f59e0b;
+  --color-danger: #ef4444;
+}
+
+[data-theme="medieval"] {
+  --color-primary: #d4af37;
+  --color-primary-alt: #b8941e;
+  --color-secondary: #131a28;
+  --color-secondary-alt: #1d2638;
+  --color-tertiary: #283246;
+  --color-tertiary-alt: #39475f;
+  --color-bg: #0c111c;
+  --color-surface: rgba(29, 38, 56, 0.85);
+  --color-surface-alt: rgba(19, 26, 40, 0.8);
+  --color-border: rgba(212, 175, 55, 0.36);
+  --color-text: #f5e6d3;
+  --color-text-muted: #d4c5b0;
+  --color-success: #39b57f;
+  --color-warning: #d4af37;
+  --color-danger: #dc4e4e;
+}
+
+[data-theme="tibia-stone"] {
+  --color-primary: #caa24a;
+  --color-primary-alt: #8b6f2f;
+  --color-secondary: #1a1a1a;
+  --color-secondary-alt: #232323;
+  --color-tertiary: #303030;
+  --color-tertiary-alt: #3b3b3b;
+  --color-bg: #0b0c10;
+  --color-surface: #232323;
+  --color-surface-alt: #303030;
+  --color-border: #5a554c;
+  --color-text: #e8e1d4;
+  --color-text-muted: #aaa194;
+  --color-success: #66b884;
+  --color-warning: #caa24a;
+  --color-danger: #cf6f66;
+}
+
+:root,
+[data-theme] {
+  --primary: var(--color-primary);
+  --primaryAlt: var(--color-primary-alt);
+  --secondary: var(--color-secondary);
+  --secondaryAlt: var(--color-secondary-alt);
+  --tertiary: var(--color-tertiary);
+  --tertiaryAlt: var(--color-tertiary-alt);
+  --surface: var(--color-surface);
+  --surfaceAlt: var(--color-surface-alt);
+  --textPrimary: var(--color-text);
+  --textSecondary: var(--color-text-muted);
+  --border: var(--color-border);
+  --danger: var(--color-danger);
+  --success: var(--color-success);
+  --warning: var(--color-warning);
+}
+
+body {
+  background: var(--color-bg);
+  color: var(--color-text);
+}
+
+.app-page-header {
+  text-align: center;
+  margin-bottom: 2rem;
+}
+
+.app-page-title {
+  font-size: clamp(2.25rem, 6vw, 4.75rem);
+  line-height: 1.05;
+  font-family: 'Cinzel', serif;
+  font-weight: 700;
+  letter-spacing: 0.04em;
+  background: linear-gradient(180deg, color-mix(in srgb, var(--color-primary) 72%, #fff 28%) 0%, color-mix(in srgb, var(--color-text) 90%, var(--color-primary-alt) 10%) 55%, color-mix(in srgb, var(--color-primary-alt) 65%, #000 35%) 100%);
+  -webkit-background-clip: text;
+  background-clip: text;
+  color: transparent;
+  -webkit-text-stroke: 0.4px color-mix(in srgb, var(--color-border) 80%, #000 20%);
+  text-shadow:
+    0 0 8px color-mix(in srgb, var(--color-primary) 45%, transparent),
+    0 2px 0 rgba(0, 0, 0, 0.9);
+}
+
+.app-page-title.app-page-title-md {
+  font-size: clamp(1.9rem, 4.5vw, 3.2rem);
+}
+
+.app-page-subtitle {
+  margin-top: 0.75rem;
+  max-width: 48rem;
+  margin-left: auto;
+  margin-right: auto;
+  color: var(--textSecondary);
+  font-size: 1rem;
+}
+
+.app-surface {
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: 1rem;
+  backdrop-filter: blur(12px);
+}
+
+.app-surface-alt {
+  background: var(--surfaceAlt);
+  border: 1px solid var(--border);
+  border-radius: 0.75rem;
+}
+
+.app-input {
+  height: 3rem;
+  width: 100%;
+  min-width: 0;
+  border-radius: 0.75rem;
+  border: 1px solid var(--border);
+  background: color-mix(in srgb, var(--secondary) 80%, transparent);
+  color: var(--textPrimary);
+  padding: 0 0.9rem;
+  outline: none;
+  transition: border-color 0.2s ease, box-shadow 0.2s ease;
+}
+
+.app-input::placeholder {
+  color: var(--textSecondary);
+}
+
+.app-input:focus {
+  border-color: color-mix(in srgb, var(--primary) 70%, #ffffff 30%);
+  box-shadow: 0 0 0 2px color-mix(in srgb, var(--primary) 16%, transparent);
+}
+
+.app-button-primary {
+  height: 3rem;
+  border-radius: 0.75rem;
+  border: 1px solid color-mix(in srgb, var(--primary) 80%, #ffffff 20%);
+  background: linear-gradient(135deg, var(--primary) 0%, var(--primaryAlt) 100%);
+  color: #fff;
+  font-weight: 600;
+  padding: 0 1rem;
+  transition: transform 0.15s ease, filter 0.2s ease;
+}
+
+.app-button-primary:hover {
+  filter: brightness(1.06);
+}
+
+.app-button-primary:active {
+  transform: translateY(1px);
+}
+
+.app-button-ghost {
+  height: 3rem;
+  border-radius: 0.75rem;
+  border: 1px solid var(--border);
+  background: color-mix(in srgb, var(--secondary) 88%, transparent);
+  color: var(--textPrimary);
+  font-weight: 600;
+  padding: 0 1rem;
+}
+
+.app-tablist {
+  display: flex;
+  align-items: center;
+  gap: 0.35rem;
+  overflow-x: auto;
+  min-width: 0;
+  border-radius: 0.75rem;
+  border: 1px solid var(--border);
+  background: color-mix(in srgb, var(--secondary) 85%, transparent);
+  padding: 0.3rem;
+}
+
+.app-tab {
+  height: 2.55rem;
+  border-radius: 0.6rem;
+  border: 1px solid transparent;
+  color: var(--textSecondary);
+  font-weight: 600;
+  white-space: nowrap;
+  padding: 0 0.9rem;
+  display: inline-flex;
+  align-items: center;
+  gap: 0.45rem;
+}
+
+.app-tab:hover {
+  color: var(--textPrimary);
+}
+
+.app-tab[data-active="true"] {
+  color: #fff;
+  border-color: color-mix(in srgb, var(--primary) 70%, #ffffff 30%);
+  background: linear-gradient(135deg, color-mix(in srgb, var(--primary) 70%, transparent) 0%, color-mix(in srgb, var(--primaryAlt) 65%, transparent) 100%);
+}
+
+.app-nav-shell {
+  background: color-mix(in srgb, var(--color-secondary) 88%, transparent);
+  border: 1px solid var(--color-border);
+}
+
+.app-nav-link {
+  color: var(--color-text-muted);
+}
+
+.app-nav-link:hover,
+.app-nav-link[data-active="true"] {
+  color: var(--color-text);
+}
+
+.app-nav-link[data-active="true"] {
+  background: color-mix(in srgb, var(--color-primary) 16%, transparent);
+  border: 1px solid color-mix(in srgb, var(--color-primary) 45%, transparent);
+}
+
+.app-stone-panel {
+  background: linear-gradient(180deg, color-mix(in srgb, var(--color-surface) 90%, #3f3f3f 10%) 0%, var(--color-surface-alt) 100%);
+  border: 1px solid var(--color-border);
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.05), 0 6px 18px rgba(0, 0, 0, 0.35);
+}

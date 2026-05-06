@@ -7,6 +7,9 @@ import {
     Clock, Code
 } from 'lucide-react';
 import axios from 'axios';
+import { faChartLine } from '@fortawesome/free-solid-svg-icons';
+import PageHeader from '../../components/ui/PageHeader';
+import AppButton from '../../components/ui/AppButton';
 
 interface APIStatus {
     name: string;
@@ -123,31 +126,31 @@ export default function APIMonitor() {
     return (
         <div className="container mx-auto px-4 py-8 max-w-7xl">
             {/* Header */}
-            <div className="mb-8 flex justify-between items-center">
-                <div>
-                    <h1 className="text-4xl font-serif text-slate-100 mb-2 flex items-center gap-3">
-                        <Activity className="w-10 h-10 text-amber-500" />
-                        API Monitor
-                    </h1>
-                    <p className="text-slate-400">Monitor external APIs and database health</p>
-                </div>
+            <div className="mb-8 flex flex-col gap-4 md:flex-row md:items-center md:justify-between">
+                <PageHeader
+                    title="API Monitor"
+                    subtitle="Monitor external APIs and database health"
+                    icon={faChartLine}
+                    align="left"
+                    size="md"
+                />
                 <div className="flex items-center gap-2">
-                    <button
+                    <AppButton
                         onClick={handleSyncUp}
                         disabled={syncingUp}
-                        className="flex items-center gap-2 px-4 py-2 bg-blue-600 hover:bg-blue-700 text-white rounded-lg transition-colors disabled:opacity-50"
+                        className="inline-flex items-center gap-2"
                     >
                         <RefreshCw className={`w-4 h-4 ${syncingUp ? 'animate-spin' : ''}`} />
                         Sync-up
-                    </button>
-                    <button
+                    </AppButton>
+                    <AppButton
                         onClick={handleRefresh}
                         disabled={refreshing}
-                        className="flex items-center gap-2 px-4 py-2 bg-amber-600 hover:bg-amber-700 text-white rounded-lg transition-colors disabled:opacity-50"
+                        className="inline-flex items-center gap-2"
                     >
                         <RefreshCw className={`w-4 h-4 ${refreshing ? 'animate-spin' : ''}`} />
                         Refresh
-                    </button>
+                    </AppButton>
                 </div>
             </div>
 

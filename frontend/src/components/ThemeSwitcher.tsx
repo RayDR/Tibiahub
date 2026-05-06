@@ -1,18 +1,20 @@
 import { useState, useEffect } from 'react';
 import { FontAwesomeIcon } from '@fortawesome/react-fontawesome';
-import { faCheck, faChessRook, faPalette } from '@fortawesome/free-solid-svg-icons';
+import { faCheck, faChessRook, faMountain, faPalette } from '@fortawesome/free-solid-svg-icons';
+import { useTranslation } from 'react-i18next';
 
 export default function ThemeSwitcher() {
-    const [theme, setTheme] = useState<'default' | 'medieval'>('default');
+    const { t } = useTranslation();
+    const [theme, setTheme] = useState<'default' | 'medieval' | 'tibia-stone'>('default');
     const [isOpen, setIsOpen] = useState(false);
 
     useEffect(() => {
-        const savedTheme = localStorage.getItem('theme') as 'default' | 'medieval' || 'default';
+        const savedTheme = (localStorage.getItem('theme') as 'default' | 'medieval' | 'tibia-stone') || 'default';
         setTheme(savedTheme);
         document.documentElement.setAttribute('data-theme', savedTheme);
     }, []);
 
-    const changeTheme = (newTheme: 'default' | 'medieval') => {
+    const changeTheme = (newTheme: 'default' | 'medieval' | 'tibia-stone') => {
         setTheme(newTheme);
         localStorage.setItem('theme', newTheme);
         document.documentElement.setAttribute('data-theme', newTheme);
@@ -20,21 +22,22 @@ export default function ThemeSwitcher() {
     };
 
     const themes = [
-        { id: 'default', name: 'Default', icon: faPalette, description: 'Modern dark theme' },
-        { id: 'medieval', name: 'Medieval', icon: faChessRook, description: 'Gothic medieval theme' },
+        { id: 'default', name: t('themes.default'), icon: faPalette, description: t('themes.defaultDescription') },
+        { id: 'medieval', name: t('themes.medieval'), icon: faChessRook, description: t('themes.medievalDescription') },
+        { id: 'tibia-stone', name: t('themes.tibiaStone'), icon: faMountain, description: t('themes.tibiaStoneDescription') },
     ];
 
-    const currentTheme = themes.find(t => t.id === theme) || themes[0];
+    const currentTheme = themes.find((themeItem) => themeItem.id === theme) || themes[0];
 
     return (
         <div className="relative">
             <button
                 onClick={() => setIsOpen(!isOpen)}
-                aria-label="Change theme"
-                className="flex items-center gap-2 px-3 py-2 text-sm text-slate-300 hover:text-amber-500 transition-all duration-300 rounded-lg hover:bg-white/5 group"
+                aria-label={t('a11y.themeSelector')}
+                className="flex items-center gap-2 rounded-lg px-3 py-2 text-sm text-[color:var(--color-text-muted)] transition-all duration-300 hover:bg-white/5 hover:text-[color:var(--color-primary)] group"
             >
                 <FontAwesomeIcon icon={faPalette} className="w-4 h-4 transition-transform duration-300 group-hover:rotate-12" />
-                <FontAwesomeIcon icon={currentTheme.icon} className="text-base" />
+                <span className="hidden md:inline text-xs font-medium">{currentTheme.name}</span>
             </button>
 
             {isOpen && (
@@ -43,24 +46,24 @@ export default function ThemeSwitcher() {
                         className="fixed inset-0 z-10" 
                         onClick={() => setIsOpen(false)}
                     />
-                    <div className="absolute right-0 mt-2 w-56 bg-slate-900 border border-slate-700 rounded-lg shadow-xl z-20 overflow-hidden backdrop-blur-sm">
-                        {themes.map((t) => (
+                    <div className="absolute right-0 z-20 mt-2 w-64 overflow-hidden rounded-lg border border-[color:var(--color-border)] bg-[color:var(--color-surface)] shadow-xl backdrop-blur-sm">
+                        {themes.map((themeItem) => (
                             <button
-                                key={t.id}
-                                onClick={() => changeTheme(t.id as 'default' | 'medieval')}
-                                aria-label={`Use ${t.name} theme`}
+                                key={themeItem.id}
+                                onClick={() => changeTheme(themeItem.id as 'default' | 'medieval' | 'tibia-stone')}
+                                aria-label={t('a11y.switchThemeTo', { theme: themeItem.name })}
                                 className={`w-full flex items-center gap-3 px-4 py-3 text-sm transition-all duration-300 ${
-                                    theme === t.id
-                                        ? 'bg-amber-600/20 text-amber-500 font-semibold'
-                                        : 'text-slate-300 hover:bg-slate-800 hover:scale-105'
+                                    theme === themeItem.id
+                                        ? 'bg-[color:var(--color-primary)]/20 text-[color:var(--color-primary)] font-semibold'
+                                        : 'text-[color:var(--color-text)] hover:bg-white/5'
                                 }`}
                             >
-                                <FontAwesomeIcon icon={t.icon} className="text-lg" />
+                                <FontAwesomeIcon icon={themeItem.icon} className="text-lg" />
                                 <div className="text-left flex-1">
-                                    <div className="font-medium">{t.name}</div>
-                                    <div className="text-xs text-slate-400">{t.description}</div>
+                                    <div className="font-medium">{themeItem.name}</div>
+                                    <div className="text-xs text-[color:var(--color-text-muted)]">{themeItem.description}</div>
                                 </div>
-                                {theme === t.id && (
+                                {theme === themeItem.id && (
                                     <FontAwesomeIcon icon={faCheck} className="text-xs" />
                                 )}
                             </button>
