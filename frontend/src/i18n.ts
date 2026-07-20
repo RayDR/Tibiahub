@@ -92,6 +92,55 @@ i18n
                         "helpers": {
                             "classification": "Classification-first mode active. Pick a category or search directly.",
                             "bosses": "Search and browse boss encounters."
+                        },
+                        "sort": {
+                            "name": "Sort by name",
+                            "experience": "Sort by experience",
+                            "hitpoints": "Sort by hitpoints",
+                            "difficulty": "Sort by difficulty",
+                            "ascending": "Ascending",
+                            "descending": "Descending"
+                        },
+                        "cards": {
+                            "recent": "Recent searches",
+                            "yourRecent": "Your recent searches",
+                            "topGlobal": "Top 5 most searched (global)"
+                        },
+                        "items": {
+                            "creaturesMatched": "{{count}} creatures matched",
+                            "chance": "Chance",
+                            "rarity": "Rarity",
+                            "zones": "Zones",
+                            "source": "Source",
+                            "sourcePage": "Source page"
+                        },
+                        "quests": {
+                            "group": "Group",
+                            "levelRange": "Lvl {{min}} - {{max}}",
+                            "noDetails": "Details not available yet.",
+                            "npc": "NPC",
+                            "location": "Location",
+                            "openDetail": "Open quest detail"
+                        },
+                        "zones": {
+                            "mapPreviewUnavailable": "Map preview unavailable",
+                            "usingPlaceholder": "Using local placeholder"
+                        },
+                        "states": {
+                            "errorTitle": "Something went wrong",
+                            "errorSubtitle": "Please try again in a moment.",
+                            "bossErrorTitle": "Boss search failed",
+                            "bossErrorSubtitle": "Unable to load bosses right now. Please try again in a moment.",
+                            "creatureEmptyTitle": "No creatures found.",
+                            "creatureEmptySubtitle": "Try another search or category.",
+                            "bossEmptyTitle": "No bosses found.",
+                            "bossEmptySubtitle": "Try another boss name or clear the search.",
+                            "unknown": "Unknown",
+                            "unknownRegion": "Unknown region",
+                            "notAvailable": "Not available"
+                        },
+                        "actions": {
+                            "loadMore": "Load more"
                         }
                     },
                     "language": {
@@ -103,12 +152,14 @@ i18n
                     "a11y": {
                         "openCyclopediaMenu": "Open Cyclopedia menu",
                         "search": "Search",
+                        "clearSearch": "Clear search",
                         "languageSelector": "Language selector",
                         "switchLanguageTo": "Switch language to {{language}}",
                         "themeSelector": "Theme selector",
                         "switchThemeTo": "Switch theme to {{theme}}"
                     },
                     "creature": {
+                        "backToCyclopedia": "Back to Cyclopedia",
                         "hp": "Hitpoints",
                         "exp": "Experience",
                         "max_dmg": "Max Damage",
@@ -558,6 +609,55 @@ i18n
                         "helpers": {
                             "classification": "Modo por clasificación activo. Elige una categoría o busca directamente.",
                             "bosses": "Busca y explora encuentros de bosses."
+                        },
+                        "sort": {
+                            "name": "Ordenar por nombre",
+                            "experience": "Ordenar por experiencia",
+                            "hitpoints": "Ordenar por vida",
+                            "difficulty": "Ordenar por dificultad",
+                            "ascending": "Ascendente",
+                            "descending": "Descendente"
+                        },
+                        "cards": {
+                            "recent": "Búsquedas recientes",
+                            "yourRecent": "Tus búsquedas recientes",
+                            "topGlobal": "Top 5 más buscados (global)"
+                        },
+                        "items": {
+                            "creaturesMatched": "{{count}} criaturas encontradas",
+                            "chance": "Probabilidad",
+                            "rarity": "Rareza",
+                            "zones": "Zonas",
+                            "source": "Fuente",
+                            "sourcePage": "Página fuente"
+                        },
+                        "quests": {
+                            "group": "Grupo",
+                            "levelRange": "Lvl {{min}} - {{max}}",
+                            "noDetails": "Detalles aún no disponibles.",
+                            "npc": "NPC",
+                            "location": "Ubicación",
+                            "openDetail": "Abrir detalle de quest"
+                        },
+                        "zones": {
+                            "mapPreviewUnavailable": "Vista previa del mapa no disponible",
+                            "usingPlaceholder": "Usando placeholder local"
+                        },
+                        "states": {
+                            "errorTitle": "Algo salió mal",
+                            "errorSubtitle": "Inténtalo de nuevo en un momento.",
+                            "bossErrorTitle": "Falló la búsqueda de bosses",
+                            "bossErrorSubtitle": "No se pudieron cargar los bosses ahora. Inténtalo de nuevo en un momento.",
+                            "creatureEmptyTitle": "No se encontraron criaturas.",
+                            "creatureEmptySubtitle": "Prueba otra búsqueda o categoría.",
+                            "bossEmptyTitle": "No se encontraron bosses.",
+                            "bossEmptySubtitle": "Prueba otro nombre de boss o limpia la búsqueda.",
+                            "unknown": "Desconocido",
+                            "unknownRegion": "Región desconocida",
+                            "notAvailable": "No disponible"
+                        },
+                        "actions": {
+                            "loadMore": "Cargar más"
                         }
                     },
                     "language": {
@@ -569,12 +669,14 @@ i18n
                     "a11y": {
                         "openCyclopediaMenu": "Abrir menú de Cyclopedia",
                         "search": "Buscar",
+                        "clearSearch": "Limpiar búsqueda",
                         "languageSelector": "Selector de idioma",
                         "switchLanguageTo": "Cambiar idioma a {{language}}",
                         "themeSelector": "Selector de tema",
                         "switchThemeTo": "Cambiar tema a {{theme}}"
                     },
                     "creature": {
+                        "backToCyclopedia": "Volver a Cyclopedia",
                         "hp": "Vida",
                         "exp": "Experiencia",
                         "max_dmg": "Daño Máx",

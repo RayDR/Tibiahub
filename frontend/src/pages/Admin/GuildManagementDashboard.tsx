@@ -1,36 +1,58 @@
-// Guild Management Dashboard Component
 import { useEffect, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useAuth } from '../../context/AuthContext';
 import { useToast } from '../../context/ToastContext';
-import { guildManagementApi, GuildMember, SystemStats, TibiaAPIStatus, SystemSettings, GuildSyncResult } from '../../services/guildManagement';
-import { 
-    Users, Settings, Activity, Shield, AlertCircle, 
-    CheckCircle, XCircle, RefreshCw, Edit2, Trash2, 
-    Save, X, Loader2, Database, Globe
+import { guildManagementApi, GuildMember, GuildSyncResult } from '../../services/guildManagement';
+import api from '../../services/api';
+import {
+    Users, Shield, Edit2, Trash2,
+    Save, X, Loader2, RefreshCw, ChevronRight, Bell, Calendar,
 } from 'lucide-react';
+
+type Tab = 'members' | 'events' | 'announcements';
+
+interface GuildEvent {
+    id: number;
+    title: string;
+    description?: string;
+    start_time: string;
+    end_time?: string;
+    is_deleted?: boolean;
+}
+
+interface GuildAnnouncement {
+    id: number;
+    title: string;
+    content: string;
+    created_at: string;
+    is_deleted?: boolean;
+}
 
 export default function GuildManagementDashboard() {
     const { user } = useAuth();
     const navigate = useNavigate();
     const toast = useToast();
 
-    const [activeTab, setActiveTab] = useState<'overview' | 'users' | 'settings'>('overview');
-    const [loading, setLoading] = useState(true);
-    const [users, setUsers] = useState<GuildMember[]>([]);
-    const [stats, setStats] = useState<SystemStats | null>(null);
-    const [tibiaStatus, setTibiaStatus] = useState<TibiaAPIStatus | null>(null);
-    const [settings, setSettings] = useState<SystemSettings | null>(null);
+    // Guild selection stage
+    const [guilds, setGuilds] = useState<string[]>([]);
+    const [selectedGuild, setSelectedGuild] = useState<string | null>(null);
+    const [loadingGuilds, setLoadingGuilds] = useState(true);
+
+    // Content state
+    const [activeTab, setActiveTab] = useState<Tab>('members');
+    const [loadingContent, setLoadingContent] = useState(false);
+    const [members, setMembers] = useState<GuildMember[]>([]);
+    const [events, setEvents] = useState<GuildEvent[]>([]);
+    const [announcements, setAnnouncements] = useState<GuildAnnouncement[]>([]);
+
+    // Member edit state
     const [editingUser, setEditingUser] = useState<number | null>(null);
     const [editForm, setEditForm] = useState<Partial<GuildMember>>({});
     const [editingCharacter, setEditingCharacter] = useState<number | null>(null);
-    const [newCharacterName, setNewCharacterName] = useState<string>('');
-    const [syncResult, setSyncResult] = useState<GuildSyncResult | null>(null);
+    const [newCharacterName, setNewCharacterName] = useState('');
     const [syncing, setSyncing] = useState(false);
-    const [guilds, setGuilds] = useState<string[]>([]);
-    const [selectedGuild, setSelectedGuild] = useState<string>('Bloodborne Warhowl');
+    const [syncResult, setSyncResult] = useState<GuildSyncResult | null>(null);
 
-    // Check if user has permission
     useEffect(() => {
         if (!user?.is_superuser && user?.guild_rank !== 'Alpha Warbringer' && user?.guild_rank !== 'Bloodhowl Marshal') {
             navigate('/guild');
@@ -38,68 +60,93 @@ export default function GuildManagementDashboard() {
     }, [user, navigate]);
 
     useEffect(() => {
-        loadAllData();
+        void loadGuilds();
     }, []);
 
-    useEffect(() => {
-        if (user?.is_superuser) {
-            loadAllData();
-        }
-    }, [selectedGuild]);
-
-    useEffect(() => {
-        if (!user?.is_superuser) {
-            setSelectedGuild(user?.guild_name || 'Bloodborne Warhowl');
-        }
-    }, [user?.is_superuser, user?.guild_name]);
-
-    const loadAllData = async () => {
-        setLoading(true);
+    const loadGuilds = async () => {
+        setLoadingGuilds(true);
         try {
-            const guildsData = await guildManagementApi.getGuilds();
-            const normalizedGuilds = guildsData.filter((name) => Boolean(name && name.trim()));
-            setGuilds(normalizedGuilds);
-
-            const preferredGuild = normalizedGuilds.includes('Bloodborne Warhowl')
-                ? 'Bloodborne Warhowl'
-                : (normalizedGuilds[0] || selectedGuild || 'Bloodborne Warhowl');
-            const activeGuild = normalizedGuilds.includes(selectedGuild) ? selectedGuild : preferredGuild;
-            const guildForQuery = user?.is_superuser ? activeGuild : undefined;
-            if (user?.is_superuser && activeGuild !== selectedGuild) {
-                setSelectedGuild(activeGuild);
-            }
-
-            const [usersData, statsData, statusData, settingsData] = await Promise.all([
-                guildManagementApi.getUsers(0, 200, {
-                    guild_name: guildForQuery,
-                    include_inactive: false,
-                    exclude_test_accounts: true,
-                }),
-                guildManagementApi.getStats(),
-                guildManagementApi.getTibiaAPIStatus(),
-                guildManagementApi.getSettings(),
-            ]);
-            setUsers(usersData);
-            setStats(statsData);
-            setTibiaStatus(statusData);
-            setSettings(settingsData);
-        } catch (error) {
-            console.error('Failed to load data:', error);
+            const data = await guildManagementApi.getGuilds();
+            const normalized = data.filter((g) => Boolean(g?.trim()));
+            setGuilds(normalized);
+        } catch {
+            toast.error('Failed to load guilds');
         } finally {
-            setLoading(false);
+            setLoadingGuilds(false);
         }
     };
 
+    const selectGuild = (guildName: string) => {
+        setSelectedGuild(guildName);
+        setSyncResult(null);
+        setActiveTab('members');
+        void loadMembers(guildName);
+    };
+
+    const loadMembers = async (guildName: string) => {
+        setLoadingContent(true);
+        try {
+            const data = await guildManagementApi.getUsers(0, 200, {
+                guild_name: user?.is_superuser ? guildName : undefined,
+                include_inactive: false,
+                exclude_test_accounts: true,
+            });
+            setMembers(data);
+        } catch {
+            toast.error('Failed to load members');
+        } finally {
+            setLoadingContent(false);
+        }
+    };
+
+    const loadEvents = async () => {
+        setLoadingContent(true);
+        try {
+            const token = localStorage.getItem('token');
+            const response = await api.get('/guild/events', {
+                headers: { Authorization: `Bearer ${token}` },
+                params: { limit: 50 },
+            });
+            setEvents(response.data || []);
+        } catch {
+            setEvents([]);
+        } finally {
+            setLoadingContent(false);
+        }
+    };
+
+    const loadAnnouncements = async () => {
+        setLoadingContent(true);
+        try {
+            const token = localStorage.getItem('token');
+            const response = await api.get('/guild/announcements', {
+                headers: { Authorization: `Bearer ${token}` },
+                params: { limit: 50 },
+            });
+            setAnnouncements(response.data || []);
+        } catch {
+            setAnnouncements([]);
+        } finally {
+            setLoadingContent(false);
+        }
+    };
+
+    const switchTab = (tab: Tab) => {
+        setActiveTab(tab);
+        if (tab === 'events') void loadEvents();
+        else if (tab === 'announcements') void loadAnnouncements();
+    };
+
     const handleSyncGuild = async () => {
+        if (!selectedGuild) return;
         setSyncing(true);
         try {
-            const result = await guildManagementApi.syncGuild(selectedGuild || 'Bloodborne Warhowl');
+            const result = await guildManagementApi.syncGuild(selectedGuild);
             setSyncResult(result);
-            loadAllData(); // Reload data after sync
+            await loadMembers(selectedGuild);
             toast.success('Guild synced successfully!');
-        } catch (error) {
-            console.error('Failed to sync guild:', error);
-            toast.error('Failed to sync guild. Please try again.');
+        } catch {
+            toast.error('Failed to sync guild');
         } finally {
             setSyncing(false);
         }
@@ -110,314 +157,239 @@ export default function GuildManagementDashboard() {
             await guildManagementApi.updateUser(userId, editForm);
             setEditingUser(null);
             setEditForm({});
-            loadAllData();
-            toast.success('User updated successfully!');
-        } catch (error) {
-            console.error('Failed to update user:', error);
+            if (selectedGuild) await loadMembers(selectedGuild);
+            toast.success('User updated');
+        } catch {
             toast.error('Failed to update user');
         }
     };
 
     const handleDeleteUser = async (userId: number, username: string) => {
-        const confirmed = window.confirm(`Are you sure you want to delete user "${username}"? This action cannot be undone.`);
-        if (!confirmed) return;
-
+        if (!window.confirm(`Delete user "${username}"? This cannot be undone.`)) return;
         try {
             await guildManagementApi.deleteUser(userId);
-            loadAllData();
-            toast.success(`User "${username}" deleted successfully`);
-        } catch (error) {
-            console.error('Failed to delete user:', error);
+            if (selectedGuild) await loadMembers(selectedGuild);
+            toast.success(`User "${username}" deleted`);
+        } catch {
             toast.error('Failed to delete user');
         }
     };
-    const handleUpdateCharacter = async (userId: number) => {
-        if (!newCharacterName.trim()) {
-            toast.error('Please enter a character name');
-            return;
-        }
 
+    const handleUpdateCharacter = async (userId: number) => {
+        if (!newCharacterName.trim()) { toast.error('Enter a character name'); return; }
         try {
             const result = await guildManagementApi.updateUserCharacter(userId, newCharacterName.trim());
-            
             if (result.validation_passed) {
-                toast.success(`Character updated to "${result.character_name}" - Validation passed!`);
+                toast.success(`Character updated to "${result.character_name}"`);
             } else {
-                toast.warning(`Character updated to "${result.character_name}", but validation failed: ${result.validation_message || 'Unknown error'}`);
+                toast.warning?.(`Character updated but validation failed: ${result.validation_message || 'Unknown'}`);
             }
-            
             setEditingCharacter(null);
             setNewCharacterName('');
-            loadAllData();
+            if (selectedGuild) await loadMembers(selectedGuild);
         } catch (error: any) {
-            console.error('Failed to update character:', error);
-            const errorMsg = error.response?.data?.detail || 'Failed to update character';
-            toast.error(errorMsg);
+            toast.error(error.response?.data?.detail || 'Failed to update character');
         }
     };
-    const handleToggleSetting = async (key: keyof SystemSettings, value: boolean) => {
+
+    const handleDeleteEvent = async (eventId: number) => {
+        if (!window.confirm('Delete this event?')) return;
         try {
-            const updated = await guildManagementApi.updateSettings({ [key]: value });
-            setSettings(updated);
-        } catch (error) {
-            console.error('Failed to update settings:', error);
+            const token = localStorage.getItem('token');
+            await api.delete(`/guild/events/${eventId}`, {
+                headers: { Authorization: `Bearer ${token}` },
+                data: { reason: 'Deleted by admin' },
+            });
+            toast.success('Event deleted');
+            void loadEvents();
+        } catch {
+            toast.error('Failed to delete event');
         }
     };
 
-    const getStatusColor = (status: string) => {
-        switch (status) {
-            case 'online': return 'text-green-400';
-            case 'offline': return 'text-red-400';
-            case 'degraded': return 'text-yellow-400';
-            default: return 'text-gray-400';
+    const handleDeleteAnnouncement = async (announcementId: number) => {
+        if (!window.confirm('Delete this announcement?')) return;
+        try {
+            const token = localStorage.getItem('token');
+            await api.delete(`/guild/announcements/${announcementId}`, {
+                headers: { Authorization: `Bearer ${token}` },
+                data: { reason: 'Deleted by admin' },
+            });
+            toast.success('Announcement deleted');
+            void loadAnnouncements();
+        } catch {
+            toast.error('Failed to delete announcement');
         }
     };
 
-    const getStatusIcon = (status: string) => {
-        switch (status) {
-            case 'online': return <CheckCircle className="w-5 h-5" />;
-            case 'offline': return <XCircle className="w-5 h-5" />;
-            case 'degraded': return <AlertCircle className="w-5 h-5" />;
-            default: return <Activity className="w-5 h-5" />;
-        }
-    };
-
-    if (loading) {
+    // ── Guild selector stage ──────────────────────────────────────────────────
+    if (!selectedGuild) {
         return (
-            <div className="flex items-center justify-center min-h-screen">
-                <Loader2 className="w-8 h-8 animate-spin text-amber-500" />
+            <div className="space-y-4">
+                <div className="bg-slate-900/50 border border-slate-700 rounded-lg p-4">
+                    <div className="flex items-center gap-3 mb-1">
+                        <Shield className="w-5 h-5 text-amber-500" />
+                        <h1 className="text-xl font-semibold text-slate-100">Guild Management</h1>
+                    </div>
+                    <p className="text-sm text-slate-400">Select a guild to manage its members, events, and announcements.</p>
+                </div>
+
+                {loadingGuilds ? (
+                    <div className="flex items-center justify-center py-16">
+                        <Loader2 className="w-8 h-8 animate-spin text-amber-500" />
+                    </div>
+                ) : guilds.length === 0 ? (
+                    <div className="text-center py-16 text-slate-500">No guilds registered yet.</div>
+                ) : (
+                    <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
+                        {guilds.map((guildName) => (
+                            <button
+                                key={guildName}
+                                onClick={() => selectGuild(guildName)}
+                                className="flex items-center justify-between gap-3 rounded-lg border border-slate-700 bg-slate-900/50 p-4 text-left hover:border-amber-500/50 hover:bg-amber-500/5 transition-colors group"
+                            >
+                                <div className="flex items-center gap-3">
+                                    <Shield className="w-8 h-8 text-amber-500/70 group-hover:text-amber-400 transition-colors" />
+                                    <div>
+                                        <div className="font-medium text-slate-100">{guildName}</div>
+                                        <div className="text-xs text-slate-500 mt-0.5">Click to manage</div>
+                                    </div>
+                                </div>
+                                <ChevronRight className="w-4 h-4 text-slate-600 group-hover:text-amber-400 transition-colors" />
+                            </button>
+                        ))}
+                    </div>
+                )}
             </div>
         );
     }
 
+    // ── Guild management view ─────────────────────────────────────────────────
     return (
-        <div className="container mx-auto px-4 py-8 max-w-7xl">
-            <div className="mb-8">
-                <h1 className="text-4xl font-serif text-slate-100 mb-2 flex items-center gap-3">
-                    <Shield className="w-10 h-10 text-amber-500" />
-                    Guild Management
-                </h1>
-                <p className="text-slate-400">Manage your guild members, settings, and synchronization with Tibia</p>
-                {user?.is_superuser && guilds.length > 0 && (
-                    <div className="mt-3 flex items-center gap-2">
-                        <label className="text-sm text-slate-300">Managing guild:</label>
-                        <select
-                            value={selectedGuild}
-                            onChange={(e) => setSelectedGuild(e.target.value)}
-                            className="rounded-md border border-slate-700 bg-slate-900 px-3 py-1.5 text-sm text-slate-200"
+        <div className="space-y-4">
+            {/* Header with guild name and back */}
+            <div className="bg-slate-900/50 border border-slate-700 rounded-lg p-4">
+                <div className="flex items-center justify-between gap-4 flex-wrap">
+                    <div className="flex items-center gap-3">
+                        <Shield className="w-5 h-5 text-amber-500" />
+                        <div>
+                            <h1 className="text-xl font-semibold text-slate-100">{selectedGuild}</h1>
+                            <p className="text-sm text-slate-400">Guild management — members, events, announcements</p>
+                        </div>
+                    </div>
+                    <div className="flex items-center gap-2">
+                        <button
+                            onClick={handleSyncGuild}
+                            disabled={syncing}
+                            className="flex items-center gap-2 rounded-md bg-amber-600 px-3 py-2 text-sm font-medium text-white hover:bg-amber-500 disabled:opacity-50"
                         >
-                            {guilds.map((guildName) => (
-                                <option key={guildName} value={guildName}>{guildName}</option>
-                            ))}
-                        </select>
+                            <RefreshCw className={`w-4 h-4 ${syncing ? 'animate-spin' : ''}`} />
+                            {syncing ? 'Syncing…' : 'Sync from Tibia'}
+                        </button>
+                        <button
+                            onClick={() => setSelectedGuild(null)}
+                            className="rounded-md border border-slate-700 px-3 py-2 text-sm text-slate-400 hover:text-slate-200"
+                        >
+                            ← Change guild
+                        </button>
+                    </div>
+                </div>
+                {syncResult && (
+                    <div className="mt-3 rounded bg-green-900/20 border border-green-700/40 px-4 py-2 text-sm text-green-300 flex flex-wrap gap-4">
+                        <span>Synced: <strong>{syncResult.synced_users}</strong></span>
+                        <span>Updated chars: <strong>{syncResult.updated_characters}</strong></span>
+                        <span>Total members: <strong>{syncResult.total_members}</strong></span>
                     </div>
                 )}
             </div>
 
             {/* Tabs */}
-            <div className="flex gap-2 mb-6 border-b border-slate-700">
-                {[
-                    { id: 'overview', label: 'Overview', icon: Activity },
-                    { id: 'users', label: 'Members', icon: Users },
-                    { id: 'settings', label: 'Settings', icon: Settings },
-                ].map((tab) => (
+            <div className="flex gap-1 border-b border-slate-700 bg-slate-900/30 rounded-t-lg">
+                {([
+                    { id: 'members', label: 'Members', icon: Users },
+                    { id: 'events', label: 'Events', icon: Calendar },
+                    { id: 'announcements', label: 'Announcements', icon: Bell },
+                ] as { id: Tab; label: string; icon: any }[]).map(({ id, label, icon: Icon }) => (
                     <button
-                        key={tab.id}
-                        onClick={() => setActiveTab(tab.id as any)}
-                        className={`flex items-center gap-2 px-4 py-2 border-b-2 transition-colors ${
-                            activeTab === tab.id
-                                ? 'border-amber-500 text-amber-500'
+                        key={id}
+                        onClick={() => switchTab(id)}
+                        className={`flex items-center gap-2 px-4 py-2.5 border-b-2 text-sm font-medium transition-colors ${
+                            activeTab === id
+                                ? 'border-amber-500 text-amber-400'
                                 : 'border-transparent text-slate-400 hover:text-slate-200'
                         }`}
                     >
-                        <tab.icon className="w-4 h-4" />
-                        {tab.label}
+                        <Icon className="w-4 h-4" />
+                        {label}
                     </button>
                 ))}
             </div>
 
-            {/* Overview Tab */}
-            {activeTab === 'overview' && (
-                <div className="space-y-6">
-                    {/* Stats Grid */}
-                    <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
-                        <div className="bg-slate-900/50 border border-slate-700 rounded-lg p-5">
-                            <div className="text-sm text-slate-400 mb-1">Total Members</div>
-                            <div className="text-3xl font-bold text-slate-100">{stats?.total_users || 0}</div>
-                            <div className="text-xs text-slate-500 mt-1">{stats?.active_users || 0} active</div>
-                        </div>
-                        <div className="bg-slate-900/50 border border-slate-700 rounded-lg p-5">
-                            <div className="text-sm text-slate-400 mb-1">Admin Users</div>
-                            <div className="text-3xl font-bold text-amber-500">{stats?.admin_users || 0}</div>
-                        </div>
-                        <div className="bg-slate-900/50 border border-slate-700 rounded-lg p-5">
-                            <div className="text-sm text-slate-400 mb-1">Linked Characters</div>
-                            <div className="text-3xl font-bold text-slate-100">{stats?.total_characters_linked || 0}</div>
-                        </div>
-                        <div className="bg-slate-900/50 border border-slate-700 rounded-lg p-5">
-                            <div className="text-sm text-slate-400 mb-1">Guild Ranks</div>
-                            <div className="text-3xl font-bold text-slate-100">{stats?.guild_ranks.length || 0}</div>
-                        </div>
-                    </div>
-
-                    {/* Tibia API Status */}
-                    <div className="bg-slate-900/50 border border-slate-700 rounded-lg p-6">
-                        <h3 className="text-lg font-semibold text-slate-100 mb-4 flex items-center gap-2">
-                            <Database className="w-5 h-5 text-amber-500" />
-                            Tibia API Status
-                        </h3>
-                        {tibiaStatus && (
-                            <div className="flex items-center justify-between">
-                                <div className="flex items-center gap-3">
-                                    <div className={getStatusColor(tibiaStatus.status)}>
-                                        {getStatusIcon(tibiaStatus.status)}
-                                    </div>
-                                    <div>
-                                        <div className="font-medium text-slate-200">{tibiaStatus.status.toUpperCase()}</div>
-                                        <div className="text-sm text-slate-400">{tibiaStatus.message}</div>
-                                        {tibiaStatus.latency_ms && (
-                                            <div className="text-xs text-slate-500 mt-1">Latency: {tibiaStatus.latency_ms.toFixed(0)}ms</div>
-                                        )}
-                                    </div>
-                                </div>
-                                <div className="flex gap-2">
-                                    <button
-                                        onClick={() => navigate('/admin/api-monitor')}
-                                        className="flex items-center gap-2 bg-purple-600 hover:bg-purple-500 text-white px-4 py-2 rounded-md transition-colors text-sm font-medium"
-                                    >
-                                        <Globe className="w-4 h-4" />
-                                        Monitor APIs
-                                    </button>
-                                    <button
-                                        onClick={handleSyncGuild}
-                                        disabled={syncing}
-                                        className="flex items-center gap-2 bg-amber-600 hover:bg-amber-500 disabled:bg-slate-700 disabled:text-slate-500 text-white px-4 py-2 rounded-md transition-colors text-sm font-medium"
-                                    >
-                                        <RefreshCw className={`w-4 h-4 ${syncing ? 'animate-spin' : ''}`} />
-                                        Sync with Tibia
-                                    </button>
-                                </div>
-                            </div>
-                        )}
-                    </div>
-
-                    {/* Sync Result */}
-                    {syncResult && (
-                        <div className="bg-green-900/20 border border-green-700/50 rounded-lg p-6">
-                            <h3 className="text-lg font-semibold text-green-400 mb-4">Sync Successful!</h3>
-                            <div className="grid grid-cols-2 md:grid-cols-4 gap-4 text-sm">
-                                <div>
-                                    <div className="text-slate-400">Total Members</div>
-                                    <div className="text-2xl font-bold text-slate-100">{syncResult.total_members}</div>
-                                </div>
-                                <div>
-                                    <div className="text-slate-400">Synced Users</div>
-                                    <div className="text-2xl font-bold text-green-400">{syncResult.synced_users}</div>
-                                </div>
-                                <div>
-                                    <div className="text-slate-400">Updated Characters</div>
-                                    <div className="text-2xl font-bold text-blue-400">{syncResult.updated_characters}</div>
-                                </div>
-                                <div>
-                                    <div className="text-slate-400">New Characters</div>
-                                    <div className="text-2xl font-bold text-purple-400">{syncResult.new_characters}</div>
-                                </div>
-                            </div>
-                            {syncResult.invalid_users.length > 0 && (
-                                <div className="mt-4 pt-4 border-t border-green-700/30">
-                                    <div className="text-sm text-yellow-400 mb-2">⚠️ Invalid Users Found:</div>
-                                    <div className="space-y-1">
-                                        {syncResult.invalid_users.map((u) => (
-                                            <div key={u.user_id} className="text-xs text-slate-400">
-                                                • {u.username} ({u.character_name}): {u.reason}
-                                            </div>
-                                        ))}
-                                    </div>
-                                </div>
-                            )}
-                        </div>
-                    )}
-
-                    {/* Guild Ranks Distribution */}
-                    <div className="bg-slate-900/50 border border-slate-700 rounded-lg p-6">
-                        <h3 className="text-lg font-semibold text-slate-100 mb-4">Guild Rank Distribution</h3>
-                        <div className="space-y-2">
-                            {stats?.guild_ranks.map((rank) => (
-                                <div key={rank.rank} className="flex items-center justify-between py-2 px-3 bg-slate-950/50 rounded">
-                                    <span className="text-slate-300">{rank.rank}</span>
-                                    <span className="font-semibold text-amber-500">{rank.count}</span>
-                                </div>
-                            ))}
-                        </div>
-                    </div>
+            {/* Tab content */}
+            {loadingContent ? (
+                <div className="flex items-center justify-center py-16">
+                    <Loader2 className="w-6 h-6 animate-spin text-amber-500" />
                 </div>
-            )}
-
-            {/* Users Tab */}
-            {activeTab === 'users' && (
+            ) : activeTab === 'members' ? (
                 <div className="bg-slate-900/50 border border-slate-700 rounded-lg overflow-hidden">
+                    <div className="flex items-center justify-between px-4 py-3 border-b border-slate-800">
+                        <span className="text-sm text-slate-400">{members.length} members</span>
+                        <button
+                            onClick={() => void loadMembers(selectedGuild)}
+                            className="flex items-center gap-1 text-xs text-slate-400 hover:text-slate-200 border border-slate-700 rounded px-2 py-1"
+                        >
+                            <RefreshCw className="w-3 h-3" /> Refresh
+                        </button>
+                    </div>
                     <div className="overflow-x-auto">
                         <table className="w-full">
                             <thead className="bg-slate-950/50">
                                 <tr>
-                                    <th className="text-left p-4 text-sm font-semibold text-slate-400">User</th>
-                                    <th className="text-left p-4 text-sm font-semibold text-slate-400">Email</th>
-                                    <th className="text-left p-4 text-sm font-semibold text-slate-400">Guild</th>
-                                    <th className="text-left p-4 text-sm font-semibold text-slate-400">Rank</th>
-                                    <th className="text-left p-4 text-sm font-semibold text-slate-400">Characters</th>
-                                    <th className="text-left p-4 text-sm font-semibold text-slate-400">Status</th>
-                                    <th className="text-right p-4 text-sm font-semibold text-slate-400">Actions</th>
+                                    <th className="text-left p-3 text-xs font-semibold uppercase tracking-wide text-slate-400">User</th>
+                                    <th className="text-left p-3 text-xs font-semibold uppercase tracking-wide text-slate-400">Rank</th>
+                                    <th className="text-left p-3 text-xs font-semibold uppercase tracking-wide text-slate-400">Characters</th>
+                                    <th className="text-left p-3 text-xs font-semibold uppercase tracking-wide text-slate-400">Status</th>
+                                    <th className="text-right p-3 text-xs font-semibold uppercase tracking-wide text-slate-400">Actions</th>
                                 </tr>
                             </thead>
                             <tbody>
-                                {users.map((member) => (
-                                    <tr key={member.id} className="border-t border-slate-800 hover:bg-slate-950/30 group"
->
-                                        <td className="p-4">
+                                {members.length === 0 ? (
+                                    <tr><td colSpan={5} className="p-8 text-center text-slate-500">No members found.</td></tr>
+                                ) : members.map((member) => (
+                                    <tr key={member.id} className="border-t border-slate-800 hover:bg-slate-950/30 group">
+                                        <td className="p-3">
                                             {editingUser === member.id ? (
                                                 <input
                                                     type="text"
                                                     value={editForm.username || member.username}
                                                     onChange={(e) => setEditForm({ ...editForm, username: e.target.value })}
-                                                    className="bg-slate-950 border border-slate-700 rounded px-2 py-1 text-sm text-slate-200"
+                                                    className="bg-slate-950 border border-slate-700 rounded px-2 py-1 text-sm text-slate-200 w-full"
                                                 />
                                             ) : (
                                                 <div>
-                                                    <div className="font-medium text-slate-200">{member.username}</div>
+                                                    <div className="font-medium text-slate-200 text-sm">{member.username}</div>
+                                                    <div className="text-xs text-slate-500">{member.email || 'No email'}</div>
                                                     {member.is_superuser && (
-                                                        <span className="text-xs bg-red-900/50 text-red-300 px-2 py-0.5 rounded">Admin</span>
+                                                        <span className="text-xs bg-red-900/50 text-red-300 px-1.5 py-0.5 rounded">Admin</span>
                                                     )}
                                                 </div>
                                             )}
                                         </td>
-                                        <td className="p-4 text-sm text-slate-400">
-                                            {editingUser === member.id ? (
-                                                <input
-                                                    type="email"
-                                                    value={editForm.email || member.email || ''}
-                                                    onChange={(e) => setEditForm({ ...editForm, email: e.target.value })}
-                                                    className="bg-slate-950 border border-slate-700 rounded px-2 py-1 text-sm text-slate-200"
-                                                />
-                                            ) : (
-                                                member.email || 'N/A'
-                                            )}
-                                        </td>
-                                        <td className="p-4 text-sm text-slate-300">{member.guild_name || 'Unknown'}</td>
-                                        <td className="p-4">
+                                        <td className="p-3">
                                             {editingUser === member.id ? (
                                                 <input
                                                     type="text"
                                                     value={editForm.guild_rank || member.guild_rank || ''}
                                                     onChange={(e) => setEditForm({ ...editForm, guild_rank: e.target.value })}
-                                                    className="bg-slate-950 border border-slate-700 rounded px-2 py-1 text-sm text-slate-200"
+                                                    className="bg-slate-950 border border-slate-700 rounded px-2 py-1 text-sm text-slate-200 w-full"
                                                 />
                                             ) : (
-                                                <span className="text-sm bg-slate-800 text-slate-300 px-2 py-1 rounded">
+                                                <span className="text-xs bg-slate-800 text-slate-300 px-2 py-1 rounded">
                                                     {member.guild_rank || 'No Rank'}
                                                 </span>
                                             )}
                                         </td>
-                                        <td className="p-4">
+                                        <td className="p-3">
                                             {editingCharacter === member.id ? (
                                                 <div className="flex items-center gap-2">
                                                     <input
@@ -427,101 +399,57 @@ export default function GuildManagementDashboard() {
                                                         placeholder="Character name"
                                                         className="bg-slate-950 border border-slate-700 rounded px-2 py-1 text-sm text-slate-200 flex-1"
                                                     />
-                                                    <button
-                                                        onClick={() => handleUpdateCharacter(member.id)}
-                                                        className="p-1.5 text-green-400 hover:bg-green-900/20 rounded transition-colors"
-                                                        title="Save character"
-                                                    >
-                                                        <Save className="w-4 h-4" />
+                                                    <button onClick={() => void handleUpdateCharacter(member.id)} className="p-1.5 text-green-400 hover:bg-green-900/20 rounded">
+                                                        <Save className="w-3.5 h-3.5" />
                                                     </button>
-                                                    <button
-                                                        onClick={() => {
-                                                            setEditingCharacter(null);
-                                                            setNewCharacterName('');
-                                                        }}
-                                                        className="p-1.5 text-slate-400 hover:bg-slate-800 rounded transition-colors"
-                                                        title="Cancel"
-                                                    >
-                                                        <X className="w-4 h-4" />
+                                                    <button onClick={() => { setEditingCharacter(null); setNewCharacterName(''); }} className="p-1.5 text-slate-400 hover:bg-slate-800 rounded">
+                                                        <X className="w-3.5 h-3.5" />
                                                     </button>
                                                 </div>
                                             ) : (
-                                                <div className="flex items-center gap-2">
-                                                    <div className="flex-1">
-                                                        {member.characters.length > 0 ? (
-                                                            <div className="space-y-1">
-                                                                {member.characters.map((char) => (
-                                                                    <div key={char.character_name} className="text-sm text-slate-300">
-                                                                        {char.character_name}
-                                                                        {char.level && <span className="text-slate-500"> (Lv {char.level})</span>}
-                                                                    </div>
-                                                                ))}
-                                                            </div>
-                                                        ) : (
-                                                            <span className="text-sm text-slate-500 italic">No characters</span>
-                                                        )}
+                                                <div className="flex items-center gap-2 group">
+                                                    <div className="flex-1 text-sm text-slate-300">
+                                                        {member.characters.length > 0
+                                                            ? member.characters.map((c) => `${c.character_name}${c.level ? ` (${c.level})` : ''}`).join(', ')
+                                                            : <span className="text-slate-500 italic">None</span>
+                                                        }
                                                     </div>
                                                     <button
-                                                        onClick={() => {
-                                                            setEditingCharacter(member.id);
-                                                            setNewCharacterName(member.characters[0]?.character_name || '');
-                                                        }}
-                                                        className="p-1.5 text-blue-400 hover:bg-blue-900/20 rounded transition-colors opacity-0 group-hover:opacity-100 transition-opacity"
-                                                        title="Edit character"
+                                                        onClick={() => { setEditingCharacter(member.id); setNewCharacterName(member.characters[0]?.character_name || ''); }}
+                                                        className="p-1 text-blue-400 hover:bg-blue-900/20 rounded opacity-0 group-hover:opacity-100 transition-opacity"
                                                     >
                                                         <Edit2 className="w-3 h-3" />
                                                     </button>
                                                 </div>
                                             )}
                                         </td>
-                                        <td className="p-4">
-                                            {member.is_active ? (
-                                                <span className="text-xs bg-green-900/50 text-green-300 px-2 py-1 rounded">Active</span>
-                                            ) : (
-                                                <span className="text-xs bg-slate-800 text-slate-500 px-2 py-1 rounded">Inactive</span>
-                                            )}
+                                        <td className="p-3">
+                                            <span className={`text-xs px-2 py-1 rounded ${member.is_active ? 'bg-green-900/40 text-green-300' : 'bg-slate-800 text-slate-500'}`}>
+                                                {member.is_active ? 'Active' : 'Inactive'}
+                                            </span>
                                         </td>
-                                        <td className="p-4">
-                                            <div className="flex items-center justify-end gap-2">
+                                        <td className="p-3">
+                                            <div className="flex items-center justify-end gap-1">
                                                 {editingUser === member.id ? (
                                                     <>
-                                                        <button
-                                                            onClick={() => handleUpdateUser(member.id)}
-                                                            className="p-1.5 text-green-400 hover:bg-green-900/20 rounded transition-colors"
-                                                            title="Save"
-                                                        >
-                                                            <Save className="w-4 h-4" />
+                                                        <button onClick={() => void handleUpdateUser(member.id)} className="p-1.5 text-green-400 hover:bg-green-900/20 rounded">
+                                                            <Save className="w-3.5 h-3.5" />
                                                         </button>
-                                                        <button
-                                                            onClick={() => {
-                                                                setEditingUser(null);
-                                                                setEditForm({});
-                                                            }}
-                                                            className="p-1.5 text-slate-400 hover:bg-slate-800 rounded transition-colors"
-                                                            title="Cancel"
-                                                        >
-                                                            <X className="w-4 h-4" />
+                                                        <button onClick={() => { setEditingUser(null); setEditForm({}); }} className="p-1.5 text-slate-400 hover:bg-slate-800 rounded">
+                                                            <X className="w-3.5 h-3.5" />
                                                         </button>
                                                     </>
                                                 ) : (
                                                     <>
-                                                        <button
-                                                            onClick={() => {
-                                                                setEditingUser(member.id);
-                                                                setEditForm(member);
-                                                            }}
-                                                            className="p-1.5 text-blue-400 hover:bg-blue-900/20 rounded transition-colors"
-                                                            title="Edit"
-                                                        >
-                                                            <Edit2 className="w-4 h-4" />
+                                                        <button onClick={() => { setEditingUser(member.id); setEditForm(member); }} className="p-1.5 text-blue-400 hover:bg-blue-900/20 rounded" title="Edit">
+                                                            <Edit2 className="w-3.5 h-3.5" />
                                                         </button>
                                                         <button
-                                                            onClick={() => handleDeleteUser(member.id, member.username)}
-                                                            className="p-1.5 text-red-400 hover:bg-red-900/20 rounded transition-colors"
-                                                            title="Delete"
+                                                            onClick={() => void handleDeleteUser(member.id, member.username)}
                                                             disabled={member.id === user?.id}
+                                                            className="p-1.5 text-red-400 hover:bg-red-900/20 rounded disabled:opacity-30" title="Delete"
                                                         >
-                                                            <Trash2 className="w-4 h-4" />
+                                                            <Trash2 className="w-3.5 h-3.5" />
                                                         </button>
                                                     </>
                                                 )}
@@ -533,74 +461,47 @@ export default function GuildManagementDashboard() {
                         </table>
                     </div>
                 </div>
-            )}
-
-            {/* Settings Tab */}
-            {activeTab === 'settings' && settings && (
-                <div className="space-y-6">
-                    <div className="bg-slate-900/50 border border-slate-700 rounded-lg p-6">
-                        <h3 className="text-lg font-semibold text-slate-100 mb-4">Validation Settings</h3>
-                        <div className="space-y-4">
-                            <div className="flex items-center justify-between p-4 bg-slate-950/50 rounded">
-                                <div>
-                                    <div className="font-medium text-slate-200">Tibia Character Validation</div>
-                                    <div className="text-sm text-slate-400 mt-1">
-                                        Validate character names using Tibia API during registration
-                                    </div>
-                                </div>
-                                <button
-                                    onClick={() => handleToggleSetting('tibia_validation_enabled', !settings.tibia_validation_enabled)}
-                                    className={`relative inline-flex h-6 w-11 items-center rounded-full transition-colors ${
-                                        settings.tibia_validation_enabled ? 'bg-amber-600' : 'bg-slate-700'
-                                    }`}
-                                >
-                                    <span
-                                        className={`inline-block h-4 w-4 transform rounded-full bg-white transition-transform ${
-                                            settings.tibia_validation_enabled ? 'translate-x-6' : 'translate-x-1'
-                                        }`}
-                                    />
-                                </button>
+            ) : activeTab === 'events' ? (
+                <div className="space-y-2">
+                    {events.length === 0 ? (
+                        <div className="text-center py-12 text-slate-500 bg-slate-900/50 border border-slate-700 rounded-lg">No events found.</div>
+                    ) : events.map((event) => (
+                        <div key={event.id} className="bg-slate-900/50 border border-slate-700 rounded-lg p-4 flex items-start justify-between gap-4">
+                            <div>
+                                <div className="font-medium text-slate-100 text-sm">{event.title}</div>
+                                {event.description && <div className="text-xs text-slate-400 mt-1 line-clamp-2">{event.description}</div>}
+                                <div className="text-xs text-slate-500 mt-1">{new Date(event.start_time).toLocaleString()}</div>
                             </div>
-
-                            {settings.tibia_validation_enabled && (
-                                <div className="flex items-center justify-between p-4 bg-slate-950/50 rounded border-l-4 border-amber-500">
-                                    <div>
-                                        <div className="font-medium text-slate-200">Strict Mode</div>
-                                        <div className="text-sm text-slate-400 mt-1">
-                                            Block registration when Tibia API is down (flexible mode allows registration without validation)
-                                        </div>
-                                    </div>
-                                    <button
-                                        onClick={() => handleToggleSetting('tibia_validation_strict', !settings.tibia_validation_strict)}
-                                        className={`relative inline-flex h-6 w-11 items-center rounded-full transition-colors ${
-                                            settings.tibia_validation_strict ? 'bg-red-600' : 'bg-slate-700'
-                                        }`}
-                                    >
-                                        <span
-                                            className={`inline-block h-4 w-4 transform rounded-full bg-white transition-transform ${
-                                                settings.tibia_validation_strict ? 'translate-x-6' : 'translate-x-1'
-                                            }`}
-                                        />
-                                    </button>
-                                </div>
-                            )}
+                            <button
+                                onClick={() => void handleDeleteEvent(event.id)}
+                                className="flex-shrink-0 p-1.5 text-red-400 hover:bg-red-900/20 rounded"
+                                title="Delete event"
+                            >
+                                <Trash2 className="w-4 h-4" />
+                            </button>
                         </div>
-                    </div>
-
-                    {tibiaStatus && tibiaStatus.status === 'offline' && settings.tibia_validation_strict && (
-                        <div className="bg-yellow-900/20 border border-yellow-700/50 rounded-lg p-4">
-                            <div className="flex items-start gap-3">
-                                <AlertCircle className="w-5 h-5 text-yellow-400 flex-shrink-0 mt-0.5" />
-                                <div>
-                                    <div className="font-medium text-yellow-400">Warning</div>
-                                    <div className="text-sm text-slate-300 mt-1">
-                                        Tibia API is offline and strict mode is enabled. Users cannot register with characters.
-                                        Consider disabling strict mode temporarily.
-                                    </div>
-                                </div>
+                    ))}
+                </div>
+            ) : (
+                <div className="space-y-2">
+                    {announcements.length === 0 ? (
+                        <div className="text-center py-12 text-slate-500 bg-slate-900/50 border border-slate-700 rounded-lg">No announcements found.</div>
+                    ) : announcements.map((a) => (
+                        <div key={a.id} className="bg-slate-900/50 border border-slate-700 rounded-lg p-4 flex items-start justify-between gap-4">
+                            <div>
+                                <div className="font-medium text-slate-100 text-sm">{a.title}</div>
+                                <div className="text-xs text-slate-400 mt-1 line-clamp-2">{a.content}</div>
+                                <div className="text-xs text-slate-500 mt-1">{new Date(a.created_at).toLocaleString()}</div>
                             </div>
+                            <button
+                                onClick={() => void handleDeleteAnnouncement(a.id)}
+                                className="flex-shrink-0 p-1.5 text-red-400 hover:bg-red-900/20 rounded"
+                                title="Delete announcement"
+                            >
+                                <Trash2 className="w-4 h-4" />
+                            </button>
                         </div>
-                    )}
+                    ))}
                 </div>
             )}
         </div>

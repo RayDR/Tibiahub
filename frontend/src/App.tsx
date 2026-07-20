@@ -7,11 +7,12 @@ import QuestDetailPage from './pages/QuestDetailPage';
 import HuntRecommendationsPage from './pages/HuntRecommendationsPage';
 import QuestViewerPage from './pages/QuestViewerPage';
 import GuildManagementDashboard from './pages/Admin/GuildManagementDashboard';
+import BestiaryManagement from './pages/Admin/BestiaryManagement';
 import AdminRedirect from './pages/Admin/AdminRedirect';
 import AdminSettings from './pages/Admin/Settings';
-import APIMonitor from './pages/Admin/APIMonitor';
-import DatabaseSync from './pages/Admin/DatabaseSync';
-import DataSyncPanel from './pages/DataSyncPanel';
+import DataTools from './pages/Admin/DataTools';
+import Overview from './pages/Admin/Overview';
+import GuildView from './pages/Admin/GuildView';
 import Profile from './pages/Profile';
 import PasswordReset from './pages/PasswordReset';
 import { useEffect } from 'react';
@@ -119,11 +120,16 @@ function App() {
               {/* Admin Routes */}
               <Route path="/admin" element={<AdminLayout />}>
                 <Route index element={<AdminRedirect />} />
+                <Route path="overview" element={<Overview />} />
                 <Route path="management" element={<GuildManagementDashboard />} />
-                <Route path="api-monitor" element={<APIMonitor />} />
-                <Route path="database-sync" element={<DatabaseSync />} />
-                <Route path="sync" element={<DataSyncPanel />} />
+                <Route path="guild-view" element={<GuildView />} />
+                <Route path="bestiary" element={<BestiaryManagement />} />
+                <Route path="data-tools" element={<DataTools />} />
                 <Route path="settings" element={<AdminSettings />} />
+                {/* Legacy redirects */}
+                <Route path="api-monitor" element={<Navigate to="/admin/data-tools" replace />} />
+                <Route path="database-sync" element={<Navigate to="/admin/data-tools" replace />} />
+                <Route path="sync" element={<Navigate to="/admin/data-tools" replace />} />
               </Route>
 
               {/* Catch-All */}

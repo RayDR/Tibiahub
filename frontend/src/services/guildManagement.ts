@@ -43,6 +43,7 @@ export interface SystemSettings {
     discord_auto_post: boolean;
     guild_raffles_enabled: boolean;
     guild_contests_enabled: boolean;
+    cyclopedia_category_images: Record<string, string>;
 }
 
 export interface GuildSyncResult {
@@ -137,6 +138,18 @@ export const guildManagementApi = {
     // Update system settings
     updateSettings: async (data: Partial<SystemSettings>): Promise<SystemSettings> => {
         const response = await api.put('/guild-management/settings', data);
+        return response.data;
+    },
+
+    uploadCategoryImage: async (category: string, file: File): Promise<{ category: string; image_url: string }> => {
+        const form = new FormData();
+        form.append('file', file);
+        const response = await api.post(`/guild-management/settings/category-images/upload?category=${encodeURIComponent(category)}`, form, {
+            headers: {
+                'Content-Type': 'multipart/form-data',
+            },
+            timeout: ADMIN_ACTION_TIMEOUT_MS,
+        });
         return response.data;
     },
 

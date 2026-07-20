@@ -5,7 +5,7 @@ export default function AdminRedirect() {
     const navigate = useNavigate();
     
     useEffect(() => {
-        navigate('/admin/management', { replace: true });
+        navigate('/admin/overview', { replace: true });
     }, [navigate]);
     
     return null;
