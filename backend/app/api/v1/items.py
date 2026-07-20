@@ -196,36 +196,6 @@ async def search_items(
             .limit(500)
             .all()
         )
-        if not rows and _is_external_detail_fallback_enabled(db):
-            external_response = await asyncio.wait_for(get_items(expand=False), timeout=DETAIL_FALLBACK_TIMEOUT_SECONDS)
-            if external_response.success() and isinstance(external_response.data, list):
-                # Persist only requested page to avoid mass sync behavior.
-                page_slice = external_response.data[skip: skip + limit]
-                persisted: list[ItemSearchResult] = []
-                for entry in page_slice:
-                    name = (entry.get("name") or "").strip()
-                    if not name:
-                        continue
-                    existing = db.query(ExternalItemModel).filter(ExternalItemModel.name == name).first()
-                    if not existing:
-                        existing = ExternalItemModel(name=name)
-                        db.add(existing)
-                    existing.item_id = entry.get("item_id")
-                    existing.description = entry.get("description")
-                    existing.type = entry.get("type")
-                    existing.raw_data = entry
-                    persisted.append(
-                        ItemSearchResult(
-                            item_name=name,
-                            normalized_name=normalize_search_text(name),
-                            item_image_url=entry.get("image_url"),
-                            source_url=entry.get("source_url"),
-                            drops=[],
-                        )
-                    )
-                if persisted:
-                    db.commit()
-                    return persisted
         grouped: dict[str, list[LootModel]] = {}
         for row in rows:
             key = row.normalized_name or normalize_search_text(row.item_name)
@@ -268,38 +238,6 @@ async def search_items(
         key=lambda key: _rank_item(search, grouped[key][0].item_name),
     )
     selected_keys = ranked_keys[skip: skip + limit]
-    if not selected_keys and _is_external_detail_fallback_enabled(db):
-        external_response = await asyncio.wait_for(get_items(expand=False), timeout=DETAIL_FALLBACK_TIMEOUT_SECONDS)
-        if external_response.success() and isinstance(external_response.data, list):
-            external_items = [entry for entry in external_response.data if entry.get("name")]
-            if external_items:
-                external_items.sort(key=lambda entry: _rank_item(search, entry.get("name", "")))
-                best_match = external_items[0]
-                if normalize_search_text(search) in normalize_search_text(best_match.get("name", "")):
-                    name = best_match.get("name")
-                    normalized_name = normalize_search_text(name)
-                    existing = db.query(ExternalItemModel).filter(ExternalItemModel.name == name).first()
-                    if not existing:
-                        existing = ExternalItemModel(name=name)
-                        db.add(existing)
-                    existing.description = best_match.get("description")
-                    existing.type = best_match.get("type")
-                    existing.raw_data = best_match
-                    EntityMetadataService.record_searches(
-                        db,
-                        entity_type="item",
-                        matches=[(normalized_name, name, None)],
-                    )
-                    db.commit()
-                    return [
-                        ItemSearchResult(
-                            item_name=name,
-                            normalized_name=normalized_name,
-                            item_image_url=best_match.get("image_url"),
-                            source_url=best_match.get("source_url"),
-                            drops=[],
-                        )
-                    ]
     EntityMetadataService.record_searches(
         db,
         entity_type="item",
@@ -439,6 +377,7 @@ def _build_item_result(
         ))
     sample = drops[0]
     return ItemSearchResult(
+        image_item_id=sample.id,
         item_name=item_name,
         normalized_name=sample.normalized_name or normalize_search_text(item_name),
         item_image_url=sample.item_image_url,

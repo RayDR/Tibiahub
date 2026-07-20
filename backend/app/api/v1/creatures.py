@@ -139,6 +139,7 @@ async def get_creatures(
             limit=limit,
             sort_by=safe_sort_by,
             sort_order=safe_sort_order,
+            include_hidden=False,
         )
         if search and cached_items:
             EntityMetadataService.record_searches(
@@ -177,44 +178,9 @@ async def get_bosses(
         limit=limit,
         sort_by=safe_sort_by,
         sort_order=safe_sort_order,
+        include_hidden=False,
     )
-    if cached:
-        return cached
-
-    if _is_external_detail_fallback_enabled(db):
-        try:
-            external_response = await asyncio.wait_for(
-                get_external_creatures(expand=True),
-                timeout=DETAIL_FALLBACK_TIMEOUT_SECONDS,
-            )
-            if external_response.success() and isinstance(external_response.data, list):
-                bosses_payload = [
-                    item for item in external_response.data
-                    if bool(item.get("is_boss"))
-                ]
-                # Persist only the needed page window to avoid mass sync behavior.
-                page_slice = bosses_payload[skip: skip + limit]
-                for payload in page_slice:
-                    upsert_creature_payload(db, payload)
-                if page_slice:
-                    db.commit()
-                cached = list_cached_creatures(
-                    db,
-                    search=search,
-                    category=None,
-                    is_boss=True,
-                    skip=skip,
-                    limit=limit,
-                    sort_by=safe_sort_by,
-                    sort_order=safe_sort_order,
-                )
-                if cached:
-                    return cached
-        except Exception as exc:
-            db.rollback()
-            logger.warning("bosses_fallback_failed search=%s error=%s", search, exc)
-
-    return []
+    return cached
 
 
 @router.get("/{creature_identifier}", response_model=Creature)
