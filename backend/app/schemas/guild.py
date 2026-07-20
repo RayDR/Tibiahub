@@ -16,6 +16,7 @@ class AnnouncementCreate(AnnouncementBase):
 class AnnouncementResponse(AnnouncementBase):
     id: int
     author_id: int
+    guild_name: Optional[str] = None
     created_at: datetime
     author: Optional[UserResponse] = None
 
@@ -36,6 +37,7 @@ class EventCreate(EventBase):
 class EventResponse(EventBase):
     id: int
     author_id: int
+    guild_name: Optional[str] = None
     created_at: datetime
     author: Optional[UserResponse] = None
 

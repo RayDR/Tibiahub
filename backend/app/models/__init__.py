@@ -1,4 +1,5 @@
 # Models module
+from app.models.media_asset import MediaAsset
 from app.models.creature import Creature, creature_weaknesses, creature_resistances
 from app.models.element import Element
 from app.models.loot import Loot
@@ -39,6 +40,7 @@ __all__ = [
     "RafflePrize",
     "RaffleWinner",
     "GuildMemberSnapshot",
+    "MediaAsset",
     "creature_weaknesses",
     "creature_resistances"
 ]

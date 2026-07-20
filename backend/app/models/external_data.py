@@ -71,7 +71,12 @@ class TibiaWikiQuest(Base):
     
     id = Column(Integer, primary_key=True, index=True)
     name = Column(String(255), unique=True, index=True, nullable=False)
+    slug = Column(String(180), nullable=True, index=True)
     description = Column(Text, nullable=True)
+    source_url = Column(String(1024), nullable=True)
+    group_name = Column(String(255), nullable=True)
+    parent_page = Column(String(255), nullable=True)
+    is_group = Column(Boolean, default=False, nullable=False)
     
     # Quest properties
     min_level = Column(Integer, nullable=True)
@@ -83,6 +88,10 @@ class TibiaWikiQuest(Base):
     duration = Column(String(100), nullable=True)  # e.g., "daily", "repeatable", "one-time"
     location = Column(String(255), nullable=True)
     npc = Column(String(255), nullable=True)  # NPC who gives the quest
+    rewards = Column(JSON, nullable=True)
+    requirements = Column(JSON, nullable=True)
+    related_creatures = Column(JSON, nullable=True)
+    last_synced_at = Column(DateTime(timezone=True), nullable=True)
     
     # Full raw data from API
     raw_data = Column(JSON, nullable=True)
