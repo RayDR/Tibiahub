@@ -3,9 +3,7 @@ import hashlib
 import asyncio
 from difflib import SequenceMatcher
 from typing import List
-from urllib.parse import unquote, urlparse
 
-import httpx
 from fastapi import APIRouter, Depends, Query
 from fastapi import HTTPException, Request, Response
 from sqlalchemy.orm import Session, joinedload
@@ -20,6 +18,7 @@ from app.models.spawn_location import SpawnLocation
 from app.schemas import ItemDetail, ItemDropCreature, ItemSearchResult
 from app.services.entity_metadata_service import EntityMetadataService
 from app.services.external_apis import get_items
+from app.services import media_asset_service as media_svc
 from app.services.text_utils import normalize_search_text
 
 router = APIRouter(prefix="/items", tags=["items"])
@@ -42,106 +41,97 @@ def _is_image_autofetch_enabled(db: Session) -> bool:
     return _get_setting(db, "auto_fetch_missing_images_enabled", "0") == "1"
 
 
-def _build_item_special_filepath(item_name: str) -> str:
-    safe_name = item_name.replace(" ", "_")
-    return f"{settings.TIBIAWIKI_BASE_PAGE_URL}/Special:FilePath/{safe_name}.gif"
-
-
-async def _resolve_fandom_image_url(image_url: str) -> str | None:
-    if "/Special:FilePath/" not in image_url:
-        return image_url
-
-    parsed = urlparse(image_url)
-    asset_name = unquote(parsed.path.rsplit("/", 1)[-1])
-    if not asset_name:
-        return None
-    file_title = asset_name[0].upper() + asset_name[1:]
-
-    async with httpx.AsyncClient(
-        timeout=15.0,
-        headers={"User-Agent": settings.TIBIAWIKI_USER_AGENT, "Accept": "application/json"},
-    ) as client:
-        response = await client.get(
-            settings.TIBIAWIKI_API_URL,
-            params={
-                "action": "query",
-                "titles": f"File:{file_title}",
-                "prop": "imageinfo",
-                "iiprop": "url",
-                "format": "json",
-            },
-        )
-        response.raise_for_status()
-        pages = ((response.json() or {}).get("query") or {}).get("pages") or {}
-        for page in pages.values():
-            imageinfo = page.get("imageinfo") or []
-            if imageinfo and imageinfo[0].get("url"):
-                return imageinfo[0]["url"]
-    return None
+def _placeholder_svg(label: str) -> bytes:
+    safe = media_svc.escape_svg_text(label or "Unknown Item", limit=42)
+    return (
+        "<svg xmlns='http://www.w3.org/2000/svg' width='320' height='320' viewBox='0 0 320 320'>"
+        "<defs><linearGradient id='g' x1='0' y1='0' x2='1' y2='1'>"
+        "<stop offset='0%' stop-color='#111827'/><stop offset='100%' stop-color='#1f2937'/></linearGradient></defs>"
+        "<rect width='320' height='320' fill='url(#g)'/>"
+        "<rect x='108' y='86' width='104' height='104' rx='12' fill='#374151'/><rect x='84' y='208' width='152' height='16' rx='8' fill='#4b5563'/>"
+        f"<text x='160' y='278' text-anchor='middle' fill='#d1d5db' font-size='14' font-family='Arial, sans-serif'>{safe}</text>"
+        "</svg>"
+    ).encode("utf-8")
 
 
 @router.get("/{item_id}/image")
 async def get_item_image(item_id: int, request: Request, db: Session = Depends(get_db)):
-    """Proxy loot image with fallback resolution and ETag caching."""
+    """Serve loot/item image from local MediaAsset cache (local-first)."""
     loot = db.query(LootModel).filter(LootModel.id == item_id).first()
     if not loot:
         loot = db.query(LootModel).filter(LootModel.external_id == str(item_id)).first()
     if not loot:
         raise HTTPException(status_code=404, detail="Item not found")
 
-    if not _is_image_autofetch_enabled(db):
-        raise HTTPException(status_code=404, detail="Image not cached locally")
-
-    resolved_url = loot.item_image_url
-    if not resolved_url:
-        resolved_url = _build_item_special_filepath(loot.item_name)
-
-    try:
-        async with httpx.AsyncClient(
-            timeout=15.0,
-            follow_redirects=True,
-            headers={
-                "User-Agent": settings.TIBIAWIKI_USER_AGENT,
-                "Referer": settings.TIBIAWIKI_BASE_PAGE_URL,
-            },
-        ) as client:
-            upstream = await client.get(resolved_url)
-            if upstream.status_code in {403, 404} and "/Special:FilePath/" in resolved_url:
-                fallback_url = await _resolve_fandom_image_url(resolved_url)
-                if fallback_url:
-                    resolved_url = fallback_url
-                    upstream = await client.get(resolved_url)
-            upstream.raise_for_status()
-
-        if loot.item_image_url != resolved_url:
-            loot.item_image_url = resolved_url
-            db.add(loot)
-            db.commit()
-
-        content = upstream.content
-        etag = hashlib.sha1(content).hexdigest()
-        if request.headers.get("if-none-match") == etag:
-            return Response(
-                status_code=304,
-                headers={
-                    "ETag": etag,
-                    "Cache-Control": f"public, max-age={settings.IMAGE_CACHE_MAX_AGE_SECONDS}",
-                },
-            )
-
-        media_type = upstream.headers.get("content-type", "image/gif").split(";")[0]
+    asset_key = media_svc.build_loot_asset_key(loot)
+    source_url = media_svc.build_loot_source_url(loot)
+    if not source_url:
+        placeholder = _placeholder_svg(loot.item_name)
         return Response(
-            content=content,
-            media_type=media_type,
+            content=placeholder,
+            media_type="image/svg+xml",
             headers={
-                "Content-Type": media_type,
-                "Content-Length": str(len(content)),
-                "Cache-Control": f"public, max-age={settings.IMAGE_CACHE_MAX_AGE_SECONDS}",
-                "ETag": etag,
+                "Cache-Control": "public, max-age=3600",
+                "X-Image-Source": "placeholder",
+                "X-Asset-Key": asset_key,
             },
         )
-    except Exception as exc:
-        raise HTTPException(status_code=404, detail=f"Image source unavailable: {str(exc)}") from exc
+
+    autofetch = _is_image_autofetch_enabled(db)
+    asset = await media_svc.get_or_fetch_asset(
+        db,
+        asset_key=asset_key,
+        source_url=source_url,
+        autofetch_enabled=autofetch,
+    )
+
+    if not asset or asset.status != "cached":
+        placeholder = _placeholder_svg(loot.item_name)
+        return Response(
+            content=placeholder,
+            media_type="image/svg+xml",
+            headers={
+                "Cache-Control": "public, max-age=3600",
+                "X-Image-Source": "placeholder",
+                "X-Image-Status": getattr(asset, "status", "missing") if asset else "missing",
+                "X-Asset-Key": asset_key,
+            },
+        )
+
+    content = asset.read_bytes()
+    if not content:
+        placeholder = _placeholder_svg(loot.item_name)
+        return Response(
+            content=placeholder,
+            media_type="image/svg+xml",
+            headers={
+                "Cache-Control": "public, max-age=3600",
+                "X-Image-Source": "placeholder",
+                "X-Image-Status": "missing",
+                "X-Asset-Key": asset_key,
+            },
+        )
+
+    etag = asset.sha256_hash[:20] if asset.sha256_hash else hashlib.sha1(content).hexdigest()
+    if request.headers.get("if-none-match") == etag:
+        return Response(status_code=304, headers={
+            "ETag": etag,
+            "Cache-Control": f"public, max-age={settings.IMAGE_CACHE_MAX_AGE_SECONDS}",
+        })
+
+    media_type = asset.content_type or "image/gif"
+    return Response(
+        content=content,
+        media_type=media_type,
+        headers={
+            "Content-Type": media_type,
+            "Content-Length": str(len(content)),
+            "Cache-Control": f"public, max-age={settings.IMAGE_CACHE_MAX_AGE_SECONDS}",
+            "ETag": etag,
+            "X-Image-Source": "local-media-asset",
+            "X-Asset-Key": asset_key,
+        },
+    )
 
 
 def _rank_item(query: str, item_name: str) -> tuple[int, float, str]:

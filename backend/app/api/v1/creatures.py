@@ -3,28 +3,28 @@ import hashlib
 import logging
 import asyncio
 from pathlib import Path
+import re
 from typing import List, Optional
-from urllib.parse import unquote, urlparse
 
-import httpx
 from fastapi import APIRouter, Depends, HTTPException, Query, Request, Response
+from fastapi.responses import FileResponse
 from sqlalchemy.orm import Session
 
 from app.db.database import get_db
 from app.models import Creature as CreatureModel
 from app.models.settings import SystemSettings as SettingsModel
-from app.models.external_data import CachedResource
 from app.schemas import Creature, CreatureCreate, CreatureSimple
 from app.services.bestiary_source import get_creature_detail_by_name
 from app.services.creature_storage_service import get_cached_creature_by_id, get_cached_creature_by_name, list_cached_creatures, resolve_cached_creature, upsert_creature_payload
 from app.services.entity_metadata_service import EntityMetadataService
-from app.services.external_apis import get_creatures as get_external_creatures
+from app.services import media_asset_service as media_svc
 from app.core.config import settings
 
 router = APIRouter(prefix="/creatures", tags=["creatures"])
 logger = logging.getLogger(__name__)
-_IMAGE_CACHE_DIR = Path("backend/storage/cache/images")
 DETAIL_FALLBACK_TIMEOUT_SECONDS = 15.0
+_CATEGORY_IMAGE_KEY_PREFIX = "cyclopedia_category_image_"
+_CATEGORY_IMAGE_DIR = Path("backend/storage/category-images")
 
 
 def _get_setting(db: Session, key: str, default: str = "") -> str:
@@ -43,58 +43,55 @@ def _is_image_autofetch_enabled(db: Session) -> bool:
     return _get_setting(db, "auto_fetch_missing_images_enabled", "0") == "1"
 
 
-def _resource_key(url: str) -> str:
-    return hashlib.sha1(url.encode("utf-8")).hexdigest()
+def _placeholder_svg(label: str) -> bytes:
+    safe = media_svc.escape_svg_text(label or "Unknown", limit=42)
+    return (
+        "<svg xmlns='http://www.w3.org/2000/svg' width='320' height='320' viewBox='0 0 320 320'>"
+        "<defs><linearGradient id='g' x1='0' y1='0' x2='1' y2='1'>"
+        "<stop offset='0%' stop-color='#0f172a'/><stop offset='100%' stop-color='#1e293b'/></linearGradient></defs>"
+        "<rect width='320' height='320' fill='url(#g)'/>"
+        "<circle cx='160' cy='118' r='48' fill='#334155'/><rect x='84' y='188' width='152' height='16' rx='8' fill='#475569'/>"
+        f"<text x='160' y='278' text-anchor='middle' fill='#cbd5e1' font-size='14' font-family='Arial, sans-serif'>{safe}</text>"
+        "</svg>"
+    ).encode("utf-8")
 
 
-def _ensure_cache_dir() -> None:
-    _IMAGE_CACHE_DIR.mkdir(parents=True, exist_ok=True)
+def _normalize_category_key(value: str) -> str:
+    normalized = re.sub(r"[^a-z0-9]+", "_", (value or "").strip().lower()).strip("_")
+    return normalized or "uncategorized"
 
 
-def _read_cached_image(resource: CachedResource) -> Optional[bytes]:
-    if not resource.local_path:
-        return None
-    path = Path(resource.local_path)
-    if not path.exists():
-        return None
-    return path.read_bytes()
+def _get_category_images(db: Session) -> dict[str, str]:
+    rows = (
+        db.query(SettingsModel)
+        .filter(SettingsModel.key.like(f"{_CATEGORY_IMAGE_KEY_PREFIX}%"), SettingsModel.is_active == True)
+        .all()
+    )
+    mapping: dict[str, str] = {}
+    for row in rows:
+        key = row.key[len(_CATEGORY_IMAGE_KEY_PREFIX):]
+        if key and row.value:
+            mapping[key] = row.value
+    return mapping
 
 
-def _write_cached_image(*, key: str, content: bytes) -> str:
-    _ensure_cache_dir()
-    path = _IMAGE_CACHE_DIR / f"{key}.bin"
-    path.write_bytes(content)
-    return str(path)
+@router.get("/category-images")
+async def get_cyclopedia_category_images(db: Session = Depends(get_db)):
+    """Public mapping used by Cyclopedia category cards."""
+    return _get_category_images(db)
 
 
-async def _resolve_fandom_image_url(image_url: str) -> Optional[str]:
-    if "/Special:FilePath/" not in image_url:
-        return image_url
-
-    parsed = urlparse(image_url)
-    asset_name = unquote(parsed.path.rsplit("/", 1)[-1])
-    if not asset_name:
-        return None
-    file_title = asset_name[0].upper() + asset_name[1:]
-
-    async with httpx.AsyncClient(timeout=15.0, headers={"User-Agent": settings.TIBIAWIKI_USER_AGENT, "Accept": "application/json"}) as client:
-        response = await client.get(
-            settings.TIBIAWIKI_API_URL,
-            params={
-                "action": "query",
-                "titles": f"File:{file_title}",
-                "prop": "imageinfo",
-                "iiprop": "url",
-                "format": "json",
-            },
-        )
-        response.raise_for_status()
-        pages = ((response.json() or {}).get("query") or {}).get("pages") or {}
-        for page in pages.values():
-            imageinfo = page.get("imageinfo") or []
-            if imageinfo and imageinfo[0].get("url"):
-                return imageinfo[0]["url"]
-    return None
+@router.get("/category-images/file/{file_name}")
+async def get_cyclopedia_category_image_file(file_name: str):
+    """Serve locally uploaded category image files."""
+    safe_name = Path(file_name).name
+    target = (_CATEGORY_IMAGE_DIR / safe_name).resolve()
+    root = _CATEGORY_IMAGE_DIR.resolve()
+    if not str(target).startswith(str(root)):
+        raise HTTPException(status_code=400, detail="Invalid file path")
+    if not target.exists() or not target.is_file():
+        raise HTTPException(status_code=404, detail="Category image not found")
+    return FileResponse(path=str(target))
 
 
 @router.get("/highlights", response_model=List[CreatureSimple])
@@ -308,116 +305,77 @@ async def create_creature(
 
 @router.get("/{creature_id}/image")
 async def get_creature_image(creature_id: int, request: Request, db: Session = Depends(get_db)):
-    """Proxy creature image as a complete buffered response to avoid HTTP/2 chunk issues."""
-    try:
-        creature = get_cached_creature_by_id(db, creature_id)
-        if not creature:
-            raise HTTPException(status_code=404, detail="Creature not found in local cache")
-    except HTTPException:
-        raise
+    """Serve creature image from local MediaAsset cache (local-first)."""
+    creature = get_cached_creature_by_id(db, creature_id)
+    if not creature:
+        raise HTTPException(status_code=404, detail="Creature not found in local cache")
 
-    image_url = creature.image_url if hasattr(creature, "image_url") else creature.get("image_url")
-    if not image_url:
-        raise HTTPException(status_code=404, detail="Image not found")
+    asset_key = media_svc.build_creature_asset_key(creature)
+    source_url = media_svc.build_creature_source_url(creature)
+    if not source_url:
+        placeholder = _placeholder_svg(creature.name)
+        return Response(
+            content=placeholder,
+            media_type="image/svg+xml",
+            headers={
+                "Cache-Control": "public, max-age=3600",
+                "X-Image-Source": "placeholder",
+                "X-Asset-Key": asset_key,
+            },
+        )
 
-    resource = (
-        db.query(CachedResource)
-        .filter(CachedResource.resource_type == "creature_image", CachedResource.entity_type == "creature", CachedResource.entity_id == creature_id)
-        .first()
+    autofetch = _is_image_autofetch_enabled(db)
+    asset = await media_svc.get_or_fetch_asset(
+        db,
+        asset_key=asset_key,
+        source_url=source_url,
+        autofetch_enabled=autofetch,
     )
 
-    if resource:
-        cached_content = _read_cached_image(resource)
-        if cached_content:
-            etag = resource.etag_hash or hashlib.sha1(cached_content).hexdigest()
-            if request.headers.get("if-none-match") == etag:
-                return Response(status_code=304, headers={
-                    "ETag": etag,
-                    "Cache-Control": f"public, max-age={settings.IMAGE_CACHE_MAX_AGE_SECONDS}",
-                })
-            media_type = resource.content_type or "image/gif"
-            return Response(
-                content=cached_content,
-                media_type=media_type,
-                headers={
-                    "Content-Type": media_type,
-                    "Content-Length": str(len(cached_content)),
-                    "Cache-Control": f"public, max-age={settings.IMAGE_CACHE_MAX_AGE_SECONDS}",
-                    "ETag": etag,
-                    "X-Image-Source": "local-cache",
-                },
-            )
+    if not asset or asset.status != "cached":
+        placeholder = _placeholder_svg(creature.name)
+        return Response(
+            content=placeholder,
+            media_type="image/svg+xml",
+            headers={
+                "Cache-Control": "public, max-age=3600",
+                "X-Image-Source": "placeholder",
+                "X-Image-Status": getattr(asset, "status", "missing") if asset else "missing",
+                "X-Asset-Key": asset_key,
+            },
+        )
 
-    if not _is_image_autofetch_enabled(db):
-        raise HTTPException(status_code=404, detail="Image not cached locally")
+    content = asset.read_bytes()
+    if not content:
+        placeholder = _placeholder_svg(creature.name)
+        return Response(
+            content=placeholder,
+            media_type="image/svg+xml",
+            headers={
+                "Cache-Control": "public, max-age=3600",
+                "X-Image-Source": "placeholder",
+                "X-Image-Status": "missing",
+                "X-Asset-Key": asset_key,
+            },
+        )
 
-    resolved_url = image_url
-    try:
-        async with httpx.AsyncClient(timeout=15.0, follow_redirects=True, headers={
-            "User-Agent": settings.TIBIAWIKI_USER_AGENT,
-            "Referer": settings.TIBIAWIKI_BASE_PAGE_URL,
-        }) as client:
-            upstream = await client.get(resolved_url)
-            if upstream.status_code in {403, 404} and "/Special:FilePath/" in resolved_url:
-                fallback_url = await _resolve_fandom_image_url(resolved_url)
-                if fallback_url:
-                    resolved_url = fallback_url
-                    if hasattr(creature, "image_url"):
-                        creature.image_url = fallback_url
-                        db.add(creature)
-                        db.commit()
-                    upstream = await client.get(resolved_url)
-            upstream.raise_for_status()
+    etag = asset.sha256_hash[:20] if asset.sha256_hash else hashlib.sha1(content).hexdigest()
+    if request.headers.get("if-none-match") == etag:
+        return Response(status_code=304, headers={
+            "ETag": etag,
+            "Cache-Control": f"public, max-age={settings.IMAGE_CACHE_MAX_AGE_SECONDS}",
+        })
 
-        content = upstream.content
-        etag = hashlib.sha1(content).hexdigest()
-        if request.headers.get("if-none-match") == etag:
-            return Response(status_code=304, headers={
-                "ETag": etag,
-                "Cache-Control": f"public, max-age={settings.IMAGE_CACHE_MAX_AGE_SECONDS}",
-            })
-
-        media_type = upstream.headers.get("content-type", "image/gif").split(";")[0]
-        cache_key = _resource_key(resolved_url)
-        local_path = _write_cached_image(key=cache_key, content=content)
-
-        if not resource:
-            resource = CachedResource(
-                resource_type="creature_image",
-                entity_type="creature",
-                entity_id=creature_id,
-                source_url=image_url,
-            )
-            db.add(resource)
-        resource.resolved_url = resolved_url
-        resource.local_path = local_path
-        resource.content_type = media_type
-        resource.size_bytes = len(content)
-        resource.etag_hash = etag
-        resource.status = "ready"
-        from datetime import datetime
-        resource.last_fetched_at = datetime.utcnow()
-        resource.error = None
-        db.commit()
-
-        headers = {
+    media_type = asset.content_type or "image/gif"
+    return Response(
+        content=content,
+        media_type=media_type,
+        headers={
             "Content-Type": media_type,
             "Content-Length": str(len(content)),
             "Cache-Control": f"public, max-age={settings.IMAGE_CACHE_MAX_AGE_SECONDS}",
             "ETag": etag,
-            "X-Image-Source": "external-fetch",
-        }
-        return Response(content=content, media_type=media_type, headers=headers)
-    except Exception as exc:
-        if resource:
-            cached_content = _read_cached_image(resource)
-            if cached_content:
-                media_type = resource.content_type or "image/gif"
-                return Response(content=cached_content, media_type=media_type, headers={
-                    "Content-Type": media_type,
-                    "Content-Length": str(len(cached_content)),
-                    "Cache-Control": f"public, max-age={settings.IMAGE_CACHE_MAX_AGE_SECONDS}",
-                    "ETag": resource.etag_hash or hashlib.sha1(cached_content).hexdigest(),
-                    "X-Image-Source": "stale-cache",
-                })
-        raise HTTPException(status_code=404, detail="Image source unavailable") from exc
+            "X-Image-Source": "local-media-asset",
+            "X-Asset-Key": asset_key,
+        },
+    )

@@ -3,7 +3,11 @@ Admin endpoints for user management and system monitoring
 """
 from typing import List, Any, Optional
 import requests
-from fastapi import APIRouter, Depends, HTTPException, status
+from pathlib import Path
+import hashlib
+import re
+
+from fastapi import APIRouter, Depends, File, HTTPException, UploadFile, status
 from sqlalchemy.orm import Session
 from sqlalchemy import func
 from datetime import datetime
@@ -16,6 +20,7 @@ from app.models.events import Event
 from app.models.raffle import Raffle
 from app.api.v1.endpoints.auth import get_current_admin_user, get_current_user
 from app.core.permissions import can_manage_guild, is_global_admin
+from app.services.media_asset_service import UnsafeMediaError, validate_raster_image
 from app.services.tibia_validation_service import TibiaValidationService
 from app.core import config, security
 from app.schemas.admin import (
@@ -28,6 +33,14 @@ from app.schemas.admin import (
 )
 
 router = APIRouter()
+
+_CATEGORY_IMAGE_KEY_PREFIX = "cyclopedia_category_image_"
+_CATEGORY_IMAGE_DIR = Path("backend/storage/category-images")
+
+
+def _normalize_category_key(value: str) -> str:
+    normalized = re.sub(r"[^a-z0-9]+", "_", (value or "").strip().lower()).strip("_")
+    return normalized or "uncategorized"
 
 
 def _looks_like_test_account(user: User) -> bool:
@@ -67,8 +80,81 @@ def _set_setting(db: Session, key: str, value: str, description: str = "") -> No
         db.add(SettingsModel(key=key, value=value, description=description, is_active=True))
 
 
+def _load_category_images(db: Session) -> dict[str, str]:
+    from app.models.settings import SystemSettings as SettingsModel
+    rows = (
+        db.query(SettingsModel)
+        .filter(SettingsModel.key.like(f"{_CATEGORY_IMAGE_KEY_PREFIX}%"), SettingsModel.is_active == True)
+        .all()
+    )
+    mapping: dict[str, str] = {}
+    for row in rows:
+        key = row.key[len(_CATEGORY_IMAGE_KEY_PREFIX):]
+        if key and row.value:
+            mapping[key] = row.value
+    return mapping
+
+
+def _save_category_images(db: Session, payload: dict[str, str]) -> None:
+    from app.models.settings import SystemSettings as SettingsModel
+    existing = (
+        db.query(SettingsModel)
+        .filter(SettingsModel.key.like(f"{_CATEGORY_IMAGE_KEY_PREFIX}%"))
+        .all()
+    )
+    by_key = {row.key: row for row in existing}
+
+    normalized_payload: dict[str, str] = {}
+    for category, url in (payload or {}).items():
+        category_key = _normalize_category_key(category)
+        image_url = (url or "").strip()
+        if not image_url:
+            continue
+        normalized_payload[category_key] = image_url
+
+    # Upsert provided values
+    for category_key, image_url in normalized_payload.items():
+        setting_key = f"{_CATEGORY_IMAGE_KEY_PREFIX}{category_key}"
+        row = by_key.get(setting_key)
+        if row:
+            row.value = image_url
+            row.is_active = True
+            row.description = "Cyclopedia category image URL"
+        else:
+            db.add(
+                SettingsModel(
+                    key=setting_key,
+                    value=image_url,
+                    description="Cyclopedia category image URL",
+                    is_active=True,
+                )
+            )
+
+    # Remove keys no longer present in payload
+    keep = {f"{_CATEGORY_IMAGE_KEY_PREFIX}{k}" for k in normalized_payload.keys()}
+    for row in existing:
+        if row.key not in keep:
+            db.delete(row)
+
+
+def _category_file_from_url(value: str) -> Path | None:
+    prefix = "/api/v1/creatures/category-images/file/"
+    if not value.startswith(prefix):
+        return None
+    filename = Path(value[len(prefix):]).name
+    candidate = (_CATEGORY_IMAGE_DIR / filename).resolve()
+    root = _CATEGORY_IMAGE_DIR.resolve()
+    return candidate if candidate.parent == root else None
+
+
+def _remove_unreferenced_category_files(old_values: set[str], current_values: set[str]) -> None:
+    for stale_url in old_values - current_values:
+        path = _category_file_from_url(stale_url)
+        if path and path.is_file():
+            path.unlink(missing_ok=True)
+
+
 def get_admin_or_guild_leader(current_user: User = Depends(get_current_user)):
-    """Allow global admin or guild leaders."""
     if is_global_admin(current_user) or can_manage_guild(current_user):
         return current_user
     raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Insufficient permissions")
@@ -269,6 +355,7 @@ def get_system_settings(
     discord_auto_post = db.query(SettingsModel).filter(SettingsModel.key == "discord_auto_post").first()
     guild_raffles_enabled = _get_setting(db, "guild_raffles_enabled", "1") == "1"
     guild_contests_enabled = _get_setting(db, "guild_contests_enabled", "1") == "1"
+    cyclopedia_category_images = _load_category_images(db)
     
     return SystemSettings(
         tibia_validation_enabled=config.settings.TIBIA_VALIDATION_ENABLED,
@@ -277,6 +364,7 @@ def get_system_settings(
         discord_auto_post=discord_auto_post.value == "1" if discord_auto_post else False,
         guild_raffles_enabled=guild_raffles_enabled,
         guild_contests_enabled=guild_contests_enabled,
+        cyclopedia_category_images=cyclopedia_category_images,
         access_token_expire_minutes=config.settings.ACCESS_TOKEN_EXPIRE_MINUTES
     )
 
@@ -331,13 +419,23 @@ def update_system_settings(
             "Enable guild contest/event features",
         )
 
+    old_category_images = set(_load_category_images(db).values())
+    if settings_update.cyclopedia_category_images is not None:
+        _save_category_images(db, settings_update.cyclopedia_category_images)
+
     db.commit()
+    if settings_update.cyclopedia_category_images is not None:
+        _remove_unreferenced_category_files(
+            old_category_images,
+            set(_load_category_images(db).values()),
+        )
     
     # Get updated values
     discord_webhook = db.query(SettingsModel).filter(SettingsModel.key == "discord_webhook_url").first()
     discord_auto_post = db.query(SettingsModel).filter(SettingsModel.key == "discord_auto_post").first()
     guild_raffles_enabled = _get_setting(db, "guild_raffles_enabled", "1") == "1"
     guild_contests_enabled = _get_setting(db, "guild_contests_enabled", "1") == "1"
+    cyclopedia_category_images = _load_category_images(db)
     
     return SystemSettings(
         tibia_validation_enabled=config.settings.TIBIA_VALIDATION_ENABLED,
@@ -346,8 +444,54 @@ def update_system_settings(
         discord_auto_post=discord_auto_post.value == "1" if discord_auto_post else False,
         guild_raffles_enabled=guild_raffles_enabled,
         guild_contests_enabled=guild_contests_enabled,
+        cyclopedia_category_images=cyclopedia_category_images,
         access_token_expire_minutes=config.settings.ACCESS_TOKEN_EXPIRE_MINUTES,
     )
+
+
+@router.post("/settings/category-images/upload")
+async def upload_category_image(
+    category: str,
+    file: UploadFile = File(...),
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_admin_user),
+):
+    """Upload an image file for a Cyclopedia category and persist URL in settings."""
+    _ = current_user
+    raw = await file.read()
+    if not raw:
+        raise HTTPException(status_code=400, detail="Empty upload")
+    if len(raw) > 3 * 1024 * 1024:
+        raise HTTPException(status_code=400, detail="Image too large (max 3MB)")
+
+    try:
+        content_type, ext = validate_raster_image(raw, file.content_type)
+    except UnsafeMediaError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
+
+    category_key = _normalize_category_key(category)
+    _CATEGORY_IMAGE_DIR.mkdir(parents=True, exist_ok=True)
+    digest = hashlib.sha256(raw).hexdigest()[:12]
+    filename = f"{category_key}_{digest}{ext}"
+    target = _CATEGORY_IMAGE_DIR / filename
+    target.write_bytes(raw)
+
+    public_url = f"/api/v1/creatures/category-images/file/{filename}"
+    old_values = set(_load_category_images(db).values())
+    _save_category_images(db, {**_load_category_images(db), category_key: public_url})
+    try:
+        db.commit()
+    except Exception:
+        db.rollback()
+        target.unlink(missing_ok=True)
+        raise HTTPException(status_code=500, detail="Unable to save category image")
+    _remove_unreferenced_category_files(old_values, set(_load_category_images(db).values()))
+
+    return {
+        "category": category_key,
+        "image_url": public_url,
+        "content_type": content_type,
+    }
 
 
 @router.put("/users/{user_id}", response_model=UserWithCharacters)
@@ -866,4 +1010,3 @@ def get_external_apis_status(
         "online_count": len([a for a in apis_status if a["status"] == "online"]),
         "apis": apis_status
     }
-

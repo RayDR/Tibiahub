@@ -1,12 +1,16 @@
 """
 Admin API endpoints - CRUD operations for creatures and hunt zones
 """
-from fastapi import APIRouter, Depends, HTTPException, status
+from fastapi import APIRouter, BackgroundTasks, Depends, HTTPException, status
+from pydantic import BaseModel
 from sqlalchemy.orm import Session
-from typing import List
+from typing import List, Optional
 
 from app.db.database import get_db
 from app.models import Creature, HuntZone, Loot, Element, SpawnLocation
+from app.models.user import User
+from app.models.quest import Quest
+from app.services import media_asset_service as media_svc
 from app.schemas import (
     CreatureCreate, Creature as CreatureSchema,
     HuntZoneCreate, HuntZone as HuntZoneSchema,
@@ -14,12 +18,49 @@ from app.schemas import (
     ElementCreate, Element as ElementSchema
 )
 
+
+class CreatureImagePatch(BaseModel):
+    name: Optional[str] = None
+    classification: Optional[str] = None
+    difficulty: Optional[str] = None
+    is_hidden: Optional[bool] = None
+    image_alias: Optional[str] = None
+    image_url_override: Optional[str] = None
+    image_source_name: Optional[str] = None
+    image_locked: Optional[bool] = None
+    clear_local_cache: Optional[bool] = False
+
+
+class LootImagePatch(BaseModel):
+    item_image_alias: Optional[str] = None
+    item_image_url_override: Optional[str] = None
+    item_image_locked: Optional[bool] = None
+    clear_local_cache: Optional[bool] = False
+
 router = APIRouter()
 
 
 # ============================================================================
 # CREATURES ADMIN
 # ============================================================================
+
+@router.get("/creatures")
+def list_creatures_admin(
+    skip: int = 0,
+    limit: int = 50,
+    search: Optional[str] = None,
+    include_hidden: bool = True,
+    db: Session = Depends(get_db),
+):
+    query = db.query(Creature)
+    if search:
+        search_term = f"%{search.strip()}%"
+        query = query.filter(Creature.name.ilike(search_term))
+    if not include_hidden:
+        query = query.filter(Creature.is_hidden == False)
+    total = query.count()
+    items = query.order_by(Creature.name.asc()).offset(skip).limit(limit).all()
+    return {"items": items, "total": total, "skip": skip, "limit": limit}
 
 @router.post("/creatures/", response_model=CreatureSchema, status_code=status.HTTP_201_CREATED)
 def create_creature(creature: CreatureCreate, db: Session = Depends(get_db)):
@@ -170,3 +211,164 @@ def delete_element(element_id: int, db: Session = Depends(get_db)):
     db.delete(db_element)
     db.commit()
     return None
+
+
+# ============================================================================
+# IMAGE ALIAS / OVERRIDE ADMIN
+# ============================================================================
+
+@router.patch("/creatures/{creature_id}/image", status_code=status.HTTP_200_OK)
+async def patch_creature_image(
+    creature_id: int,
+    payload: CreatureImagePatch,
+    background_tasks: BackgroundTasks,
+    db: Session = Depends(get_db),
+):
+    """Set image alias, override URL, or lock flag for a creature image."""
+    creature = db.query(Creature).filter(Creature.id == creature_id).first()
+    if not creature:
+        raise HTTPException(status_code=404, detail="Creature not found")
+
+    previous_asset_key = media_svc.build_creature_asset_key(creature)
+
+    if payload.name is not None and payload.name.strip():
+        creature.name = payload.name.strip()
+    if payload.classification is not None:
+        creature.classification = payload.classification.strip() or None
+    if payload.difficulty is not None:
+        creature.difficulty = payload.difficulty.strip() or None
+    if payload.is_hidden is not None:
+        creature.is_hidden = bool(payload.is_hidden)
+
+    if payload.image_alias is not None:
+        creature.image_alias = payload.image_alias or None
+    if payload.image_url_override is not None:
+        if payload.image_url_override.strip():
+            try:
+                media_svc.validate_remote_url(payload.image_url_override.strip())
+            except media_svc.UnsafeMediaError as exc:
+                raise HTTPException(status_code=400, detail=str(exc)) from exc
+        creature.image_url_override = payload.image_url_override or None
+    if payload.image_source_name is not None:
+        creature.image_source_name = payload.image_source_name or None
+    if payload.image_locked is not None:
+        creature.image_locked = payload.image_locked
+
+    if payload.clear_local_cache:
+        media_svc.clear_asset(db, asset_key=previous_asset_key)
+        creature.image_asset_id = None
+
+    db.commit()
+
+    # Refresh MediaAsset in background so admin sees immediate feedback
+    asset_key = media_svc.build_creature_asset_key(creature)
+    source_url = media_svc.build_creature_source_url(creature)
+    asset_status = "no_source"
+    if source_url:
+        asset = await media_svc.refresh_asset(db, asset_key=asset_key, source_url=source_url)
+        asset_status = (asset.status if asset else "failed")
+        # Link creature → asset
+        if asset and asset.id and not creature.image_asset_id:
+            creature.image_asset_id = asset.id
+            db.commit()
+
+    return {
+        "id": creature.id,
+        "name": creature.name,
+        "classification": creature.classification,
+        "difficulty": creature.difficulty,
+        "is_hidden": creature.is_hidden,
+        "image_alias": creature.image_alias,
+        "image_url_override": creature.image_url_override,
+        "image_source_name": creature.image_source_name,
+        "image_locked": creature.image_locked,
+        "clear_local_cache": bool(payload.clear_local_cache),
+        "asset_key": asset_key,
+        "asset_status": asset_status,
+    }
+
+
+@router.patch("/loot/{loot_id}/image", status_code=status.HTTP_200_OK)
+async def patch_loot_image(
+    loot_id: int,
+    payload: LootImagePatch,
+    db: Session = Depends(get_db),
+):
+    """Set image alias, override URL, or lock flag for a loot item image."""
+    loot = db.query(Loot).filter(Loot.id == loot_id).first()
+    if not loot:
+        raise HTTPException(status_code=404, detail="Loot item not found")
+
+    previous_asset_key = media_svc.build_loot_asset_key(loot)
+
+    if payload.item_image_alias is not None:
+        loot.item_image_alias = payload.item_image_alias or None
+    if payload.item_image_url_override is not None:
+        if payload.item_image_url_override.strip():
+            try:
+                media_svc.validate_remote_url(payload.item_image_url_override.strip())
+            except media_svc.UnsafeMediaError as exc:
+                raise HTTPException(status_code=400, detail=str(exc)) from exc
+        loot.item_image_url_override = payload.item_image_url_override or None
+    if payload.item_image_locked is not None:
+        loot.item_image_locked = payload.item_image_locked
+
+    if payload.clear_local_cache:
+        media_svc.clear_asset(db, asset_key=previous_asset_key)
+        loot.image_asset_id = None
+
+    db.commit()
+
+    asset_key = media_svc.build_loot_asset_key(loot)
+    source_url = media_svc.build_loot_source_url(loot)
+    asset_status = "no_source"
+    if source_url:
+        asset = await media_svc.refresh_asset(db, asset_key=asset_key, source_url=source_url)
+        asset_status = (asset.status if asset else "failed")
+        if asset and asset.id and not loot.image_asset_id:
+            loot.image_asset_id = asset.id
+            db.commit()
+
+    return {
+        "id": loot.id,
+        "item_name": loot.item_name,
+        "item_image_alias": loot.item_image_alias,
+        "item_image_url_override": loot.item_image_url_override,
+        "item_image_locked": loot.item_image_locked,
+        "clear_local_cache": bool(payload.clear_local_cache),
+        "asset_key": asset_key,
+        "asset_status": asset_status,
+    }
+
+
+# ============================================================================
+# SYSTEM OVERVIEW
+# ============================================================================
+
+@router.get("/overview/stats")
+def get_overview_stats(db: Session = Depends(get_db)):
+    """Return aggregate system stats for the admin overview page."""
+    total_creatures = db.query(Creature).count()
+    visible_creatures = db.query(Creature).filter(Creature.is_hidden != True).count()
+    hidden_creatures = total_creatures - visible_creatures
+    total_hunt_zones = db.query(HuntZone).count()
+    total_quests = db.query(Quest).count()
+    total_users = db.query(User).count()
+    active_users = db.query(User).filter(User.is_active == True).count()
+    admin_users = db.query(User).filter(User.is_superuser == True).count()
+
+    return {
+        "creatures": {
+            "total": total_creatures,
+            "visible": visible_creatures,
+            "hidden": hidden_creatures,
+        },
+        "hunt_zones": {"total": total_hunt_zones},
+        "quests": {"total": total_quests},
+        "users": {
+            "total": total_users,
+            "active": active_users,
+            "inactive": total_users - active_users,
+            "admin": admin_users,
+        },
+    }
