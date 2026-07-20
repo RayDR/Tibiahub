@@ -1,6 +1,6 @@
 import { useState, useEffect } from 'react';
 import { useParams } from 'react-router-dom';
-import { motion, AnimatePresence } from 'framer-motion';
+import { motion } from 'framer-motion';
 import { eventsApi } from '../services/events';
 import { Loader2, Trophy, Clock, Skull, Users } from 'lucide-react';
 import { useAuth } from '../context/AuthContext';
@@ -21,7 +21,6 @@ export default function PublicRafflePage() {
     const [eventData, setEventData] = useState<any>(null);
     const [participants, setParticipants] = useState<Participant[]>([]);
     const [winner, setWinner] = useState<Participant | null>(null);
-    const [winnerNumber, setWinnerNumber] = useState<number | null>(null);
 
     // Animation Stage: 'waiting', 'drawing', 'elimination1', 'elimination2', 'winner'
     const [stage, setStage] = useState<'waiting' | 'drawing' | 'elimination1' | 'elimination2' | 'winner'>('waiting');
@@ -34,15 +33,14 @@ export default function PublicRafflePage() {
         const init = async () => {
             try {
                 if (!uuid && !publicCode) return;
-                const event = publicCode ? await eventsApi.getPublicEventByCode(publicCode) : await eventsApi.getPublicEvent(uuid);
+                const event = publicCode ? await eventsApi.getPublicEventByCode(publicCode) : await eventsApi.getPublicEvent(uuid!);
                 setEventData(event);
 
                 // Get participants status
-                const status = await eventsApi.getRaffleStatus(publicCode ? event.uuid : uuid);
+                const status = await eventsApi.getRaffleStatus(publicCode ? event.uuid : uuid!);
                 setParticipants(status.participants);
 
                 if (status.is_drawn && status.winner_number && status.winner_name) {
-                    setWinnerNumber(status.winner_number);
                     // Always start fresh - don't set winner yet, let animation do it
                     // Wait a bit for participants to be ready
                     setTimeout(() => {

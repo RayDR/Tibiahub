@@ -1,5 +1,5 @@
 // Password Reset Page
-import { useState, useEffect } from 'react';
+import { useState } from 'react';
 import { useNavigate, useSearchParams } from 'react-router-dom';
 import { useToast } from '../context/ToastContext';
 import { Shield, Loader2, CheckCircle, Mail } from 'lucide-react';

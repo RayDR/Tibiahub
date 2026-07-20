@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { useTranslation } from 'react-i18next';
-import { Calendar, Trophy, Users, Ticket, Gift, Plus, Trash2, ExternalLink, Loader2 } from 'lucide-react';
+import { Calendar, Trophy, Users, Ticket, Gift, Plus, Trash2, Loader2 } from 'lucide-react';
 import { eventsApi, Event, EventCreate } from '../../services/events';
 import { guildApi } from '../../services/guild';
 import { useAuth } from '../../context/AuthContext';
@@ -669,6 +669,7 @@ const EventDetailModal: React.FC<EventDetailModalProps> = ({
   winnerName,
   currentUser,
 }) => {
+  const toast = useToast();
   const [isPublicEdit, setIsPublicEdit] = useState(event.is_public);
   const [syncLoading, setSyncLoading] = useState(false);
   const [syncLog, setSyncLog] = useState<string[]>([]);
@@ -1066,14 +1067,14 @@ const EventDetailModal: React.FC<EventDetailModalProps> = ({
                     {canManageEvent && event.is_public && (
                       <div className="flex gap-2">
                         <button
-                          onClick={() => handleExcludeParticipant(p.id, p.username)}
+                          onClick={() => handleExcludeParticipant(p.id, p.username || 'Unknown participant')}
                           className="px-2 py-1 bg-red-900/30 hover:bg-red-900/50 text-red-400 rounded text-xs border border-red-700/50 transition-colors"
                           title="Excluir permanentemente (no volverá en actualizaciones automáticas)"
                         >
                           🚫
                         </button>
                         <button
-                          onClick={() => handleDeleteParticipant(p.id, p.username)}
+                          onClick={() => handleDeleteParticipant(p.id, p.username || 'Unknown participant')}
                           className="px-2 py-1 bg-slate-800 hover:bg-slate-700 text-slate-400 rounded text-xs border border-slate-600 transition-colors"
                           title="Eliminar (puede volver en próxima actualización)"
                         >

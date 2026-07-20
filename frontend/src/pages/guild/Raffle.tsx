@@ -24,7 +24,7 @@ import { useAuth } from '../../context/AuthContext';
 import { useToast } from '../../context/ToastContext';
 import { guildApi } from '../../services/guild';
 import { guildManagementApi } from '../../services/guildManagement';
-import { Raffle, RaffleSimulation, raffleApi } from '../../services/raffle';
+import { Raffle, RaffleAccessMode, RaffleSimulation, RaffleStatus, raffleApi } from '../../services/raffle';
 
 // ---------------------------------------------------------------------------
 // Helpers
@@ -121,7 +121,14 @@ export default function RafflePage() {
   const [activeTab, setActiveTab] = useState<Tab>('overview');
   const [simulation, setSimulation] = useState<RaffleSimulation | null>(null);
 
-  const [createForm, setCreateForm] = useState({
+  const [createForm, setCreateForm] = useState<{
+    title: string;
+    description: string;
+    guild_name: string;
+    access_mode: RaffleAccessMode;
+    show_participants: boolean;
+    prizes: Array<{ name: string; reward: string }>;
+  }>({
     title: '',
     description: '',
     guild_name: '',
@@ -653,7 +660,7 @@ export default function RafflePage() {
                       <label className="mb-1 block text-xs text-slate-400">{t('raffle.edit.statusLabel')}</label>
                       <select
                         value={selectedRaffle.status}
-                        onChange={(e) => setRaffles((curr) => curr.map((r) => r.id === selectedRaffle.id ? { ...r, status: e.target.value } : r))}
+                        onChange={(e) => setRaffles((curr) => curr.map((r) => r.id === selectedRaffle.id ? { ...r, status: e.target.value as RaffleStatus } : r))}
                         className="w-full rounded-xl border border-slate-700 bg-slate-900 px-3 py-2 text-slate-100"
                       >
                         <option value="draft">{t('raffle.edit.statusDraft')}</option>
