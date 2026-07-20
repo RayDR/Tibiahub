@@ -2,12 +2,13 @@
 import { useEffect, useState } from 'react';
 import { useAuth } from '../context/AuthContext';
 import { useToast } from '../context/ToastContext';
-import { useNavigate } from 'react-router-dom';
-import { User, Shield, Mail, Calendar, Edit2, Save, X, Loader2, Link2, Lock } from 'lucide-react';
+import { User, Shield, Mail, Calendar, Edit2, Save, X, Loader2, Link2, Lock, Tag, BadgeInfo } from 'lucide-react';
 import api from '../services/api';
 
 interface ProfileData {
     username: string;
+    display_name?: string;
+    title?: string;
     email: string;
     avatar_url?: string;
     tibia_character_name: string;
@@ -28,13 +29,14 @@ interface ProfileData {
 export default function Profile() {
     const { updateUser } = useAuth();
     const toast = useToast();
-    const navigate = useNavigate();
     
     const [loading, setLoading] = useState(true);
     const [saving, setSaving] = useState(false);
     const [editing, setEditing] = useState(false);
     const [profileData, setProfileData] = useState<ProfileData | null>(null);
     const [formData, setFormData] = useState({
+        display_name: '',
+        title: '',
         email: '',
         avatar_url: '',
         tibia_character_name: '',
@@ -53,6 +55,8 @@ export default function Profile() {
             const response = await api.get('/profile/me');
             setProfileData(response.data);
             setFormData({
+                display_name: response.data.display_name || '',
+                title: response.data.title || '',
                 email: response.data.email || '',
                 avatar_url: response.data.avatar_url || '',
                 tibia_character_name: response.data.tibia_character_name || '',
@@ -81,6 +85,8 @@ export default function Profile() {
         setSaving(true);
         try {
             const payload: Record<string, string> = {
+                display_name: formData.display_name,
+                title: formData.title,
                 email: formData.email,
                 avatar_url: formData.avatar_url,
             };
@@ -112,6 +118,8 @@ export default function Profile() {
         setEditing(false);
         if (profileData) {
             setFormData({
+                display_name: profileData.display_name || '',
+                title: profileData.title || '',
                 email: profileData.email || '',
                 avatar_url: profileData.avatar_url || '',
                 tibia_character_name: profileData.tibia_character_name || '',
@@ -215,6 +223,50 @@ export default function Profile() {
                                         (event.target as HTMLImageElement).style.display = 'none';
                                     }}
                                 />
+                            </div>
+                        )}
+                    </div>
+
+                    {/* Display Name */}
+                    <div>
+                        <label className="block text-sm font-medium text-[color:var(--color-text-muted)] mb-2">
+                            <Tag className="w-4 h-4 inline mr-1" />
+                            Display Name
+                        </label>
+                        {editing ? (
+                            <input
+                                type="text"
+                                value={formData.display_name}
+                                onChange={(e) => setFormData({ ...formData, display_name: e.target.value })}
+                                className="app-input w-full px-3 py-2"
+                                placeholder="How others will see you (leave blank to use username)"
+                                maxLength={100}
+                            />
+                        ) : (
+                            <div className="bg-[color:var(--color-surface-alt)] border border-[color:var(--color-border)] rounded px-3 py-2 text-[color:var(--color-text)]">
+                                {profileData.display_name || <span className="text-[color:var(--color-text-muted)] italic">Not set</span>}
+                            </div>
+                        )}
+                    </div>
+
+                    {/* Title */}
+                    <div>
+                        <label className="block text-sm font-medium text-[color:var(--color-text-muted)] mb-2">
+                            <BadgeInfo className="w-4 h-4 inline mr-1" />
+                            Title / Bio Line
+                        </label>
+                        {editing ? (
+                            <input
+                                type="text"
+                                value={formData.title}
+                                onChange={(e) => setFormData({ ...formData, title: e.target.value })}
+                                className="app-input w-full px-3 py-2"
+                                placeholder="e.g. Guild Master, Veteran Hunter..."
+                                maxLength={100}
+                            />
+                        ) : (
+                            <div className="bg-[color:var(--color-surface-alt)] border border-[color:var(--color-border)] rounded px-3 py-2 text-[color:var(--color-text)]">
+                                {profileData.title || <span className="text-[color:var(--color-text-muted)] italic">Not set</span>}
                             </div>
                         )}
                     </div>
