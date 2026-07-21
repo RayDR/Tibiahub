@@ -55,6 +55,22 @@ Revision `guild_leadership_20260725` follows `raffle_scopes_20260724` and adds t
 - Confirm applicant responses never reveal internal comments or vote totals.
 - Confirm the assistance banner and Guild Directory return action persist on admin routes.
 
+## Workspace polish and onboarding
+
+The leadership workspace is organized as a dashboard, recruitment pipeline, and
+application detail view. Summary cards expose pending reviews, interviews,
+promotion follow-up, and the signed-in member's own application. Application
+detail keeps applicant communication separate from reviewer-only notes and
+shows a chronological, audience-filtered timeline. Accepted members receive an
+explicit onboarding/promotion follow-up state; completing it is an auditable
+manager action and duplicate completion is rejected.
+
+All leadership routes are lazy-loaded and render a translated loading state.
+API panels use independent loading/error boundaries so one failed request does
+not blank the rest of the page. Forms use full-width controls on small screens,
+44px touch targets, safe-area spacing, and confirmation for final decisions.
+New labels and workflow statuses are available in English and Spanish.
+
 ## Future roles
 
 Add a stable role code and translations, then explicitly enable recruitment and permissions. Reserved concepts such as recruiter, raid leader, treasury manager, Discord moderator, and event coordinator must not appear in the UI until their policy and workflow are implemented.
