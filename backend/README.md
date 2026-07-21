@@ -1,5 +1,8 @@
 # Tibia Bestiary API - Backend
 
+Automatic raffle scheduling, recovery, and operational runbooks are documented
+in [`../docs/automatic-raffle-operations.md`](../docs/automatic-raffle-operations.md).
+
 Backend API para el sistema de bestiario de Tibia construido con FastAPI y SQLite.
 
 ## 🚀 Características
