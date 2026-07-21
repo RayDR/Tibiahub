@@ -1,12 +1,13 @@
 import { useEffect, useState } from 'react';
-import { useNavigate } from 'react-router-dom';
+import { Navigate, useNavigate, useSearchParams } from 'react-router-dom';
 import { useAuth } from '../../context/AuthContext';
 import { useToast } from '../../context/ToastContext';
 import { guildManagementApi, GuildMember, GuildSyncResult } from '../../services/guildManagement';
 import api from '../../services/api';
+import { AssistanceBanner } from '../../components/workspace/WorkspacePrimitives';
 import {
     Users, Shield, Edit2, Trash2,
-    Save, X, Loader2, RefreshCw, ChevronRight, Bell, Calendar,
+    Save, X, Loader2, RefreshCw, Bell, Calendar,
 } from 'lucide-react';
 
 type Tab = 'members' | 'events' | 'announcements';
@@ -32,11 +33,11 @@ export default function GuildManagementDashboard() {
     const { user } = useAuth();
     const navigate = useNavigate();
     const toast = useToast();
+    const [searchParams] = useSearchParams();
+    const assistedGuild = (searchParams.get('guild') || '').trim();
 
     // Guild selection stage
-    const [guilds, setGuilds] = useState<string[]>([]);
-    const [selectedGuild, setSelectedGuild] = useState<string | null>(null);
-    const [loadingGuilds, setLoadingGuilds] = useState(true);
+    const [selectedGuild] = useState<string | null>(assistedGuild || null);
 
     // Content state
     const [activeTab, setActiveTab] = useState<Tab>('members');
@@ -59,29 +60,7 @@ export default function GuildManagementDashboard() {
         }
     }, [user, navigate]);
 
-    useEffect(() => {
-        void loadGuilds();
-    }, []);
-
-    const loadGuilds = async () => {
-        setLoadingGuilds(true);
-        try {
-            const data = await guildManagementApi.getGuilds();
-            const normalized = data.filter((g) => Boolean(g?.trim()));
-            setGuilds(normalized);
-        } catch {
-            toast.error('Failed to load guilds');
-        } finally {
-            setLoadingGuilds(false);
-        }
-    };
-
-    const selectGuild = (guildName: string) => {
-        setSelectedGuild(guildName);
-        setSyncResult(null);
-        setActiveTab('members');
-        void loadMembers(guildName);
-    };
+    useEffect(() => { if (assistedGuild) void loadMembers(assistedGuild); }, [assistedGuild]);
 
     const loadMembers = async (guildName: string) => {
         setLoadingContent(true);
@@ -226,49 +205,13 @@ export default function GuildManagementDashboard() {
 
     // ── Guild selector stage ──────────────────────────────────────────────────
     if (!selectedGuild) {
-        return (
-            <div className="space-y-4">
-                <div className="bg-slate-900/50 border border-slate-700 rounded-lg p-4">
-                    <div className="flex items-center gap-3 mb-1">
-                        <Shield className="w-5 h-5 text-amber-500" />
-                        <h1 className="text-xl font-semibold text-slate-100">Guild Management</h1>
-                    </div>
-                    <p className="text-sm text-slate-400">Select a guild to manage its members, events, and announcements.</p>
-                </div>
-
-                {loadingGuilds ? (
-                    <div className="flex items-center justify-center py-16">
-                        <Loader2 className="w-8 h-8 animate-spin text-amber-500" />
-                    </div>
-                ) : guilds.length === 0 ? (
-                    <div className="text-center py-16 text-slate-500">No guilds registered yet.</div>
-                ) : (
-                    <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
-                        {guilds.map((guildName) => (
-                            <button
-                                key={guildName}
-                                onClick={() => selectGuild(guildName)}
-                                className="flex items-center justify-between gap-3 rounded-lg border border-slate-700 bg-slate-900/50 p-4 text-left hover:border-amber-500/50 hover:bg-amber-500/5 transition-colors group"
-                            >
-                                <div className="flex items-center gap-3">
-                                    <Shield className="w-8 h-8 text-amber-500/70 group-hover:text-amber-400 transition-colors" />
-                                    <div>
-                                        <div className="font-medium text-slate-100">{guildName}</div>
-                                        <div className="text-xs text-slate-500 mt-0.5">Click to manage</div>
-                                    </div>
-                                </div>
-                                <ChevronRight className="w-4 h-4 text-slate-600 group-hover:text-amber-400 transition-colors" />
-                            </button>
-                        ))}
-                    </div>
-                )}
-            </div>
-        );
+        return <Navigate to="/admin/guilds" replace />;
     }
 
     // ── Guild management view ─────────────────────────────────────────────────
     return (
         <div className="space-y-4">
+            <AssistanceBanner guildName={selectedGuild} />
             {/* Header with guild name and back */}
             <div className="bg-slate-900/50 border border-slate-700 rounded-lg p-4">
                 <div className="flex items-center justify-between gap-4 flex-wrap">
@@ -289,7 +232,7 @@ export default function GuildManagementDashboard() {
                             {syncing ? 'Syncing…' : 'Sync from Tibia'}
                         </button>
                         <button
-                            onClick={() => setSelectedGuild(null)}
+                            onClick={() => navigate('/admin/guilds')}
                             className="rounded-md border border-slate-700 px-3 py-2 text-sm text-slate-400 hover:text-slate-200"
                         >
                             ← Change guild
