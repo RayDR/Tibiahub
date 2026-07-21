@@ -1,4 +1,4 @@
-from sqlalchemy import Boolean, Column, DateTime, ForeignKey, Integer, JSON, String, Text, UniqueConstraint
+from sqlalchemy import Boolean, Column, DateTime, ForeignKey, Index, Integer, JSON, String, Text, UniqueConstraint, text
 from sqlalchemy.orm import relationship
 from sqlalchemy.sql import func
 
@@ -51,6 +51,7 @@ class GuildLeadershipOpening(Base):
 
 class GuildLeadershipApplication(Base):
     __tablename__ = "guild_leadership_applications"
+    __table_args__ = (Index("uq_leadership_active_application", "opening_id", "applicant_user_id", unique=True, sqlite_where=text("status IN ('applied','under_review','more_information_requested','interview','voting')"), postgresql_where=text("status IN ('applied','under_review','more_information_requested','interview','voting')")),)
 
     id = Column(Integer, primary_key=True)
     opening_id = Column(Integer, ForeignKey("guild_leadership_openings.id"), nullable=False, index=True)
@@ -85,6 +86,7 @@ class GuildLeadershipApplication(Base):
 
 class GuildLeadershipAssignment(Base):
     __tablename__ = "guild_leadership_assignments"
+    __table_args__ = (Index("uq_leadership_active_assignment", "guild_name", "role_id", "user_id", unique=True, sqlite_where=text("is_active = 1"), postgresql_where=text("is_active IS TRUE")),)
 
     id = Column(Integer, primary_key=True)
     guild_name = Column(String(200), nullable=False, index=True)
