@@ -20,6 +20,8 @@ class RaffleCreate(BaseModel):
     title: str
     description: Optional[str] = None
     guild_name: str = Field(..., min_length=1)
+    scope_type: Literal["guild", "server", "global"] = "guild"
+    world_name: Optional[str] = None
     access_mode: str = "guild_only"
     show_participants: bool = True
     visibility: str = "public"
@@ -116,6 +118,8 @@ class RaffleResponse(BaseModel):
     title: str
     description: Optional[str] = None
     guild_name: str
+    scope_type: str = "guild"
+    world_name: Optional[str] = None
     access_mode: str
     show_participants: bool
     participant_count: int
@@ -180,7 +184,6 @@ class RaffleDrawRequest(BaseModel):
 
 
 class EligibilityEntryResponse(BaseModel):
-    user_id: int
     character_name: Optional[str] = None
     guild_name: Optional[str] = None
     guild_rank: Optional[str] = None
@@ -225,6 +228,7 @@ class AutomaticResultResponse(BaseModel):
     delivered_at: Optional[datetime] = None
     delivered_by_name: Optional[str] = None
     delivery_note: Optional[str] = None
+    delivery_history: List[dict] = []
 
 
 class AutomaticRunResponse(BaseModel):

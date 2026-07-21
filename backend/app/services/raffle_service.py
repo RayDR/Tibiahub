@@ -373,6 +373,8 @@ class RaffleService:
             "title": raffle.title,
             "description": raffle.description,
             "guild_name": raffle.guild_name,
+            "scope_type": getattr(raffle, "scope_type", None) or {"guild_only": "guild", "world_only": "server", "public": "global"}.get(raffle.access_mode, "guild"),
+            "world_name": getattr(raffle, "world_name", None),
             "access_mode": raffle.access_mode,
             "show_participants": raffle.show_participants,
             "participant_count": len(participants),
