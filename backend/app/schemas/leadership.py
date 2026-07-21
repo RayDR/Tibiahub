@@ -88,3 +88,7 @@ class DecisionCreate(BaseModel):
 class PromotionUpdate(BaseModel):
     completed: bool
     note: Optional[str] = Field(None, max_length=2000)
+
+
+class AssignmentEnd(BaseModel):
+    reason: str = Field(..., min_length=3, max_length=2000)

@@ -14,7 +14,7 @@ from app.models.leadership import (
 )
 from app.models.user import User
 from app.schemas.leadership import (
-    ApplicationCreate, DecisionCreate, InterviewCreate, MessageCreate, OpeningCreate,
+    ApplicationCreate, AssignmentEnd, DecisionCreate, InterviewCreate, MessageCreate, OpeningCreate,
     OpeningUpdate, PromotionUpdate, StatusUpdate, VoteCreate,
 )
 from app.services.leadership_service import ACTIVE_APPLICATION_STATUSES, LeadershipService
@@ -47,14 +47,23 @@ def opening_data(row: GuildLeadershipOpening) -> dict:
     return {"id": row.id, "role_code": row.role.role_code, "title": row.title, "description": row.description, "responsibilities": row.responsibilities, "requirements": row.requirements, "openings_count": row.openings_count, "filled_count": accepted, "application_deadline": row.application_deadline, "status": row.status, "allow_viceleader_review": row.allow_viceleader_review, "voting_enabled": row.voting_enabled, "votes_required": row.votes_required, "created_at": row.created_at, "updated_at": row.updated_at}
 
 
+def _name(user: User | None) -> str | None:
+    return None if not user else user.display_name or user.username
+
+
+def assignment_data(row: GuildLeadershipAssignment) -> dict:
+    return {"id": row.id, "role_code": row.role.role_code, "character_name": row.character_name, "assignment_source": row.assignment_source, "started_at": row.started_at, "ended_at": row.ended_at, "is_active": row.is_active, "notes": row.notes, "assigned_by": _name(row.assigned_by), "in_game_promotion_status": row.in_game_promotion_status, "in_game_promoted_at": row.in_game_promoted_at, "in_game_promoted_by": _name(row.promoted_by)}
+
+
 def application_data(row: GuildLeadershipApplication, viewer: User) -> dict:
     reviewer = LeadershipService.reviewer(viewer, row.opening)
     applicant = row.applicant_user_id == viewer.id
     if not (reviewer or applicant): raise HTTPException(403, "Application is private")
     messages = [item for item in row.messages if not item.deleted_at and (reviewer or item.audience in {"applicant", "both"})]
-    data = {"id": row.id, "opening_id": row.opening_id, "character_name": row.character_name, "status": row.status, "profile": row.profile_snapshot, "submitted_at": row.submitted_at, "conduct_agreed_at": row.conduct_agreed_at, "conduct_version": row.conduct_version, "history": [{"from_status": item.from_status, "to_status": item.to_status, "reason": item.reason if reviewer or item.to_status in {"more_information_requested", "accepted", "rejected"} else None, "created_at": item.created_at} for item in row.histories], "messages": [{"id": item.id, "audience": item.audience, "message_type": item.message_type, "body": item.body, "author_name": item.author.display_name or item.author.username, "created_at": item.created_at} for item in messages], "interview": None if not row.interview else {"scheduled_at": row.interview.scheduled_at, "timezone": row.interview.timezone, "meeting_location": row.interview.meeting_location, "completed_at": row.interview.completed_at}}
+    data = {"id": row.id, "opening_id": row.opening_id, "opening_title": row.opening.title, "role_code": row.opening.role.role_code, "character_name": row.character_name, "status": row.status, "profile": row.profile_snapshot, "submitted_at": row.submitted_at, "conduct_agreed_at": row.conduct_agreed_at, "conduct_version": row.conduct_version, "final_decision_at": row.final_decision_at, "rejection_reason": row.rejection_reason if reviewer or applicant else None, "valid_actions": LeadershipService.valid_actions(row, viewer), "history": [{"from_status": item.from_status, "to_status": item.to_status, "reason": item.reason if reviewer or item.to_status in {"more_information_requested", "accepted", "rejected"} else None, "actor_name": _name(item.actor) if reviewer or item.actor_context == "applicant" else None, "actor_context": item.actor_context if reviewer else None, "admin_assistance": item.actor_context == "admin_assistance" if reviewer else False, "created_at": item.created_at} for item in row.histories], "messages": [{"id": item.id, "audience": item.audience, "message_type": item.message_type, "body": item.body, "author_name": item.author.display_name or item.author.username, "created_at": item.created_at} for item in messages], "interview": None if not row.interview else {"scheduled_at": row.interview.scheduled_at, "timezone": row.interview.timezone, "meeting_location": row.interview.meeting_location, "completed_at": row.interview.completed_at, "organizer": _name(row.interview.created_by), "completed_by": _name(row.interview.completed_by), "internal_notes": row.interview.interview_notes if reviewer else None}, "assignment": assignment_data(row.accepted_assignment) if row.accepted_assignment else None}
     if reviewer:
-        data.update({"answers": {"why_apply": row.why_apply, "contribution": row.contribution, "availability": row.availability, "leadership_experience": row.leadership_experience, "applicant_message": row.applicant_message}, "vote_summary": {value: sum(1 for vote in row.votes if vote.vote == value) for value in ("support", "neutral", "oppose")}, "vote_participation": len(row.votes)})
+        current_vote = next((vote for vote in row.votes if vote.voter_user_id == viewer.id), None)
+        data.update({"answers": {"why_apply": row.why_apply, "contribution": row.contribution, "availability": row.availability, "leadership_experience": row.leadership_experience, "applicant_message": row.applicant_message}, "vote_summary": {value: sum(1 for vote in row.votes if vote.vote == value) for value in ("support", "neutral", "oppose")}, "vote_participation": len(row.votes), "current_vote": current_vote.vote if current_vote else None, "current_vote_comment": current_vote.comment if current_vote else None})
     return data
 
 
@@ -67,7 +76,8 @@ def summary(db: Session, guild: str, user: User) -> dict:
     applications = db.query(GuildLeadershipApplication).join(GuildLeadershipOpening).filter(GuildLeadershipOpening.guild_name.ilike(guild), GuildLeadershipApplication.status.in_(ACTIVE_APPLICATION_STATUSES)).all()
     own = next((item for item in applications if item.applicant_user_id == user.id), None)
     can_review = LeadershipService.manager(user, guild) or any(LeadershipService.reviewer(user, opening) for opening in openings)
-    return {"guild_name": guild, "role": "viceleader", "active_viceleaders": active_assignments, "recommended_minimum": 4, "target_count": role.target_count if role else 4, "below_recommended": active_assignments < 4, "open_positions": sum(max(0, item.openings_count - sum(1 for app in item.applications if app.status == "accepted")) for item in openings if item.status == "open"), "active_applicants": len(applications) if can_review else None, "interviews_pending": sum(1 for item in applications if item.status == "interview") if can_review else 0, "applications_voting": sum(1 for item in applications if item.status == "voting") if can_review else 0, "recently_accepted": db.query(GuildLeadershipApplication).join(GuildLeadershipOpening).filter(GuildLeadershipOpening.guild_name.ilike(guild), GuildLeadershipApplication.status == "accepted").count(), "own_status": own.status if own else None, "capabilities": {"manage": LeadershipService.manager(user, guild), "review": can_review}}
+    pending_promotions = db.query(GuildLeadershipAssignment).filter(GuildLeadershipAssignment.guild_name.ilike(guild), GuildLeadershipAssignment.is_active.is_(True), GuildLeadershipAssignment.in_game_promotion_status == "pending").count()
+    return {"guild_name": guild, "role": "viceleader", "active_viceleaders": active_assignments, "recommended_minimum": 4, "target_count": role.target_count if role else 4, "below_recommended": active_assignments < 4, "open_positions": sum(max(0, item.openings_count - sum(1 for app in item.applications if app.status == "accepted")) for item in openings if item.status == "open"), "active_applicants": len(applications) if can_review else None, "applications_requiring_attention": sum(1 for item in applications if item.status in {"applied", "more_information_requested"}) if can_review else None, "interviews_pending": sum(1 for item in applications if item.status == "interview") if can_review else 0, "applications_voting": sum(1 for item in applications if item.status == "voting") if can_review else 0, "recently_accepted": db.query(GuildLeadershipApplication).join(GuildLeadershipOpening).filter(GuildLeadershipOpening.guild_name.ilike(guild), GuildLeadershipApplication.status == "accepted").count(), "pending_promotions": pending_promotions if LeadershipService.manager(user, guild) else None, "own_status": own.status if own else None, "own_application_id": own.id if own else None, "capabilities": {"manage": LeadershipService.manager(user, guild), "review": can_review}}
 
 
 @router.get("/me/leadership")
@@ -222,15 +232,27 @@ def decision(application_id: int, payload: DecisionCreate, db: Session = Depends
 
 @router.get("/me/leadership/assignments")
 def assignments(db: Session = Depends(get_db), user: User = Depends(get_current_active_user)):
-    guild=own_guild(user); return [{"id": row.id, "role_code": row.role.role_code, "character_name": row.character_name, "started_at": row.started_at, "is_active": row.is_active, "in_game_promotion_status": row.in_game_promotion_status, "in_game_promoted_at": row.in_game_promoted_at} for row in db.query(GuildLeadershipAssignment).filter(GuildLeadershipAssignment.guild_name.ilike(guild)).all()]
+    guild=own_guild(user); return [assignment_data(row) for row in db.query(GuildLeadershipAssignment).filter(GuildLeadershipAssignment.guild_name.ilike(guild)).order_by(GuildLeadershipAssignment.is_active.desc(), GuildLeadershipAssignment.started_at.desc()).all()]
 
 
 @router.patch("/me/leadership/assignments/{assignment_id}/promotion")
 def promotion(assignment_id: int, payload: PromotionUpdate, db: Session = Depends(get_db), user: User = Depends(get_current_active_user)):
     row=db.query(GuildLeadershipAssignment).filter(GuildLeadershipAssignment.id==assignment_id, GuildLeadershipAssignment.guild_name.ilike(own_guild(user))).first()
     if not row or not LeadershipService.manager(user, row.guild_name): raise HTTPException(403, "Promotion tracking is restricted")
+    if payload.completed and row.in_game_promotion_status == "completed": raise HTTPException(409, "In-game promotion is already complete")
     row.in_game_promotion_status="completed" if payload.completed else "pending"; row.in_game_promoted_at=datetime.now(UTC) if payload.completed else None; row.in_game_promoted_by_id=user.id if payload.completed else None
+    if payload.note: row.notes = payload.note
     LeadershipService.audit(db, user, row.guild_name, "leadership_promotion_completed" if payload.completed else "leadership_promotion_pending", "leadership_assignment", row.id); db.commit(); return {"id": row.id, "in_game_promotion_status": row.in_game_promotion_status, "in_game_promoted_at": row.in_game_promoted_at}
+
+
+@router.post("/me/leadership/assignments/{assignment_id}/end")
+def end_assignment(assignment_id: int, payload: AssignmentEnd, db: Session = Depends(get_db), user: User = Depends(get_current_active_user)):
+    row = db.query(GuildLeadershipAssignment).filter(GuildLeadershipAssignment.id == assignment_id, GuildLeadershipAssignment.guild_name.ilike(own_guild(user))).first()
+    if not row or not LeadershipService.manager(user, row.guild_name): raise HTTPException(403, "Assignment management is restricted")
+    if not row.is_active: raise HTTPException(409, "Assignment is already ended")
+    row.is_active = False; row.ended_at = datetime.now(UTC); row.notes = payload.reason
+    LeadershipService.audit(db, user, row.guild_name, "leadership_assignment_ended", "leadership_assignment", row.id, {"reason_recorded": True}); db.commit()
+    return assignment_data(row)
 
 
 # Explicit admin-assistance contracts use the same domain rules with a fixed registered guild.
@@ -324,13 +346,25 @@ def admin_vote(guild_key: str, application_id: int, payload: VoteCreate, db: Ses
 @admin_router.get("/guilds/{guild_key}/leadership/assignments")
 def admin_assignments(guild_key: str, db: Session = Depends(get_db), admin: User = Depends(get_current_admin_user)):
     guild = _resolve_registered_guild(db, guild_key)
-    return [{"id": row.id, "role_code": row.role.role_code, "character_name": row.character_name, "started_at": row.started_at, "is_active": row.is_active, "in_game_promotion_status": row.in_game_promotion_status, "in_game_promoted_at": row.in_game_promoted_at} for row in db.query(GuildLeadershipAssignment).filter(GuildLeadershipAssignment.guild_name.ilike(guild)).all()]
+    return [assignment_data(row) for row in db.query(GuildLeadershipAssignment).filter(GuildLeadershipAssignment.guild_name.ilike(guild)).order_by(GuildLeadershipAssignment.is_active.desc(), GuildLeadershipAssignment.started_at.desc()).all()]
 
 
 @admin_router.patch("/guilds/{guild_key}/leadership/assignments/{assignment_id}/promotion")
 def admin_promotion(guild_key: str, assignment_id: int, payload: PromotionUpdate, db: Session = Depends(get_db), admin: User = Depends(get_current_admin_user)):
     guild = _resolve_registered_guild(db, guild_key); row = db.query(GuildLeadershipAssignment).filter(GuildLeadershipAssignment.id == assignment_id, GuildLeadershipAssignment.guild_name.ilike(guild)).first()
     if not row: raise HTTPException(404, "Leadership assignment not found")
+    if payload.completed and row.in_game_promotion_status == "completed": raise HTTPException(409, "In-game promotion is already complete")
     row.in_game_promotion_status = "completed" if payload.completed else "pending"; row.in_game_promoted_at = datetime.now(UTC) if payload.completed else None; row.in_game_promoted_by_id = admin.id if payload.completed else None
+    if payload.note: row.notes = payload.note
     LeadershipService.audit(db, admin, guild, "leadership_promotion_completed" if payload.completed else "leadership_promotion_pending", "leadership_assignment", row.id); db.commit()
     return {"id": row.id, "in_game_promotion_status": row.in_game_promotion_status, "in_game_promoted_at": row.in_game_promoted_at}
+
+
+@admin_router.post("/guilds/{guild_key}/leadership/assignments/{assignment_id}/end")
+def admin_end_assignment(guild_key: str, assignment_id: int, payload: AssignmentEnd, db: Session = Depends(get_db), admin: User = Depends(get_current_admin_user)):
+    guild = _resolve_registered_guild(db, guild_key); row = db.query(GuildLeadershipAssignment).filter(GuildLeadershipAssignment.id == assignment_id, GuildLeadershipAssignment.guild_name.ilike(guild)).first()
+    if not row: raise HTTPException(404, "Leadership assignment not found")
+    if not row.is_active: raise HTTPException(409, "Assignment is already ended")
+    row.is_active = False; row.ended_at = datetime.now(UTC); row.notes = payload.reason
+    LeadershipService.audit(db, admin, guild, "leadership_assignment_ended", "leadership_assignment", row.id, {"reason_recorded": True}); db.commit()
+    return assignment_data(row)

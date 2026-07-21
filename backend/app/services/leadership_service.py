@@ -29,6 +29,31 @@ TRANSITIONS = {
 
 class LeadershipService:
     @staticmethod
+    def valid_actions(application: GuildLeadershipApplication, viewer: User) -> list[str]:
+        applicant = application.applicant_user_id == viewer.id
+        reviewer = LeadershipService.reviewer(viewer, application.opening)
+        manager = LeadershipService.manager(viewer, application.opening.guild_name)
+        actions: list[str] = []
+        if applicant and application.status in ACTIVE_APPLICATION_STATUSES:
+            actions.append("withdraw")
+            if application.status == "more_information_requested":
+                actions.append("reply")
+        if reviewer:
+            actions.append("comment")
+            if application.opening.voting_enabled and application.status == "voting" and not applicant:
+                actions.append("vote")
+        if manager and application.status not in TERMINAL_STATUSES:
+            if application.status == "applied": actions.append("start_review")
+            if application.status in {"applied", "under_review", "more_information_requested"}: actions.append("request_information")
+            if application.status in {"under_review", "more_information_requested", "interview"}: actions.append("schedule_interview")
+            if application.opening.voting_enabled and application.status in {"under_review", "interview"}: actions.append("start_voting")
+            if "accepted" in TRANSITIONS.get(application.status, set()): actions.append("accept")
+            if "rejected" in TRANSITIONS.get(application.status, set()): actions.append("reject")
+            if "cancelled" in TRANSITIONS.get(application.status, set()): actions.append("cancel")
+            if application.status == "more_information_requested": actions.append("return_to_review")
+        return actions
+
+    @staticmethod
     def ensure_role(db: Session, guild_name: str, actor: User) -> GuildLeadershipRole:
         role = db.query(GuildLeadershipRole).filter(GuildLeadershipRole.guild_name.ilike(guild_name), GuildLeadershipRole.role_code == "viceleader").first()
         if role:

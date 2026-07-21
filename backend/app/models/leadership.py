@@ -82,6 +82,7 @@ class GuildLeadershipApplication(Base):
     messages = relationship("GuildLeadershipApplicationMessage", back_populates="application", order_by="GuildLeadershipApplicationMessage.created_at")
     votes = relationship("GuildLeadershipVote", back_populates="application")
     interview = relationship("GuildLeadershipInterview", back_populates="application", uselist=False)
+    accepted_assignment = relationship("GuildLeadershipAssignment", foreign_keys=[accepted_assignment_id], post_update=True)
 
 
 class GuildLeadershipAssignment(Base):
@@ -105,6 +106,8 @@ class GuildLeadershipAssignment(Base):
 
     role = relationship("GuildLeadershipRole")
     user = relationship("User", foreign_keys=[user_id])
+    assigned_by = relationship("User", foreign_keys=[assigned_by_id])
+    promoted_by = relationship("User", foreign_keys=[in_game_promoted_by_id])
 
 
 class GuildLeadershipApplicationHistory(Base):
@@ -119,6 +122,7 @@ class GuildLeadershipApplicationHistory(Base):
     safe_metadata = Column(JSON, nullable=False, default=dict)
     created_at = Column(DateTime(timezone=True), nullable=False, server_default=func.now())
     application = relationship("GuildLeadershipApplication", back_populates="histories")
+    actor = relationship("User", foreign_keys=[actor_id])
 
 
 class GuildLeadershipApplicationMessage(Base):
@@ -149,6 +153,8 @@ class GuildLeadershipInterview(Base):
     created_by_id = Column(Integer, ForeignKey("users.id"), nullable=False)
     created_at = Column(DateTime(timezone=True), nullable=False, server_default=func.now())
     application = relationship("GuildLeadershipApplication", back_populates="interview")
+    created_by = relationship("User", foreign_keys=[created_by_id])
+    completed_by = relationship("User", foreign_keys=[completed_by_id])
 
 
 class GuildLeadershipVote(Base):
