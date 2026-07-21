@@ -31,6 +31,7 @@ class User(Base):
     residence = Column(String(100), nullable=True)
     achievement_points = Column(Integer, nullable=True)
     last_login_at = Column(DateTime(timezone=True), nullable=True)
+    last_app_login_at = Column(DateTime(timezone=True), nullable=True)
     tibia_status = Column(String(50), nullable=True)
     tibia_last_error = Column(String(255), nullable=True)
     last_updated = Column(DateTime(timezone=True), nullable=True)
@@ -43,4 +44,3 @@ class User(Base):
 
     def __repr__(self):
         return f"<User {self.username}>"
-
