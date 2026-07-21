@@ -32,10 +32,13 @@ import Announcements from './pages/guild/Announcements';
 import Events from './pages/guild/Events';
 import HuntCatalog from './pages/guild/HuntCatalog';
 import RafflesWorkspace from './pages/guild/RafflesWorkspace';
-import Recruitment from './pages/guild/Recruitment';
+import Leadership from './pages/guild/Leadership';
+import LeadershipRecruitment from './pages/guild/LeadershipRecruitment';
+import LeadershipApplicationDetail from './pages/guild/LeadershipApplicationDetail';
 import GuildDirectory from './pages/Admin/GuildDirectory';
 import AdminGuildWorkspace from './pages/Admin/AdminGuildWorkspace';
 import AdminGuildRaffles from './pages/Admin/AdminGuildRaffles';
+import AdminGuildLeadership from './pages/Admin/AdminGuildLeadership';
 import GlobalActivities from './pages/Admin/GlobalActivities';
 import NotificationsPage from './pages/guild/Notifications';
 import RafflePublicPage from './pages/RafflePublicPage';
@@ -122,7 +125,10 @@ function App() {
                 <Route path="members" element={<GuildMembersPage />} />
                 <Route path="announcements" element={<Announcements />} />
                 <Route path="events" element={<Events />} />
-                <Route path="recruitment" element={<Recruitment />} />
+                <Route path="leadership" element={<Leadership />} />
+                <Route path="leadership/recruitment" element={<LeadershipRecruitment />} />
+                <Route path="leadership/recruitment/applications/:applicationId" element={<LeadershipApplicationDetail />} />
+                <Route path="recruitment" element={<Navigate to="/guild/leadership/recruitment" replace />} />
                 <Route path="hunts" element={<HuntCatalog />} />
                 <Route path="raffles" element={<RafflesWorkspace />} />
                 <Route path="raffle" element={<Navigate to="/guild/raffles?section=history" replace />} />
@@ -137,6 +143,9 @@ function App() {
                 <Route path="guilds" element={<GuildDirectory />} />
                 <Route path="guilds/:guildKey" element={<AdminGuildWorkspace />} />
                 <Route path="guilds/:guildKey/raffles" element={<AdminGuildRaffles />} />
+                <Route path="guilds/:guildKey/leadership" element={<AdminGuildLeadership />} />
+                <Route path="guilds/:guildKey/leadership/recruitment" element={<AdminGuildLeadership recruitment />} />
+                <Route path="guilds/:guildKey/leadership/recruitment/applications/:applicationId" element={<LeadershipApplicationDetail admin />} />
                 <Route path="activities" element={<GlobalActivities />} />
                 <Route path="management" element={<GuildManagementDashboard />} />
                 <Route path="guild-view" element={<GuildView />} />
