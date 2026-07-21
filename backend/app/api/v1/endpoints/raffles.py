@@ -15,17 +15,19 @@ from app.core.permissions import (
     can_update_raffle_delivery, can_view_private_raffle_results,
     can_manage_guild, is_global_admin, is_matching_raffle_leader,
 )
+from app.core.scopes import ContentScope, ScopeType, require_scope_creation
 from app.core import security
 from app.db.database import get_db
 from app.models.events import Event
 from app.models.guild import Announcement, AnnouncementType
 from app.models.raffle import (
     Raffle, RaffleEligibilitySnapshot, RaffleManagerGrant, RaffleParticipant,
-    RafflePrize, RafflePrizeDelivery, RaffleRun, RaffleRunResult, RaffleWinner,
+    RafflePrize, RafflePrizeDelivery, RaffleDeliveryAudit, RaffleRun, RaffleRunResult, RaffleWinner,
     RaffleTestAudit,
 )
 from app.models.user import User
 from app.models.user_character import UserCharacter
+from app.models.workspace_audit import WorkspaceAudit
 from app.schemas.raffle import (
     RaffleCreate,
     RaffleDrawRequest,
@@ -72,6 +74,18 @@ def _ensure_public_code(db: Session, raffle: Raffle) -> None:
         return
     raffle.public_code = generate_unique_code(db, Raffle)
     db.add(raffle)
+
+
+def _audit_admin_action(db: Session, user: User, raffle: Raffle, action: str, metadata: dict | None = None) -> None:
+    if not is_global_admin(user):
+        return
+    assisted = raffle.scope_type == "guild" and (user.guild_name or "").strip().casefold() != raffle.guild_name.strip().casefold()
+    db.add(WorkspaceAudit(
+        actor_id=user.id, workspace_type="admin_guild_assist" if assisted else "admin",
+        guild_name=raffle.guild_name if raffle.scope_type == "guild" else None,
+        action=action, target_type="raffle", target_id=str(raffle.id), assisted=assisted,
+        safe_metadata={"scope_type": raffle.scope_type, **(metadata or {})},
+    ))
 
 
 def _require_raffle_management(current_user: User, raffle: Raffle) -> None:
@@ -209,6 +223,35 @@ def list_raffles(
     return [RaffleService.serialize_raffle(raffle) for raffle in visible]
 
 
+@router.get("/workspace")
+def raffle_workspace(
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_active_user),
+):
+    query = db.query(Raffle).options(selectinload(Raffle.prizes)).filter(Raffle.is_deleted.is_(False))
+    raffles = query.order_by(Raffle.created_at.desc()).all()
+    visible = []
+    for raffle in raffles:
+        same_guild = bool(current_user.guild_name and raffle.guild_name.casefold() == current_user.guild_name.casefold())
+        same_world = bool(current_user.world_name and raffle.world_name and raffle.world_name.casefold() == current_user.world_name.casefold())
+        if not (is_global_admin(current_user) or same_guild or raffle.scope_type == "global" or (raffle.scope_type == "server" and same_world)):
+            continue
+        snapshot = max(raffle.eligibility_snapshots, key=lambda row: row.snapshot_number) if raffle.eligibility_snapshots else None
+        public = _serialize_public_raffle(db, raffle)
+        visible.append({
+            "id": raffle.id, "public_code": raffle.public_code, "title": raffle.title,
+            "guild_name": raffle.guild_name, "scope_type": raffle.scope_type, "world_name": raffle.world_name,
+            "purpose": raffle.purpose, "status": raffle.status, "scheduled_run_at": raffle.scheduled_run_at,
+            "publication_status": raffle.publication_status, "execution_state": raffle.execution_state,
+            "last_error_summary": raffle.last_error_summary, "retry_count": raffle.retry_count,
+            "participant_count": len([p for p in raffle.participants if not p.is_deleted]),
+            "eligibility": None if not snapshot else {"candidate_count": snapshot.candidate_count, "eligible_count": snapshot.eligible_count, "excluded_count": snapshot.excluded_count, "cutoff_at": snapshot.cutoff_at, "frozen": True},
+            "winners": public["winners"],
+            "capabilities": {"manage": can_administer_raffle(db, current_user, raffle), "publish": can_publish_raffle(current_user, raffle)},
+        })
+    return visible
+
+
 @router.get("/{raffle_id}", response_model=RaffleResponse)
 def get_raffle(
     raffle_id: int,
@@ -246,18 +289,22 @@ def create_raffle(
     current_user: User = Depends(get_current_manager_user),
 ):
     automatic_stage1 = payload.run_mode == "automatic" or payload.purpose in {"test", "real"}
+    scope = ContentScope(ScopeType(payload.scope_type), guild_name=payload.guild_name, world_name=payload.world_name or current_user.world_name)
+    require_scope_creation(current_user, scope)
     allowed = (
         is_global_admin(current_user) or is_matching_raffle_leader(current_user, payload.guild_name)
         if automatic_stage1 else can_manage_guild(current_user, payload.guild_name)
     )
     if not allowed:
         raise HTTPException(status_code=403, detail="You can only manage raffles for your guild")
-    access_mode = normalize_access_mode(payload.access_mode, payload.visibility)
+    access_mode = {"guild": "guild_only", "server": "world_only", "global": "public"}[payload.scope_type]
     raffle = Raffle(
         title=payload.title,
         description=payload.description,
         public_code=generate_unique_code(db, Raffle),
         guild_name=payload.guild_name,
+        scope_type=payload.scope_type,
+        world_name=(payload.world_name or current_user.world_name) if payload.scope_type in {"guild", "server"} else None,
         access_mode=access_mode,
         show_participants=payload.show_participants,
         visibility="private" if access_mode == "guild_only" else "public",
@@ -311,7 +358,7 @@ def create_raffle(
         )
 
     if raffle.run_mode == "automatic" or raffle.purpose in {"test", "real"}:
-        if raffle.run_mode != "automatic" or raffle.access_mode != "guild_only":
+        if raffle.run_mode != "automatic" or raffle.scope_type != "guild":
             raise HTTPException(status_code=400, detail="Test and real automatic raffles must be guild-only and automatic")
         try:
             db.flush()
@@ -338,6 +385,7 @@ def create_raffle(
                 details={"scheduled_run_at": raffle.scheduled_run_at.isoformat(), "timezone_name": raffle.timezone_name},
             ))
 
+    _audit_admin_action(db, current_user, raffle, "raffle_created")
     db.commit()
     db.refresh(raffle)
     return get_raffle(raffle.id, db, current_user)
@@ -895,6 +943,7 @@ async def freeze_automatic_eligibility(
     _require_capability(can_execute_raffle(db, current_user, raffle))
     try:
         snapshot = await RaffleEligibilityService.freeze(db, raffle, current_user)
+        _audit_admin_action(db, current_user, raffle, "raffle_eligibility_frozen")
         db.commit()
         db.refresh(snapshot)
         return {
@@ -1018,6 +1067,8 @@ async def execute_automatic_raffle(
     _require_capability(can_execute_raffle(db, current_user, raffle))
     try:
         run = await AutomaticRaffleService.execute(db, raffle, current_user, trigger=payload.trigger)
+        _audit_admin_action(db, current_user, raffle, "raffle_executed")
+        db.commit()
         return serialize_run(run)
     except (AutomaticRaffleError, RaffleEligibilityError) as exc:
         raise HTTPException(status_code=409 if getattr(exc, "code", "") in {"already_executed", "execution_in_progress", "concurrent_execution"} else 400, detail=exc.summary) from exc
@@ -1051,6 +1102,7 @@ def rerun_automatic_raffle(
             is_global_admin=is_global_admin(current_user),
         )
         NotificationService.emit(db, raffle, "raffle_rerun_performed", f"raffle:{raffle.id}:run:{run.id}:rerun", payload={"positions": payload.positions})
+        _audit_admin_action(db, current_user, raffle, "raffle_rerun", {"positions": payload.positions})
         db.commit()
         return serialize_run(run)
     except AutomaticRaffleError as exc:
@@ -1082,6 +1134,7 @@ def update_raffle_delivery(
             raise HTTPException(status_code=409, detail="Delivered prizes require a global-admin override note")
     if payload.admin_override and not is_global_admin(current_user):
         raise HTTPException(status_code=403, detail="Only global administrators may override delivery state")
+    previous_status = delivery.status
     delivery.status = payload.status
     delivery.note = note or None
     if payload.status == "delivered":
@@ -1090,9 +1143,11 @@ def update_raffle_delivery(
     elif delivery.status != "delivered":
         delivery.delivered_at = None
         delivery.delivered_by_id = None
+    db.add(RaffleDeliveryAudit(delivery_id=delivery.id, actor_id=current_user.id, previous_status=previous_status, new_status=payload.status, note=note or None, admin_override=payload.admin_override))
     event_type = {"delivered": "raffle_prize_delivered", "disputed": "raffle_prize_disputed"}.get(payload.status)
     if event_type:
         NotificationService.emit(db, raffle, event_type, f"raffle:{raffle.id}:result:{result_id}:delivery:{payload.status}")
+    _audit_admin_action(db, current_user, raffle, "raffle_delivery_updated", {"status": payload.status})
     db.commit()
     db.refresh(delivery)
     return {
@@ -1120,6 +1175,7 @@ def publish_raffle_results(
     raffle.published_at = datetime.now(UTC)
     raffle.published_by_id = current_user.id
     NotificationService.emit(db, raffle, "raffle_result_published", f"raffle:{raffle.id}:published:{raffle.current_run_number}")
+    _audit_admin_action(db, current_user, raffle, "raffle_published")
     db.commit()
     return {"raffle_id": raffle.id, "publication_status": raffle.publication_status, "published_at": raffle.published_at, "published_by_id": raffle.published_by_id}
 
@@ -1136,6 +1192,7 @@ def unpublish_raffle_results(
     raffle.published_at = None
     raffle.published_by_id = None
     NotificationService.emit(db, raffle, "raffle_result_unpublished", f"raffle:{raffle.id}:unpublished:{raffle.current_run_number}:{int(datetime.now(UTC).timestamp())}")
+    _audit_admin_action(db, current_user, raffle, "raffle_unpublished")
     db.commit()
     return {"raffle_id": raffle.id, "publication_status": raffle.publication_status, "published_at": None, "published_by_id": None}
 

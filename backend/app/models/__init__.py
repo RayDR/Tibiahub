@@ -15,7 +15,7 @@ from app.models.events import Event, EventParticipant, PublicEventParticipant
 from app.models.entity_metadata import EntityMetadata
 from app.models.raffle import (
     Raffle, RaffleEligibilityEntry, RaffleEligibilitySnapshot, RaffleManagerGrant,
-    RaffleParticipant, RafflePrize, RafflePrizeDelivery, RaffleRerunAudit,
+    RaffleParticipant, RafflePrize, RafflePrizeDelivery, RaffleDeliveryAudit, RaffleRerunAudit,
     RaffleRun, RaffleRunResult, RaffleWinner,
     RaffleSchedulerAttempt, RaffleSchedulerState, RaffleTestAudit, InternalNotification,
 )
@@ -51,6 +51,7 @@ __all__ = [
     "RaffleRun",
     "RaffleRunResult",
     "RafflePrizeDelivery",
+    "RaffleDeliveryAudit",
     "RaffleRerunAudit",
     "RaffleSchedulerAttempt",
     "RaffleSchedulerState",

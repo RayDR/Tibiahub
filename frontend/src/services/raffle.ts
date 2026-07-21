@@ -1,6 +1,7 @@
 import api from './api';
 
 export type RaffleAccessMode = 'guild_only' | 'world_only' | 'public';
+export type RaffleScope = 'guild' | 'server' | 'global';
 export type RaffleStatus = 'draft' | 'open' | 'closed' | 'completed' | 'cancelled' | 'deleted';
 
 export interface RafflePrizeInput {
@@ -58,6 +59,8 @@ export interface Raffle {
   title: string;
   description?: string;
   guild_name: string;
+  scope_type: RaffleScope;
+  world_name?: string;
   access_mode: RaffleAccessMode;
   show_participants: boolean;
   participant_count: number;
@@ -103,12 +106,23 @@ export interface AutomaticResult {
   amount: number; currency: string; character_name: string; selection_index: number;
   candidate_count: number; delivery_status: 'pending' | 'delivered' | 'disputed' | 'cancelled'; delivery_deadline_at: string;
   delivered_at?: string; delivered_by_name?: string; delivery_note?: string;
+  delivery_history?: Array<{ previous_status: string; new_status: string; actor: string; note?: string; admin_override: boolean; created_at: string }>;
 }
 
 export interface AutomaticRun {
   id: number; raffle_id: number; run_number: number; snapshot_id: number; parent_run_id?: number;
   trigger: string; state: string; started_at?: string; completed_at?: string; failure_code?: string;
   failure_summary?: string; algorithm_version: string; entropy_commitment?: string; results: AutomaticResult[];
+}
+
+export interface RaffleWorkspaceItem {
+  id: number; public_code: string; title: string; guild_name: string; scope_type: RaffleScope; world_name?: string;
+  purpose: 'test' | 'real' | 'legacy'; status: RaffleStatus; scheduled_run_at?: string;
+  publication_status: 'private' | 'published'; execution_state: Raffle['execution_state']; participant_count: number;
+  last_error_summary?: string; retry_count: number;
+  eligibility?: { candidate_count: number; eligible_count: number; excluded_count: number; cutoff_at: string; frozen: boolean };
+  winners: Array<{ prize_position: 'second' | 'first'; prize_name: string; amount: number; currency: string; character_name: string; delivery_status: AutomaticResult['delivery_status']; delivery_deadline_at: string }>;
+  capabilities: { manage: boolean; publish: boolean };
 }
 
 export interface RaffleExecution {
@@ -170,6 +184,7 @@ export interface PublicRaffle {
 }
 
 export const raffleApi = {
+  async workspace(): Promise<RaffleWorkspaceItem[]> { return (await api.get('/raffles/workspace')).data; },
   async list(): Promise<Raffle[]> {
     const response = await api.get('/raffles/');
     return response.data;
@@ -190,7 +205,7 @@ export const raffleApi = {
     return response.data;
   },
 
-  async create(payload: { title: string; description?: string; guild_name: string; access_mode?: RaffleAccessMode; show_participants?: boolean; prizes: RafflePrizeInput[]; purpose?: 'test' | 'real' | 'legacy'; run_mode?: 'manual' | 'automatic'; scheduled_run_at?: string; timezone_name?: string; eligibility_days?: number }): Promise<Raffle> {
+  async create(payload: { title: string; description?: string; guild_name: string; scope_type?: RaffleScope; world_name?: string; access_mode?: RaffleAccessMode; show_participants?: boolean; prizes: RafflePrizeInput[]; purpose?: 'test' | 'real' | 'legacy'; run_mode?: 'manual' | 'automatic'; scheduled_run_at?: string; timezone_name?: string; eligibility_days?: number }): Promise<Raffle> {
     const response = await api.post('/raffles/', payload);
     return response.data;
   },

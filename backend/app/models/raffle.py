@@ -19,6 +19,8 @@ class Raffle(Base):
     description = Column(Text, nullable=True)
     public_code = Column(String(6), nullable=False, unique=True, index=True)
     guild_name = Column(String(200), nullable=False)
+    scope_type = Column(String(20), nullable=False, default="guild")  # guild|server|global
+    world_name = Column(String(100), nullable=True)
     access_mode = Column(String(20), nullable=False, default="guild_only")  # guild_only|world_only|public
     show_participants = Column(Boolean, nullable=False, default=True)
     visibility = Column(String(20), nullable=False, default="public")  # public|private
@@ -268,6 +270,23 @@ class RafflePrizeDelivery(Base):
     raffle = relationship("Raffle", back_populates="deliveries")
     result = relationship("RaffleRunResult", back_populates="delivery")
     delivered_by = relationship("User")
+    history = relationship("RaffleDeliveryAudit", back_populates="delivery", cascade="all, delete-orphan", order_by="RaffleDeliveryAudit.created_at")
+
+
+class RaffleDeliveryAudit(Base):
+    __tablename__ = "raffle_delivery_audits"
+
+    id = Column(Integer, primary_key=True)
+    delivery_id = Column(Integer, ForeignKey("raffle_prize_deliveries.id"), nullable=False, index=True)
+    actor_id = Column(Integer, ForeignKey("users.id"), nullable=False)
+    previous_status = Column(String(20), nullable=False)
+    new_status = Column(String(20), nullable=False)
+    note = Column(Text, nullable=True)
+    admin_override = Column(Boolean, nullable=False, default=False)
+    created_at = Column(DateTime(timezone=True), server_default=func.now(), nullable=False)
+
+    delivery = relationship("RafflePrizeDelivery", back_populates="history")
+    actor = relationship("User")
 
 
 class RaffleRerunAudit(Base):

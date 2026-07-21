@@ -75,6 +75,7 @@ def _serialize_result(result: RaffleRunResult) -> dict:
         "delivered_at": delivery.delivered_at,
         "delivered_by_name": delivery.delivered_by.username if delivery.delivered_by else None,
         "delivery_note": delivery.note,
+        "delivery_history": [{"previous_status": item.previous_status, "new_status": item.new_status, "actor": item.actor.username, "note": item.note, "admin_override": item.admin_override, "created_at": item.created_at} for item in delivery.history],
     }
 
 

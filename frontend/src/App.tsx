@@ -35,6 +35,8 @@ import RafflesWorkspace from './pages/guild/RafflesWorkspace';
 import Recruitment from './pages/guild/Recruitment';
 import GuildDirectory from './pages/Admin/GuildDirectory';
 import AdminGuildWorkspace from './pages/Admin/AdminGuildWorkspace';
+import AdminGuildRaffles from './pages/Admin/AdminGuildRaffles';
+import GlobalActivities from './pages/Admin/GlobalActivities';
 import NotificationsPage from './pages/guild/Notifications';
 import RafflePublicPage from './pages/RafflePublicPage';
 import PublicRafflePage from './pages/PublicRafflePage';
@@ -134,6 +136,8 @@ function App() {
                 <Route path="overview" element={<Overview />} />
                 <Route path="guilds" element={<GuildDirectory />} />
                 <Route path="guilds/:guildKey" element={<AdminGuildWorkspace />} />
+                <Route path="guilds/:guildKey/raffles" element={<AdminGuildRaffles />} />
+                <Route path="activities" element={<GlobalActivities />} />
                 <Route path="management" element={<GuildManagementDashboard />} />
                 <Route path="guild-view" element={<GuildView />} />
                 <Route path="bestiary" element={<BestiaryManagement />} />
