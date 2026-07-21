@@ -101,6 +101,32 @@ export interface RaffleSimulation {
   warnings: string[];
 }
 
+export interface PublicRaffle {
+  public_code: string;
+  title: string;
+  description?: string;
+  guild_name: string;
+  access_mode: RaffleAccessMode;
+  purpose: 'test' | 'real' | 'legacy';
+  timezone_name: string;
+  scheduled_run_at?: string;
+  status: RaffleStatus;
+  publication_status: 'private' | 'reviewed' | 'published';
+  show_participants: boolean;
+  participant_count: number;
+  participants: Array<{ character_name: string; guild_rank?: string }>;
+  prizes: RafflePrize[];
+  winners: Array<{
+    prize_position: 'second' | 'first';
+    prize_name: string;
+    amount: number;
+    currency: string;
+    character_name: string;
+    delivery_status: 'pending' | 'delivered' | 'disputed' | 'cancelled';
+    delivery_deadline_at: string;
+  }>;
+}
+
 export const raffleApi = {
   async list(): Promise<Raffle[]> {
     const response = await api.get('/raffles/');
@@ -162,22 +188,22 @@ export const raffleApi = {
     return response.data;
   },
 
-  async getPublic(raffleId: number): Promise<Raffle> {
+  async getPublic(raffleId: number): Promise<PublicRaffle> {
     const response = await api.get(`/raffles/public/${raffleId}`);
     return response.data;
   },
 
-  async getPublicByCode(publicCode: string): Promise<Raffle> {
+  async getPublicByCode(publicCode: string): Promise<PublicRaffle> {
     const response = await api.get(`/raffles/public/code/${publicCode}`);
     return response.data;
   },
 
-  async registerPublic(raffleId: number, characterName: string): Promise<Raffle> {
+  async registerPublic(raffleId: number, characterName: string): Promise<PublicRaffle> {
     const response = await api.post(`/raffles/public/${raffleId}/register`, { character_name: characterName });
     return response.data;
   },
 
-  async registerPublicByCode(publicCode: string, characterName: string): Promise<Raffle> {
+  async registerPublicByCode(publicCode: string, characterName: string): Promise<PublicRaffle> {
     const response = await api.post(`/raffles/public/code/${publicCode}/register`, { character_name: characterName });
     return response.data;
   },

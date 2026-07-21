@@ -4,7 +4,7 @@ import { FontAwesomeIcon } from '@fortawesome/react-fontawesome';
 import { faGift, faSpinner, faTrophy, faUsers } from '@fortawesome/free-solid-svg-icons';
 import { useTranslation } from 'react-i18next';
 
-import { raffleApi, type Raffle } from '../services/raffle';
+import { raffleApi, type PublicRaffle } from '../services/raffle';
 
 const STATUS_BANNER_CLASS: Record<string, string> = {
   open: 'border-emerald-500/30 bg-emerald-950/20 text-emerald-100',
@@ -17,7 +17,7 @@ export default function RafflePublicPage() {
   const { publicCode } = useParams<{ publicCode: string }>();
   const { t } = useTranslation();
 
-  const [raffle, setRaffle] = useState<Raffle | null>(null);
+  const [raffle, setRaffle] = useState<PublicRaffle | null>(null);
   const [characterName, setCharacterName] = useState('');
   const [loading, setLoading] = useState(true);
   const [busy, setBusy] = useState(false);
@@ -158,7 +158,7 @@ export default function RafflePublicPage() {
               <div className="mb-3 text-sm text-slate-400">{t('raffle.publicPage.participantsVisible', { count: raffle.participant_count })}</div>
               <div className="max-h-72 space-y-2 overflow-y-auto pr-2 text-sm">
                 {raffle.participants.map((participant) => (
-                  <div key={participant.id} className="rounded-lg border border-slate-800 bg-slate-950/50 px-3 py-2 text-slate-300">
+                  <div key={participant.character_name} className="rounded-lg border border-slate-800 bg-slate-950/50 px-3 py-2 text-slate-300">
                     <div className="font-medium text-slate-100">{participant.character_name}</div>
                     <div className="text-xs text-slate-500">{participant.guild_rank || t('guild.member')}</div>
                   </div>
@@ -178,14 +178,14 @@ export default function RafflePublicPage() {
             <FontAwesomeIcon icon={faTrophy} className="h-5 w-5 text-amber-400" /> {t('raffle.publicPage.winnersTitle')}
           </h3>
           <div className="space-y-2 text-sm text-slate-300">
-            {raffle.current_winners.map((winner) => (
-              <div key={winner.id} className="rounded-lg border border-slate-800 bg-slate-950/50 px-3 py-2">
+            {raffle.winners.map((winner) => (
+              <div key={winner.prize_position} className="rounded-lg border border-slate-800 bg-slate-950/50 px-3 py-2">
                 <div className="font-medium text-slate-100">{winner.prize_name}</div>
                 <div>{winner.character_name}</div>
-                <div className="text-xs text-slate-500">{t('raffle.publicPage.winnerRun', { run: winner.run_number })}</div>
+                <div className="text-xs text-slate-500">{winner.amount} {winner.currency} · {winner.delivery_status}</div>
               </div>
             ))}
-            {raffle.current_winners.length === 0 && <div className="text-slate-500">{t('raffle.publicPage.winnersEmpty')}</div>}
+            {raffle.winners.length === 0 && <div className="text-slate-500">{t('raffle.publicPage.winnersEmpty')}</div>}
           </div>
         </div>
       </section>
