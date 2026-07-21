@@ -16,9 +16,10 @@ _is_sqlite = _db_dialect == "sqlite"
 if _db_dialect == "postgresql" and _db_url.drivername == "postgresql+asyncpg":
     _db_url = _db_url.set(drivername="postgresql+psycopg2")
 
-_SQLITE_CONNECT_ARGS = {"check_same_thread": False, "timeout": 5} if _is_sqlite else {}
+_SQLITE_CONNECT_ARGS = {"check_same_thread": False, "timeout": 15} if _is_sqlite else {}
 _ENGINE_KWARGS = {
     "pool_pre_ping": True,
+    "pool_recycle": 1800,
 }
 
 engine = create_engine(
@@ -29,12 +30,20 @@ engine = create_engine(
 
 
 if _is_sqlite:
+    @event.listens_for(engine, "first_connect")
+    def _configure_sqlite_journal_mode(dbapi_connection, _connection_record):
+        # WAL mode is persistent. Setting it once per process avoids attempting a
+        # journal-mode transition whenever the connection pool grows.
+        cursor = dbapi_connection.cursor()
+        cursor.execute("PRAGMA journal_mode=WAL")
+        cursor.close()
+
     @event.listens_for(engine, "connect")
     def _configure_sqlite_connection(dbapi_connection, _connection_record):
         cursor = dbapi_connection.cursor()
-        cursor.execute("PRAGMA journal_mode=WAL")
         cursor.execute("PRAGMA synchronous=NORMAL")
-        cursor.execute("PRAGMA busy_timeout=5000")
+        cursor.execute("PRAGMA busy_timeout=15000")
+        cursor.execute("PRAGMA foreign_keys=ON")
         cursor.close()
 
 # Create session factory

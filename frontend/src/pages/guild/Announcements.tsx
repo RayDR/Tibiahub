@@ -5,13 +5,13 @@ import { useToast } from '../../context/ToastContext';
 import { useTranslation } from 'react-i18next';
 
 import { Plus, Megaphone, Loader2, Filter, X, CalendarClock, User } from 'lucide-react';
-import { resolveGuildContext } from '../../utils/guildContext';
+import { useGuildContext } from '../../utils/guildContext';
 
 export default function Announcements() {
     const { user } = useAuth();
     const { t } = useTranslation();
     const toast = useToast();
-    const guildName = resolveGuildContext(user);
+    const guildName = useGuildContext(user);
 
     const [announcements, setAnnouncements] = useState<Announcement[]>([]);
     const [loading, setLoading] = useState(true);

@@ -3,13 +3,11 @@ import { Loader2, RefreshCcw, Users } from 'lucide-react';
 
 import { useAuth } from '../../context/AuthContext';
 import { GuildMember, guildApi } from '../../services/guild';
+import { useGuildContext } from '../../utils/guildContext';
 
 export default function GuildMembersPage() {
   const { user } = useAuth();
-  const selectedGuild = (localStorage.getItem('selectedGuildName') || '').trim();
-  const guildName = user?.is_superuser
-    ? (selectedGuild || user?.guild_name || 'Bloodborne Warhowl')
-    : (user?.guild_name || 'Bloodborne Warhowl');
+  const guildName = useGuildContext(user);
 
   const [members, setMembers] = useState<GuildMember[]>([]);
   const [source, setSource] = useState<'live' | 'snapshot'>('snapshot');
@@ -28,6 +26,7 @@ export default function GuildMembersPage() {
       try {
         setLoading(true);
         setError(null);
+        if (!guildName) throw new Error('Missing guild context');
         const payload = await guildApi.getGuildMembers(guildName);
         setMembers(payload.members);
         setSource(payload.source);
@@ -44,6 +43,7 @@ export default function GuildMembersPage() {
     try {
       setBusySync(true);
       setError(null);
+      if (!guildName) throw new Error('Missing guild context');
       const payload = await guildApi.syncGuildMembers(guildName);
       setMembers(payload.members);
       setSource(payload.source);
