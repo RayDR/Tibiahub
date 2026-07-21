@@ -6,6 +6,7 @@ import { useTranslation } from 'react-i18next';
 import { useAuth } from '../../context/AuthContext';
 import { Sword, Shield, Badge } from 'lucide-react';
 import { useGuildContext } from '../../utils/guildContext';
+import { LeadershipSummary, leadershipApi } from '../../services/leadership';
 
 export default function Dashboard() {
     const { t } = useTranslation();
@@ -14,6 +15,7 @@ export default function Dashboard() {
     const [announcements, setAnnouncements] = useState<Announcement[]>([]);
     const [loading, setLoading] = useState(true);
     const [detailModal, setDetailModal] = useState<Announcement | null>(null);
+    const [leadership, setLeadership] = useState<LeadershipSummary | null>(null);
 
     useEffect(() => {
         const loadData = async () => {
@@ -32,6 +34,8 @@ export default function Dashboard() {
         };
         void loadData();
     }, [guildName]);
+
+    useEffect(() => { if (guildName) void leadershipApi.summary().then(setLeadership).catch(() => setLeadership(null)); }, [guildName]);
 
     return (
         <div className="space-y-6 sm:space-y-8">
@@ -73,6 +77,10 @@ export default function Dashboard() {
                     </div>
                 </div>
             </div>
+
+            {leadership && <Link to="/guild/leadership" className="block rounded-xl border border-amber-500/30 bg-amber-950/10 p-4">
+                <div className="flex items-center justify-between gap-3"><div><h2 className="font-semibold text-amber-200">{t('leadership.title')}</h2><p className="mt-1 text-sm text-slate-400">{t('leadership.summary.active')}: {leadership.active_viceleaders} · {t('leadership.summary.positions')}: {leadership.open_positions}{leadership.capabilities.review && leadership.active_applicants !== undefined ? ` · ${t('leadership.summary.applicants')}: ${leadership.active_applicants}` : ''}{!leadership.capabilities.review && leadership.own_status ? ` · ${t(`leadership.status.${leadership.own_status}`)}` : ''}</p></div>{leadership.below_recommended && <span className="rounded-full bg-amber-500/20 px-3 py-1 text-xs text-amber-200">{t('leadership.warning.title')}</span>}</div>
+            </Link>}
 
             <div className="grid grid-cols-1 lg:grid-cols-2 gap-4 sm:gap-6">
                 {/* Latest Announcements */}

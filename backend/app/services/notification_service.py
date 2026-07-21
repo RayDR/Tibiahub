@@ -10,6 +10,20 @@ from app.models.user import User
 
 class NotificationService:
     @staticmethod
+    def emit_users(db: Session, recipients: list[User], notification_type: str, event_key: str, *, guild_name: str | None, deep_link: str, payload: dict | None = None) -> None:
+        for recipient in {user.id: user for user in recipients if user and user.is_active}.values():
+            dedupe = f"{event_key}:user:{recipient.id}"
+            if db.query(InternalNotification.id).filter(InternalNotification.recipient_user_id == recipient.id, InternalNotification.deduplication_key == dedupe).first():
+                continue
+            db.add(InternalNotification(
+                recipient_user_id=recipient.id, guild_name=guild_name, raffle_id=None,
+                notification_type=notification_type,
+                title_key=f"notifications.types.{notification_type}.title",
+                message_key=f"notifications.types.{notification_type}.message",
+                interpolation=payload or {}, deep_link=deep_link, deduplication_key=dedupe,
+            ))
+
+    @staticmethod
     def recipients(db: Session, raffle: Raffle, *, include_managers: bool = True) -> list[User]:
         users = db.query(User).filter(User.is_active.is_(True)).all()
         manager_ids = set()

@@ -22,6 +22,26 @@ i18n
                         "admin": "Admin",
                         "management": "Management"
                     },
+                    "leadership": {
+                        "title": "Guild leadership",
+                        "navigation": "Leadership",
+                        "roles": { "viceleader": "Viceleader", "viceleaderDescription": "Supports the Guild Leader and guild members." },
+                        "warning": { "title": "Leadership capacity warning", "belowMinimum": "The guild is below the recommended minimum of four viceleaders." },
+                        "summary": { "active": "Active viceleaders", "recommended": "Recommended minimum", "target": "Guild target", "positions": "Open positions", "applicants": "Active applicants", "interviews": "Pending interviews", "voting": "Applications in voting", "accepted": "Recently accepted" },
+                        "recruitment": { "title": "Viceleader recruitment", "open": "Open recruitment", "pipeline": "Application pipeline" },
+                        "openings": { "create": "Create opening", "titleField": "Opening title", "description": "Description", "responsibilities": "Responsibilities", "requirements": "Requirements", "count": "Open positions", "empty": "No open opportunities", "emptyHelp": "There are no viceleader openings accepting applications.", "defaultResponsibilities": "Support members, coordinate guild activities, and help maintain a fair and positive community.", "defaultRequirements": "Be an active guild member, communicate respectfully, and protect confidential leadership discussions." },
+                        "applications": { "apply": "Apply", "yours": "Your application", "formTitle": "Apply for viceleader", "profileNotice": "This linked guild character will be included as a read-only profile snapshot.", "candidate": "Candidate", "submitted": "Submitted", "answers": "Application answers", "timeline": "Status timeline", "communication": "Applicant communication", "internal": "Internal review comments", "interview": "Interview", "voting": "Private reviewer vote", "decision": "Final decision", "withdraw": "Withdraw application", "acceptedNotice": "Accepted in TibiaHub. The Guild Leader must still complete the in-game promotion." },
+                        "questions": { "why_apply": "Why do you want to become a viceleader?", "contribution": "What would you contribute to the guild?", "availability": "How much time can you dedicate?", "leadership_experience": "Have you led a guild or community before?" },
+                        "conduct": { "text": "I commit to act in the best interest of the guild, treat members with respect, avoid unnecessary conflict, protect confidential leadership discussions, and make decisions that support a positive and fair community.", "accepted": "Code of conduct accepted" },
+                        "status": { "all": "All", "applied": "New", "under_review": "Review", "more_information_requested": "Information requested", "interview": "Interview", "voting": "Voting", "accepted": "Accepted", "rejected": "Rejected", "withdrawn": "Withdrawn", "cancelled": "Cancelled" },
+                        "actions": { "retry": "Retry", "save": "Save", "cancel": "Cancel", "submit": "Submit application", "submitting": "Submitting…", "send": "Send", "requestInfo": "Request information", "startReview": "Start review", "scheduleInterview": "Schedule interview", "startVoting": "Start voting", "accept": "Accept", "reject": "Reject", "confirm": "Confirm" },
+                        "assignment": { "manualTitle": "In-game promotion is manual", "manualNotice": "TibiaHub records the leadership decision. The Guild Leader must still promote the character in Tibia.", "pending": "In-game promotion pending", "completed": "In-game promotion completed" },
+                        "fields": { "message": "Message", "internalComment": "Internal comment", "reason": "Reason", "dateTime": "Date and time", "timezone": "Timezone", "location": "Discord channel or meeting location", "notes": "Internal interview notes", "vote": "Recommendation", "character_name": "Character", "level": "Level", "vocation": "Vocation", "guild_name": "Guild", "guild_rank": "Guild rank", "join_date": "Join date", "last_activity": "Last activity", "discord_username": "Discord", "world": "World" },
+                        "votes": { "support": "Support", "neutral": "Neutral", "oppose": "Oppose", "participation": "{{count}} reviewers participated" },
+                        "errors": { "load": "Leadership data could not be loaded", "retry": "Try again without losing the rest of your workspace.", "submit": "The application could not be submitted.", "action": "The action could not be completed." },
+                        "loading": "Loading leadership workspace…",
+                        "assistance": "You are assisting {{guild}}. The guild is fixed and your actions are audited."
+                    },
                     "hero": {
                         "title": "Tibia Cyclopedia",
                         "subtitle": "Complete your weekly tasks, find your next hunt, and plan your next set."
@@ -331,7 +351,14 @@ i18n
                             "raffle_result_unpublished": { "title": "Results unpublished", "message": "Results for {{raffle}} returned to private review." },
                             "raffle_prize_delivered": { "title": "Prize delivered", "message": "A prize for {{raffle}} was marked delivered." },
                             "raffle_prize_disputed": { "title": "Prize disputed", "message": "A prize for {{raffle}} requires review." },
-                            "raffle_delivery_overdue": { "title": "Prize delivery overdue", "message": "A prize for {{raffle}} passed its delivery deadline." }
+                            "raffle_delivery_overdue": { "title": "Prize delivery overdue", "message": "A prize for {{raffle}} passed its delivery deadline." },
+                            "leadership_opening_published": { "title": "Leadership opening published", "message": "A new guild leadership opportunity is available." },
+                            "leadership_application_received": { "title": "Leadership application received", "message": "{{character}} submitted a private leadership application." },
+                            "leadership_application_status_changed": { "title": "Application status updated", "message": "Your leadership application moved to {{status}}." },
+                            "leadership_more_information_requested": { "title": "More information requested", "message": "Your guild requested more information for your application." },
+                            "leadership_applicant_replied": { "title": "Applicant replied", "message": "{{character}} replied to the leadership review." },
+                            "leadership_interview_scheduled": { "title": "Leadership interview scheduled", "message": "Interview details are available in your application." },
+                            "leadership_application_accepted": { "title": "Leadership application accepted", "message": "{{character}} was accepted in TibiaHub; in-game promotion remains pending." }
                         }
                     },
                     "raffle": {
@@ -604,6 +631,26 @@ i18n
                         "guild": "Gremio",
                         "admin": "Admin",
                         "management": "Administración"
+                    },
+                    "leadership": {
+                        "title": "Liderazgo de la guild",
+                        "navigation": "Liderazgo",
+                        "roles": { "viceleader": "Viceleader", "viceleaderDescription": "Apoya al Guild Leader y a los miembros de la guild." },
+                        "warning": { "title": "Aviso de capacidad del liderazgo", "belowMinimum": "La guild está por debajo del mínimo recomendado de cuatro viceleaders." },
+                        "summary": { "active": "Viceleaders activos", "recommended": "Mínimo recomendado", "target": "Objetivo de la guild", "positions": "Posiciones abiertas", "applicants": "Candidaturas activas", "interviews": "Entrevistas pendientes", "voting": "Candidaturas en votación", "accepted": "Aceptados recientemente" },
+                        "recruitment": { "title": "Reclutamiento de viceleaders", "open": "Abrir reclutamiento", "pipeline": "Flujo de candidaturas" },
+                        "openings": { "create": "Crear vacante", "titleField": "Título de la vacante", "description": "Descripción", "responsibilities": "Responsabilidades", "requirements": "Requisitos", "count": "Posiciones abiertas", "empty": "No hay oportunidades abiertas", "emptyHelp": "No hay vacantes de viceleader aceptando candidaturas.", "defaultResponsibilities": "Apoyar a los miembros, coordinar actividades y ayudar a mantener una comunidad justa y positiva.", "defaultRequirements": "Ser miembro activo, comunicarse con respeto y proteger las conversaciones confidenciales del liderazgo." },
+                        "applications": { "apply": "Postularme", "yours": "Tu candidatura", "formTitle": "Postulación a viceleader", "profileNotice": "Este personaje vinculado de la guild se incluirá como perfil de solo lectura.", "candidate": "Candidato", "submitted": "Enviada", "answers": "Respuestas de la candidatura", "timeline": "Historial de estados", "communication": "Comunicación con el candidato", "internal": "Comentarios internos de revisión", "interview": "Entrevista", "voting": "Voto privado del revisor", "decision": "Decisión final", "withdraw": "Retirar candidatura", "acceptedNotice": "Aceptado en TibiaHub. El Guild Leader todavía debe completar la promoción dentro del juego." },
+                        "questions": { "why_apply": "¿Por qué quieres convertirte en viceleader?", "contribution": "¿Qué aportarías a la guild?", "availability": "¿Cuánto tiempo puedes dedicar?", "leadership_experience": "¿Has liderado antes una guild o comunidad?" },
+                        "conduct": { "text": "Me comprometo a actuar en beneficio de la guild, tratar a los miembros con respeto, evitar conflictos innecesarios, proteger las conversaciones confidenciales del liderazgo y tomar decisiones que favorezcan una comunidad positiva y justa.", "accepted": "Código de conducta aceptado" },
+                        "status": { "all": "Todas", "applied": "Nuevas", "under_review": "Revisión", "more_information_requested": "Información solicitada", "interview": "Entrevista", "voting": "Votación", "accepted": "Aceptada", "rejected": "Rechazada", "withdrawn": "Retirada", "cancelled": "Cancelada" },
+                        "actions": { "retry": "Reintentar", "save": "Guardar", "cancel": "Cancelar", "submit": "Enviar candidatura", "submitting": "Enviando…", "send": "Enviar", "requestInfo": "Solicitar información", "startReview": "Iniciar revisión", "scheduleInterview": "Programar entrevista", "startVoting": "Iniciar votación", "accept": "Aceptar", "reject": "Rechazar", "confirm": "Confirmar" },
+                        "assignment": { "manualTitle": "La promoción dentro del juego es manual", "manualNotice": "TibiaHub registra la decisión de liderazgo. El Guild Leader todavía debe promover al personaje en Tibia.", "pending": "Promoción dentro del juego pendiente", "completed": "Promoción dentro del juego completada" },
+                        "fields": { "message": "Mensaje", "internalComment": "Comentario interno", "reason": "Razón", "dateTime": "Fecha y hora", "timezone": "Zona horaria", "location": "Canal de Discord o lugar de reunión", "notes": "Notas internas de entrevista", "vote": "Recomendación", "character_name": "Personaje", "level": "Nivel", "vocation": "Vocación", "guild_name": "Guild", "guild_rank": "Rango de guild", "join_date": "Fecha de ingreso", "last_activity": "Última actividad", "discord_username": "Discord", "world": "Mundo" },
+                        "votes": { "support": "Apoyar", "neutral": "Neutral", "oppose": "Oponerse", "participation": "Participaron {{count}} revisores" },
+                        "errors": { "load": "No se pudieron cargar los datos de liderazgo", "retry": "Reintenta sin perder el resto de tu espacio de trabajo.", "submit": "No se pudo enviar la candidatura.", "action": "No se pudo completar la acción." },
+                        "loading": "Cargando el espacio de liderazgo…",
+                        "assistance": "Estás asistiendo a {{guild}}. La guild está fija y tus acciones quedan auditadas."
                     },
                     "hero": {
                         "title": "Cyclopedia de Tibia",
@@ -913,7 +960,14 @@ i18n
                             "raffle_result_unpublished": { "title": "Resultados retirados", "message": "Los resultados de {{raffle}} volvieron a revisión privada." },
                             "raffle_prize_delivered": { "title": "Premio entregado", "message": "Un premio de {{raffle}} fue marcado como entregado." },
                             "raffle_prize_disputed": { "title": "Premio en disputa", "message": "Un premio de {{raffle}} requiere revisión." },
-                            "raffle_delivery_overdue": { "title": "Entrega atrasada", "message": "Un premio de {{raffle}} superó su plazo de entrega." }
+                            "raffle_delivery_overdue": { "title": "Entrega atrasada", "message": "Un premio de {{raffle}} superó su plazo de entrega." },
+                            "leadership_opening_published": { "title": "Vacante de liderazgo publicada", "message": "Hay una nueva oportunidad de liderazgo en la guild." },
+                            "leadership_application_received": { "title": "Candidatura de liderazgo recibida", "message": "{{character}} envió una candidatura privada de liderazgo." },
+                            "leadership_application_status_changed": { "title": "Estado de candidatura actualizado", "message": "Tu candidatura de liderazgo cambió a {{status}}." },
+                            "leadership_more_information_requested": { "title": "Se solicitó más información", "message": "Tu guild solicitó más información para tu candidatura." },
+                            "leadership_applicant_replied": { "title": "El candidato respondió", "message": "{{character}} respondió a la revisión de liderazgo." },
+                            "leadership_interview_scheduled": { "title": "Entrevista de liderazgo programada", "message": "Los detalles de la entrevista están disponibles en tu candidatura." },
+                            "leadership_application_accepted": { "title": "Candidatura de liderazgo aceptada", "message": "{{character}} fue aceptado en TibiaHub; la promoción dentro del juego sigue pendiente." }
                         }
                     },
                     "raffle": {

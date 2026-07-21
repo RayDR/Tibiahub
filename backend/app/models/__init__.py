@@ -21,6 +21,11 @@ from app.models.raffle import (
 )
 from app.models.guild_member_snapshot import GuildMemberSnapshot
 from app.models.workspace_audit import WorkspaceAudit
+from app.models.leadership import (
+    GuildLeadershipRole, GuildLeadershipOpening, GuildLeadershipApplication,
+    GuildLeadershipAssignment, GuildLeadershipApplicationHistory,
+    GuildLeadershipApplicationMessage, GuildLeadershipInterview, GuildLeadershipVote,
+)
 
 __all__ = [
     "Creature",
@@ -60,6 +65,9 @@ __all__ = [
     "GuildMemberSnapshot",
     "MediaAsset",
     "WorkspaceAudit",
+    "GuildLeadershipRole", "GuildLeadershipOpening", "GuildLeadershipApplication",
+    "GuildLeadershipAssignment", "GuildLeadershipApplicationHistory",
+    "GuildLeadershipApplicationMessage", "GuildLeadershipInterview", "GuildLeadershipVote",
     "creature_weaknesses",
     "creature_resistances"
 ]
