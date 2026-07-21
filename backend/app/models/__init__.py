@@ -20,6 +20,7 @@ from app.models.raffle import (
     RaffleSchedulerAttempt, RaffleSchedulerState, RaffleTestAudit, InternalNotification,
 )
 from app.models.guild_member_snapshot import GuildMemberSnapshot
+from app.models.workspace_audit import WorkspaceAudit
 
 __all__ = [
     "Creature",
@@ -57,6 +58,7 @@ __all__ = [
     "InternalNotification",
     "GuildMemberSnapshot",
     "MediaAsset",
+    "WorkspaceAudit",
     "creature_weaknesses",
     "creature_resistances"
 ]
