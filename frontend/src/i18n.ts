@@ -26,6 +26,45 @@ i18n
                         "title": "Tibia Cyclopedia",
                         "subtitle": "Complete your weekly tasks, find your next hunt, and plan your next set."
                     },
+                    "home": {
+                        "welcomeBack": "Welcome back, {{username}}",
+                        "guestTitle": "TibiaHub Home",
+                        "subtitle": "Pick up where you left off, jump into the Cyclopedia, or build your next hunt route.",
+                        "openCyclopedia": "Open Cyclopedia",
+                        "openPlanner": "Open Planner",
+                        "featured": "Featured",
+                        "topSearched": "Top Searched",
+                        "emptyFeatured": "No featured creatures available yet.",
+                        "emptyTop": "No popular items or zones available yet.",
+                        "creatureCount": "creatures",
+                        "minLevel": "Min level",
+                        "continueTitle": "Continue where you left off",
+                        "clearHistory": "Clear history",
+                        "loadingHistory": "Loading your activity...",
+                        "emptyHistory": "No activity yet. Start by opening a creature, quest, or running a search.",
+                        "emptyRecentGuest": "No recent creatures yet.",
+                        "profileCard": {
+                            "title": "Quick Profile",
+                            "subtitle": "Your account snapshot and quick access to profile settings.",
+                            "manage": "Manage profile",
+                            "character": "Character",
+                            "world": "World",
+                            "guild": "Guild",
+                            "vocation": "Vocation",
+                            "notSet": "Not set"
+                        },
+                        "activity": {
+                            "creatureViewed": "Creature viewed",
+                            "questViewed": "Quest viewed",
+                            "openCreature": "Open creature",
+                            "openQuest": "Open quest",
+                            "search": "Search",
+                            "searchNoQuery": "Search in Cyclopedia",
+                            "repeatSearch": "Repeat search",
+                            "huntPlan": "Hunt plan",
+                            "openPlanner": "Open planner"
+                        }
+                    },
                     "search": {
                         "placeholder": "Search...",
                         "creaturesPlaceholder": "Search creatures...",
@@ -59,7 +98,7 @@ i18n
                         "english": "English",
                         "spanish": "Spanish",
                         "regionUS": "EN · US",
-                        "regionMX": "ES · Mexico"
+                        "regionMX": "ES · MX"
                     },
                     "a11y": {
                         "openCyclopediaMenu": "Open Cyclopedia menu",
@@ -452,6 +491,45 @@ i18n
                     "hero": {
                         "title": "Cyclopedia de Tibia",
                         "subtitle": "Completa tus weekly tasks, encuentra tu próxima hunt y consigue tu próximo set."
+                    },
+                    "home": {
+                        "welcomeBack": "Bienvenido de vuelta, {{username}}",
+                        "guestTitle": "Inicio de TibiaHub",
+                        "subtitle": "Retoma tu progreso, entra a la Cyclopedia o arma tu siguiente ruta de caza.",
+                        "openCyclopedia": "Abrir Cyclopedia",
+                        "openPlanner": "Abrir Planner",
+                        "featured": "Destacados",
+                        "topSearched": "Más buscados",
+                        "emptyFeatured": "Aún no hay criaturas destacadas.",
+                        "emptyTop": "Aún no hay ítems o zonas populares.",
+                        "creatureCount": "criaturas",
+                        "minLevel": "Nivel mínimo",
+                        "continueTitle": "Continúa donde te quedaste",
+                        "clearHistory": "Limpiar historial",
+                        "loadingHistory": "Cargando tu actividad...",
+                        "emptyHistory": "Aún no hay actividad. Abre una criatura, quest o realiza una búsqueda.",
+                        "emptyRecentGuest": "Aún no hay criaturas recientes.",
+                        "profileCard": {
+                            "title": "Perfil rápido",
+                            "subtitle": "Resumen de tu cuenta y acceso rápido a tu perfil.",
+                            "manage": "Gestionar perfil",
+                            "character": "Personaje",
+                            "world": "Mundo",
+                            "guild": "Guild",
+                            "vocation": "Vocación",
+                            "notSet": "Sin configurar"
+                        },
+                        "activity": {
+                            "creatureViewed": "Criatura vista",
+                            "questViewed": "Quest vista",
+                            "openCreature": "Abrir criatura",
+                            "openQuest": "Abrir quest",
+                            "search": "Búsqueda",
+                            "searchNoQuery": "Buscar en Cyclopedia",
+                            "repeatSearch": "Repetir búsqueda",
+                            "huntPlan": "Plan de caza",
+                            "openPlanner": "Abrir planner"
+                        }
                     },
                     "search": {
                         "placeholder": "Buscar...",

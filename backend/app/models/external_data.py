@@ -131,14 +131,40 @@ class SyncJob(Base):
     message = Column(Text, nullable=True)
     result_summary = Column(JSON, nullable=True)
     requester = Column(String(255), nullable=True)
+    job_limit = Column(Integer, nullable=True)
     requested_by_user_id = Column(Integer, nullable=True, index=True)
     error = Column(Text, nullable=True)
     error_message = Column(Text, nullable=True)
     cancel_requested = Column(Boolean, nullable=False, default=False)
+    current_entity_type = Column(String(50), nullable=True, index=True)
+    current_offset = Column(Integer, nullable=False, default=0)
+    processed_count = Column(Integer, nullable=False, default=0)
+    failed_count = Column(Integer, nullable=False, default=0)
+    last_successful_external_id = Column(String(255), nullable=True)
+    checkpoint = Column(JSON, nullable=True)
+    batch_size = Column(Integer, nullable=False, default=100)
+    max_retries = Column(Integer, nullable=False, default=3)
+    external_timeout_seconds = Column(Integer, nullable=False, default=15)
     started_at = Column(DateTime(timezone=True), nullable=True)
     finished_at = Column(DateTime(timezone=True), nullable=True)
     created_at = Column(DateTime(timezone=True), server_default=func.now())
     updated_at = Column(DateTime(timezone=True), onupdate=func.now())
+
+
+class SyncJobError(Base):
+    """Per-entity error records for sync jobs."""
+
+    __tablename__ = "sync_job_errors"
+
+    id = Column(Integer, primary_key=True, index=True)
+    job_id = Column(String(64), ForeignKey("sync_jobs.id"), nullable=False, index=True)
+    entity_type = Column(String(50), nullable=False, index=True)
+    external_id = Column(String(255), nullable=True, index=True)
+    entity_name = Column(String(255), nullable=True)
+    error_message = Column(Text, nullable=False)
+    retry_count = Column(Integer, nullable=False, default=0)
+    status = Column(String(30), nullable=False, default="failed")
+    created_at = Column(DateTime(timezone=True), server_default=func.now())
 
 
 class CachedResource(Base):

@@ -1,4 +1,4 @@
-import api from './api';
+import api, { LOGIN_TIMEOUT_MS } from './api';
 
 export interface User {
     id: number;
@@ -29,6 +29,7 @@ export const authApi = {
         formData.append('username', username);
         formData.append('password', password);
         const response = await api.post('/auth/login', formData, {
+            timeout: LOGIN_TIMEOUT_MS,
             headers: {
                 'Content-Type': 'multipart/form-data'
             }

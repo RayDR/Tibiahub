@@ -108,18 +108,18 @@ export default function GuildLayout() {
     if (loading) {
         if (authTimedOut) {
             return (
-                <div className="mt-20 text-center text-slate-300">
+                <div className="mt-20 text-center text-[color:var(--color-text)]">
                     <p className="mb-3">Unable to load guild data right now.</p>
                     <button
                         onClick={() => window.location.reload()}
-                        className="rounded-md border border-red-500/30 bg-red-600/20 px-4 py-2 text-sm hover:bg-red-600/30"
+                        className="rounded-md border border-[color:var(--color-danger)]/40 bg-[color:var(--color-danger)]/20 px-4 py-2 text-sm hover:bg-[color:var(--color-danger)]/30"
                     >
                         Retry
                     </button>
                 </div>
             );
         }
-        return <div className="text-center mt-20 text-slate-400">Loading guild data...</div>;
+        return <div className="text-center mt-20 text-[color:var(--color-text-muted)]">Loading guild data...</div>;
     }
 
     if (!isAuthenticated) {
@@ -130,13 +130,13 @@ export default function GuildLayout() {
         <div className="flex flex-col lg:flex-row min-h-[calc(100vh-100px)] gap-4 lg:gap-6 mt-6 sm:mt-8 px-2 sm:px-0">
             {/* Sidebar */}
             <aside className="w-full lg:w-64 flex-shrink-0">
-                <div className="bg-slate-900/50 border border-red-900/30 rounded-lg overflow-hidden lg:sticky lg:top-24">
-                    <div className="p-3 sm:p-4 border-b border-red-900/30 bg-slate-900/80">
+                <div className="app-surface rounded-lg overflow-hidden lg:sticky lg:top-24">
+                    <div className="p-3 sm:p-4 border-b border-[color:var(--color-border)] bg-[color:var(--color-surface-alt)]">
                         <h3 className="font-serif text-primary font-bold text-lg tracking-wide flex items-center gap-2">
-                            <Shield className="w-5 h-5 text-red-500" />
+                            <Shield className="w-5 h-5 text-[color:var(--color-primary)]" />
                             {t('guild.guildHall')}
                         </h3>
-                        <p className="text-xs text-slate-400 mt-1 truncate">
+                        <p className="text-xs text-[color:var(--color-text-muted)] mt-1 truncate">
                             {user?.tibia_character_name}
                         </p>
                         <span className="text-xs text-primary/80 uppercase tracking-widest font-semibold text-[10px]">
@@ -144,7 +144,7 @@ export default function GuildLayout() {
                         </span>
                         {user?.is_superuser && availableGuilds.length > 0 && (
                             <div className="mt-3">
-                                <label className="mb-1 block text-[10px] uppercase tracking-wider text-slate-500">Managing guild</label>
+                                <label className="mb-1 block text-[10px] uppercase tracking-wider text-[color:var(--color-text-muted)]">Managing guild</label>
                                 <select
                                     value={selectedGuild}
                                     onChange={(e) => {
@@ -152,7 +152,7 @@ export default function GuildLayout() {
                                         setSelectedGuild(nextGuild);
                                         localStorage.setItem('selectedGuildName', nextGuild);
                                     }}
-                                    className="w-full rounded-md border border-slate-700 bg-slate-950 px-2 py-1 text-xs text-slate-200"
+                                    className="app-input h-8 w-full rounded-md px-2 py-1 text-xs"
                                 >
                                     {availableGuilds.map((guildName) => (
                                         <option key={guildName} value={guildName}>{guildName}</option>
@@ -175,24 +175,24 @@ export default function GuildLayout() {
                                     key={item.path}
                                     to={item.path}
                                     className={`flex items-center gap-3 px-3 py-2.5 rounded-md transition-colors text-sm font-medium ${isActive
-                                            ? 'bg-red-600/20 text-primary border border-red-500/20'
-                                            : 'text-slate-400 hover:text-primary hover:bg-red-950/10'
+                                            ? 'bg-[color:var(--color-primary)]/20 text-[color:var(--color-primary)] border border-[color:var(--color-primary)]/30'
+                                            : 'text-[color:var(--color-text-muted)] hover:text-[color:var(--color-primary)] hover:bg-[color:var(--color-primary)]/10'
                                         }`}
                                 >
-                                    <Icon className={`w-4 h-4 ${item.special ? 'text-yellow-400' : ''}`} />
+                                    <Icon className={`w-4 h-4 ${item.special ? 'text-[color:var(--color-warning)]' : ''}`} />
                                     {item.name}
                                     {item.special && (
-                                        <Sparkles className="w-3 h-3 text-yellow-400 ml-auto" />
+                                        <Sparkles className="w-3 h-3 text-[color:var(--color-warning)] ml-auto" />
                                     )}
                                 </Link>
                             );
                         })}
                     </nav>
 
-                    <div className="p-2 border-t border-red-900/30 mt-2">
+                    <div className="p-2 border-t border-[color:var(--color-border)] mt-2">
                         <button
                             onClick={logout}
-                            className="w-full flex items-center gap-3 px-3 py-2.5 rounded-md text-slate-400 hover:text-red-400 hover:bg-red-950/30 transition-colors text-sm font-medium"
+                            className="w-full flex items-center gap-3 px-3 py-2.5 rounded-md text-[color:var(--color-text-muted)] hover:text-[color:var(--color-danger)] hover:bg-[color:var(--color-danger)]/15 transition-colors text-sm font-medium"
                         >
                             <LogOut className="w-4 h-4" />
                             {t('auth.logout')}
@@ -202,7 +202,7 @@ export default function GuildLayout() {
             </aside>
 
             {/* Main Content */}
-            <main className="flex-1 bg-slate-900/30 border border-red-900/20 rounded-lg p-6 min-h-[500px] shadow-lg shadow-red-950/10 transition-all duration-300">
+            <main className="flex-1 app-surface rounded-lg p-6 min-h-[500px] shadow-lg transition-all duration-300">
                 <Outlet />
             </main>
         </div>

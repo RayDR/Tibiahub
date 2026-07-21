@@ -125,14 +125,14 @@ export default function Profile() {
     if (loading) {
         return (
             <div className="flex items-center justify-center min-h-[400px]">
-                <Loader2 className="w-8 h-8 animate-spin text-amber-500" />
+                <Loader2 className="w-8 h-8 animate-spin text-[color:var(--color-primary)]" />
             </div>
         );
     }
 
     if (!profileData) {
         return (
-            <div className="text-center text-slate-400 py-20">
+            <div className="text-center text-[color:var(--color-text-muted)] py-20">
                 Failed to load profile data
             </div>
         );
@@ -142,22 +142,22 @@ export default function Profile() {
         <div className="max-w-4xl mx-auto px-4 py-8">
             {/* Header */}
             <div className="mb-8">
-                <h1 className="text-3xl md:text-4xl font-serif text-slate-100 mb-2 flex items-center gap-3">
-                    <User className="w-8 h-8 md:w-10 md:h-10 text-amber-500" />
+                <h1 className="text-3xl md:text-4xl font-serif text-[color:var(--color-text)] mb-2 flex items-center gap-3">
+                    <User className="w-8 h-8 md:w-10 md:h-10 text-[color:var(--color-primary)]" />
                     My Profile
                 </h1>
-                <p className="text-slate-400 text-sm md:text-base">View and manage your account information</p>
+                <p className="text-[color:var(--color-text-muted)] text-sm md:text-base">View and manage your account information</p>
             </div>
 
             {/* Profile Card */}
-            <div className="bg-slate-900/50 border border-slate-700 rounded-lg overflow-hidden">
+            <div className="app-surface rounded-lg overflow-hidden">
                 {/* Header with Edit Button */}
-                <div className="p-4 md:p-6 border-b border-slate-700 flex items-center justify-between">
-                    <h2 className="text-xl font-semibold text-slate-100">Account Information</h2>
+                <div className="p-4 md:p-6 border-b border-[color:var(--color-border)] flex items-center justify-between">
+                    <h2 className="text-xl font-semibold text-[color:var(--color-text)]">Account Information</h2>
                     {!editing ? (
                         <button
                             onClick={() => setEditing(true)}
-                            className="flex items-center gap-2 bg-blue-600 hover:bg-blue-500 text-white px-3 md:px-4 py-2 rounded-md transition-colors text-sm font-medium"
+                            className="flex items-center gap-2 app-button-primary px-3 md:px-4 py-2 rounded-md transition-colors text-sm font-medium"
                         >
                             <Edit2 className="w-4 h-4" />
                             <span className="hidden sm:inline">Edit</span>
@@ -167,7 +167,7 @@ export default function Profile() {
                             <button
                                 onClick={handleSave}
                                 disabled={saving}
-                                className="flex items-center gap-2 bg-green-600 hover:bg-green-500 disabled:bg-slate-700 disabled:text-slate-500 text-white px-3 md:px-4 py-2 rounded-md transition-colors text-sm font-medium"
+                                className="flex items-center gap-2 bg-[color:var(--color-success)] hover:brightness-110 disabled:bg-[color:var(--color-surface-alt)] disabled:text-[color:var(--color-text-muted)] text-white px-3 md:px-4 py-2 rounded-md transition-colors text-sm font-medium"
                             >
                                 {saving ? <Loader2 className="w-4 h-4 animate-spin" /> : <Save className="w-4 h-4" />}
                                 <span className="hidden sm:inline">Save</span>
@@ -175,7 +175,7 @@ export default function Profile() {
                             <button
                                 onClick={handleCancel}
                                 disabled={saving}
-                                className="flex items-center gap-2 bg-slate-700 hover:bg-slate-600 disabled:opacity-50 text-white px-3 md:px-4 py-2 rounded-md transition-colors text-sm font-medium"
+                                className="flex items-center gap-2 app-button-ghost disabled:opacity-50 text-white px-3 md:px-4 py-2 rounded-md transition-colors text-sm font-medium"
                             >
                                 <X className="w-4 h-4" />
                                 <span className="hidden sm:inline">Cancel</span>
@@ -188,7 +188,7 @@ export default function Profile() {
                 <div className="p-4 md:p-6 space-y-6">
                     {/* Avatar URL */}
                     <div>
-                        <label className="block text-sm font-medium text-slate-400 mb-2">
+                        <label className="block text-sm font-medium text-[color:var(--color-text-muted)] mb-2">
                             <Link2 className="w-4 h-4 inline mr-1" />
                             Avatar URL
                         </label>
@@ -197,16 +197,16 @@ export default function Profile() {
                                 type="url"
                                 value={formData.avatar_url}
                                 onChange={(e) => setFormData({ ...formData, avatar_url: e.target.value })}
-                                className="w-full bg-slate-950 border border-slate-700 rounded px-3 py-2 text-slate-200 focus:outline-none focus:border-amber-500"
+                                className="app-input w-full px-3 py-2"
                                 placeholder="https://.../avatar.png"
                             />
                         ) : (
-                            <div className="bg-slate-950/50 border border-slate-700 rounded px-3 py-2 text-slate-300 break-all">
+                            <div className="bg-[color:var(--color-surface-alt)] border border-[color:var(--color-border)] rounded px-3 py-2 text-[color:var(--color-text)] break-all">
                                 {profileData.avatar_url || 'Not set'}
                             </div>
                         )}
                         {(editing ? formData.avatar_url : profileData.avatar_url) && (
-                            <div className="mt-3 h-16 w-16 overflow-hidden rounded-full border border-slate-700 bg-slate-950">
+                            <div className="mt-3 h-16 w-16 overflow-hidden rounded-full border border-[color:var(--color-border)] bg-[color:var(--color-surface-alt)]">
                                 <img
                                     src={editing ? formData.avatar_url : profileData.avatar_url}
                                     alt="Avatar"
@@ -221,18 +221,18 @@ export default function Profile() {
 
                     {/* Username - Read only */}
                     <div>
-                        <label className="block text-sm font-medium text-slate-400 mb-2">
+                        <label className="block text-sm font-medium text-[color:var(--color-text-muted)] mb-2">
                             Username
                         </label>
-                        <div className="bg-slate-950/50 border border-slate-700 rounded px-3 py-2 text-slate-300">
+                        <div className="bg-[color:var(--color-surface-alt)] border border-[color:var(--color-border)] rounded px-3 py-2 text-[color:var(--color-text)]">
                             {profileData.username}
                         </div>
-                        <p className="text-xs text-slate-500 mt-1">Username cannot be changed</p>
+                        <p className="text-xs text-[color:var(--color-text-muted)] mt-1">Username cannot be changed</p>
                     </div>
 
                     {/* Email */}
                     <div>
-                        <label className="block text-sm font-medium text-slate-400 mb-2">
+                        <label className="block text-sm font-medium text-[color:var(--color-text-muted)] mb-2">
                             <Mail className="w-4 h-4 inline mr-1" />
                             Email
                         </label>
@@ -241,11 +241,11 @@ export default function Profile() {
                                 type="email"
                                 value={formData.email}
                                 onChange={(e) => setFormData({ ...formData, email: e.target.value })}
-                                className="w-full bg-slate-950 border border-slate-700 rounded px-3 py-2 text-slate-200 focus:outline-none focus:border-amber-500"
+                                className="app-input w-full px-3 py-2"
                                 placeholder="your.email@example.com"
                             />
                         ) : (
-                            <div className="bg-slate-950/50 border border-slate-700 rounded px-3 py-2 text-slate-300">
+                            <div className="bg-[color:var(--color-surface-alt)] border border-[color:var(--color-border)] rounded px-3 py-2 text-[color:var(--color-text)]">
                                 {profileData.email || 'Not set'}
                             </div>
                         )}
@@ -253,14 +253,14 @@ export default function Profile() {
 
                     {/* Tibia Character */}
                     <div>
-                        <label className="block text-sm font-medium text-slate-400 mb-2">
+                        <label className="block text-sm font-medium text-[color:var(--color-text-muted)] mb-2">
                             <Shield className="w-4 h-4 inline mr-1" />
                             Tibia Character
                         </label>
-                        <div className="bg-slate-950/50 border border-slate-700 rounded px-3 py-2 text-slate-300">
+                        <div className="bg-[color:var(--color-surface-alt)] border border-[color:var(--color-border)] rounded px-3 py-2 text-[color:var(--color-text)]">
                             {profileData.tibia_character_name}
                         </div>
-                        <p className="text-xs text-slate-500 mt-1">Contact an admin to change your linked character</p>
+                        <p className="text-xs text-[color:var(--color-text-muted)] mt-1">Contact an admin to change your linked character</p>
                     </div>
 
                     {/* Vocation */}

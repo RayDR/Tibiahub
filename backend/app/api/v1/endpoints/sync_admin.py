@@ -37,6 +37,12 @@ class SyncJobResponse(BaseModel):
     created_at: Optional[str] = None
     error: Optional[str] = None
     summary: Optional[dict[str, Any]] = None
+    checkpoint: Optional[dict[str, Any]] = None
+    current_entity_type: Optional[str] = None
+    current_offset: int = 0
+    processed_count: int = 0
+    failed_count: int = 0
+    last_successful_external_id: Optional[str] = None
 
 
 class SyncRuntimeSettings(BaseModel):
@@ -107,6 +113,12 @@ def _to_job_response(job) -> SyncJobResponse:
         created_at=job.created_at.isoformat() if job.created_at else None,
         error=job.error_message or job.error,
         summary=job.result_summary,
+        checkpoint=job.checkpoint,
+        current_entity_type=job.current_entity_type,
+        current_offset=job.current_offset or 0,
+        processed_count=job.processed_count or 0,
+        failed_count=job.failed_count or 0,
+        last_successful_external_id=job.last_successful_external_id,
     )
 
 
@@ -160,6 +172,9 @@ def _start_job(
     force: bool,
     skip_images: bool,
     limit: int | None,
+    batch_size: int,
+    max_retries: int,
+    external_timeout_seconds: int,
 ) -> dict[str, Any]:
     try:
         job = SyncService.create_job(
@@ -167,6 +182,10 @@ def _start_job(
             job_type=target,
             requester=requester.username,
             requested_by_user_id=requester.id,
+            job_limit=limit,
+            batch_size=batch_size,
+            max_retries=max_retries,
+            external_timeout_seconds=external_timeout_seconds,
         )
     except RuntimeError as exc:
         raise HTTPException(status_code=409, detail=str(exc)) from exc
@@ -184,70 +203,161 @@ def start_full_sync(
     force: bool = Query(False),
     skip_images: bool = Query(False),
     limit: Optional[int] = Query(None, ge=1),
+    batch_size: int = Query(100, ge=10, le=500),
+    max_retries: int = Query(3, ge=0, le=10),
+    external_timeout_seconds: int = Query(15, ge=5, le=120),
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_admin_user),
 ):
-    return _start_job(db, target="full", requester=current_user, force=force, skip_images=skip_images, limit=limit)
+    return _start_job(
+        db,
+        target="full",
+        requester=current_user,
+        force=force,
+        skip_images=skip_images,
+        limit=limit,
+        batch_size=batch_size,
+        max_retries=max_retries,
+        external_timeout_seconds=external_timeout_seconds,
+    )
 
 
 @router.post("/creatures")
 def start_creatures_sync(
     force: bool = Query(False),
     limit: Optional[int] = Query(None, ge=1),
+    batch_size: int = Query(100, ge=10, le=500),
+    max_retries: int = Query(3, ge=0, le=10),
+    external_timeout_seconds: int = Query(15, ge=5, le=120),
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_admin_user),
 ):
-    return _start_job(db, target="creatures", requester=current_user, force=force, skip_images=False, limit=limit)
+    return _start_job(
+        db,
+        target="creatures",
+        requester=current_user,
+        force=force,
+        skip_images=False,
+        limit=limit,
+        batch_size=batch_size,
+        max_retries=max_retries,
+        external_timeout_seconds=external_timeout_seconds,
+    )
 
 
 @router.post("/bosses")
 def start_bosses_sync(
     force: bool = Query(False),
     limit: Optional[int] = Query(None, ge=1),
+    batch_size: int = Query(100, ge=10, le=500),
+    max_retries: int = Query(3, ge=0, le=10),
+    external_timeout_seconds: int = Query(15, ge=5, le=120),
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_admin_user),
 ):
-    return _start_job(db, target="bosses", requester=current_user, force=force, skip_images=False, limit=limit)
+    return _start_job(
+        db,
+        target="bosses",
+        requester=current_user,
+        force=force,
+        skip_images=False,
+        limit=limit,
+        batch_size=batch_size,
+        max_retries=max_retries,
+        external_timeout_seconds=external_timeout_seconds,
+    )
 
 
 @router.post("/items")
 def start_items_sync(
     force: bool = Query(False),
     limit: Optional[int] = Query(None, ge=1),
+    batch_size: int = Query(100, ge=10, le=500),
+    max_retries: int = Query(3, ge=0, le=10),
+    external_timeout_seconds: int = Query(15, ge=5, le=120),
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_admin_user),
 ):
-    return _start_job(db, target="items", requester=current_user, force=force, skip_images=False, limit=limit)
+    return _start_job(
+        db,
+        target="items",
+        requester=current_user,
+        force=force,
+        skip_images=False,
+        limit=limit,
+        batch_size=batch_size,
+        max_retries=max_retries,
+        external_timeout_seconds=external_timeout_seconds,
+    )
 
 
 @router.post("/quests")
 def start_quests_sync(
     force: bool = Query(False),
     limit: Optional[int] = Query(None, ge=1),
+    batch_size: int = Query(100, ge=10, le=500),
+    max_retries: int = Query(3, ge=0, le=10),
+    external_timeout_seconds: int = Query(15, ge=5, le=120),
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_admin_user),
 ):
-    return _start_job(db, target="quests", requester=current_user, force=force, skip_images=False, limit=limit)
+    return _start_job(
+        db,
+        target="quests",
+        requester=current_user,
+        force=force,
+        skip_images=False,
+        limit=limit,
+        batch_size=batch_size,
+        max_retries=max_retries,
+        external_timeout_seconds=external_timeout_seconds,
+    )
 
 
 @router.post("/hunt-zones")
 def start_hunt_zones_sync(
     force: bool = Query(False),
     limit: Optional[int] = Query(None, ge=1),
+    batch_size: int = Query(100, ge=10, le=500),
+    max_retries: int = Query(3, ge=0, le=10),
+    external_timeout_seconds: int = Query(15, ge=5, le=120),
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_admin_user),
 ):
-    return _start_job(db, target="hunt-zones", requester=current_user, force=force, skip_images=False, limit=limit)
+    return _start_job(
+        db,
+        target="hunt-zones",
+        requester=current_user,
+        force=force,
+        skip_images=False,
+        limit=limit,
+        batch_size=batch_size,
+        max_retries=max_retries,
+        external_timeout_seconds=external_timeout_seconds,
+    )
 
 
 @router.post("/images")
 def start_images_sync(
     force: bool = Query(False),
     limit: Optional[int] = Query(None, ge=1),
+    batch_size: int = Query(100, ge=10, le=500),
+    max_retries: int = Query(3, ge=0, le=10),
+    external_timeout_seconds: int = Query(15, ge=5, le=120),
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_admin_user),
 ):
-    return _start_job(db, target="images", requester=current_user, force=force, skip_images=False, limit=limit)
+    return _start_job(
+        db,
+        target="images",
+        requester=current_user,
+        force=force,
+        skip_images=False,
+        limit=limit,
+        batch_size=batch_size,
+        max_retries=max_retries,
+        external_timeout_seconds=external_timeout_seconds,
+    )
 
 
 @router.get("/jobs", response_model=list[SyncJobResponse])
@@ -319,6 +429,22 @@ def cancel_sync_job(
 ):
     _ = current_user
     job = SyncService.request_cancel(db, job_id)
+    if not job:
+        raise HTTPException(status_code=404, detail="Job not found")
+    return _to_job_response(job)
+
+
+@router.post("/jobs/{job_id}/resume", response_model=SyncJobResponse)
+def resume_sync_job(
+    job_id: str,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_admin_user),
+):
+    _ = current_user
+    try:
+        job = SyncService.resume_job(db, job_id)
+    except RuntimeError as exc:
+        raise HTTPException(status_code=409, detail=str(exc)) from exc
     if not job:
         raise HTTPException(status_code=404, detail="Job not found")
     return _to_job_response(job)
@@ -409,11 +535,24 @@ def legacy_sync_target(
     target: str,
     force: bool = Query(False),
     limit: Optional[int] = Query(None, ge=1),
+    batch_size: int = Query(100, ge=10, le=500),
+    max_retries: int = Query(3, ge=0, le=10),
+    external_timeout_seconds: int = Query(15, ge=5, le=120),
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_admin_user),
 ):
     normalized = _normalize_target(target)
-    return _start_job(db, target=normalized, requester=current_user, force=force, skip_images=False, limit=limit)
+    return _start_job(
+        db,
+        target=normalized,
+        requester=current_user,
+        force=force,
+        skip_images=False,
+        limit=limit,
+        batch_size=batch_size,
+        max_retries=max_retries,
+        external_timeout_seconds=external_timeout_seconds,
+    )
 
 
 @router.post("/manual/{api_name}")
@@ -421,13 +560,26 @@ def legacy_manual(
     api_name: str,
     force: bool = Query(False),
     limit: Optional[int] = Query(None, ge=1),
+    batch_size: int = Query(100, ge=10, le=500),
+    max_retries: int = Query(3, ge=0, le=10),
+    external_timeout_seconds: int = Query(15, ge=5, le=120),
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_admin_user),
 ):
     normalized = _normalize_target(api_name)
     if normalized == "full":
         normalized = "creatures"
-    return _start_job(db, target=normalized, requester=current_user, force=force, skip_images=False, limit=limit)
+    return _start_job(
+        db,
+        target=normalized,
+        requester=current_user,
+        force=force,
+        skip_images=False,
+        limit=limit,
+        batch_size=batch_size,
+        max_retries=max_retries,
+        external_timeout_seconds=external_timeout_seconds,
+    )
 
 
 @router.post("/bestiary/start")
@@ -435,11 +587,24 @@ def legacy_bestiary_start(
     source: str = Query("creatures"),
     force: bool = Query(False),
     limit: Optional[int] = Query(None, ge=1),
+    batch_size: int = Query(100, ge=10, le=500),
+    max_retries: int = Query(3, ge=0, le=10),
+    external_timeout_seconds: int = Query(15, ge=5, le=120),
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_admin_user),
 ):
     normalized = _normalize_target(source)
-    return _start_job(db, target=normalized, requester=current_user, force=force, skip_images=False, limit=limit)
+    return _start_job(
+        db,
+        target=normalized,
+        requester=current_user,
+        force=force,
+        skip_images=False,
+        limit=limit,
+        batch_size=batch_size,
+        max_retries=max_retries,
+        external_timeout_seconds=external_timeout_seconds,
+    )
 
 
 @router.get("/status")

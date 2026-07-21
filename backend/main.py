@@ -3,6 +3,7 @@ Tibia Bestiary API - Main Application
 """
 import logging
 import time
+import uuid
 
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
@@ -10,12 +11,13 @@ from fastapi.routing import APIRoute
 from contextlib import asynccontextmanager
 
 from app.core.config import settings
-from app.db.database import init_db
+from app.db.database import SessionLocal, init_db
 from app.api.v1.router import api_router
+from app.services.sync_service import SyncService
 
 
 logger = logging.getLogger("app.slow_requests")
-SLOW_REQUEST_MS = 1500
+SLOW_REQUEST_MS = 1000
 
 
 @asynccontextmanager
@@ -23,6 +25,15 @@ async def lifespan(app: FastAPI):
     """Lifecycle manager for the application"""
     # Startup: Initialize database
     init_db()
+
+    db = SessionLocal()
+    try:
+        stale_ids = SyncService.recover_stale_running_jobs(db, reason="stale after backend recovery")
+        if stale_ids:
+            logger.warning("sync_stale_jobs_recovered count=%s jobs=%s", len(stale_ids), ",".join(stale_ids))
+    finally:
+        db.close()
+
     yield
     # Shutdown: Clean up resources if needed
 
@@ -46,9 +57,11 @@ app.add_middleware(
 
 @app.middleware("http")
 async def slow_request_logger(request, call_next):
+    request_id = request.headers.get("x-request-id") or uuid.uuid4().hex
     start = time.perf_counter()
     response = await call_next(request)
     elapsed_ms = int((time.perf_counter() - start) * 1000)
+    response.headers["X-Request-Id"] = request_id
 
     route_name = request.url.path
     if request.scope.get("route") and isinstance(request.scope["route"], APIRoute):
@@ -56,12 +69,13 @@ async def slow_request_logger(request, call_next):
 
     if elapsed_ms >= SLOW_REQUEST_MS:
         logger.warning(
-            "slow_request method=%s path=%s route=%s status=%s duration_ms=%s",
+            "slow_request warning=slow_request method=%s path=%s route=%s status_code=%s duration_ms=%s request_id=%s",
             request.method,
             request.url.path,
             route_name,
             response.status_code,
             elapsed_ms,
+            request_id,
         )
 
     return response
@@ -83,8 +97,7 @@ async def root():
 if __name__ == "__main__":
     import uvicorn
     uvicorn.run(
-        "main:app",
+        app,
         host=settings.API_HOST,
         port=settings.API_PORT,
-        reload=True
     )

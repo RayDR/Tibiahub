@@ -6,6 +6,8 @@ import { AlertTriangle, ArrowLeft, Gem, Heart, Info, Loader2, MapPin, Shield, Sk
 import { creaturesApi } from '../services/api';
 import LootDisplay from '../components/LootDisplay';
 import type { Creature } from '../types';
+import { useAuth } from '../context/AuthContext';
+import { activityApi } from '../services/activity';
 
 const formatNumber = (value?: number | null): string => {
   if (value === null || value === undefined) return 'Unknown';
@@ -21,6 +23,7 @@ const CreatureDetailPage: React.FC = () => {
   const [loading, setLoading] = useState(true);
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
   const [showFullOverview, setShowFullOverview] = useState(false);
+  const { isAuthenticated } = useAuth();
 
   useEffect(() => {
     const fetchCreature = async () => {
@@ -34,6 +37,21 @@ const CreatureDetailPage: React.FC = () => {
         }
         const data = await response.json();
         setCreature(data);
+
+        if (isAuthenticated && data?.id) {
+          void activityApi.record({
+            activity_type: data.is_boss ? 'view_boss' : 'view_creature',
+            entity_type: 'creature',
+            entity_id: String(data.id),
+            metadata: {
+              name: data.name,
+              slug: data.slug,
+              is_boss: !!data.is_boss,
+            },
+          }).catch(() => {
+            // Non-blocking history event.
+          });
+        }
 
         const canonicalSlug = response.headers.get('x-canonical-slug') || data.slug;
 
@@ -72,7 +90,7 @@ const CreatureDetailPage: React.FC = () => {
       }
     };
     void fetchCreature();
-  }, [slug, navigate]);
+  }, [slug, navigate, isAuthenticated]);
 
   if (loading) {
     return (

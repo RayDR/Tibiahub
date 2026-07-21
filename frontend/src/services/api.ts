@@ -3,7 +3,9 @@ import type { Creature, CreatureSimple, HuntZone, HuntRecommendation, ItemDetail
 
 const API_BASE_URL = import.meta.env.VITE_API_URL || '/api/v1';
 export const REQUEST_TIMEOUT_MS = 10000;
-export const ADMIN_ACTION_TIMEOUT_MS = 25000;
+export const LOGIN_TIMEOUT_MS = 20000;
+export const ADMIN_ACTION_TIMEOUT_MS = 30000;
+export const HEALTH_TIMEOUT_MS = 5000;
 
 const api = axios.create({
   baseURL: API_BASE_URL,
@@ -179,7 +181,7 @@ export const systemApi = {
       latest_success_at?: string | null;
     };
   }> => {
-    const response = await api.get('/health', { signal });
+    const response = await api.get('/health', { signal, timeout: HEALTH_TIMEOUT_MS });
     return response.data;
   },
 };

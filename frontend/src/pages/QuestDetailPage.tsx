@@ -4,6 +4,8 @@ import { ArrowLeft, Crown, Loader2, ScrollText } from 'lucide-react';
 
 import { questsApi } from '../services/api';
 import type { QuestDetail } from '../types';
+import { useAuth } from '../context/AuthContext';
+import { activityApi } from '../services/activity';
 
 export default function QuestDetailPage() {
   const { questId } = useParams<{ questId: string }>();
@@ -11,6 +13,7 @@ export default function QuestDetailPage() {
   const [loading, setLoading] = useState(true);
   const [quest, setQuest] = useState<QuestDetail | null>(null);
   const [error, setError] = useState<string | null>(null);
+  const { isAuthenticated } = useAuth();
 
   useEffect(() => {
     const controller = new AbortController();
@@ -19,7 +22,20 @@ export default function QuestDetailPage() {
       try {
         setLoading(true);
         setError(null);
-        setQuest(await questsApi.getById(Number(questId), controller.signal));
+        const data = await questsApi.getById(Number(questId), controller.signal);
+        setQuest(data);
+        if (isAuthenticated && data?.id) {
+          void activityApi.record({
+            activity_type: 'view_quest',
+            entity_type: 'quest',
+            entity_id: String(data.id),
+            metadata: {
+              name: data.name,
+            },
+          }).catch(() => {
+            // Non-blocking history event.
+          });
+        }
       } catch (err: any) {
         setError(err?.response?.data?.detail || err?.message || 'Quest not found');
       } finally {
@@ -28,7 +44,7 @@ export default function QuestDetailPage() {
     };
     void run();
     return () => controller.abort();
-  }, [questId]);
+  }, [questId, isAuthenticated]);
 
   if (loading) {
     return (

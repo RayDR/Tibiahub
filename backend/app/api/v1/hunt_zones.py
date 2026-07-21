@@ -68,20 +68,20 @@ async def get_hunt_zone_highlights(
     limit: int = Query(12, ge=1, le=50),
     db: Session = Depends(get_db),
 ):
-    metadata = EntityMetadataService.get_highlights(db, entity_type="hunt_zone", limit=limit)
-    zones = []
-    for record in metadata:
-        if record.entity_id is None:
-            continue
-        zone = (
-            db.query(HuntZoneModel)
-            .options(selectinload(HuntZoneModel.creature_spawns).selectinload(SpawnLocation.creature))
-            .filter(HuntZoneModel.id == record.entity_id)
-            .first()
-        )
-        if zone:
-            zones.append(zone)
-    return zones
+    try:
+        metadata = EntityMetadataService.get_highlights(db, entity_type="hunt_zone", limit=limit)
+        if not metadata:
+            return []
+
+        zone_ids = [record.entity_id for record in metadata if record.entity_id is not None]
+        if not zone_ids:
+            return []
+
+        raw_zones = db.query(HuntZoneModel).filter(HuntZoneModel.id.in_(zone_ids)).all()
+        by_id = {zone.id: zone for zone in raw_zones}
+        return [by_id[zone_id] for zone_id in zone_ids if zone_id in by_id]
+    except Exception:
+        return []
 
 
 @router.get("/", response_model=List[HuntZone])

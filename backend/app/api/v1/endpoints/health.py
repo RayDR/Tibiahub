@@ -11,6 +11,20 @@ from app.models.settings import SystemSettings as SettingsModel
 router = APIRouter()
 
 
+@router.get("/healthz")
+def healthz():
+    return {"status": "ok"}
+
+
+@router.get("/ready")
+def readiness_check(db: Session = Depends(get_db)):
+    try:
+        db.execute(text("SELECT 1"))
+    except Exception:
+        return {"status": "not_ready", "db": "error"}
+    return {"status": "ready", "db": "ok"}
+
+
 @router.get("/health")
 def health_check(db: Session = Depends(get_db)):
     now = datetime.utcnow()

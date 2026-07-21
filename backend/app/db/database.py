@@ -1,15 +1,27 @@
 """Database configuration and session management."""
-from sqlalchemy import create_engine, text
+from sqlalchemy import create_engine, event
 from sqlalchemy.ext.declarative import declarative_base
 from sqlalchemy.orm import sessionmaker
 
 from app.core.config import settings
 
 # Create database engine
+_SQLITE_CONNECT_ARGS = {"check_same_thread": False, "timeout": 5} if settings.DATABASE_URL.startswith("sqlite") else {}
+
 engine = create_engine(
     settings.DATABASE_URL,
-    connect_args={"check_same_thread": False}  # Needed for SQLite
+    connect_args=_SQLITE_CONNECT_ARGS,
 )
+
+
+if settings.DATABASE_URL.startswith("sqlite"):
+    @event.listens_for(engine, "connect")
+    def _configure_sqlite_connection(dbapi_connection, _connection_record):
+        cursor = dbapi_connection.cursor()
+        cursor.execute("PRAGMA journal_mode=WAL")
+        cursor.execute("PRAGMA synchronous=NORMAL")
+        cursor.execute("PRAGMA busy_timeout=5000")
+        cursor.close()
 
 # Create session factory
 SessionLocal = sessionmaker(autocommit=False, autoflush=False, bind=engine)
@@ -127,8 +139,18 @@ SQLITE_RUNTIME_MIGRATIONS = {
         "message": "TEXT",
         "result_summary": "TEXT",
         "requester": "VARCHAR(255)",
+        "job_limit": "INTEGER",
         "requested_by_user_id": "INTEGER",
         "error_message": "TEXT",
+        "current_entity_type": "VARCHAR(50)",
+        "current_offset": "INTEGER DEFAULT 0",
+        "processed_count": "INTEGER DEFAULT 0",
+        "failed_count": "INTEGER DEFAULT 0",
+        "last_successful_external_id": "VARCHAR(255)",
+        "checkpoint": "TEXT",
+        "batch_size": "INTEGER DEFAULT 100",
+        "max_retries": "INTEGER DEFAULT 3",
+        "external_timeout_seconds": "INTEGER DEFAULT 15",
     },
     "cached_resources": {
         "resource_key": "VARCHAR(128)",
@@ -139,9 +161,20 @@ SQLITE_RUNTIME_MIGRATIONS = {
 }
 
 SQLITE_RUNTIME_INDEXES = (
+    "CREATE INDEX IF NOT EXISTS idx_creatures_name ON creatures(name)",
     "CREATE INDEX IF NOT EXISTS idx_creatures_normalized_name ON creatures(normalized_name)",
+    "CREATE INDEX IF NOT EXISTS idx_creatures_slug ON creatures(slug)",
+    "CREATE INDEX IF NOT EXISTS idx_creatures_classification ON creatures(classification)",
+    "CREATE INDEX IF NOT EXISTS idx_creatures_is_boss ON creatures(is_boss)",
+    "CREATE INDEX IF NOT EXISTS idx_loot_item_name ON loot(item_name)",
     "CREATE INDEX IF NOT EXISTS idx_loot_normalized_name ON loot(normalized_name)",
+    "CREATE INDEX IF NOT EXISTS idx_hunt_zones_name ON hunt_zones(name)",
     "CREATE INDEX IF NOT EXISTS idx_hunt_zones_normalized_name ON hunt_zones(normalized_name)",
+    "CREATE INDEX IF NOT EXISTS idx_entity_metadata_entity_type ON entity_metadata(entity_type)",
+    "CREATE INDEX IF NOT EXISTS idx_entity_metadata_entity_key ON entity_metadata(entity_key)",
+    "CREATE INDEX IF NOT EXISTS idx_user_activity_user_id ON user_activity(user_id)",
+    "CREATE INDEX IF NOT EXISTS idx_user_activity_created_at ON user_activity(created_at)",
+    "CREATE INDEX IF NOT EXISTS idx_user_activity_user_id_created_at ON user_activity(user_id, created_at)",
     "CREATE INDEX IF NOT EXISTS idx_users_tibia_character_name ON users(tibia_character_name)",
     "CREATE INDEX IF NOT EXISTS idx_announcements_is_deleted ON announcements(is_deleted)",
     "CREATE INDEX IF NOT EXISTS idx_guild_events_is_deleted ON guild_events(is_deleted)",
@@ -150,7 +183,10 @@ SQLITE_RUNTIME_INDEXES = (
     "CREATE UNIQUE INDEX IF NOT EXISTS idx_raffles_public_code ON raffles(public_code)",
     "CREATE UNIQUE INDEX IF NOT EXISTS idx_events_public_code ON events(public_code)",
     "CREATE INDEX IF NOT EXISTS idx_sync_jobs_requested_by_user_id ON sync_jobs(requested_by_user_id)",
+    "CREATE INDEX IF NOT EXISTS idx_sync_jobs_current_entity_type ON sync_jobs(current_entity_type)",
     "CREATE INDEX IF NOT EXISTS idx_cached_resources_resource_key ON cached_resources(resource_key)",
+    "CREATE INDEX IF NOT EXISTS idx_sync_job_errors_job_id ON sync_job_errors(job_id)",
+    "CREATE INDEX IF NOT EXISTS idx_sync_job_errors_entity_type ON sync_job_errors(entity_type)",
 )
 
 
@@ -176,7 +212,11 @@ def _run_sqlite_runtime_migrations():
                 )
 
         for statement in SQLITE_RUNTIME_INDEXES:
-            connection.exec_driver_sql(statement)
+            try:
+                connection.exec_driver_sql(statement)
+            except Exception:
+                # Some legacy databases may not include every optional table.
+                continue
 
 
 def get_db():
@@ -205,6 +245,7 @@ def init_db():
         raffle,
         guild_member_snapshot,
         settings,
+        user_activity,
     )
     Base.metadata.create_all(bind=engine)
     _run_sqlite_runtime_migrations()
