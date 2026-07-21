@@ -1,6 +1,6 @@
 from datetime import datetime
 
-from fastapi import APIRouter, Depends
+from fastapi import APIRouter, Depends, Response, status as http_status
 from sqlalchemy import text
 from sqlalchemy.orm import Session
 
@@ -18,23 +18,35 @@ def healthz():
 
 
 @router.get("/ready")
-def readiness_check(db: Session = Depends(get_db)):
+def readiness_check(response: Response, db: Session = Depends(get_db)):
     try:
         db.execute(text("SELECT 1"))
     except Exception:
+        response.status_code = http_status.HTTP_503_SERVICE_UNAVAILABLE
         return {"status": "not_ready", "db": "error"}
     return {"status": "ready", "db": "ok"}
 
 
 @router.get("/health")
-def health_check(db: Session = Depends(get_db)):
+def health_check(response: Response, db: Session = Depends(get_db)):
     now = datetime.utcnow()
     db_status = "ok"
 
     try:
         db.execute(text("SELECT 1"))
     except Exception:
-        db_status = "error"
+        response.status_code = http_status.HTTP_503_SERVICE_UNAVAILABLE
+        return {
+            "status": "degraded",
+            "db": "error",
+            "external_sync": {
+                "active_jobs": None,
+                "failed_jobs_today": None,
+                "latest_data_version": None,
+                "latest_success_at": None,
+            },
+            "timestamp": now.isoformat() + "Z",
+        }
 
     active_jobs = db.query(SyncJob).filter(SyncJob.status.in_(["pending", "running"])).count()
     failed_jobs_24h = (

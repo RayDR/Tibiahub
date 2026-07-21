@@ -5,11 +5,13 @@ import socket
 from types import SimpleNamespace
 
 import pytest
+from fastapi import Response, status
 from PIL import Image
 
 from app.core.security import create_access_token
 from app.models.guild import Announcement
 from app.services import media_asset_service as media
+from app.api.v1.endpoints.health import health_check, readiness_check
 from tests.conftest import make_user
 
 
@@ -118,3 +120,21 @@ def test_guild_reads_are_scoped_and_cross_guild_is_forbidden(client, db):
     )
     assert admin_view.status_code == 200
     assert [row["title"] for row in admin_view.json()] == ["Two"]
+
+
+class _UnavailableDatabase:
+    def execute(self, _statement):
+        raise OSError("storage unavailable")
+
+
+def test_health_endpoints_report_database_failure_as_unavailable():
+    ready_response = Response()
+    assert readiness_check(ready_response, _UnavailableDatabase()) == {"status": "not_ready", "db": "error"}
+    assert ready_response.status_code == status.HTTP_503_SERVICE_UNAVAILABLE
+
+    health_response = Response()
+    payload = health_check(health_response, _UnavailableDatabase())
+    assert health_response.status_code == status.HTTP_503_SERVICE_UNAVAILABLE
+    assert payload["status"] == "degraded"
+    assert payload["db"] == "error"
+    assert payload["external_sync"]["active_jobs"] is None
