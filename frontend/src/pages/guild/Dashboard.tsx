@@ -5,10 +5,12 @@ import { Link } from 'react-router-dom';
 import { useTranslation } from 'react-i18next';
 import { useAuth } from '../../context/AuthContext';
 import { Sword, Shield, Badge } from 'lucide-react';
+import { resolveGuildContext } from '../../utils/guildContext';
 
 export default function Dashboard() {
     const { t } = useTranslation();
-        const { user } = useAuth();
+    const { user } = useAuth();
+    const guildName = resolveGuildContext(user);
     const [announcements, setAnnouncements] = useState<Announcement[]>([]);
     const [loading, setLoading] = useState(true);
     const [detailModal, setDetailModal] = useState<Announcement | null>(null);
@@ -16,7 +18,11 @@ export default function Dashboard() {
     useEffect(() => {
         const loadData = async () => {
             try {
-                const data = await guildApi.getAnnouncements(0, 3);
+                if (!guildName) {
+                    setAnnouncements([]);
+                    return;
+                }
+                const data = await guildApi.getAnnouncements(0, 3, guildName);
                 setAnnouncements(data);
             } catch (error) {
                 console.error("Failed to load dashboard data", error);
@@ -24,8 +30,8 @@ export default function Dashboard() {
                 setLoading(false);
             }
         };
-        loadData();
-    }, []);
+        void loadData();
+    }, [guildName]);
 
     return (
         <div className="space-y-6 sm:space-y-8">

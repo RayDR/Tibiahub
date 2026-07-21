@@ -30,7 +30,7 @@ export interface SystemStats {
 
 export interface TibiaAPIStatus {
     status: 'online' | 'offline' | 'degraded';
-    latency_ms?: number;
+    latency_ms?: number | null;
     cached: boolean;
     last_check: string;
     message: string;

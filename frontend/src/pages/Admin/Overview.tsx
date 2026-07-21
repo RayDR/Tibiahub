@@ -12,7 +12,7 @@ interface Stats {
 
 interface TibiaStatus {
     status: 'online' | 'offline' | 'degraded';
-    latency_ms?: number;
+    latency_ms?: number | null;
     message: string;
     last_check: string;
 }
@@ -103,8 +103,8 @@ export default function Overview() {
                             <span className={`text-2xl font-bold uppercase ${statusColor(tibiaStatus.status)}`}>
                                 {tibiaStatus.status}
                             </span>
-                            {tibiaStatus.latency_ms !== undefined && (
-                                <span className="text-xs text-slate-500">{tibiaStatus.latency_ms.toFixed(0)}ms</span>
+                            {Number.isFinite(Number(tibiaStatus.latency_ms)) && tibiaStatus.latency_ms !== null && (
+                                <span className="text-xs text-slate-500">{Number(tibiaStatus.latency_ms).toFixed(0)}ms</span>
                             )}
                         </div>
                     ) : (

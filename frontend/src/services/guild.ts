@@ -8,6 +8,7 @@ export interface Announcement {
     type: 'general' | 'contest' | 'hunt';
     created_at: string;
     author?: User;
+    guild_name?: string;
 }
 
 export interface Event {
@@ -18,6 +19,7 @@ export interface Event {
     end_time?: string;
     type: 'quest' | 'hunt' | 'pvp' | 'meeting' | 'other';
     author?: User;
+    guild_name?: string;
 }
 
 export interface Recruitment {
@@ -51,23 +53,23 @@ export interface GuildFeatureFlags {
 }
 
 export const guildApi = {
-    getAnnouncements: async (skip: number = 0, limit: number = 10): Promise<Announcement[]> => {
-        const response = await api.get('/guild/announcements', { params: { skip, limit } });
+    getAnnouncements: async (skip: number = 0, limit: number = 10, guildName?: string): Promise<Announcement[]> => {
+        const response = await api.get('/guild/announcements', { params: { skip, limit, guild_name: guildName || undefined } });
         return response.data;
     },
 
-    createAnnouncement: async (data: { title: string; content: string; type: string }): Promise<Announcement> => {
-        const response = await api.post('/guild/announcements', data);
+    createAnnouncement: async (data: { title: string; content: string; type: string }, guildName?: string): Promise<Announcement> => {
+        const response = await api.post('/guild/announcements', data, { params: { guild_name: guildName || undefined } });
         return response.data;
     },
 
-    getEvents: async (skip: number = 0, limit: number = 20): Promise<Event[]> => {
-        const response = await api.get('/guild/events', { params: { skip, limit } });
+    getEvents: async (skip: number = 0, limit: number = 20, guildName?: string): Promise<Event[]> => {
+        const response = await api.get('/guild/events', { params: { skip, limit, guild_name: guildName || undefined } });
         return response.data;
     },
 
-    createEvent: async (data: any): Promise<Event> => {
-        const response = await api.post('/guild/events', data);
+    createEvent: async (data: any, guildName?: string): Promise<Event> => {
+        const response = await api.post('/guild/events', data, { params: { guild_name: guildName || undefined } });
         return response.data;
     },
 

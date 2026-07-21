@@ -775,7 +775,7 @@ export default function RafflePage() {
                                 <div className={participant.is_eligible ? 'text-emerald-400' : 'text-slate-500'}>
                                   {participant.is_eligible ? t('raffle.participants.eligible') : t('raffle.participants.ineligible')}
                                 </div>
-                                <div>{t('raffle.participants.weight')} {participant.weight.toFixed(1)}</div>
+                                <div>{t('raffle.participants.weight')} {Number.isFinite(Number(participant.weight)) ? Number(participant.weight).toFixed(1) : '1.0'}</div>
                               </div>
                               <div className="flex gap-0.5">
                                 {[1, 2, 3, 4, 5].map((w) => (
