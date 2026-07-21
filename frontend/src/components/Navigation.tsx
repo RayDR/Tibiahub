@@ -8,6 +8,7 @@ import { useAuth } from '../context/AuthContext';
 import LanguageSwitcher from './LanguageSwitcher';
 import ThemeSwitcher from './ThemeSwitcher';
 import { cyclopediaSections } from '../config/cyclopediaSections';
+import NotificationIndicator from './NotificationIndicator';
 
 const Navigation: React.FC = () => {
   const location = useLocation();
@@ -187,6 +188,7 @@ const Navigation: React.FC = () => {
             <div className="hidden sm:block w-px h-6 bg-slate-700 mx-1 sm:mx-2" />
 
             <LanguageSwitcher />
+            {isAuthenticated && <NotificationIndicator />}
             
             <div className="hidden sm:block w-px h-6 bg-slate-700 mx-1" />
             

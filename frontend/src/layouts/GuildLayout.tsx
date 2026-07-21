@@ -64,7 +64,7 @@ export default function GuildLayout() {
         { name: 'Guild Events', path: '/guild/events', icon: CalendarClock, special: false },
         { name: 'Contests', path: '/guild/events?type=contest', icon: Shield, special: true },
         { name: t('guild.huntCatalog'), path: '/guild/hunts', icon: Compass, special: false },
-        ...(featureFlags.guild_raffles_enabled ? [{ name: 'Guild Raffle', path: '/guild/raffle', icon: Coins, special: true }] : []),
+        ...(featureFlags.guild_raffles_enabled ? [{ name: t('raffle.operations.navigation'), path: '/guild/automatic-raffles', icon: Coins, special: true }] : []),
     ], [t, featureFlags.guild_raffles_enabled]);
 
     useEffect(() => {
