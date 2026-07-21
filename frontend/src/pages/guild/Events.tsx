@@ -6,6 +6,7 @@ import { guildApi } from '../../services/guild';
 import { useAuth } from '../../context/AuthContext';
 import { useToast } from '../../context/ToastContext';
 import { useSearchParams } from 'react-router-dom';
+import { useGuildContext } from '../../utils/guildContext';
 
 export const Events: React.FC = () => {
   useTranslation();
@@ -27,10 +28,7 @@ export const Events: React.FC = () => {
     guild_contests_enabled: true,
   });
   const canManageEvents = Boolean(user?.is_superuser || ['leader', 'vice leader', 'guild leader', 'alpha warbringer', 'bloodhowl marshal'].includes((user?.guild_rank || '').toLowerCase()));
-  const selectedGuild = (localStorage.getItem('selectedGuildName') || '').trim();
-  const scopedGuild = user?.is_superuser
-    ? (selectedGuild || user?.guild_name || 'Bloodborne Warhowl')
-    : (user?.guild_name || undefined);
+  const scopedGuild = useGuildContext(user);
 
   useEffect(() => {
     const queryType = (searchParams.get('type') as 'raffle' | 'contest' | 'hunt' | 'quest' | null) || 'all';

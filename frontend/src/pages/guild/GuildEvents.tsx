@@ -3,11 +3,11 @@ import { guildApi, Event } from '../../services/guild';
 
 import { Plus, CalendarClock, Clock, CheckCircle2, XCircle, HelpCircle } from 'lucide-react';
 import { useAuth } from '../../context/AuthContext';
-import { resolveGuildContext } from '../../utils/guildContext';
+import { useGuildContext } from '../../utils/guildContext';
 
 export default function Events() {
     const { user } = useAuth();
-    const guildName = resolveGuildContext(user);
+    const guildName = useGuildContext(user);
 
     const [events, setEvents] = useState<Event[]>([]);
     const [loading, setLoading] = useState(true);

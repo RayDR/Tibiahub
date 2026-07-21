@@ -7,6 +7,7 @@ import { LayoutDashboard, Megaphone, CalendarClock, Users, LogOut, Shield, Compa
 import { guildApi } from '../services/guild';
 import { guildManagementApi } from '../services/guildManagement';
 import { REQUEST_TIMEOUT_MS } from '../services/api';
+import type { GuildLayoutContext } from '../utils/guildContext';
 
 export default function GuildLayout() {
     const { t } = useTranslation();
@@ -18,6 +19,7 @@ export default function GuildLayout() {
     });
     const [availableGuilds, setAvailableGuilds] = useState<string[]>([]);
     const [selectedGuild, setSelectedGuild] = useState('');
+    const [guildSelectionLoading, setGuildSelectionLoading] = useState(true);
     const [authTimedOut, setAuthTimedOut] = useState(false);
 
     useEffect(() => {
@@ -69,12 +71,14 @@ export default function GuildLayout() {
 
     useEffect(() => {
         const loadGuildSelector = async () => {
+            setGuildSelectionLoading(true);
             if (!user?.is_superuser) {
                 const ownGuild = (user?.guild_name || '').trim();
                 if (ownGuild) {
                     localStorage.setItem('selectedGuildName', ownGuild);
                     setSelectedGuild(ownGuild);
                 }
+                setGuildSelectionLoading(false);
                 return;
             }
 
@@ -99,6 +103,8 @@ export default function GuildLayout() {
                     setSelectedGuild(fallbackGuild);
                     localStorage.setItem('selectedGuildName', fallbackGuild);
                 }
+            } finally {
+                setGuildSelectionLoading(false);
             }
         };
 
@@ -203,7 +209,9 @@ export default function GuildLayout() {
 
             {/* Main Content */}
             <main className="flex-1 app-surface rounded-lg p-6 min-h-[500px] shadow-lg transition-all duration-300">
-                <Outlet />
+                {guildSelectionLoading
+                    ? <div className="text-center text-[color:var(--color-text-muted)]">Loading guild data...</div>
+                    : <Outlet context={{ selectedGuild } satisfies GuildLayoutContext} />}
             </main>
         </div>
     );
