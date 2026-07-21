@@ -23,7 +23,6 @@ import { useTranslation } from 'react-i18next';
 import { useAuth } from '../../context/AuthContext';
 import { useToast } from '../../context/ToastContext';
 import { guildApi } from '../../services/guild';
-import { guildManagementApi } from '../../services/guildManagement';
 import { Raffle, RaffleAccessMode, RaffleSimulation, RaffleStatus, raffleApi } from '../../services/raffle';
 
 // ---------------------------------------------------------------------------
@@ -144,7 +143,6 @@ export default function RafflePage() {
   const [rerunReason, setRerunReason] = useState('');
   const [manualCharacter, setManualCharacter] = useState('');
   const [editMode, setEditMode] = useState(false);
-  const [availableGuilds, setAvailableGuilds] = useState<string[]>([]);
 
   const isLeader = ['leader', 'vice leader', 'guild leader', 'alpha warbringer', 'bloodhowl marshal'].includes(
     (user?.guild_rank || '').toLowerCase(),
@@ -160,13 +158,6 @@ export default function RafflePage() {
       } catch { setRafflesEnabled(true); }
     })();
   }, []);
-  useEffect(() => {
-    if (!canManage) return;
-    void (async () => {
-      try { setAvailableGuilds(await guildManagementApi.getGuilds()); }
-      catch { setAvailableGuilds([]); }
-    })();
-  }, [canManage]);
   useEffect(() => {
     if (!createForm.guild_name && user?.guild_name) {
       setCreateForm((c) => ({ ...c, guild_name: user.guild_name || '' }));
@@ -450,27 +441,7 @@ export default function RafflePage() {
             required
           />
 
-          {user?.is_superuser && availableGuilds.length > 0 ? (
-            <select
-              value={createForm.guild_name}
-              onChange={(e) => setCreateForm((c) => ({ ...c, guild_name: e.target.value }))}
-              className="w-full rounded-xl border border-slate-700 bg-slate-950 px-4 py-2.5 text-slate-100 outline-none focus:border-amber-500"
-              required
-            >
-              <option value="">{t('raffle.create.selectGuild')}</option>
-              {availableGuilds.map((g) => (
-                <option key={g} value={g}>{g}</option>
-              ))}
-            </select>
-          ) : (
-            <input
-              value={createForm.guild_name}
-              onChange={(e) => setCreateForm((c) => ({ ...c, guild_name: e.target.value }))}
-              placeholder={t('raffle.create.guildPlaceholder')}
-              className="w-full rounded-xl border border-slate-700 bg-slate-950 px-4 py-2.5 text-slate-100 outline-none focus:border-amber-500"
-              required
-            />
-          )}
+          <input value={createForm.guild_name} readOnly aria-readonly="true" className="w-full rounded-xl border border-slate-800 bg-slate-950/60 px-4 py-2.5 text-slate-400" required />
 
           <div className="grid gap-3 sm:grid-cols-2">
             <div>
