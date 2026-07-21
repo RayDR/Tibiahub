@@ -74,6 +74,9 @@ class RaffleParticipantResponse(BaseModel):
     weight_multiplier: float = 1.0
     is_eligible: bool
     created_at: datetime
+    source: Optional[str] = None
+    eligibility_override: Optional[bool] = None
+    eligibility_override_reason: Optional[str] = None
 
     class Config:
         from_attributes = True
@@ -219,6 +222,9 @@ class AutomaticResultResponse(BaseModel):
     candidate_count: int
     delivery_status: str
     delivery_deadline_at: datetime
+    delivered_at: Optional[datetime] = None
+    delivered_by_name: Optional[str] = None
+    delivery_note: Optional[str] = None
 
 
 class AutomaticRunResponse(BaseModel):
@@ -258,6 +264,29 @@ class DeliveryResponse(BaseModel):
     delivered_at: Optional[datetime] = None
     delivered_by_id: Optional[int] = None
     note: Optional[str] = None
+
+
+class TestEligibilityOverrideRequest(BaseModel):
+    eligible: bool
+    reason: str = Field(..., min_length=3, max_length=1000)
+
+
+class TestRetryRequest(BaseModel):
+    reason: str = Field(..., min_length=3, max_length=1000)
+
+
+class TestCleanupRequest(BaseModel):
+    confirmation: Literal["ARCHIVE TEST RAFFLE"]
+    reason: str = Field(..., min_length=3, max_length=1000)
+
+
+class TestCleanupResponse(BaseModel):
+    raffle_id: int
+    archived: bool
+    participant_associations_removed: int
+    users_modified: int = 0
+    guilds_modified: int = 0
+    real_raffles_modified: int = 0
 
 
 class ManagerGrantRequest(BaseModel):

@@ -360,6 +360,9 @@ class RaffleService:
                 "weight_multiplier": participant.weight_multiplier,
                 "is_eligible": participant.is_eligible,
                 "created_at": participant.created_at,
+                "source": participant.source,
+                "eligibility_override": participant.eligibility_override,
+                "eligibility_override_reason": participant.eligibility_override_reason,
             }
             for participant in raffle.participants
             if not participant.is_deleted and participant.user is not None

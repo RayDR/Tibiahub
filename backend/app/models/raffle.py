@@ -87,6 +87,8 @@ class RaffleParticipant(Base):
     weight = Column(Float, nullable=False, default=1.0)
     weight_multiplier = Column(Float, nullable=False, default=1.0)
     is_eligible = Column(Boolean, nullable=False, default=True)
+    eligibility_override = Column(Boolean, nullable=True)
+    eligibility_override_reason = Column(Text, nullable=True)
     source = Column(String(50), nullable=False, default="guild_sync")
     source_data = Column(JSON, nullable=True)
     created_at = Column(DateTime(timezone=True), server_default=func.now())
@@ -285,6 +287,21 @@ class RaffleRerunAudit(Base):
     raffle = relationship("Raffle")
     source_run = relationship("RaffleRun", foreign_keys=[source_run_id])
     new_run = relationship("RaffleRun", foreign_keys=[new_run_id])
+    actor = relationship("User")
+
+
+class RaffleTestAudit(Base):
+    __tablename__ = "raffle_test_audits"
+
+    id = Column(Integer, primary_key=True)
+    raffle_id = Column(Integer, ForeignKey("raffles.id"), nullable=False, index=True)
+    actor_id = Column(Integer, ForeignKey("users.id"), nullable=False)
+    action = Column(String(80), nullable=False, index=True)
+    reason = Column(Text, nullable=True)
+    details = Column(JSON, nullable=False, default=dict)
+    created_at = Column(DateTime(timezone=True), server_default=func.now(), nullable=False)
+
+    raffle = relationship("Raffle")
     actor = relationship("User")
 
 

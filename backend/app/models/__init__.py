@@ -17,7 +17,7 @@ from app.models.raffle import (
     Raffle, RaffleEligibilityEntry, RaffleEligibilitySnapshot, RaffleManagerGrant,
     RaffleParticipant, RafflePrize, RafflePrizeDelivery, RaffleRerunAudit,
     RaffleRun, RaffleRunResult, RaffleWinner,
-    RaffleSchedulerAttempt, RaffleSchedulerState, InternalNotification,
+    RaffleSchedulerAttempt, RaffleSchedulerState, RaffleTestAudit, InternalNotification,
 )
 from app.models.guild_member_snapshot import GuildMemberSnapshot
 
@@ -53,6 +53,7 @@ __all__ = [
     "RaffleRerunAudit",
     "RaffleSchedulerAttempt",
     "RaffleSchedulerState",
+    "RaffleTestAudit",
     "InternalNotification",
     "GuildMemberSnapshot",
     "MediaAsset",

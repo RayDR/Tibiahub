@@ -8,7 +8,8 @@ from fastapi import APIRouter, Depends, HTTPException, status
 from pydantic import BaseModel, Field
 from sqlalchemy.orm import Session, selectinload
 
-from app.api.v1.endpoints.auth import get_current_active_user, get_current_manager_user
+from app.api.v1.endpoints.auth import get_current_active_user, get_current_manager_user, get_current_admin_user
+from app.core.config import settings
 from app.core.permissions import (
     can_administer_raffle, can_execute_raffle, can_publish_raffle,
     can_update_raffle_delivery, can_view_private_raffle_results,
@@ -21,6 +22,7 @@ from app.models.guild import Announcement, AnnouncementType
 from app.models.raffle import (
     Raffle, RaffleEligibilitySnapshot, RaffleManagerGrant, RaffleParticipant,
     RafflePrize, RafflePrizeDelivery, RaffleRun, RaffleRunResult, RaffleWinner,
+    RaffleTestAudit,
 )
 from app.models.user import User
 from app.models.user_character import UserCharacter
@@ -43,10 +45,15 @@ from app.schemas.raffle import (
     ManagerGrantResponse,
     PublicationResponse,
     PublicRaffleResponse,
+    TestCleanupRequest,
+    TestCleanupResponse,
+    TestEligibilityOverrideRequest,
+    TestRetryRequest,
 )
 from app.services.automatic_raffle_service import AutomaticRaffleError, AutomaticRaffleService, serialize_run, validate_automatic_prizes
 from app.services.raffle_eligibility_service import RaffleEligibilityError, RaffleEligibilityService
 from app.services.notification_service import NotificationService
+from app.services.raffle_scheduler_service import RETRYABLE_CODES
 from app.services.raffle_service import RaffleService, normalize_access_mode, normalize_status, sync_legacy_raffle_fields
 from app.services.public_code import generate_unique_code
 from app.services.tibia_api import get_character_info, get_guild_info
@@ -313,10 +320,23 @@ def create_raffle(
         except AutomaticRaffleError as exc:
             db.rollback()
             raise HTTPException(status_code=400, detail=exc.summary) from exc
-        if raffle.purpose == "real" and (not raffle.scheduled_run_at or raffle.scheduled_run_at <= datetime.now(UTC)):
+        scheduled_run_at = raffle.scheduled_run_at
+        if scheduled_run_at and scheduled_run_at.tzinfo is None:
+            scheduled_run_at = scheduled_run_at.replace(tzinfo=UTC)
+        if raffle.purpose == "real" and (not scheduled_run_at or scheduled_run_at <= datetime.now(UTC)):
             db.rollback()
             raise HTTPException(status_code=400, detail="Real automatic raffles require a future schedule")
+        if raffle.purpose == "test":
+            now = datetime.now(UTC)
+            if not scheduled_run_at or scheduled_run_at <= now or scheduled_run_at > now + timedelta(days=7):
+                db.rollback()
+                raise HTTPException(status_code=400, detail="Test raffles require a schedule within the next seven days")
         NotificationService.emit(db, raffle, "raffle_scheduled", f"raffle:{raffle.id}:scheduled")
+        if raffle.purpose == "test":
+            db.add(RaffleTestAudit(
+                raffle_id=raffle.id, actor_id=current_user.id, action="test_raffle_created",
+                details={"scheduled_run_at": raffle.scheduled_run_at.isoformat(), "timezone_name": raffle.timezone_name},
+            ))
 
     db.commit()
     db.refresh(raffle)
@@ -543,12 +563,15 @@ def remove_participant(
     raffle_id: int,
     participant_id: int,
     db: Session = Depends(get_db),
-    current_user: User = Depends(get_current_manager_user),
+    current_user: User = Depends(get_current_active_user),
 ):
     raffle = db.query(Raffle).filter(Raffle.id == raffle_id).first()
     if not raffle:
         raise HTTPException(status_code=404, detail="Raffle not found")
-    _require_raffle_management(current_user, raffle)
+    automatic = raffle.run_mode == "automatic" or raffle.purpose in {"test", "real"}
+    _require_capability(can_administer_raffle(db, current_user, raffle)) if automatic else _require_raffle_management(current_user, raffle)
+    if automatic and raffle.purpose != "test":
+        raise HTTPException(status_code=400, detail="Manual participant removal is allowed only for test raffles")
 
     participant = (
         db.query(RaffleParticipant)
@@ -562,6 +585,11 @@ def remove_participant(
     participant.deleted_by_user_id = current_user.id
     participant.is_eligible = False
     participant.delete_reason = "removed by manager"
+    if raffle.purpose == "test":
+        db.add(RaffleTestAudit(
+            raffle_id=raffle.id, actor_id=current_user.id, action="test_participant_removed",
+            details={"participant_id": participant.id, "character_name": participant.character_name},
+        ))
     db.commit()
     return get_raffle(raffle_id, db, current_user)
 
@@ -790,7 +818,7 @@ async def add_participant_manual(
     raffle_id: int,
     payload: PublicRaffleRegisterRequest,
     db: Session = Depends(get_db),
-    current_user: User = Depends(get_current_manager_user),
+    current_user: User = Depends(get_current_active_user),
 ):
     raffle = db.query(Raffle).filter(Raffle.id == raffle_id).first()
     if not raffle:
@@ -814,6 +842,11 @@ async def add_participant_manual(
             raffle_id=raffle.id, user_id=user.id, character_name=canonical_name,
             guild_rank=(character.guild_rank if character else user.guild_rank), weight=1.0,
             weight_multiplier=1.0, is_eligible=True, source="test_local_account",
+        ))
+        db.flush()
+        db.add(RaffleTestAudit(
+            raffle_id=raffle.id, actor_id=current_user.id, action="test_participant_added",
+            details={"user_id": user.id, "character_name": canonical_name},
         ))
         db.commit()
         return get_raffle(raffle.id, db, current_user)
@@ -874,6 +907,104 @@ async def freeze_automatic_eligibility(
     except RaffleEligibilityError as exc:
         db.rollback()
         raise HTTPException(status_code=400, detail=exc.summary) from exc
+
+
+@router.patch("/{raffle_id}/participants/{participant_id}/test-eligibility-override")
+def override_test_eligibility(
+    raffle_id: int,
+    participant_id: int,
+    payload: TestEligibilityOverrideRequest,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_admin_user),
+):
+    raffle = _stage1_raffle(db, raffle_id)
+    if raffle.purpose != "test":
+        raise HTTPException(status_code=400, detail="Eligibility overrides are restricted to test raffles")
+    if raffle.eligibility_snapshots:
+        raise HTTPException(status_code=409, detail="Eligibility cannot be overridden after a snapshot is frozen")
+    participant = db.query(RaffleParticipant).filter(
+        RaffleParticipant.id == participant_id, RaffleParticipant.raffle_id == raffle.id,
+        RaffleParticipant.is_deleted.is_(False),
+    ).first()
+    if not participant:
+        raise HTTPException(status_code=404, detail="Test participant not found")
+    participant.eligibility_override = payload.eligible
+    participant.eligibility_override_reason = payload.reason.strip()
+    db.add(RaffleTestAudit(
+        raffle_id=raffle.id, actor_id=current_user.id, action="test_eligibility_override",
+        reason=payload.reason.strip(), details={"participant_id": participant.id, "eligible": payload.eligible},
+    ))
+    db.commit()
+    return {"raffle_id": raffle.id, "participant_id": participant.id, "eligible": payload.eligible, "audited": True}
+
+
+@router.post("/{raffle_id}/test-retry")
+def retry_test_raffle(
+    raffle_id: int,
+    payload: TestRetryRequest,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_admin_user),
+):
+    raffle = _stage1_raffle(db, raffle_id)
+    now = datetime.now(UTC)
+    if raffle.purpose != "test":
+        raise HTTPException(status_code=400, detail="Scheduler retry is restricted to test raffles")
+    if raffle.execution_state != "failed" or raffle.last_error_code not in RETRYABLE_CODES:
+        raise HTTPException(status_code=409, detail="This test raffle does not have a safe retryable failure")
+    if raffle.lease_expires_at and raffle.lease_expires_at > now:
+        raise HTTPException(status_code=409, detail="The current scheduler lease has not expired")
+    if (raffle.retry_count or 0) >= settings.RAFFLE_SCHEDULER_MAX_RETRIES:
+        raise HTTPException(status_code=409, detail="Maximum scheduler retry count reached")
+    if db.query(RaffleRun.id).filter(RaffleRun.raffle_id == raffle.id, RaffleRun.state == "succeeded").first():
+        raise HTTPException(status_code=409, detail="A successful run already exists")
+    raffle.execution_state = "pending"
+    raffle.claim_token = None
+    raffle.claimed_at = None
+    raffle.lease_expires_at = None
+    raffle.next_retry_at = now
+    db.add(RaffleTestAudit(
+        raffle_id=raffle.id, actor_id=current_user.id, action="test_scheduler_retry",
+        reason=payload.reason.strip(), details={"failure_code": raffle.last_error_code, "retry_count": raffle.retry_count},
+    ))
+    db.commit()
+    return {"raffle_id": raffle.id, "execution_state": raffle.execution_state, "next_retry_at": raffle.next_retry_at}
+
+
+@router.post("/{raffle_id}/test-cleanup", response_model=TestCleanupResponse)
+def cleanup_test_raffle(
+    raffle_id: int,
+    payload: TestCleanupRequest,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_active_user),
+):
+    raffle = _stage1_raffle(db, raffle_id)
+    _require_capability(can_administer_raffle(db, current_user, raffle))
+    if raffle.purpose != "test":
+        raise HTTPException(status_code=400, detail="Cleanup is restricted to test raffles")
+    now = datetime.now(UTC)
+    participants = db.query(RaffleParticipant).filter(
+        RaffleParticipant.raffle_id == raffle.id, RaffleParticipant.is_deleted.is_(False),
+    ).all()
+    for participant in participants:
+        participant.is_deleted = True
+        participant.is_eligible = False
+        participant.deleted_at = now
+        participant.deleted_by_user_id = current_user.id
+        participant.delete_reason = "test raffle cleanup"
+    raffle.archived_at = now
+    raffle.is_active = False
+    raffle.registration_enabled = False
+    raffle.status = "cancelled"
+    db.add(RaffleTestAudit(
+        raffle_id=raffle.id, actor_id=current_user.id, action="test_cleanup",
+        reason=payload.reason.strip(), details={"participant_associations_removed": len(participants)},
+    ))
+    db.commit()
+    return {
+        "raffle_id": raffle.id, "archived": True,
+        "participant_associations_removed": len(participants),
+        "users_modified": 0, "guilds_modified": 0, "real_raffles_modified": 0,
+    }
 
 
 @router.post("/{raffle_id}/execute", response_model=AutomaticRunResponse)

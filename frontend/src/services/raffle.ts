@@ -22,6 +22,9 @@ export interface RaffleParticipant {
   weight_multiplier: number;
   is_eligible: boolean;
   created_at: string;
+  source?: string;
+  eligibility_override?: boolean | null;
+  eligibility_override_reason?: string;
 }
 
 export interface RafflePrize {
@@ -99,6 +102,7 @@ export interface AutomaticResult {
   id: number; prize_id: number; prize_position: 'second' | 'first'; prize_name: string;
   amount: number; currency: string; character_name: string; selection_index: number;
   candidate_count: number; delivery_status: 'pending' | 'delivered' | 'disputed' | 'cancelled'; delivery_deadline_at: string;
+  delivered_at?: string; delivered_by_name?: string; delivery_note?: string;
 }
 
 export interface AutomaticRun {
@@ -273,7 +277,16 @@ export const raffleApi = {
   },
   async publish(raffleId: number): Promise<void> { await api.post(`/raffles/${raffleId}/publish`); },
   async unpublish(raffleId: number): Promise<void> { await api.post(`/raffles/${raffleId}/unpublish`); },
-  async updateDelivery(raffleId: number, resultId: number, status: AutomaticResult['delivery_status'], note?: string): Promise<void> {
-    await api.patch(`/raffles/${raffleId}/results/${resultId}/delivery`, { status, note });
+  async updateDelivery(raffleId: number, resultId: number, status: AutomaticResult['delivery_status'], note?: string, adminOverride = false): Promise<void> {
+    await api.patch(`/raffles/${raffleId}/results/${resultId}/delivery`, { status, note, admin_override: adminOverride });
+  },
+  async overrideTestEligibility(raffleId: number, participantId: number, eligible: boolean, reason: string): Promise<void> {
+    await api.patch(`/raffles/${raffleId}/participants/${participantId}/test-eligibility-override`, { eligible, reason });
+  },
+  async retryTest(raffleId: number, reason: string): Promise<void> {
+    await api.post(`/raffles/${raffleId}/test-retry`, { reason });
+  },
+  async cleanupTest(raffleId: number, reason: string): Promise<{ raffle_id: number; archived: boolean; participant_associations_removed: number; users_modified: number; guilds_modified: number; real_raffles_modified: number }> {
+    return (await api.post(`/raffles/${raffleId}/test-cleanup`, { confirmation: 'ARCHIVE TEST RAFFLE', reason })).data;
   },
 };
