@@ -1,7 +1,7 @@
 import { Outlet, Link, useLocation, Navigate } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext';
 import { useTranslation } from 'react-i18next';
-import { Activity, Settings, Database, Shield, Wrench } from 'lucide-react';
+import { Activity, Settings, Database, Shield, Wrench, CalendarDays } from 'lucide-react';
 import { WorkspaceHeader } from '../components/workspace/WorkspacePrimitives';
 
 export default function AdminLayout() {
@@ -10,6 +10,7 @@ export default function AdminLayout() {
     if (!isAuthenticated || !user?.is_superuser) return <Navigate to="/guild" replace />;
     const items = [
         { key: 'overview', path: '/admin/overview', icon: Activity }, { key: 'guilds', path: '/admin/guilds', icon: Shield },
+        { key: 'activities', path: '/admin/activities', icon: CalendarDays },
         { key: 'cyclopedia', path: '/admin/bestiary', icon: Database }, { key: 'operations', path: '/admin/data-tools', icon: Wrench },
         { key: 'settings', path: '/admin/settings', icon: Settings },
     ];
