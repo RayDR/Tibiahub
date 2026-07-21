@@ -156,13 +156,16 @@ class AutomaticRaffleService:
         return results
 
     @staticmethod
-    async def execute(db: Session, raffle: Raffle, actor: User, *, trigger: str = "manual") -> RaffleRun:
+    async def execute(db: Session, raffle: Raffle, actor: User, *, trigger: str = "manual", claimed_token: str | None = None) -> RaffleRun:
         raffle_id = raffle.id
         actor_id = actor.id
         if raffle.purpose not in {"test", "real"} or raffle.run_mode != "automatic":
             raise AutomaticRaffleError("invalid_raffle_mode", "This endpoint only executes automatic test or real raffles")
         validate_automatic_prizes(raffle)
-        AutomaticRaffleService.claim(db, raffle)
+        if claimed_token is None:
+            AutomaticRaffleService.claim(db, raffle)
+        elif raffle.execution_state != "claimed" or not hmac.compare_digest(raffle.claim_token or "", claimed_token):
+            raise AutomaticRaffleError("claim_lost", "The scheduler claim is no longer valid")
         snapshot = None
         snapshot_id = None
         try:

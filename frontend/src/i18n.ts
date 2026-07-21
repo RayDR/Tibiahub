@@ -304,7 +304,37 @@ i18n
                         "settings": "System Settings",
                         "database": "Database"
                     },
+                    "notifications": {
+                        "title": "Notifications", "empty": "No notifications yet.", "markAll": "Mark all as read", "indicator": "{{count}} unread notifications",
+                        "types": {
+                            "raffle_scheduled": { "title": "Raffle scheduled", "message": "{{raffle}} has been scheduled." },
+                            "raffle_completed": { "title": "Raffle completed", "message": "{{raffle}} is ready for private review." },
+                            "raffle_execution_failed": { "title": "Raffle execution failed", "message": "{{raffle}} could not be completed safely." },
+                            "raffle_winner_selected": { "title": "Private winner selected", "message": "A winner for {{raffle}} is awaiting publication." },
+                            "raffle_rerun_performed": { "title": "Raffle rerun completed", "message": "Updated results for {{raffle}} are private." },
+                            "raffle_result_published": { "title": "Results published", "message": "Results for {{raffle}} are now public." },
+                            "raffle_result_unpublished": { "title": "Results unpublished", "message": "Results for {{raffle}} returned to private review." },
+                            "raffle_prize_delivered": { "title": "Prize delivered", "message": "A prize for {{raffle}} was marked delivered." },
+                            "raffle_prize_disputed": { "title": "Prize disputed", "message": "A prize for {{raffle}} requires review." },
+                            "raffle_delivery_overdue": { "title": "Prize delivery overdue", "message": "A prize for {{raffle}} passed its delivery deadline." }
+                        }
+                    },
                     "raffle": {
+                        "legacyLabel": "Legacy raffle history — not used by the automatic scheduler",
+                        "operations": {
+                            "navigation": "Automatic Raffles", "title": "Automatic Guild Raffles", "subtitle": "Schedule, review, publish, and deliver authoritative guild draws.",
+                            "prepare": "Prepare raffle", "purpose": "Purpose", "test": "Test", "real": "Real", "testLabel": "TEST", "guild": "Guild", "name": "Raffle name", "timezone": "IANA timezone",
+                            "localSchedule": "Scheduled date and time", "localEquivalent": "Local: {{value}}", "utcEquivalent": "UTC: {{value}}", "save": "Save scheduled raffle",
+                            "rules": "Only current guild members with qualifying activity during the five days before the draw may participate. Winners are selected automatically. Second place receives 100 Tibia Coins and first place receives 250 Tibia Coins. Prizes will be delivered within 24 hours after the draw.",
+                            "confirmReal": "I confirm this is a separate real raffle and the schedule is correct.", "fridayExample": "Preparation example: Friday, July 24, 2026 at 8:00 PM America/Chicago equals July 25, 2026 at 01:00 UTC. Do not use a past date.",
+                            "secondPlace": "Second Place", "firstPlace": "First Place", "scheduledLocal": "Scheduled local time", "scheduledUtc": "Scheduled UTC time", "retryState": "Retry count", "lastFailure": "Last failure",
+                            "preview": "Preview eligibility", "freeze": "Freeze snapshot", "testCharacter": "Existing local character", "addTestParticipant": "Add test participant", "eligibleCount": "{{count}} eligible", "excludedCount": "{{count}} excluded", "snapshotAt": "Cutoff: {{value}}", "staleWarning": "Membership or activity information may be stale. Refresh guild data before freezing.",
+                            "privateReview": "Pending private review. Public visitors cannot see these winners.", "publish": "Publish results", "unpublish": "Return to private", "rerunTitle": "Rerun positions", "rerunReason": "Required reason", "rerunWarning": "Previous results remain in history. A rerun returns publication to private review and may affect delivery tracking.", "rerun": "Run selected positions again",
+                            "execution": { "pending": "Pending", "claimed": "Claimed", "running": "Running", "failed": "Failed", "succeeded": "Completed" },
+                            "delivery": { "pending": "Pending", "delivered": "Delivered", "disputed": "Disputed", "cancelled": "Cancelled", "managerNote": "Updated by raffle manager" },
+                            "draw": { "preparing": "Preparing draw", "secondRolling": "Second-place round", "secondReveal": "Second place revealed", "pause": "Preparing first place", "firstRolling": "First-place round", "complete": "Private results ready" },
+                            "errors": { "load": "Could not load automatic raffles.", "confirmReal": "Explicit confirmation is required for a real raffle.", "future": "Real raffles require a valid future schedule.", "create": "Could not create the raffle.", "rerun": "Could not rerun the selected positions." }
+                        },
                         "eventNotFound": "Event not found",
                         "winner": "WINNER",
                         "congratsMessage": "Congratulations! Your prize awaits.",
@@ -820,7 +850,37 @@ i18n
                         "management": "Gestión de Usuarios",
                         "settings": "Configuración del Sistema",
                         "database": "Base de Datos"                    },
+                    "notifications": {
+                        "title": "Notificaciones", "empty": "Aún no hay notificaciones.", "markAll": "Marcar todas como leídas", "indicator": "{{count}} notificaciones sin leer",
+                        "types": {
+                            "raffle_scheduled": { "title": "Rifa programada", "message": "{{raffle}} ha sido programada." },
+                            "raffle_completed": { "title": "Rifa completada", "message": "{{raffle}} está lista para revisión privada." },
+                            "raffle_execution_failed": { "title": "Falló la ejecución", "message": "{{raffle}} no pudo completarse de forma segura." },
+                            "raffle_winner_selected": { "title": "Ganador privado seleccionado", "message": "Un ganador de {{raffle}} espera publicación." },
+                            "raffle_rerun_performed": { "title": "Repetición completada", "message": "Los resultados actualizados de {{raffle}} son privados." },
+                            "raffle_result_published": { "title": "Resultados publicados", "message": "Los resultados de {{raffle}} ahora son públicos." },
+                            "raffle_result_unpublished": { "title": "Resultados retirados", "message": "Los resultados de {{raffle}} volvieron a revisión privada." },
+                            "raffle_prize_delivered": { "title": "Premio entregado", "message": "Un premio de {{raffle}} fue marcado como entregado." },
+                            "raffle_prize_disputed": { "title": "Premio en disputa", "message": "Un premio de {{raffle}} requiere revisión." },
+                            "raffle_delivery_overdue": { "title": "Entrega atrasada", "message": "Un premio de {{raffle}} superó su plazo de entrega." }
+                        }
+                    },
                     "raffle": {
+                        "legacyLabel": "Historial de rifas legacy — no lo utiliza el scheduler automático",
+                        "operations": {
+                            "navigation": "Rifas Automáticas", "title": "Rifas Automáticas del Gremio", "subtitle": "Programa, revisa, publica y entrega sorteos autoritativos del gremio.",
+                            "prepare": "Preparar rifa", "purpose": "Propósito", "test": "Prueba", "real": "Real", "testLabel": "PRUEBA", "guild": "Gremio", "name": "Nombre de la rifa", "timezone": "Zona horaria IANA",
+                            "localSchedule": "Fecha y hora programada", "localEquivalent": "Local: {{value}}", "utcEquivalent": "UTC: {{value}}", "save": "Guardar rifa programada",
+                            "rules": "Solo pueden participar miembros actuales del gremio con actividad válida durante los cinco días anteriores al sorteo. Los ganadores se seleccionan automáticamente. El segundo lugar recibe 100 Tibia Coins y el primer lugar recibe 250 Tibia Coins. Los premios se entregarán dentro de las 24 horas posteriores al sorteo.",
+                            "confirmReal": "Confirmo que esta es una rifa real independiente y que el horario es correcto.", "fridayExample": "Ejemplo de preparación: viernes 24 de julio de 2026 a las 8:00 PM America/Chicago equivale al 25 de julio de 2026 a la 01:00 UTC. No uses una fecha pasada.",
+                            "secondPlace": "Segundo Lugar", "firstPlace": "Primer Lugar", "scheduledLocal": "Hora local programada", "scheduledUtc": "Hora UTC programada", "retryState": "Número de reintentos", "lastFailure": "Último fallo",
+                            "preview": "Previsualizar elegibilidad", "freeze": "Congelar snapshot", "testCharacter": "Personaje local existente", "addTestParticipant": "Agregar participante de prueba", "eligibleCount": "{{count}} elegibles", "excludedCount": "{{count}} excluidos", "snapshotAt": "Corte: {{value}}", "staleWarning": "La información de membresía o actividad puede estar desactualizada. Actualiza los datos antes de congelar.",
+                            "privateReview": "Pendiente de revisión privada. Los visitantes públicos no pueden ver estos ganadores.", "publish": "Publicar resultados", "unpublish": "Volver a privado", "rerunTitle": "Repetir posiciones", "rerunReason": "Razón obligatoria", "rerunWarning": "Los resultados anteriores permanecen en el historial. Una repetición vuelve la publicación a revisión privada y puede afectar el seguimiento de entrega.", "rerun": "Repetir posiciones seleccionadas",
+                            "execution": { "pending": "Pendiente", "claimed": "Reservada", "running": "En ejecución", "failed": "Fallida", "succeeded": "Completada" },
+                            "delivery": { "pending": "Pendiente", "delivered": "Entregado", "disputed": "En disputa", "cancelled": "Cancelado", "managerNote": "Actualizado por el gestor de la rifa" },
+                            "draw": { "preparing": "Preparando sorteo", "secondRolling": "Ronda del segundo lugar", "secondReveal": "Segundo lugar revelado", "pause": "Preparando el primer lugar", "firstRolling": "Ronda del primer lugar", "complete": "Resultados privados listos" },
+                            "errors": { "load": "No se pudieron cargar las rifas automáticas.", "confirmReal": "Se requiere confirmación explícita para una rifa real.", "future": "Las rifas reales requieren un horario futuro válido.", "create": "No se pudo crear la rifa.", "rerun": "No se pudieron repetir las posiciones seleccionadas." }
+                        },
                         "eventNotFound": "Evento no encontrado",
                         "winner": "GANADOR",
                         "congratsMessage": "¡Felicidades! Tu premio te espera.",

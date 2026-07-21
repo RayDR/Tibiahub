@@ -187,6 +187,8 @@ SQLITE_RUNTIME_MIGRATIONS = {
         "lease_expires_at": "DATETIME",
         "last_error_code": "VARCHAR(100)",
         "last_error_summary": "TEXT",
+        "retry_count": "INTEGER DEFAULT 0",
+        "next_retry_at": "DATETIME",
         "version": "INTEGER DEFAULT 1",
         "archive_after_days": "INTEGER DEFAULT 7",
         "archived_at": "DATETIME",

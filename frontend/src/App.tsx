@@ -30,6 +30,8 @@ import Announcements from './pages/guild/Announcements';
 import Events from './pages/guild/Events';
 import HuntCatalog from './pages/guild/HuntCatalog';
 import Raffle from './pages/guild/Raffle';
+import AutomaticRaffleOperations from './pages/guild/AutomaticRaffleOperations';
+import NotificationsPage from './pages/guild/Notifications';
 import RafflePublicPage from './pages/RafflePublicPage';
 import PublicRafflePage from './pages/PublicRafflePage';
 import NotFound from './pages/NotFound';
@@ -115,6 +117,8 @@ function App() {
                 <Route path="recruitment" element={<Navigate to="/guild/events?type=contest" replace />} />
                 <Route path="hunts" element={<HuntCatalog />} />
                 <Route path="raffle" element={<Raffle />} />
+                <Route path="automatic-raffles" element={<AutomaticRaffleOperations />} />
+                <Route path="notifications" element={<NotificationsPage />} />
               </Route>
 
               {/* Admin Routes */}

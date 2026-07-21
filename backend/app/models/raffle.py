@@ -41,6 +41,8 @@ class Raffle(Base):
     lease_expires_at = Column(DateTime(timezone=True), nullable=True)
     last_error_code = Column(String(100), nullable=True)
     last_error_summary = Column(Text, nullable=True)
+    retry_count = Column(Integer, nullable=False, default=0)
+    next_retry_at = Column(DateTime(timezone=True), nullable=True)
     version = Column(Integer, nullable=False, default=1)
     archive_after_days = Column(Integer, nullable=False, default=7)
     archived_at = Column(DateTime(timezone=True), nullable=True)
@@ -67,6 +69,7 @@ class Raffle(Base):
     eligibility_snapshots = relationship("RaffleEligibilitySnapshot", back_populates="raffle", cascade="all, delete-orphan")
     runs = relationship("RaffleRun", back_populates="raffle", cascade="all, delete-orphan", foreign_keys="RaffleRun.raffle_id")
     deliveries = relationship("RafflePrizeDelivery", back_populates="raffle", cascade="all, delete-orphan")
+    scheduler_attempts = relationship("RaffleSchedulerAttempt", back_populates="raffle", cascade="all, delete-orphan")
 
 
 class RaffleParticipant(Base):
@@ -283,3 +286,59 @@ class RaffleRerunAudit(Base):
     source_run = relationship("RaffleRun", foreign_keys=[source_run_id])
     new_run = relationship("RaffleRun", foreign_keys=[new_run_id])
     actor = relationship("User")
+
+
+class RaffleSchedulerAttempt(Base):
+    __tablename__ = "raffle_scheduler_attempts"
+    __table_args__ = (UniqueConstraint("job_id", name="uq_raffle_scheduler_job_id"),)
+
+    id = Column(Integer, primary_key=True)
+    raffle_id = Column(Integer, ForeignKey("raffles.id"), nullable=False, index=True)
+    job_id = Column(String(255), nullable=False)
+    worker_id = Column(String(255), nullable=False)
+    trigger = Column(String(30), nullable=False, default="scheduler")
+    attempt_number = Column(Integer, nullable=False)
+    state = Column(String(30), nullable=False)
+    retryable = Column(Boolean, nullable=False, default=False)
+    failure_code = Column(String(100), nullable=True)
+    failure_summary = Column(Text, nullable=True)
+    claimed_at = Column(DateTime(timezone=True), nullable=False)
+    started_at = Column(DateTime(timezone=True), nullable=True)
+    completed_at = Column(DateTime(timezone=True), nullable=True)
+
+    raffle = relationship("Raffle", back_populates="scheduler_attempts")
+
+
+class RaffleSchedulerState(Base):
+    __tablename__ = "raffle_scheduler_state"
+
+    worker_id = Column(String(255), primary_key=True)
+    enabled = Column(Boolean, nullable=False, default=True)
+    heartbeat_at = Column(DateTime(timezone=True), nullable=False)
+    last_poll_at = Column(DateTime(timezone=True), nullable=True)
+    last_success_at = Column(DateTime(timezone=True), nullable=True)
+    last_failure_at = Column(DateTime(timezone=True), nullable=True)
+    last_failure_code = Column(String(100), nullable=True)
+    updated_at = Column(DateTime(timezone=True), server_default=func.now(), onupdate=func.now(), nullable=False)
+
+
+class InternalNotification(Base):
+    __tablename__ = "internal_notifications"
+    __table_args__ = (UniqueConstraint("recipient_user_id", "deduplication_key", name="uq_notification_recipient_dedupe"),)
+
+    id = Column(Integer, primary_key=True)
+    recipient_user_id = Column(Integer, ForeignKey("users.id"), nullable=False, index=True)
+    guild_name = Column(String(200), nullable=True, index=True)
+    raffle_id = Column(Integer, ForeignKey("raffles.id"), nullable=True, index=True)
+    notification_type = Column(String(80), nullable=False, index=True)
+    title_key = Column(String(255), nullable=False)
+    message_key = Column(String(255), nullable=False)
+    interpolation = Column(JSON, nullable=False, default=dict)
+    deep_link = Column(String(500), nullable=True)
+    deduplication_key = Column(String(255), nullable=False)
+    is_read = Column(Boolean, nullable=False, default=False, index=True)
+    created_at = Column(DateTime(timezone=True), server_default=func.now(), nullable=False)
+    read_at = Column(DateTime(timezone=True), nullable=True)
+
+    recipient = relationship("User")
+    raffle = relationship("Raffle")

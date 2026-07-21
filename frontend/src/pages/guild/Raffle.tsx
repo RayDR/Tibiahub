@@ -427,6 +427,7 @@ export default function RafflePage() {
   return (
     <div className="space-y-6">
       <div className="rounded-2xl border border-slate-800 bg-gradient-to-br from-slate-900/80 to-slate-950 p-6">
+        <div className="mb-3 inline-flex rounded-full border border-slate-600 px-3 py-1 text-xs text-slate-300">{t('raffle.legacyLabel')}</div>
         <div className="flex items-center gap-3">
           <FontAwesomeIcon icon={faTrophy} className="h-6 w-6 text-amber-400" />
           <h1 className="text-2xl font-bold text-slate-100">{t('raffle.console.title')}</h1>

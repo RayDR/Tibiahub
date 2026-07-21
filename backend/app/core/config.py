@@ -3,6 +3,7 @@ Configuration settings for the application
 """
 from pydantic_settings import BaseSettings
 from typing import List
+from pydantic import Field
 
 
 class Settings(BaseSettings):
@@ -38,6 +39,12 @@ class Settings(BaseSettings):
     BESTIARY_BOOTSTRAP_ENABLED: bool = False
     BESTIARY_BOOTSTRAP_MIN_COUNT: int = 100
     RAFFLE_DEFAULT_GUILD_NAME: str = ""
+    RAFFLE_SCHEDULER_ENABLED: bool = False
+    RAFFLE_SCHEDULER_POLL_SECONDS: int = Field(30, ge=5, le=3600)
+    RAFFLE_SCHEDULER_LEASE_SECONDS: int = Field(300, ge=30, le=3600)
+    RAFFLE_SCHEDULER_MAX_RETRIES: int = Field(5, ge=0, le=20)
+    RAFFLE_SCHEDULER_INITIAL_RETRY_SECONDS: int = Field(60, ge=5, le=3600)
+    RAFFLE_SCHEDULER_WORKER_ID: str = "raffle-scheduler-1"
     IMAGE_CACHE_MAX_AGE_SECONDS: int = 86400
     RESET_PASSWORD_URL: str = "https://tibiahub.domoforge.com/reset-password"
     SMTP_HOST: str = ""
