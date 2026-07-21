@@ -20,7 +20,10 @@ from app.schemas.guild import (
     GuildMemberSnapshotResponse,
 )
 from app.api.v1.endpoints.auth import get_current_user, get_current_active_user, get_current_admin_user, get_current_manager_user
-from app.core.permissions import is_global_admin, require_guild_management
+from app.core.permissions import (
+    can_manage_announcements, can_manage_events, can_manage_guild_members, is_global_admin,
+    require_guild_management, resolve_guild_role,
+)
 from app.services.tibia_api import get_active_guild_members, get_guild_info
 
 router = APIRouter()
@@ -28,6 +31,53 @@ router = APIRouter()
 
 class SoftDeletePayload(BaseModel):
     reason: Optional[str] = None
+
+
+def _require_capability(allowed: bool) -> None:
+    if not allowed:
+        raise HTTPException(status_code=403, detail="Insufficient guild workspace permissions")
+
+
+@router.get("/me")
+def get_own_guild_workspace(current_user: User = Depends(get_current_active_user)):
+    guild_name = (current_user.guild_name or "").strip()
+    return {
+        "workspace_type": "guild" if guild_name else "personal",
+        "status": "ready" if guild_name else "no_guild",
+        "guild_name": guild_name or None,
+        "world_name": current_user.world_name,
+        "role": resolve_guild_role(current_user).value,
+        "capabilities": {
+            "manage_members": bool(guild_name and not current_user.is_superuser and resolve_guild_role(current_user).value == "guild_leader"),
+            "manage_announcements": bool(guild_name and can_manage_announcements(current_user, guild_name)),
+            "manage_events": bool(guild_name and can_manage_events(current_user, guild_name)),
+            "change_guild_scope": False,
+        },
+    }
+
+
+@router.get("/me/dashboard")
+def get_own_guild_dashboard(
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_active_user),
+):
+    guild_name = (current_user.guild_name or "").strip()
+    if not guild_name:
+        raise HTTPException(status_code=409, detail="No guild membership is linked to this account")
+    announcements = db.query(Announcement).filter(
+        Announcement.guild_name.ilike(guild_name), Announcement.is_deleted.is_(False),
+    ).order_by(Announcement.created_at.desc()).limit(3).all()
+    events = db.query(GuildEvent).filter(
+        GuildEvent.guild_name.ilike(guild_name), GuildEvent.is_deleted.is_(False),
+    ).order_by(GuildEvent.start_time.asc()).limit(3).all()
+    return {
+        "guild_name": guild_name,
+        "world_name": current_user.world_name,
+        "role": resolve_guild_role(current_user).value,
+        "member_count": db.query(User.id).filter(User.guild_name.ilike(guild_name), User.is_active.is_(True)).count(),
+        "announcements": announcements,
+        "events": events,
+    }
 
 
 def _resolve_guild_scope(current_user: User, requested_guild: str | None) -> str:
@@ -93,10 +143,10 @@ def create_announcement(
     db: Session = Depends(get_db),
     announcement_in: AnnouncementCreate,
     guild_name: Optional[str] = None,
-    current_user: User = Depends(get_current_manager_user),
+    current_user: User = Depends(get_current_active_user),
 ) -> Any:
     scoped_guild = _resolve_guild_scope(current_user, guild_name)
-    require_guild_management(current_user, scoped_guild)
+    _require_capability(can_manage_announcements(current_user, scoped_guild))
     announcement = Announcement(
         title=announcement_in.title,
         content=announcement_in.content,
@@ -131,12 +181,12 @@ def soft_delete_announcement(
     announcement_id: int,
     payload: Optional[SoftDeletePayload] = None,
     db: Session = Depends(get_db),
-    current_user: User = Depends(get_current_manager_user),
+    current_user: User = Depends(get_current_active_user),
 ) -> Any:
     announcement = db.query(Announcement).filter(Announcement.id == announcement_id).first()
     if not announcement:
         raise HTTPException(status_code=404, detail="Announcement not found")
-    require_guild_management(current_user, announcement.guild_name)
+    _require_capability(can_manage_announcements(current_user, announcement.guild_name))
     announcement.is_deleted = True
     announcement.deleted_at = datetime.utcnow()
     announcement.deleted_by_user_id = current_user.id
@@ -150,12 +200,12 @@ def soft_delete_announcement(
 def restore_announcement(
     announcement_id: int,
     db: Session = Depends(get_db),
-    current_user: User = Depends(get_current_manager_user),
+    current_user: User = Depends(get_current_active_user),
 ) -> Any:
     announcement = db.query(Announcement).filter(Announcement.id == announcement_id).first()
     if not announcement:
         raise HTTPException(status_code=404, detail="Announcement not found")
-    require_guild_management(current_user, announcement.guild_name)
+    _require_capability(can_manage_announcements(current_user, announcement.guild_name))
     announcement.is_deleted = False
     announcement.deleted_at = None
     announcement.deleted_by_user_id = None
@@ -172,10 +222,10 @@ def create_event(
     db: Session = Depends(get_db),
     event_in: EventCreate,
     guild_name: Optional[str] = None,
-    current_user: User = Depends(get_current_manager_user)
+    current_user: User = Depends(get_current_active_user)
 ) -> Any:
     scoped_guild = _resolve_guild_scope(current_user, guild_name)
-    require_guild_management(current_user, scoped_guild)
+    _require_capability(can_manage_events(current_user, scoped_guild))
     event = GuildEvent(
         title=event_in.title,
         description=event_in.description,
@@ -212,12 +262,12 @@ def soft_delete_guild_event(
     event_id: int,
     payload: Optional[SoftDeletePayload] = None,
     db: Session = Depends(get_db),
-    current_user: User = Depends(get_current_manager_user),
+    current_user: User = Depends(get_current_active_user),
 ) -> Any:
     event = db.query(GuildEvent).filter(GuildEvent.id == event_id).first()
     if not event:
         raise HTTPException(status_code=404, detail="Event not found")
-    require_guild_management(current_user, event.guild_name)
+    _require_capability(can_manage_events(current_user, event.guild_name))
     event.is_deleted = True
     event.deleted_at = datetime.utcnow()
     event.deleted_by_user_id = current_user.id
@@ -231,12 +281,12 @@ def soft_delete_guild_event(
 def restore_guild_event(
     event_id: int,
     db: Session = Depends(get_db),
-    current_user: User = Depends(get_current_manager_user),
+    current_user: User = Depends(get_current_active_user),
 ) -> Any:
     event = db.query(GuildEvent).filter(GuildEvent.id == event_id).first()
     if not event:
         raise HTTPException(status_code=404, detail="Event not found")
-    require_guild_management(current_user, event.guild_name)
+    _require_capability(can_manage_events(current_user, event.guild_name))
     event.is_deleted = False
     event.deleted_at = None
     event.deleted_by_user_id = None
@@ -314,7 +364,8 @@ async def get_raffle_participants(
     """
     Get active guild members for raffle
     """
-    members = await get_active_guild_members(guild_name, days)
+    scoped_guild = _resolve_guild_scope(current_user, guild_name)
+    members = await get_active_guild_members(scoped_guild, days)
     return members
 
 
@@ -354,9 +405,10 @@ async def get_guild_members_snapshot(
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_active_user),
 ) -> Any:
+    guild_name = _resolve_guild_scope(current_user, guild_name)
     source = "snapshot"
     if refresh:
-        if not current_user.is_superuser and (current_user.guild_rank or "").lower() not in {"leader", "vice leader"}:
+        if not can_manage_guild_members(current_user, guild_name):
             raise HTTPException(status_code=403, detail="Only guild leaders can force sync")
 
         latest = (
