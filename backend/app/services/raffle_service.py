@@ -377,6 +377,13 @@ class RaffleService:
             "registration_enabled": raffle.registration_enabled,
             "run_mode": raffle.run_mode,
             "scheduled_run_at": raffle.scheduled_run_at,
+            "purpose": getattr(raffle, "purpose", "legacy"),
+            "timezone_name": getattr(raffle, "timezone_name", "America/Chicago"),
+            "eligibility_days": getattr(raffle, "eligibility_days", 5),
+            "eligibility_cutoff_at": getattr(raffle, "eligibility_cutoff_at", None),
+            "publication_status": getattr(raffle, "publication_status", "private"),
+            "execution_state": getattr(raffle, "execution_state", "pending"),
+            "executed_at": getattr(raffle, "executed_at", None),
             "archive_after_days": raffle.archive_after_days,
             "archived_at": raffle.archived_at,
             "status": raffle.status,
@@ -391,6 +398,9 @@ class RaffleService:
                     "name": prize.name,
                     "reward": prize.reward,
                     "order_index": prize.order_index,
+                    "position": prize.position,
+                    "amount": prize.amount,
+                    "currency": prize.currency,
                 }
                 for prize in raffle.prizes
             ],
