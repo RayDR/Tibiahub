@@ -4,7 +4,7 @@ API v1 Router - Combines all API endpoints
 from fastapi import APIRouter, Depends
 
 from app.api.v1 import creatures, hunt_zones, admin as admin_old, recommendations, items, quests
-from app.api.v1.endpoints import auth, guild, profile, admin, hunts, events, catalog, sync, password_reset, tibia, sync_admin, raffles, health, me_activity
+from app.api.v1.endpoints import auth, guild, profile, admin, hunts, events, catalog, sync, password_reset, tibia, sync_admin, raffles, health, me_activity, notifications
 
 api_router = APIRouter()
 
@@ -19,6 +19,7 @@ api_router.include_router(hunts.router, prefix="/hunts", tags=["Hunt Catalog"])
 api_router.include_router(catalog.router, prefix="/catalog", tags=["Catalog"])
 api_router.include_router(events.router, prefix="/events", tags=["Events & Raffles"])
 api_router.include_router(raffles.router, prefix="/raffles", tags=["Guild Raffles"])
+api_router.include_router(notifications.router)
 api_router.include_router(sync.router, prefix="/sync", tags=["Database Sync"])
 api_router.include_router(sync_admin.router, prefix="/admin/sync", tags=["Sync Admin"])
 api_router.include_router(tibia.router, tags=["Tibia.com API"])
