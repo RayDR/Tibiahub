@@ -100,12 +100,13 @@ export default function GuildManagementDashboard() {
     };
 
     const loadEvents = async () => {
+        if (!selectedGuild) return;
         setLoadingContent(true);
         try {
             const token = localStorage.getItem('token');
             const response = await api.get('/guild/events', {
                 headers: { Authorization: `Bearer ${token}` },
-                params: { limit: 50 },
+                params: { limit: 50, guild_name: selectedGuild },
             });
             setEvents(response.data || []);
         } catch {
@@ -116,12 +117,13 @@ export default function GuildManagementDashboard() {
     };
 
     const loadAnnouncements = async () => {
+        if (!selectedGuild) return;
         setLoadingContent(true);
         try {
             const token = localStorage.getItem('token');
             const response = await api.get('/guild/announcements', {
                 headers: { Authorization: `Bearer ${token}` },
-                params: { limit: 50 },
+                params: { limit: 50, guild_name: selectedGuild },
             });
             setAnnouncements(response.data || []);
         } catch {
