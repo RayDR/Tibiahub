@@ -4,6 +4,8 @@ from datetime import datetime
 
 class ProfileResponse(BaseModel):
     username: str
+    display_name: Optional[str] = None
+    title: Optional[str] = None
     email: Optional[str] = None
     avatar_url: Optional[str] = None
     tibia_character_name: str
@@ -24,6 +26,8 @@ class ProfileResponse(BaseModel):
     model_config = ConfigDict(from_attributes=True)
 
 class ProfileUpdate(BaseModel):
+    display_name: Optional[str] = Field(None, max_length=100, description="Public display name")
+    title: Optional[str] = Field(None, max_length=100, description="Custom title or bio line")
     email: Optional[EmailStr] = Field(None, description="New email address")
     avatar_url: Optional[str] = Field(None, description="Avatar image URL")
     current_password: Optional[str] = Field(None, min_length=6, description="Current password")

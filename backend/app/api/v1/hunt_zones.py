@@ -1,9 +1,6 @@
 """Hunt Zones API endpoints."""
 import hashlib
 from typing import List, Optional
-from urllib.parse import unquote, urlparse
-
-import httpx
 from fastapi import APIRouter, Depends, HTTPException, Query
 from fastapi import Request, Response
 from sqlalchemy.orm import Session, selectinload
@@ -17,6 +14,7 @@ from app.schemas import HuntZone, HuntZoneCreate, HuntRecommendation
 from app.services.entity_metadata_service import EntityMetadataService
 from app.services.text_utils import normalize_search_text
 from app.services.hunt_service import HuntRecommendationService
+from app.services import media_asset_service as media_svc
 
 router = APIRouter(prefix="/hunt-zones", tags=["hunt-zones"])
 
@@ -31,36 +29,21 @@ def _is_image_autofetch_enabled(db: Session) -> bool:
 
 
 async def _resolve_fandom_image_url(image_url: str) -> str | None:
-    if "/Special:FilePath/" not in image_url:
-        return image_url
+    return image_url
 
-    parsed = urlparse(image_url)
-    asset_name = unquote(parsed.path.rsplit("/", 1)[-1])
-    if not asset_name:
-        return None
-    file_title = asset_name[0].upper() + asset_name[1:]
 
-    async with httpx.AsyncClient(
-        timeout=20.0,
-        headers={"User-Agent": settings.TIBIAWIKI_USER_AGENT, "Accept": "application/json"},
-    ) as client:
-        response = await client.get(
-            settings.TIBIAWIKI_API_URL,
-            params={
-                "action": "query",
-                "titles": f"File:{file_title}",
-                "prop": "imageinfo",
-                "iiprop": "url",
-                "format": "json",
-            },
-        )
-        response.raise_for_status()
-        pages = ((response.json() or {}).get("query") or {}).get("pages") or {}
-        for page in pages.values():
-            imageinfo = page.get("imageinfo") or []
-            if imageinfo and imageinfo[0].get("url"):
-                return imageinfo[0]["url"]
-    return None
+def _placeholder_map_svg(label: str) -> bytes:
+    safe = media_svc.escape_svg_text(label or "Unknown Zone", limit=48)
+    return (
+        "<svg xmlns='http://www.w3.org/2000/svg' width='640' height='360' viewBox='0 0 640 360'>"
+        "<defs><linearGradient id='bg' x1='0' y1='0' x2='1' y2='1'>"
+        "<stop offset='0%' stop-color='#0f172a'/><stop offset='100%' stop-color='#1e293b'/></linearGradient></defs>"
+        "<rect width='640' height='360' fill='url(#bg)'/>"
+        "<path d='M0 280 L160 220 L280 260 L410 210 L640 260 L640 360 L0 360 Z' fill='#334155'/>"
+        "<circle cx='320' cy='162' r='22' fill='#f59e0b'/><circle cx='320' cy='162' r='8' fill='#111827'/>"
+        f"<text x='320' y='324' text-anchor='middle' fill='#cbd5e1' font-size='20' font-family='Arial, sans-serif'>{safe}</text>"
+        "</svg>"
+    ).encode("utf-8")
 
 
 @router.get("/highlights", response_model=List[HuntZone])
@@ -152,64 +135,83 @@ async def get_hunt_zone(zone_id: int, db: Session = Depends(get_db)):
 
 @router.get("/{zone_id}/map-image")
 async def get_hunt_zone_map_image(zone_id: int, request: Request, db: Session = Depends(get_db)):
-    """Proxy hunt zone map image with fallback resolution and ETag caching."""
+    """Serve hunt-zone map image from local MediaAsset cache (local-first)."""
     zone = db.query(HuntZoneModel).filter(HuntZoneModel.id == zone_id).first()
     if not zone:
         raise HTTPException(status_code=404, detail="Hunt zone not found")
 
-    map_url = zone.map_image_url
-    if not map_url:
-        raise HTTPException(status_code=404, detail="Map image not available")
-    if not _is_image_autofetch_enabled(db):
-        raise HTTPException(status_code=404, detail="Map image not cached locally")
-
-    resolved_url = map_url
-    try:
-        async with httpx.AsyncClient(
-            timeout=20.0,
-            follow_redirects=True,
-            headers={
-                "User-Agent": settings.TIBIAWIKI_USER_AGENT,
-                "Referer": settings.TIBIAWIKI_BASE_PAGE_URL,
-            },
-        ) as client:
-            upstream = await client.get(resolved_url)
-            if upstream.status_code in {403, 404} and "/Special:FilePath/" in resolved_url:
-                fallback_url = await _resolve_fandom_image_url(resolved_url)
-                if fallback_url:
-                    resolved_url = fallback_url
-                    upstream = await client.get(resolved_url)
-            upstream.raise_for_status()
-
-        if zone.map_image_url != resolved_url:
-            zone.map_image_url = resolved_url
-            db.add(zone)
-            db.commit()
-
-        content = upstream.content
-        etag = hashlib.sha1(content).hexdigest()
-        if request.headers.get("if-none-match") == etag:
-            return Response(
-                status_code=304,
-                headers={
-                    "ETag": etag,
-                    "Cache-Control": f"public, max-age={settings.IMAGE_CACHE_MAX_AGE_SECONDS}",
-                },
-            )
-
-        media_type = upstream.headers.get("content-type", "image/png").split(";")[0]
+    asset_key = media_svc.build_zone_asset_key(zone)
+    source_url = media_svc.build_zone_source_url(zone)
+    if not source_url:
+        placeholder = _placeholder_map_svg(zone.name)
         return Response(
-            content=content,
-            media_type=media_type,
+            content=placeholder,
+            media_type="image/svg+xml",
             headers={
-                "Content-Type": media_type,
-                "Content-Length": str(len(content)),
-                "Cache-Control": f"public, max-age={settings.IMAGE_CACHE_MAX_AGE_SECONDS}",
-                "ETag": etag,
+                "Cache-Control": "public, max-age=3600",
+                "X-Image-Source": "placeholder",
+                "X-Asset-Key": asset_key,
             },
         )
-    except Exception as exc:
-        raise HTTPException(status_code=404, detail=f"Map image source unavailable: {str(exc)}") from exc
+
+    autofetch = _is_image_autofetch_enabled(db)
+    asset = await media_svc.get_or_fetch_asset(
+        db,
+        asset_key=asset_key,
+        source_url=source_url,
+        autofetch_enabled=autofetch,
+    )
+
+    if not asset or asset.status != "cached":
+        placeholder = _placeholder_map_svg(zone.name)
+        return Response(
+            content=placeholder,
+            media_type="image/svg+xml",
+            headers={
+                "Cache-Control": "public, max-age=3600",
+                "X-Image-Source": "placeholder",
+                "X-Image-Status": getattr(asset, "status", "missing") if asset else "missing",
+                "X-Asset-Key": asset_key,
+            },
+        )
+
+    content = asset.read_bytes()
+    if not content:
+        placeholder = _placeholder_map_svg(zone.name)
+        return Response(
+            content=placeholder,
+            media_type="image/svg+xml",
+            headers={
+                "Cache-Control": "public, max-age=3600",
+                "X-Image-Source": "placeholder",
+                "X-Image-Status": "missing",
+                "X-Asset-Key": asset_key,
+            },
+        )
+
+    etag = asset.sha256_hash[:20] if asset.sha256_hash else hashlib.sha1(content).hexdigest()
+    if request.headers.get("if-none-match") == etag:
+        return Response(
+            status_code=304,
+            headers={
+                "ETag": etag,
+                "Cache-Control": f"public, max-age={settings.IMAGE_CACHE_MAX_AGE_SECONDS}",
+            },
+        )
+
+    media_type = asset.content_type or "image/png"
+    return Response(
+        content=content,
+        media_type=media_type,
+        headers={
+            "Content-Type": media_type,
+            "Content-Length": str(len(content)),
+            "Cache-Control": f"public, max-age={settings.IMAGE_CACHE_MAX_AGE_SECONDS}",
+            "ETag": etag,
+            "X-Image-Source": "local-media-asset",
+            "X-Asset-Key": asset_key,
+        },
+    )
 
 
 @router.get("/recommendations/{vocation}", response_model=List[HuntRecommendation])

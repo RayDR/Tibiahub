@@ -54,6 +54,7 @@ class Creature(Base):
     difficulty = Column(String(20))  # Trivial, Easy, Medium, Hard
     occurrence = Column(String(20))  # Common, Uncommon, Rare, Very Rare
     is_boss = Column(Boolean, default=False)
+    is_hidden = Column(Boolean, default=False)
     
     # Loot info
     loot_value = Column(Float)  # Average gold value
@@ -70,6 +71,11 @@ class Creature(Base):
     
     # Image
     image_url = Column(String(255))
+    image_alias = Column(String(255), nullable=True)       # e.g. "Demon" when creature is "Angry Demon"
+    image_url_override = Column(String(1024), nullable=True)  # full URL manually set by admin
+    image_source_name = Column(String(255), nullable=True)  # e.g. "tibiawiki"
+    image_locked = Column(Boolean, default=False)           # if True, sync must not overwrite image fields
+    image_asset_id = Column(Integer, ForeignKey("media_assets.id"), nullable=True)
     data_sources = Column(JSON, nullable=True)
     missing_fields = Column(JSON, nullable=True)
     related_tasks = Column(JSON, nullable=True)

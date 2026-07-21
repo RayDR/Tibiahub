@@ -68,6 +68,10 @@ class SystemSettings(BaseModel):
         True,
         description="Enable guild contest/event features"
     )
+    cyclopedia_category_images: dict[str, str] = Field(
+        default_factory=dict,
+        description="Mapping: category_key -> image URL used by Cyclopedia category cards",
+    )
     access_token_expire_minutes: int = Field(
         ..., 
         description="JWT token expiration time in minutes"
@@ -99,6 +103,10 @@ class UpdateSystemSettings(BaseModel):
     guild_contests_enabled: Optional[bool] = Field(
         None,
         description="Enable/disable guild contest/event features"
+    )
+    cyclopedia_category_images: Optional[dict[str, str]] = Field(
+        None,
+        description="Optional full mapping to save for Cyclopedia category images",
     )
 
 

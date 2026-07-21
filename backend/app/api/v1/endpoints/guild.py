@@ -20,7 +20,7 @@ from app.schemas.guild import (
     GuildMemberSnapshotResponse,
 )
 from app.api.v1.endpoints.auth import get_current_user, get_current_active_user, get_current_admin_user, get_current_manager_user
-from app.core.permissions import require_guild_management
+from app.core.permissions import is_global_admin, require_guild_management
 from app.services.tibia_api import get_active_guild_members, get_guild_info
 
 router = APIRouter()
@@ -28,6 +28,17 @@ router = APIRouter()
 
 class SoftDeletePayload(BaseModel):
     reason: Optional[str] = None
+
+
+def _resolve_guild_scope(current_user: User, requested_guild: str | None) -> str:
+    guild_name = (requested_guild or current_user.guild_name or "").strip()
+    if not guild_name:
+        raise HTTPException(status_code=400, detail="A guild name is required")
+    if not is_global_admin(current_user):
+        own_guild = (current_user.guild_name or "").strip()
+        if not own_guild or own_guild.casefold() != guild_name.casefold():
+            raise HTTPException(status_code=403, detail="You can only access your own guild")
+    return guild_name
 
 
 def _latest_snapshot_rows(db: Session, guild_name: str, limit: int = 400) -> list[GuildMemberSnapshot]:
@@ -81,13 +92,17 @@ def create_announcement(
     *,
     db: Session = Depends(get_db),
     announcement_in: AnnouncementCreate,
+    guild_name: Optional[str] = None,
     current_user: User = Depends(get_current_manager_user),
 ) -> Any:
+    scoped_guild = _resolve_guild_scope(current_user, guild_name)
+    require_guild_management(current_user, scoped_guild)
     announcement = Announcement(
         title=announcement_in.title,
         content=announcement_in.content,
         type=announcement_in.type,
-        author_id=current_user.id
+        author_id=current_user.id,
+        guild_name=scoped_guild,
     )
     db.add(announcement)
     db.commit()
@@ -99,10 +114,12 @@ def read_announcements(
     skip: int = 0,
     limit: int = 100,
     include_deleted: bool = False,
+    guild_name: Optional[str] = None,
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_active_user)
 ) -> Any:
-    query = db.query(Announcement)
+    scoped_guild = _resolve_guild_scope(current_user, guild_name)
+    query = db.query(Announcement).filter(Announcement.guild_name.ilike(scoped_guild))
     if not include_deleted:
         query = query.filter(Announcement.is_deleted == False)
     announcements = query.order_by(Announcement.created_at.desc()).offset(skip).limit(limit).all()
@@ -119,6 +136,7 @@ def soft_delete_announcement(
     announcement = db.query(Announcement).filter(Announcement.id == announcement_id).first()
     if not announcement:
         raise HTTPException(status_code=404, detail="Announcement not found")
+    require_guild_management(current_user, announcement.guild_name)
     announcement.is_deleted = True
     announcement.deleted_at = datetime.utcnow()
     announcement.deleted_by_user_id = current_user.id
@@ -137,6 +155,7 @@ def restore_announcement(
     announcement = db.query(Announcement).filter(Announcement.id == announcement_id).first()
     if not announcement:
         raise HTTPException(status_code=404, detail="Announcement not found")
+    require_guild_management(current_user, announcement.guild_name)
     announcement.is_deleted = False
     announcement.deleted_at = None
     announcement.deleted_by_user_id = None
@@ -152,15 +171,19 @@ def create_event(
     *,
     db: Session = Depends(get_db),
     event_in: EventCreate,
+    guild_name: Optional[str] = None,
     current_user: User = Depends(get_current_manager_user)
 ) -> Any:
+    scoped_guild = _resolve_guild_scope(current_user, guild_name)
+    require_guild_management(current_user, scoped_guild)
     event = GuildEvent(
         title=event_in.title,
         description=event_in.description,
         start_time=event_in.start_time,
         end_time=event_in.end_time,
         type=event_in.type,
-        author_id=current_user.id
+        author_id=current_user.id,
+        guild_name=scoped_guild,
     )
     db.add(event)
     db.commit()
@@ -172,10 +195,12 @@ def read_events(
     skip: int = 0,
     limit: int = 100,
     include_deleted: bool = False,
+    guild_name: Optional[str] = None,
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_active_user)
 ) -> Any:
-    query = db.query(GuildEvent)
+    scoped_guild = _resolve_guild_scope(current_user, guild_name)
+    query = db.query(GuildEvent).filter(GuildEvent.guild_name.ilike(scoped_guild))
     if not include_deleted:
         query = query.filter(GuildEvent.is_deleted == False)
     events = query.order_by(GuildEvent.start_time.asc()).offset(skip).limit(limit).all()
@@ -192,6 +217,7 @@ def soft_delete_guild_event(
     event = db.query(GuildEvent).filter(GuildEvent.id == event_id).first()
     if not event:
         raise HTTPException(status_code=404, detail="Event not found")
+    require_guild_management(current_user, event.guild_name)
     event.is_deleted = True
     event.deleted_at = datetime.utcnow()
     event.deleted_by_user_id = current_user.id
@@ -210,6 +236,7 @@ def restore_guild_event(
     event = db.query(GuildEvent).filter(GuildEvent.id == event_id).first()
     if not event:
         raise HTTPException(status_code=404, detail="Event not found")
+    require_guild_management(current_user, event.guild_name)
     event.is_deleted = False
     event.deleted_at = None
     event.deleted_by_user_id = None
@@ -228,6 +255,7 @@ def attend_event(
     event = db.query(GuildEvent).filter(GuildEvent.id == event_id).first()
     if not event:
         raise HTTPException(status_code=404, detail="Event not found")
+    _resolve_guild_scope(current_user, event.guild_name)
     
     attendance = db.query(EventAttendance).filter(
         EventAttendance.event_id == event_id,

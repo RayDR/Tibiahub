@@ -52,8 +52,13 @@ export interface CreatureSimple {
   hitpoints: number;
   experience: number;
   is_boss: boolean;
+  is_hidden?: boolean;
   difficulty?: string;
   classification?: string;
+  image_alias?: string;
+  image_url_override?: string;
+  image_source_name?: string;
+  image_locked?: boolean;
   related_tasks?: string[];
   image_url?: string;
   source_url?: string;
@@ -75,10 +80,15 @@ export interface Creature {
   difficulty?: string;
   occurrence?: string;
   is_boss: boolean;
+  is_hidden?: boolean;
   loot_value?: number;
   description?: string;
   behavior?: string;
   image_url?: string;
+  image_alias?: string;
+  image_url_override?: string;
+  image_source_name?: string;
+  image_locked?: boolean;
   bestiary_class?: string;
   bestiary_level?: string;
   charm_points?: number | null;
@@ -99,10 +109,17 @@ export interface Creature {
 export interface HuntZone {
   id: number;
   name: string;
+  slug?: string;
   city?: string;
+  region?: string;
   min_level: number;
   max_level?: number;
   recommended_level?: number;
+  recommended_vocations?: string[];
+  recommended_party_size?: string;
+  exp_rating?: string;
+  profit_rating?: string;
+  danger_rating?: string;
   knights_recommended: boolean;
   paladins_recommended: boolean;
   sorcerers_recommended: boolean;
@@ -120,7 +137,14 @@ export interface HuntZone {
   location_x?: number;
   location_y?: number;
   location_z?: number;
+  map_x?: number;
+  map_y?: number;
+  map_z?: number;
+  map_bounds?: Record<string, unknown>;
+  map_asset_id?: number;
   map_image_url?: string;
+  source_provider?: string;
+  source_name?: string;
   source_url?: string;
   creatures?: CreatureSimple[];
   last_synced_at?: string;
@@ -136,6 +160,7 @@ export interface ItemDropCreature {
 }
 
 export interface ItemSearchResult {
+  image_item_id?: number | null;
   item_name: string;
   normalized_name: string;
   item_image_url?: string | null;
@@ -157,7 +182,11 @@ export interface ItemDetail {
 export interface QuestSearchResult {
   id?: number;
   name: string;
+  slug?: string;
   description?: string;
+  group_name?: string;
+  parent_page?: string;
+  is_group?: boolean;
   min_level?: number;
   max_level?: number;
   experience_reward?: number;
@@ -178,14 +207,20 @@ export interface QuestRelatedCreature {
 export interface QuestDetail {
   id: number;
   name: string;
+  slug?: string;
   description?: string;
+  group_name?: string;
+  parent_page?: string;
+  is_group?: boolean;
   min_level?: number;
   max_level?: number;
   experience_reward?: number;
   location?: string;
   npc?: string;
   source_url?: string;
+  rewards?: string[];
   requirements: string[];
+  related_quest_names?: string[];
   related_creatures: QuestRelatedCreature[];
 }
 

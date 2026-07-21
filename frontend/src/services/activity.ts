@@ -28,8 +28,8 @@ interface ActivityCreatePayload {
 }
 
 export const activityApi = {
-  async getMine(limit: number = 40): Promise<UserActivityEntry[]> {
-    const response = await api.get('/me/activity', { params: { limit } });
+  async getMine(limit: number = 40, signal?: AbortSignal): Promise<UserActivityEntry[]> {
+    const response = await api.get('/me/activity', { params: { limit }, signal });
     return response.data;
   },
 

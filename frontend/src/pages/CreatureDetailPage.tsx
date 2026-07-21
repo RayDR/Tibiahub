@@ -1,10 +1,11 @@
 import React, { useEffect, useState } from 'react';
-import { useNavigate, useParams } from 'react-router-dom';
+import { useLocation, useNavigate, useParams } from 'react-router-dom';
 import { motion } from 'framer-motion';
 import { AlertTriangle, ArrowLeft, Gem, Heart, Info, Loader2, MapPin, Shield, Skull, Swords, Zap } from 'lucide-react';
+import { useTranslation } from 'react-i18next';
 
-import { creaturesApi } from '../services/api';
 import LootDisplay from '../components/LootDisplay';
+import ImageWithFallback from '../components/ImageWithFallback';
 import type { Creature } from '../types';
 import { useAuth } from '../context/AuthContext';
 import { activityApi } from '../services/activity';
@@ -19,6 +20,8 @@ const formatNumber = (value?: number | null): string => {
 const CreatureDetailPage: React.FC = () => {
   const { slug } = useParams<{ slug: string }>();
   const navigate = useNavigate();
+  const location = useLocation();
+  const { t } = useTranslation();
   const [creature, setCreature] = useState<Creature | null>(null);
   const [loading, setLoading] = useState(true);
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
@@ -120,24 +123,41 @@ const CreatureDetailPage: React.FC = () => {
   const accessRequirements = (creature.related_tasks || []).filter((task) => /quest|mission|access|required/i.test(task));
   const displayRequirements = accessRequirements.length > 0 ? accessRequirements : (creature.related_tasks || []);
 
+  const backTarget = (location.state as { from?: string } | null)?.from;
+
   return (
     <div className="min-h-screen pb-20 pt-28">
       <div className="relative mb-8">
         <div className="pointer-events-none absolute inset-0 bg-gradient-to-b from-amber-500/10 to-transparent" />
         <div className="container relative z-10 mx-auto px-4">
-          <button onClick={() => navigate('/cyclopedia')} className="group mb-6 flex items-center gap-2 text-slate-400 transition-colors hover:text-white">
+          <button
+            onClick={() => {
+              if (backTarget) {
+                navigate(backTarget);
+                return;
+              }
+              if (window.history.length > 1) {
+                navigate(-1);
+                return;
+              }
+              navigate('/cyclopedia');
+            }}
+            className="group mb-6 flex items-center gap-2 text-slate-400 transition-colors hover:text-white"
+          >
             <ArrowLeft size={18} className="transition-transform group-hover:-translate-x-1" />
-            Back to Cyclopedia
+            {t('creature.backToCyclopedia')}
           </button>
 
           <div className="flex flex-col items-start gap-8 md:flex-row">
             <motion.div initial={{ scale: 0.92, opacity: 0 }} animate={{ scale: 1, opacity: 1 }} className="relative aspect-square w-full overflow-hidden rounded-2xl border border-slate-700 bg-slate-900/80 p-8 shadow-2xl shadow-black/50 md:w-64">
               <div className="absolute inset-0 bg-gradient-to-br from-amber-500/5 to-red-500/5" />
-              {creature.image_url ? (
-                <img src={`/api/v1/creatures/${creature.id}/image`} alt={creature.name} className="h-full w-full object-contain drop-shadow-[0_0_15px_rgba(0,0,0,0.6)]" />
-              ) : (
-                <div className="flex h-full items-center justify-center"><Skull size={80} className="text-slate-700 opacity-50" /></div>
-              )}
+              <ImageWithFallback
+                src={`/api/v1/creatures/${creature.id}/image`}
+                alt={creature.name}
+                className="h-full w-full object-contain drop-shadow-[0_0_15px_rgba(0,0,0,0.6)]"
+                containerClassName="h-full w-full"
+                fallbackLabel="Creature"
+              />
             </motion.div>
 
             <div className="flex-1 space-y-6">
@@ -218,7 +238,7 @@ const CreatureDetailPage: React.FC = () => {
               <MapPin className="text-amber-500" size={20} /> Known Locations
             </h2>
             <div className="space-y-2 text-sm text-slate-300">
-              {creature.locations?.length > 0 ? creature.locations.map((location) => (
+              {(creature.locations?.length ?? 0) > 0 ? creature.locations!.map((location) => (
                 <div key={location} className="rounded-lg border border-slate-800 bg-slate-950/60 px-3 py-2">{location}</div>
               )) : <div className="text-slate-500">Not available</div>}
             </div>
@@ -236,8 +256,8 @@ const CreatureDetailPage: React.FC = () => {
           <div className="rounded-2xl border border-slate-700 bg-slate-900/80 p-6 backdrop-blur">
             <h2 className="mb-4 text-lg font-bold text-white">Sources & Completeness</h2>
             <div className="space-y-2 text-sm text-slate-300">
-              <div>Sources: {creature.data_sources?.length > 0 ? creature.data_sources.join(', ') : 'Unknown'}</div>
-              <div>Missing fields: {creature.missing_fields?.length > 0 ? creature.missing_fields.join(', ') : 'None'}</div>
+              <div>Sources: {(creature.data_sources?.length ?? 0) > 0 ? creature.data_sources!.join(', ') : 'Unknown'}</div>
+              <div>Missing fields: {(creature.missing_fields?.length ?? 0) > 0 ? creature.missing_fields!.join(', ') : 'None'}</div>
               {creature.source_url ? (
                 <a href={creature.source_url} target="_blank" rel="noreferrer" className="inline-block text-amber-400 hover:text-amber-300">
                   Open source page

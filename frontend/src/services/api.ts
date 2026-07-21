@@ -55,6 +55,11 @@ export const creaturesApi = {
     return response.data;
   },
 
+  getCategoryImages: async (signal?: AbortSignal): Promise<Record<string, string>> => {
+    const response = await api.get('/creatures/category-images', { signal });
+    return response.data || {};
+  },
+
   getById: async (id: number): Promise<Creature> => {
     const response = await api.get(`/creatures/${id}`);
     return response.data;
@@ -158,19 +163,68 @@ export const itemsApi = {
 };
 
 export const questsApi = {
-  list: async (params?: { skip?: number; limit?: number }, signal?: AbortSignal): Promise<QuestSearchResult[]> => {
+  list: async (params?: { skip?: number; limit?: number; include_groups?: boolean }, signal?: AbortSignal): Promise<QuestSearchResult[]> => {
     const response = await api.get('/quests/', { params, signal });
     return response.data;
   },
 
-  search: async (search: string, limit: number = 50, signal?: AbortSignal): Promise<QuestSearchResult[]> => {
-    const response = await api.get('/quests/', { params: { search, limit }, signal });
+  getHighlights: async (limit: number = 12, signal?: AbortSignal): Promise<QuestSearchResult[]> => {
+    const response = await api.get('/quests/highlights', { params: { limit }, signal });
+    return response.data;
+  },
+
+  search: async (search: string, limit: number = 50, signal?: AbortSignal, include_groups: boolean = false): Promise<QuestSearchResult[]> => {
+    const response = await api.get('/quests/', { params: { search, limit, include_groups }, signal });
     return response.data;
   },
 
   getById: async (id: number, signal?: AbortSignal): Promise<QuestDetail> => {
     const response = await api.get(`/quests/${id}`, { signal });
     return response.data;
+  },
+};
+
+export const adminCreaturesApi = {
+  list: async (params?: {
+    skip?: number;
+    limit?: number;
+    search?: string;
+    include_hidden?: boolean;
+  }, signal?: AbortSignal): Promise<{ items: Creature[]; total: number; skip: number; limit: number }> => {
+    const response = await api.get('/admin/creatures', { params, signal });
+    return response.data;
+  },
+
+  patch: async (
+    creatureId: number,
+    payload: {
+      name?: string;
+      classification?: string | null;
+      difficulty?: string | null;
+      is_hidden?: boolean;
+      image_alias?: string | null;
+      image_url_override?: string | null;
+      image_source_name?: string | null;
+      image_locked?: boolean;
+      clear_local_cache?: boolean;
+    }
+  ): Promise<any> => {
+    const response = await api.patch(`/admin/creatures/${creatureId}/image`, payload, {
+      timeout: ADMIN_ACTION_TIMEOUT_MS,
+    });
+    return response.data;
+  },
+};
+
+export const adminOverviewApi = {
+  getStats: async (signal?: AbortSignal) => {
+    const response = await api.get('/admin/overview/stats', { signal });
+    return response.data as {
+      creatures: { total: number; visible: number; hidden: number };
+      hunt_zones: { total: number };
+      quests: { total: number };
+      users: { total: number; active: number; inactive: number; admin: number };
+    };
   },
 };
 

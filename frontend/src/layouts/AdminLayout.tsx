@@ -1,7 +1,7 @@
 import { Outlet, Link, useLocation, Navigate } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext';
 import { useTranslation } from 'react-i18next';
-import { Settings, Users, Database, LogOut, Shield, GitBranch } from 'lucide-react';
+import { Activity, Settings, Users, Database, LogOut, Shield, Wrench } from 'lucide-react';
 
 export default function AdminLayout() {
     const { t } = useTranslation();
@@ -16,12 +16,23 @@ export default function AdminLayout() {
         return <Navigate to="/guild" replace />;
     }
 
-    const navItems = [
-        { name: t('admin.management'), path: '/admin/management', icon: Users },
-        { name: 'API Monitor', path: '/admin/api-monitor', icon: Database },
-        { name: 'Database Sync', path: '/admin/database-sync', icon: GitBranch },
-        { name: 'Admin Sync', path: '/admin/sync', icon: GitBranch },
-        { name: t('admin.settings'), path: '/admin/settings', icon: Settings },
+    const navSections = [
+        {
+            title: 'Core',
+            items: [
+                { name: 'Overview', path: '/admin/overview', icon: Activity },
+                { name: 'Guild Management', path: '/admin/management', icon: Users },
+                { name: 'Guild Preview', path: '/admin/guild-view', icon: Shield },
+                { name: 'Bestiary', path: '/admin/bestiary', icon: Database },
+                { name: t('admin.settings'), path: '/admin/settings', icon: Settings },
+            ],
+        },
+        {
+            title: 'Data Ops',
+            items: [
+                { name: 'Data Tools', path: '/admin/data-tools', icon: Wrench },
+            ],
+        },
     ];
 
     return (
@@ -42,24 +53,33 @@ export default function AdminLayout() {
                         </span>
                     </div>
 
-                    <nav className="p-2 space-y-1">
-                        {navItems.map((item) => {
-                            const isActive = location.pathname === item.path;
-                            const Icon = item.icon;
-                            return (
-                                <Link
-                                    key={item.path}
-                                    to={item.path}
-                                    className={`flex items-center gap-3 px-3 py-2.5 rounded-md transition-colors text-sm font-medium ${isActive
-                                            ? 'bg-[color:var(--color-primary)]/20 text-[color:var(--color-primary)] border border-[color:var(--color-primary)]/30'
-                                            : 'text-[color:var(--color-text-muted)] hover:text-[color:var(--color-text)] hover:bg-[color:var(--color-surface-alt)]'
-                                        }`}
-                                >
-                                    <Icon className="w-4 h-4" />
-                                    {item.name}
-                                </Link>
-                            );
-                        })}
+                    <nav className="p-2 space-y-3">
+                        {navSections.map((section) => (
+                            <div key={section.title}>
+                                <div className="px-2 py-1 text-[10px] uppercase tracking-widest text-[color:var(--color-text-muted)]">
+                                    {section.title}
+                                </div>
+                                <div className="space-y-1">
+                                    {section.items.map((item) => {
+                                        const isActive = location.pathname === item.path;
+                                        const Icon = item.icon;
+                                        return (
+                                            <Link
+                                                key={item.path}
+                                                to={item.path}
+                                                className={`flex items-center gap-3 px-3 py-2.5 rounded-md transition-colors text-sm font-medium ${isActive
+                                                        ? 'bg-[color:var(--color-primary)]/20 text-[color:var(--color-primary)] border border-[color:var(--color-primary)]/30'
+                                                        : 'text-[color:var(--color-text-muted)] hover:text-[color:var(--color-text)] hover:bg-[color:var(--color-surface-alt)]'
+                                                    }`}
+                                            >
+                                                <Icon className="w-4 h-4" />
+                                                {item.name}
+                                            </Link>
+                                        );
+                                    })}
+                                </div>
+                            </div>
+                        ))}
                     </nav>
 
                     <div className="p-2 border-t border-[color:var(--color-border)] mt-2">

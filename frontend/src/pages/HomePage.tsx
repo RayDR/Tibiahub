@@ -27,12 +27,19 @@ const HomePage: React.FC = () => {
   const [activityLoading, setActivityLoading] = useState(false);
 
   useEffect(() => {
+    const controller = new AbortController();
+    let mounted = true;
+
     const loadHighlights = async () => {
       const [creaturesResult, itemsResult, zonesResult] = await Promise.allSettled([
-        creaturesApi.getHighlights(12),
-        itemsApi.getHighlights(8),
-        huntZonesApi.getHighlights(6),
+        creaturesApi.getHighlights(12, controller.signal),
+        itemsApi.getHighlights(8, controller.signal),
+        huntZonesApi.getHighlights(6, controller.signal),
       ]);
+
+      if (!mounted) {
+        return;
+      }
 
       if (creaturesResult.status === 'fulfilled') {
         setFeaturedCreatures(creaturesResult.value);
@@ -57,6 +64,11 @@ const HomePage: React.FC = () => {
     };
 
     void loadHighlights();
+
+    return () => {
+      mounted = false;
+      controller.abort();
+    };
   }, []);
 
   useEffect(() => {
@@ -65,18 +77,35 @@ const HomePage: React.FC = () => {
       return;
     }
 
+    const controller = new AbortController();
+    let mounted = true;
+
     const loadActivity = async () => {
       try {
-        setActivityLoading(true);
-        setActivity(await activityApi.getMine(12));
+        if (mounted) {
+          setActivityLoading(true);
+        }
+        const result = await activityApi.getMine(12, controller.signal);
+        if (mounted) {
+          setActivity(result);
+        }
       } catch {
-        setActivity([]);
+        if (mounted) {
+          setActivity([]);
+        }
       } finally {
-        setActivityLoading(false);
+        if (mounted) {
+          setActivityLoading(false);
+        }
       }
     };
 
     void loadActivity();
+
+    return () => {
+      mounted = false;
+      controller.abort();
+    };
   }, [isAuthenticated]);
 
   const recentCreatures = useMemo<RecentCreature[]>(() => {
@@ -153,7 +182,7 @@ const HomePage: React.FC = () => {
         <h1 className="text-3xl font-bold text-amber-200 md:text-4xl">
           {isAuthenticated ? t('home.welcomeBack', { username: user?.username || '' }) : t('home.guestTitle')}
         </h1>
-        <p className="mt-3 max-w-3xl text-slate-300">{t('home.subtitle')}</p>
+        <p className="mt-3 max-w-3xl text-slate-300">Explora la Cyclopedia, planea tu proxima hunt y completa tus weekly tasks.</p>
         <div className="mt-6 flex flex-wrap gap-3">
           <select
             value={cyclopediaSection}
@@ -170,6 +199,37 @@ const HomePage: React.FC = () => {
           <Link to="/planner" className="rounded-lg border border-slate-600 bg-slate-800 px-4 py-2 text-sm font-semibold text-slate-100 hover:border-amber-500/40">
             {t('home.openPlanner')}
           </Link>
+          {isAuthenticated && (
+            <Link to="/guild/dashboard" className="rounded-lg border border-slate-600 bg-slate-800 px-4 py-2 text-sm font-semibold text-slate-100 hover:border-amber-500/40">
+              Open Guild
+            </Link>
+          )}
+        </div>
+
+        <div className="mt-6 grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
+          <Link to="/cyclopedia?tab=creatures" className="rounded-xl border border-slate-700 bg-slate-950/50 p-4 text-sm text-slate-200 hover:border-amber-500/40">
+            <div className="font-semibold text-amber-200">Cyclopedia</div>
+            <div className="mt-1 text-xs text-slate-400">Creatures, bosses, loot, quests y zones.</div>
+          </Link>
+          <Link to="/planner" className="rounded-xl border border-slate-700 bg-slate-950/50 p-4 text-sm text-slate-200 hover:border-amber-500/40">
+            <div className="font-semibold text-amber-200">Hunt Planner</div>
+            <div className="mt-1 text-xs text-slate-400">Recomendaciones por vocacion, nivel y objetivo.</div>
+          </Link>
+          <Link to="/cyclopedia?tab=quests" className="rounded-xl border border-slate-700 bg-slate-950/50 p-4 text-sm text-slate-200 hover:border-amber-500/40">
+            <div className="font-semibold text-amber-200">Quests</div>
+            <div className="mt-1 text-xs text-slate-400">Busca quests reales y revisa requisitos.</div>
+          </Link>
+          {isAuthenticated ? (
+            <Link to="/guild/dashboard" className="rounded-xl border border-slate-700 bg-slate-950/50 p-4 text-sm text-slate-200 hover:border-amber-500/40">
+              <div className="font-semibold text-amber-200">Guild</div>
+              <div className="mt-1 text-xs text-slate-400">Gestion, eventos y actividad de equipo.</div>
+            </Link>
+          ) : (
+            <Link to="/login" className="rounded-xl border border-slate-700 bg-slate-950/50 p-4 text-sm text-slate-200 hover:border-amber-500/40">
+              <div className="font-semibold text-amber-200">Inicia sesion</div>
+              <div className="mt-1 text-xs text-slate-400">Activa historial y atajos personalizados.</div>
+            </Link>
+          )}
         </div>
       </section>
 

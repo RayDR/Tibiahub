@@ -8,6 +8,7 @@ import pytest
 from fastapi.testclient import TestClient
 from sqlalchemy import create_engine
 from sqlalchemy.orm import sessionmaker, Session
+from sqlalchemy.pool import StaticPool
 
 # Use in-memory SQLite for all tests
 TEST_DATABASE_URL = "sqlite:///:memory:"
@@ -21,6 +22,7 @@ def engine():
     _engine = create_engine(
         TEST_DATABASE_URL,
         connect_args={"check_same_thread": False},
+        poolclass=StaticPool,
     )
     Base.metadata.create_all(bind=_engine)
     yield _engine

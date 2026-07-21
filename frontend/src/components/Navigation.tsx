@@ -1,5 +1,5 @@
 import React, { useEffect, useRef, useState } from 'react';
-import { Link, useLocation } from 'react-router-dom';
+import { Link, useLocation, useNavigate } from 'react-router-dom';
 import { BookOpen, ChevronDown, Map, Shield, Settings } from 'lucide-react';
 import { motion } from 'framer-motion';
 import { useTranslation } from 'react-i18next';
@@ -11,6 +11,7 @@ import { cyclopediaSections } from '../config/cyclopediaSections';
 
 const Navigation: React.FC = () => {
   const location = useLocation();
+  const navigate = useNavigate();
   const { t } = useTranslation();
   const { isAuthenticated, user } = useAuth();
   const [cyclopediaMenuOpen, setCyclopediaMenuOpen] = useState(false);
@@ -34,7 +35,7 @@ const Navigation: React.FC = () => {
     closeTimerRef.current = window.setTimeout(() => {
       setCyclopediaMenuOpen(false);
       closeTimerRef.current = null;
-    }, 120);
+    }, 300);
   };
 
   useEffect(() => {
@@ -76,7 +77,9 @@ const Navigation: React.FC = () => {
   const navItems = [
     { path: '/cyclopedia', label: t('nav.search'), icon: BookOpen },
     { path: '/planner', label: t('nav.planner'), icon: Map },
-    ...(isAuthenticated ? [{ path: '/guild', label: t('nav.guild'), icon: Shield }] : []),
+    ...(isAuthenticated
+        ? [{ path: user?.is_superuser ? '/admin/guild-view' : '/guild', label: t('nav.guild'), icon: Shield }]
+        : []),
     ...(user?.is_superuser ? [{ path: '/admin', label: t('nav.admin'), icon: Settings }] : []),
   ];
 
@@ -137,18 +140,19 @@ const Navigation: React.FC = () => {
               {cyclopediaMenuOpen && (
                 <div className="absolute left-0 top-full mt-2 w-56 rounded-xl border border-[color:var(--color-border)] bg-[color:var(--color-surface)] p-1.5 shadow-2xl">
                   {cyclopediaSections.map((entry) => (
-                    <Link
+                    <button
                       key={entry.key}
-                      to={`/cyclopedia?tab=${entry.key}`}
+                      type="button"
                       onClick={() => {
                         clearCloseTimer();
                         setCyclopediaMenuOpen(false);
+                        navigate(`/cyclopedia?tab=${entry.key}`);
                       }}
-                      className="flex items-center gap-2 rounded-lg px-3 py-2 text-sm text-[color:var(--color-text-muted)] hover:bg-white/5 hover:text-[color:var(--color-text)]"
+                      className="flex w-full items-center gap-2 rounded-lg px-3 py-2 text-left text-sm text-[color:var(--color-text-muted)] hover:bg-white/5 hover:text-[color:var(--color-text)]"
                     >
                       <FontAwesomeIcon icon={entry.icon} className="w-4" />
                       <span>{t(entry.i18nLabel)}</span>
-                    </Link>
+                    </button>
                   ))}
                 </div>
               )}

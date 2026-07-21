@@ -1,20 +1,34 @@
 """Database configuration and session management."""
 from sqlalchemy import create_engine, event
+from sqlalchemy.engine.url import make_url
 from sqlalchemy.ext.declarative import declarative_base
 from sqlalchemy.orm import sessionmaker
 
 from app.core.config import settings
 
-# Create database engine
-_SQLITE_CONNECT_ARGS = {"check_same_thread": False, "timeout": 5} if settings.DATABASE_URL.startswith("sqlite") else {}
+# Create database engine (sync SQLAlchemy engine for SQLite + PostgreSQL)
+_db_url = make_url(settings.DATABASE_URL)
+_db_dialect = _db_url.get_backend_name()
+_is_sqlite = _db_dialect == "sqlite"
+
+# SQLAlchemy sync engine cannot use asyncpg directly.
+# If an asyncpg URL is provided, normalize it to psycopg2 for runtime compatibility.
+if _db_dialect == "postgresql" and _db_url.drivername == "postgresql+asyncpg":
+    _db_url = _db_url.set(drivername="postgresql+psycopg2")
+
+_SQLITE_CONNECT_ARGS = {"check_same_thread": False, "timeout": 5} if _is_sqlite else {}
+_ENGINE_KWARGS = {
+    "pool_pre_ping": True,
+}
 
 engine = create_engine(
-    settings.DATABASE_URL,
+    _db_url,
     connect_args=_SQLITE_CONNECT_ARGS,
+    **_ENGINE_KWARGS,
 )
 
 
-if settings.DATABASE_URL.startswith("sqlite"):
+if _is_sqlite:
     @event.listens_for(engine, "connect")
     def _configure_sqlite_connection(dbapi_connection, _connection_record):
         cursor = dbapi_connection.cursor()
@@ -51,22 +65,57 @@ SQLITE_RUNTIME_MIGRATIONS = {
         "last_synced_at": "DATETIME",
         "created_at": "DATETIME",
         "updated_at": "DATETIME",
-    },
+        # image alias/override support
+        "image_alias": "VARCHAR(255)",
+        "image_url_override": "VARCHAR(1024)",
+        "image_source_name": "VARCHAR(255)",
+                "image_locked": "BOOLEAN DEFAULT 0",
+                "image_asset_id": "INTEGER",
+        "is_hidden": "BOOLEAN DEFAULT 0",
+        },
     "loot": {
         "normalized_name": "VARCHAR(150)",
         "external_id": "VARCHAR(100)",
         "item_image_url": "VARCHAR(255)",
+        "item_image_alias": "VARCHAR(255)",
+        "item_image_url_override": "VARCHAR(1024)",
+        "item_image_locked": "BOOLEAN DEFAULT 0",
         "source_url": "VARCHAR(255)",
         "raw_data": "TEXT",
+        "image_asset_id": "INTEGER",
     },
     "hunt_zones": {
         "normalized_name": "VARCHAR(150)",
+        "slug": "VARCHAR(150)",
         "source_name": "VARCHAR(50)",
+        "source_provider": "VARCHAR(50)",
         "source_url": "VARCHAR(255)",
+        "region": "VARCHAR(100)",
+        "recommended_vocations": "TEXT",
+        "recommended_party_size": "VARCHAR(50)",
+        "exp_rating": "VARCHAR(20)",
+        "profit_rating": "VARCHAR(20)",
+        "danger_rating": "VARCHAR(20)",
+        "map_x": "INTEGER",
+        "map_y": "INTEGER",
+        "map_z": "INTEGER",
+        "map_bounds": "TEXT",
         "raw_data": "TEXT",
+        "map_asset_id": "INTEGER",
         "last_synced_at": "DATETIME",
         "created_at": "DATETIME",
         "updated_at": "DATETIME",
+    },
+    "tibiawiki_quests": {
+        "slug": "VARCHAR(180)",
+        "source_url": "VARCHAR(1024)",
+        "group_name": "VARCHAR(255)",
+        "parent_page": "VARCHAR(255)",
+        "rewards": "TEXT",
+        "requirements": "TEXT",
+        "related_creatures": "TEXT",
+        "is_group": "BOOLEAN DEFAULT 0",
+        "last_synced_at": "DATETIME",
     },
     "users": {
         "avatar_url": "VARCHAR(255)",
@@ -77,6 +126,8 @@ SQLITE_RUNTIME_MIGRATIONS = {
         "last_login_at": "DATETIME",
         "tibia_status": "VARCHAR(50)",
         "tibia_last_error": "VARCHAR(255)",
+        "display_name": "VARCHAR(100)",
+        "title": "VARCHAR(100)",
     },
     "user_characters": {
         "world_name": "VARCHAR(100)",
@@ -88,12 +139,14 @@ SQLITE_RUNTIME_MIGRATIONS = {
         "last_login_at": "DATETIME",
     },
     "announcements": {
+        "guild_name": "VARCHAR(200)",
         "deleted_at": "DATETIME",
         "deleted_by_user_id": "INTEGER",
         "delete_reason": "TEXT",
         "is_deleted": "BOOLEAN DEFAULT 0",
     },
     "guild_events": {
+        "guild_name": "VARCHAR(200)",
         "deleted_at": "DATETIME",
         "deleted_by_user_id": "INTEGER",
         "delete_reason": "TEXT",
@@ -191,7 +244,7 @@ SQLITE_RUNTIME_INDEXES = (
 
 
 def _run_sqlite_runtime_migrations():
-    if not settings.DATABASE_URL.startswith("sqlite"):
+    if not _is_sqlite:
         return
 
     with engine.begin() as connection:
@@ -216,6 +269,17 @@ def _run_sqlite_runtime_migrations():
                 connection.exec_driver_sql(statement)
             except Exception:
                 # Some legacy databases may not include every optional table.
+                continue
+
+        # Backfill new guild scopes from each content author's current guild.
+        for table_name in ("announcements", "guild_events"):
+            try:
+                connection.exec_driver_sql(
+                    f"UPDATE {table_name} SET guild_name = "
+                    f"(SELECT users.guild_name FROM users WHERE users.id = {table_name}.author_id) "
+                    "WHERE guild_name IS NULL"
+                )
+            except Exception:
                 continue
 
 
@@ -246,6 +310,7 @@ def init_db():
         guild_member_snapshot,
         settings,
         user_activity,
+        media_asset,
     )
     Base.metadata.create_all(bind=engine)
     _run_sqlite_runtime_migrations()
