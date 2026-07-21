@@ -4,7 +4,7 @@ from datetime import datetime
 from decimal import Decimal
 from typing import List, Literal, Optional
 
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, Field, field_validator
 
 
 class RafflePrizeCreate(BaseModel):
@@ -33,6 +33,13 @@ class RaffleCreate(BaseModel):
     eligibility_days: int = Field(5, ge=1, le=30)
     eligibility_cutoff_at: Optional[datetime] = None
 
+    @field_validator("scheduled_run_at", "eligibility_cutoff_at")
+    @classmethod
+    def require_aware_timestamp(cls, value: Optional[datetime]) -> Optional[datetime]:
+        if value is not None and (value.tzinfo is None or value.utcoffset() is None):
+            raise ValueError("Timestamp must include a UTC offset")
+        return value
+
 
 class RaffleUpdate(BaseModel):
     title: Optional[str] = None
@@ -46,6 +53,15 @@ class RaffleUpdate(BaseModel):
     scheduled_run_at: Optional[datetime] = None
     archive_after_days: Optional[int] = None
     status: Optional[str] = None
+    timezone_name: Optional[str] = None
+    eligibility_days: Optional[int] = Field(None, ge=1, le=30)
+
+    @field_validator("scheduled_run_at")
+    @classmethod
+    def require_aware_timestamp(cls, value: Optional[datetime]) -> Optional[datetime]:
+        if value is not None and (value.tzinfo is None or value.utcoffset() is None):
+            raise ValueError("Timestamp must include a UTC offset")
+        return value
 
 
 class RaffleParticipantResponse(BaseModel):
@@ -122,6 +138,13 @@ class RaffleResponse(BaseModel):
     publication_status: str = "private"
     execution_state: str = "pending"
     executed_at: Optional[datetime] = None
+    scheduler_job_id: Optional[str] = None
+    claimed_at: Optional[datetime] = None
+    lease_expires_at: Optional[datetime] = None
+    last_error_code: Optional[str] = None
+    last_error_summary: Optional[str] = None
+    retry_count: int = 0
+    next_retry_at: Optional[datetime] = None
 
 
 class RaffleExecutionResponse(BaseModel):

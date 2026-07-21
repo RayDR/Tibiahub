@@ -46,6 +46,7 @@ from app.schemas.raffle import (
 )
 from app.services.automatic_raffle_service import AutomaticRaffleError, AutomaticRaffleService, serialize_run, validate_automatic_prizes
 from app.services.raffle_eligibility_service import RaffleEligibilityError, RaffleEligibilityService
+from app.services.notification_service import NotificationService
 from app.services.raffle_service import RaffleService, normalize_access_mode, normalize_status, sync_legacy_raffle_fields
 from app.services.public_code import generate_unique_code
 from app.services.tibia_api import get_character_info, get_guild_info
@@ -268,32 +269,25 @@ def create_raffle(
     db.add(raffle)
     db.flush()
 
-    announcement = Announcement(
-        title=f"Raffle: {payload.title}",
-        content=payload.description or f"New raffle created for guild {payload.guild_name}.",
-        author_id=current_user.id,
-        type=AnnouncementType.GENERAL,
-    )
-    db.add(announcement)
-    db.flush()
-
-    raffle_event = Event(
-        type="raffle",
-        title=payload.title,
-        description=payload.description or "Guild raffle event",
-        rules="One participant per account. Vice leaders get +10% weight.",
-        reward=", ".join([f"{prize.name}: {prize.reward}" for prize in (payload.prizes or [])]) or "Guild rewards",
-        start_date=datetime.utcnow(),
-        draw_date=datetime.utcnow() + timedelta(days=1),
-        status="active",
-        is_active=True,
-        is_public=True,
-        participant_mode="manual",
-        guild_name=payload.guild_name,
-        creator_id=current_user.id,
-        announcement_id=announcement.id,
-    )
-    db.add(raffle_event)
+    # Legacy event raffles retain their historical event/announcement mirror.
+    # Modern automatic raffles are authoritative in this subsystem only.
+    if not automatic_stage1:
+        announcement = Announcement(
+            title=f"Raffle: {payload.title}",
+            content=payload.description or f"New raffle created for guild {payload.guild_name}.",
+            author_id=current_user.id,
+            type=AnnouncementType.GENERAL,
+        )
+        db.add(announcement)
+        db.flush()
+        db.add(Event(
+            type="raffle", title=payload.title, description=payload.description or "Guild raffle event",
+            rules="One participant per account. Vice leaders get +10% weight.",
+            reward=", ".join([f"{prize.name}: {prize.reward}" for prize in (payload.prizes or [])]) or "Guild rewards",
+            start_date=datetime.utcnow(), draw_date=datetime.utcnow() + timedelta(days=1), status="active",
+            is_active=True, is_public=True, participant_mode="manual", guild_name=payload.guild_name,
+            creator_id=current_user.id, announcement_id=announcement.id,
+        ))
 
     prizes = payload.prizes or []
     for index, prize in enumerate(prizes, start=1):
@@ -319,6 +313,10 @@ def create_raffle(
         except AutomaticRaffleError as exc:
             db.rollback()
             raise HTTPException(status_code=400, detail=exc.summary) from exc
+        if raffle.purpose == "real" and (not raffle.scheduled_run_at or raffle.scheduled_run_at <= datetime.now(UTC)):
+            db.rollback()
+            raise HTTPException(status_code=400, detail="Real automatic raffles require a future schedule")
+        NotificationService.emit(db, raffle, "raffle_scheduled", f"raffle:{raffle.id}:scheduled")
 
     db.commit()
     db.refresh(raffle)
@@ -347,7 +345,7 @@ def update_raffle(
             raise HTTPException(status_code=403, detail="Cannot move raffle outside your guild scope")
         raffle.guild_name = payload.guild_name
 
-    for field in ["title", "description", "scheduled_run_at"]:
+    for field in ["title", "description", "scheduled_run_at", "timezone_name", "eligibility_days"]:
         value = getattr(payload, field)
         if value is not None:
             setattr(raffle, field, value)
@@ -797,6 +795,28 @@ async def add_participant_manual(
     raffle = db.query(Raffle).filter(Raffle.id == raffle_id).first()
     if not raffle:
         raise HTTPException(status_code=404, detail="Raffle not found")
+    if raffle.run_mode == "automatic" or raffle.purpose in {"test", "real"}:
+        _require_capability(can_administer_raffle(db, current_user, raffle))
+        if raffle.purpose != "test":
+            raise HTTPException(status_code=400, detail="Manual participants are allowed only for test raffles")
+        selected_name = payload.character_name.strip()
+        character = db.query(UserCharacter).filter(UserCharacter.character_name.ilike(selected_name)).first()
+        user = character.user if character else db.query(User).filter(User.tibia_character_name.ilike(selected_name)).first()
+        if not user or not user.is_active or (user.guild_name or "").casefold() != raffle.guild_name.casefold():
+            raise HTTPException(status_code=400, detail="Test participants must be active local accounts in this guild")
+        if db.query(RaffleParticipant.id).filter(
+            RaffleParticipant.raffle_id == raffle.id, RaffleParticipant.user_id == user.id,
+            RaffleParticipant.is_deleted.is_(False),
+        ).first():
+            raise HTTPException(status_code=400, detail="This account is already registered")
+        canonical_name = character.character_name if character else user.tibia_character_name
+        db.add(RaffleParticipant(
+            raffle_id=raffle.id, user_id=user.id, character_name=canonical_name,
+            guild_rank=(character.guild_rank if character else user.guild_rank), weight=1.0,
+            weight_multiplier=1.0, is_eligible=True, source="test_local_account",
+        ))
+        db.commit()
+        return get_raffle(raffle.id, db, current_user)
     _require_raffle_management(current_user, raffle)
     if raffle.status in {"archived", "deleted"} or raffle.is_deleted:
         raise HTTPException(status_code=400, detail="Raffle does not accept registrations")
@@ -899,6 +919,8 @@ def rerun_automatic_raffle(
             override_delivered=payload.override_delivered, override_reason=payload.override_reason,
             is_global_admin=is_global_admin(current_user),
         )
+        NotificationService.emit(db, raffle, "raffle_rerun_performed", f"raffle:{raffle.id}:run:{run.id}:rerun", payload={"positions": payload.positions})
+        db.commit()
         return serialize_run(run)
     except AutomaticRaffleError as exc:
         raise HTTPException(status_code=409 if exc.code in {"execution_in_progress", "concurrent_execution", "prize_already_delivered"} else 400, detail=exc.summary) from exc
@@ -937,6 +959,9 @@ def update_raffle_delivery(
     elif delivery.status != "delivered":
         delivery.delivered_at = None
         delivery.delivered_by_id = None
+    event_type = {"delivered": "raffle_prize_delivered", "disputed": "raffle_prize_disputed"}.get(payload.status)
+    if event_type:
+        NotificationService.emit(db, raffle, event_type, f"raffle:{raffle.id}:result:{result_id}:delivery:{payload.status}")
     db.commit()
     db.refresh(delivery)
     return {
@@ -963,6 +988,7 @@ def publish_raffle_results(
     raffle.publication_status = "published"
     raffle.published_at = datetime.now(UTC)
     raffle.published_by_id = current_user.id
+    NotificationService.emit(db, raffle, "raffle_result_published", f"raffle:{raffle.id}:published:{raffle.current_run_number}")
     db.commit()
     return {"raffle_id": raffle.id, "publication_status": raffle.publication_status, "published_at": raffle.published_at, "published_by_id": raffle.published_by_id}
 
@@ -978,8 +1004,11 @@ def unpublish_raffle_results(
     raffle.publication_status = "private"
     raffle.published_at = None
     raffle.published_by_id = None
+    NotificationService.emit(db, raffle, "raffle_result_unpublished", f"raffle:{raffle.id}:unpublished:{raffle.current_run_number}:{int(datetime.now(UTC).timestamp())}")
     db.commit()
     return {"raffle_id": raffle.id, "publication_status": raffle.publication_status, "published_at": None, "published_by_id": None}
+
+
 
 
 @router.post("/{raffle_id}/managers", response_model=ManagerGrantResponse)
