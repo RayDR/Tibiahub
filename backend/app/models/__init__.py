@@ -13,7 +13,11 @@ from app.models.user_activity import UserActivity
 from app.models.guild import GuildEvent, EventAttendance, Announcement, Recruitment
 from app.models.events import Event, EventParticipant, PublicEventParticipant
 from app.models.entity_metadata import EntityMetadata
-from app.models.raffle import Raffle, RaffleParticipant, RafflePrize, RaffleWinner
+from app.models.raffle import (
+    Raffle, RaffleEligibilityEntry, RaffleEligibilitySnapshot, RaffleManagerGrant,
+    RaffleParticipant, RafflePrize, RafflePrizeDelivery, RaffleRerunAudit,
+    RaffleRun, RaffleRunResult, RaffleWinner,
+)
 from app.models.guild_member_snapshot import GuildMemberSnapshot
 
 __all__ = [
@@ -39,6 +43,13 @@ __all__ = [
     "RaffleParticipant",
     "RafflePrize",
     "RaffleWinner",
+    "RaffleManagerGrant",
+    "RaffleEligibilitySnapshot",
+    "RaffleEligibilityEntry",
+    "RaffleRun",
+    "RaffleRunResult",
+    "RafflePrizeDelivery",
+    "RaffleRerunAudit",
     "GuildMemberSnapshot",
     "MediaAsset",
     "creature_weaknesses",
