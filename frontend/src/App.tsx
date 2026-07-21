@@ -15,8 +15,7 @@ import Overview from './pages/Admin/Overview';
 import GuildView from './pages/Admin/GuildView';
 import Profile from './pages/Profile';
 import PasswordReset from './pages/PasswordReset';
-import { useEffect } from 'react';
-import { useState } from 'react';
+import { lazy, Suspense, useEffect, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 
 import { AuthProvider } from './context/AuthContext';
@@ -32,13 +31,9 @@ import Announcements from './pages/guild/Announcements';
 import Events from './pages/guild/Events';
 import HuntCatalog from './pages/guild/HuntCatalog';
 import RafflesWorkspace from './pages/guild/RafflesWorkspace';
-import Leadership from './pages/guild/Leadership';
-import LeadershipRecruitment from './pages/guild/LeadershipRecruitment';
-import LeadershipApplicationDetail from './pages/guild/LeadershipApplicationDetail';
 import GuildDirectory from './pages/Admin/GuildDirectory';
 import AdminGuildWorkspace from './pages/Admin/AdminGuildWorkspace';
 import AdminGuildRaffles from './pages/Admin/AdminGuildRaffles';
-import AdminGuildLeadership from './pages/Admin/AdminGuildLeadership';
 import GlobalActivities from './pages/Admin/GlobalActivities';
 import NotificationsPage from './pages/guild/Notifications';
 import RafflePublicPage from './pages/RafflePublicPage';
@@ -46,11 +41,17 @@ import PublicRafflePage from './pages/PublicRafflePage';
 import NotFound from './pages/NotFound';
 import { systemApi } from './services/api';
 
+const Leadership = lazy(() => import('./pages/guild/Leadership'));
+const LeadershipRecruitment = lazy(() => import('./pages/guild/LeadershipRecruitment'));
+const LeadershipApplicationDetail = lazy(() => import('./pages/guild/LeadershipApplicationDetail'));
+const AdminGuildLeadership = lazy(() => import('./pages/Admin/AdminGuildLeadership'));
+
 function App() {
   const location = useLocation();
   const navigate = useNavigate();
   const [latestDataVersion, setLatestDataVersion] = useState<string>('');
   const { t } = useTranslation();
+  const leadershipFallback = <div role="status" className="p-8 text-center text-slate-400">{t('leadership.loading')}</div>;
 
   // Keyboard shortcut listener for Ctrl+Alt+G (Guild) and Ctrl+Alt+A (Admin)
   useEffect(() => {
@@ -125,9 +126,9 @@ function App() {
                 <Route path="members" element={<GuildMembersPage />} />
                 <Route path="announcements" element={<Announcements />} />
                 <Route path="events" element={<Events />} />
-                <Route path="leadership" element={<Leadership />} />
-                <Route path="leadership/recruitment" element={<LeadershipRecruitment />} />
-                <Route path="leadership/recruitment/applications/:applicationId" element={<LeadershipApplicationDetail />} />
+                <Route path="leadership" element={<Suspense fallback={leadershipFallback}><Leadership /></Suspense>} />
+                <Route path="leadership/recruitment" element={<Suspense fallback={leadershipFallback}><LeadershipRecruitment /></Suspense>} />
+                <Route path="leadership/recruitment/applications/:applicationId" element={<Suspense fallback={leadershipFallback}><LeadershipApplicationDetail /></Suspense>} />
                 <Route path="recruitment" element={<Navigate to="/guild/leadership/recruitment" replace />} />
                 <Route path="hunts" element={<HuntCatalog />} />
                 <Route path="raffles" element={<RafflesWorkspace />} />
@@ -143,9 +144,9 @@ function App() {
                 <Route path="guilds" element={<GuildDirectory />} />
                 <Route path="guilds/:guildKey" element={<AdminGuildWorkspace />} />
                 <Route path="guilds/:guildKey/raffles" element={<AdminGuildRaffles />} />
-                <Route path="guilds/:guildKey/leadership" element={<AdminGuildLeadership />} />
-                <Route path="guilds/:guildKey/leadership/recruitment" element={<AdminGuildLeadership recruitment />} />
-                <Route path="guilds/:guildKey/leadership/recruitment/applications/:applicationId" element={<LeadershipApplicationDetail admin />} />
+                <Route path="guilds/:guildKey/leadership" element={<Suspense fallback={leadershipFallback}><AdminGuildLeadership /></Suspense>} />
+                <Route path="guilds/:guildKey/leadership/recruitment" element={<Suspense fallback={leadershipFallback}><AdminGuildLeadership recruitment /></Suspense>} />
+                <Route path="guilds/:guildKey/leadership/recruitment/applications/:applicationId" element={<Suspense fallback={leadershipFallback}><LeadershipApplicationDetail admin /></Suspense>} />
                 <Route path="activities" element={<GlobalActivities />} />
                 <Route path="management" element={<GuildManagementDashboard />} />
                 <Route path="guild-view" element={<GuildView />} />
