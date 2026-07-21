@@ -72,6 +72,9 @@ def _serialize_result(result: RaffleRunResult) -> dict:
         "candidate_count": result.candidate_count,
         "delivery_status": delivery.status,
         "delivery_deadline_at": delivery.delivery_deadline_at,
+        "delivered_at": delivery.delivered_at,
+        "delivered_by_name": delivery.delivered_by.username if delivery.delivered_by else None,
+        "delivery_note": delivery.note,
     }
 
 
@@ -241,6 +244,7 @@ class AutomaticRaffleService:
         return db.query(RaffleRun).options(
             selectinload(RaffleRun.results).selectinload(RaffleRunResult.prize),
             selectinload(RaffleRun.results).selectinload(RaffleRunResult.delivery),
+            selectinload(RaffleRun.results).selectinload(RaffleRunResult.delivery).selectinload(RafflePrizeDelivery.delivered_by),
         ).filter(RaffleRun.id == run_id).one()
 
     @staticmethod

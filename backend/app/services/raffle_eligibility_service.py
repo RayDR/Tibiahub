@@ -22,6 +22,7 @@ EXCLUSION_SUMMARIES = {
     "duplicate_account": "Account already appears in the candidate set",
     "missing_activity": "No qualifying activity timestamp is available",
     "guild_source_unavailable": "Current guild membership could not be verified",
+    "test_override_excluded": "Excluded by an audited test override",
 }
 
 
@@ -99,6 +100,11 @@ class RaffleEligibilityService:
             participant.user_id for participant in raffle.participants
             if raffle.purpose == "test" and not participant.is_deleted
         }
+        participant_overrides = {
+            participant.user_id: participant
+            for participant in raffle.participants
+            if raffle.purpose == "test" and not participant.is_deleted and participant.eligibility_override is not None
+        }
         if explicit_test_user_ids:
             user_query = user_query.filter(User.id.in_(explicit_test_user_ids))
         users = user_query.order_by(User.id).all()
@@ -134,6 +140,12 @@ class RaffleEligibilityService:
                 elif as_utc(user.last_login_at) < cutoff_at:
                     exclusion_code = "stale_activity"
 
+            override = participant_overrides.get(user.id)
+            if override and override.eligibility_override is True and exclusion_code in {"missing_activity", "stale_activity"}:
+                exclusion_code = None
+            elif override and override.eligibility_override is False and exclusion_code is None:
+                exclusion_code = "test_override_excluded"
+
             seen.add(user.id)
             entries.append({
                 "user_id": user.id,
@@ -143,7 +155,11 @@ class RaffleEligibilityService:
                 "last_activity_at": as_utc(user.last_login_at),
                 "is_eligible": exclusion_code is None,
                 "exclusion_code": exclusion_code,
-                "exclusion_summary": EXCLUSION_SUMMARIES.get(exclusion_code) if exclusion_code else None,
+                "exclusion_summary": (
+                    override.eligibility_override_reason
+                    if override and exclusion_code == "test_override_excluded"
+                    else EXCLUSION_SUMMARIES.get(exclusion_code) if exclusion_code else None
+                ),
                 "source_data": member_data,
             })
 
