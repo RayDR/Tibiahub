@@ -79,7 +79,7 @@ const Navigation: React.FC = () => {
     { path: '/cyclopedia', label: t('nav.search'), icon: BookOpen },
     { path: '/planner', label: t('nav.planner'), icon: Map },
     ...(isAuthenticated
-        ? [{ path: user?.is_superuser ? '/admin/guild-view' : '/guild', label: t('nav.guild'), icon: Shield }]
+        ? [{ path: '/guild', label: t('nav.guild'), icon: Shield }]
         : []),
     ...(user?.is_superuser ? [{ path: '/admin', label: t('nav.admin'), icon: Settings }] : []),
   ];

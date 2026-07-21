@@ -17,8 +17,10 @@ import Profile from './pages/Profile';
 import PasswordReset from './pages/PasswordReset';
 import { useEffect } from 'react';
 import { useState } from 'react';
+import { useTranslation } from 'react-i18next';
 
 import { AuthProvider } from './context/AuthContext';
+import { WorkspaceProvider } from './context/WorkspaceContext';
 import { ToastProvider } from './context/ToastContext';
 import Login from './pages/auth/Login';
 import Register from './pages/auth/Register';
@@ -29,8 +31,10 @@ import GuildMembersPage from './pages/guild/Members';
 import Announcements from './pages/guild/Announcements';
 import Events from './pages/guild/Events';
 import HuntCatalog from './pages/guild/HuntCatalog';
-import Raffle from './pages/guild/Raffle';
-import AutomaticRaffleOperations from './pages/guild/AutomaticRaffleOperations';
+import RafflesWorkspace from './pages/guild/RafflesWorkspace';
+import Recruitment from './pages/guild/Recruitment';
+import GuildDirectory from './pages/Admin/GuildDirectory';
+import AdminGuildWorkspace from './pages/Admin/AdminGuildWorkspace';
 import NotificationsPage from './pages/guild/Notifications';
 import RafflePublicPage from './pages/RafflePublicPage';
 import PublicRafflePage from './pages/PublicRafflePage';
@@ -40,7 +44,8 @@ import { systemApi } from './services/api';
 function App() {
   const location = useLocation();
   const navigate = useNavigate();
-  const [latestDataVersion, setLatestDataVersion] = useState<string>('Latest data version unavailable');
+  const [latestDataVersion, setLatestDataVersion] = useState<string>('');
+  const { t } = useTranslation();
 
   // Keyboard shortcut listener for Ctrl+Alt+G (Guild) and Ctrl+Alt+A (Admin)
   useEffect(() => {
@@ -76,6 +81,7 @@ function App() {
 
   return (
     <AuthProvider>
+      <WorkspaceProvider>
       <ToastProvider>
         <div className="min-h-screen text-[color:var(--color-text)] font-sans pt-20" style={{ backgroundColor: 'var(--color-bg)' }}>
           <Navigation />
@@ -114,10 +120,11 @@ function App() {
                 <Route path="members" element={<GuildMembersPage />} />
                 <Route path="announcements" element={<Announcements />} />
                 <Route path="events" element={<Events />} />
-                <Route path="recruitment" element={<Navigate to="/guild/events?type=contest" replace />} />
+                <Route path="recruitment" element={<Recruitment />} />
                 <Route path="hunts" element={<HuntCatalog />} />
-                <Route path="raffle" element={<Raffle />} />
-                <Route path="automatic-raffles" element={<AutomaticRaffleOperations />} />
+                <Route path="raffles" element={<RafflesWorkspace />} />
+                <Route path="raffle" element={<Navigate to="/guild/raffles?section=history" replace />} />
+                <Route path="automatic-raffles" element={<Navigate to="/guild/raffles" replace />} />
                 <Route path="notifications" element={<NotificationsPage />} />
               </Route>
 
@@ -125,6 +132,8 @@ function App() {
               <Route path="/admin" element={<AdminLayout />}>
                 <Route index element={<AdminRedirect />} />
                 <Route path="overview" element={<Overview />} />
+                <Route path="guilds" element={<GuildDirectory />} />
+                <Route path="guilds/:guildKey" element={<AdminGuildWorkspace />} />
                 <Route path="management" element={<GuildManagementDashboard />} />
                 <Route path="guild-view" element={<GuildView />} />
                 <Route path="bestiary" element={<BestiaryManagement />} />
@@ -144,17 +153,18 @@ function App() {
           {/* Footer */}
           <footer className="mt-24 text-center border-t border-slate-800 pt-8 pb-8">
             <div className="inline-block">
-              <p className="text-slate-400 text-sm">Tibia Cyclopedia - Fan-made project ({latestDataVersion})</p>
+              <p className="text-slate-400 text-sm">{t('footer.project', { version: latestDataVersion || t('footer.unavailable') })}</p>
               <p className="mt-2 text-slate-600 text-xs">
-                Tibia is a registered trademark of CipSoft GmbH
+                {t('footer.trademark')}
               </p>
               <p className="mt-2 text-slate-500 text-xs">
-                Data sourced from <a href="https://tibia.fandom.com" target="_blank" rel="noopener noreferrer" className="text-amber-500 hover:text-amber-400 transition-colors">TibiaWiki</a>
+                {t('footer.dataSource')} <a href="https://tibia.fandom.com" target="_blank" rel="noopener noreferrer" className="text-amber-500 hover:text-amber-400 transition-colors">TibiaWiki</a>
               </p>
             </div>
           </footer>
         </div>
       </ToastProvider>
+      </WorkspaceProvider>
     </AuthProvider>
   );
 }

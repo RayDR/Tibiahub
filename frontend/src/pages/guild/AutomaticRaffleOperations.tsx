@@ -33,7 +33,7 @@ export default function AutomaticRaffleOperations() {
   const [busy, setBusy] = useState(false);
   const [purpose, setPurpose] = useState<'test' | 'real'>('test');
   const [title, setTitle] = useState('');
-  const [guild, setGuild] = useState(user?.guild_name || '');
+  const guild = (user?.guild_name || '').trim();
   const [timezone, setTimezone] = useState('America/Chicago');
   const [schedule, setSchedule] = useState('');
   const [confirmedReal, setConfirmedReal] = useState(false);
@@ -124,7 +124,7 @@ export default function AutomaticRaffleOperations() {
     <form onSubmit={create} className="grid gap-3 rounded-2xl border border-slate-800 bg-slate-900/70 p-5 md:grid-cols-2">
       <h2 className="md:col-span-2 flex items-center gap-2 text-lg font-semibold">{t('raffle.operations.prepare')} {purpose === 'test' && <span className="rounded-full bg-violet-500/20 px-3 py-1 text-xs text-violet-200">{t('raffle.operations.testLabel')}</span>}</h2>
       <label>{t('raffle.operations.purpose')}<select value={purpose} onChange={(e) => setPurpose(e.target.value as 'test' | 'real')} className="mt-1 w-full rounded-lg bg-slate-950 p-2"><option value="test">{t('raffle.operations.test')}</option><option value="real">{t('raffle.operations.real')}</option></select></label>
-      <label>{t('raffle.operations.guild')}<input value={guild} onChange={(e) => setGuild(e.target.value)} required className="mt-1 w-full rounded-lg bg-slate-950 p-2" /></label>
+      <label>{t('raffle.operations.guild')}<input value={guild} readOnly aria-readonly="true" className="mt-1 w-full rounded-lg border border-slate-800 bg-slate-950/60 p-2 text-slate-400" /></label>
       <label>{t('raffle.operations.name')}<input value={title} onChange={(e) => setTitle(e.target.value)} required className="mt-1 w-full rounded-lg bg-slate-950 p-2" /></label>
       <label>{t('raffle.operations.timezone')}<input value={timezone} onChange={(e) => setTimezone(e.target.value)} required className="mt-1 w-full rounded-lg bg-slate-950 p-2" /></label>
       <label>{t('raffle.operations.localSchedule')}<input type="datetime-local" value={schedule} onChange={(e) => setSchedule(e.target.value)} required className="mt-1 w-full rounded-lg bg-slate-950 p-2" /></label>

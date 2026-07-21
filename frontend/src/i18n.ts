@@ -304,6 +304,21 @@ i18n
                         "settings": "System Settings",
                         "database": "Database"
                     },
+                    "workspace": {
+                        "admin": { "title": "TibiaHub Administration", "badge": "Global admin", "navigation": "Administration sections", "loading": "Loading administration..." },
+                        "adminNav": { "overview": "Overview", "guilds": "Guilds", "users": "Users", "activities": "Global Activities", "cyclopedia": "Cyclopedia Data", "operations": "System Operations", "settings": "Settings" },
+                        "guild": { "badge": "My guild", "navigation": "Guild sections" },
+                        "noGuild": { "title": "No guild is linked", "help": "Link your Tibia character and guild membership from your profile to open your guild workspace.", "profile": "Open profile" },
+                        "assistance": { "title": "Admin assistance mode", "message": "You are managing {{guild}} as a global administrator.", "auditNotice": "Actions are audited and do not change your own guild membership.", "return": "Return to Guild Directory", "badge": "Admin assistance", "manage": "Manage this guild", "publicView": "Open my guild workspace" },
+                        "adminGuilds": { "title": "Registered guilds", "subtitle": "Open an explicit, audited assistance workspace.", "empty": "No registered guilds", "emptyHelp": "Guilds appear here after a member or synchronized roster identifies them.", "open": "Open workspace" },
+                        "errors": { "guildDirectory": "Guild directory unavailable", "tryAgain": "Try again in a moment.", "assistance": "Assistance workspace unavailable" },
+                        "common": { "unknownServer": "Unknown server", "leader": "Leader", "members": "Members", "setup": "Setup", "alerts": "Open alerts", "loading": "Loading workspace..." },
+                        "setup": { "ready": "Ready", "needs_attention": "Needs attention" },
+                        "roles": { "global_admin": "Global admin", "guild_leader": "Guild leader", "guild_viceleader": "Viceleader", "guild_member": "Guild member", "delegated_manager": "Delegated manager" },
+                        "recruitment": { "title": "Recruitment", "subtitle": "Grow your guild with a focused recruitment workflow.", "empty": "Recruitment tools are being prepared", "help": "Use the member roster while applications and invitations are added here.", "members": "Open members" },
+                        "raffles": { "title": "Raffles", "subtitle": "Manage scheduled draws and review historical raffles in one place.", "tabs": { "upcoming": "Upcoming", "participants": "Participants", "eligibility": "Eligibility", "draw": "Draw", "results": "Results", "history": "History" } }
+                    },
+                    "footer": { "project": "TibiaHub · {{version}}", "unavailable": "data version unavailable", "trademark": "Tibia is a trademark of CipSoft GmbH.", "dataSource": "Game data source:" },
                     "notifications": {
                         "title": "Notifications", "empty": "No notifications yet.", "markAll": "Mark all as read", "indicator": "{{count}} unread notifications",
                         "types": {
@@ -860,6 +875,21 @@ i18n
                         "management": "Gestión de Usuarios",
                         "settings": "Configuración del Sistema",
                         "database": "Base de Datos"                    },
+                    "workspace": {
+                        "admin": { "title": "Administración de TibiaHub", "badge": "Admin global", "navigation": "Secciones de administración", "loading": "Cargando administración..." },
+                        "adminNav": { "overview": "Resumen", "guilds": "Guilds", "users": "Usuarios", "activities": "Actividades globales", "cyclopedia": "Datos de Cyclopedia", "operations": "Operaciones del sistema", "settings": "Configuración" },
+                        "guild": { "badge": "Mi guild", "navigation": "Secciones de la guild" },
+                        "noGuild": { "title": "No hay una guild vinculada", "help": "Vincula tu personaje de Tibia y tu membresía desde el perfil para abrir el espacio de tu guild.", "profile": "Abrir perfil" },
+                        "assistance": { "title": "Modo de asistencia administrativa", "message": "Estás administrando {{guild}} como administrador global.", "auditNotice": "Las acciones se auditan y no cambian tu membresía personal.", "return": "Volver al directorio de guilds", "badge": "Asistencia administrativa", "manage": "Administrar esta guild", "publicView": "Abrir el espacio de mi guild" },
+                        "adminGuilds": { "title": "Guilds registradas", "subtitle": "Abre un espacio de asistencia explícito y auditado.", "empty": "No hay guilds registradas", "emptyHelp": "Las guilds aparecen después de identificar un miembro o sincronizar su lista.", "open": "Abrir espacio" },
+                        "errors": { "guildDirectory": "Directorio de guilds no disponible", "tryAgain": "Inténtalo de nuevo en un momento.", "assistance": "Espacio de asistencia no disponible" },
+                        "common": { "unknownServer": "Servidor desconocido", "leader": "Líder", "members": "Miembros", "setup": "Configuración", "alerts": "Alertas abiertas", "loading": "Cargando espacio..." },
+                        "setup": { "ready": "Listo", "needs_attention": "Requiere atención" },
+                        "roles": { "global_admin": "Admin global", "guild_leader": "Líder de guild", "guild_viceleader": "Viceleader", "guild_member": "Miembro de guild", "delegated_manager": "Gestor delegado" },
+                        "recruitment": { "title": "Reclutamiento", "subtitle": "Haz crecer tu guild con un flujo de reclutamiento enfocado.", "empty": "Las herramientas de reclutamiento están en preparación", "help": "Usa la lista de miembros mientras se agregan solicitudes e invitaciones.", "members": "Abrir miembros" },
+                        "raffles": { "title": "Rifas", "subtitle": "Administra sorteos programados y revisa el historial en un solo lugar.", "tabs": { "upcoming": "Próximas", "participants": "Participantes", "eligibility": "Elegibilidad", "draw": "Sorteo", "results": "Resultados", "history": "Historial" } }
+                    },
+                    "footer": { "project": "TibiaHub · {{version}}", "unavailable": "versión de datos no disponible", "trademark": "Tibia es una marca registrada de CipSoft GmbH.", "dataSource": "Fuente de datos del juego:" },
                     "notifications": {
                         "title": "Notificaciones", "empty": "Aún no hay notificaciones.", "markAll": "Marcar todas como leídas", "indicator": "{{count}} notificaciones sin leer",
                         "types": {
