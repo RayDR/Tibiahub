@@ -9,7 +9,13 @@ interface SystemSettings {
     discord_auto_post: boolean;
     guild_raffles_enabled: boolean;
     guild_contests_enabled: boolean;
+    cyclopedia_category_images: Record<string, string>;
 }
+
+const CREATURE_CATEGORY_KEYS = [
+    'amphibic', 'aquatic', 'bird', 'construct', 'demon', 'dragon', 'elemental',
+    'fey', 'giant', 'human', 'humanoid', 'lycanthrope', 'magical', 'mammal', 'undead', 'beast',
+];
 
 export default function AdminSettings() {
     const [settings, setSettings] = useState<SystemSettings | null>(null);
@@ -52,6 +58,29 @@ export default function AdminSettings() {
     const updateSetting = (key: keyof SystemSettings, value: any) => {
         if (settings) {
             setSettings({ ...settings, [key]: value });
+        }
+    };
+
+    const updateCategoryImage = (category: string, value: string) => {
+        if (!settings) return;
+        setSettings({
+            ...settings,
+            cyclopedia_category_images: {
+                ...(settings.cyclopedia_category_images || {}),
+                [category]: value,
+            },
+        });
+    };
+
+    const handleCategoryFileUpload = async (category: string, file?: File) => {
+        if (!settings || !file) return;
+        try {
+            const result = await guildManagementApi.uploadCategoryImage(category, file);
+            updateCategoryImage(category, result.image_url);
+            setMessage({ type: 'success', text: `Image uploaded for ${category}` });
+        } catch (error) {
+            console.error('Failed to upload category image:', error);
+            setMessage({ type: 'error', text: `Failed upload for ${category}` });
         }
     };
 
@@ -173,6 +202,36 @@ export default function AdminSettings() {
                                 <div className="w-11 h-6 bg-slate-700 peer-focus:outline-none peer-focus:ring-2 peer-focus:ring-red-500 rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-slate-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-purple-600"></div>
                             </label>
                         </div>
+                    </div>
+                </div>
+
+                {/* Cyclopedia Category Images */}
+                <div className="bg-slate-900/50 border border-slate-700 rounded-lg p-6">
+                    <h2 className="text-xl font-semibold text-slate-100 mb-2">Cyclopedia Category Images</h2>
+                    <p className="text-sm text-slate-400 mb-4">Set URL or upload local file for each creature category card.</p>
+
+                    <div className="grid gap-4 sm:grid-cols-2">
+                        {CREATURE_CATEGORY_KEYS.map((category) => (
+                            <div key={category} className="rounded-lg border border-slate-800 bg-slate-950/50 p-3">
+                                <div className="mb-2 text-sm font-medium text-slate-200 capitalize">{category}</div>
+                                <input
+                                    type="text"
+                                    value={settings.cyclopedia_category_images?.[category] || ''}
+                                    onChange={(e) => updateCategoryImage(category, e.target.value)}
+                                    placeholder="https://... or /api/v1/creatures/category-images/file/..."
+                                    className="w-full bg-slate-950 border border-slate-700 rounded-md px-3 py-2 text-slate-200 focus:border-red-500 focus:outline-none"
+                                />
+                                <label className="mt-2 inline-flex cursor-pointer items-center rounded-md border border-slate-700 px-3 py-1.5 text-xs text-slate-300 hover:border-red-500/50">
+                                    Upload local image
+                                    <input
+                                        type="file"
+                                        accept="image/*"
+                                        className="hidden"
+                                        onChange={(e) => handleCategoryFileUpload(category, e.target.files?.[0])}
+                                    />
+                                </label>
+                            </div>
+                        ))}
                     </div>
                 </div>
 

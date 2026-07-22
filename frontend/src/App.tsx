@@ -7,17 +7,19 @@ import QuestDetailPage from './pages/QuestDetailPage';
 import HuntRecommendationsPage from './pages/HuntRecommendationsPage';
 import QuestViewerPage from './pages/QuestViewerPage';
 import GuildManagementDashboard from './pages/Admin/GuildManagementDashboard';
+import BestiaryManagement from './pages/Admin/BestiaryManagement';
 import AdminRedirect from './pages/Admin/AdminRedirect';
 import AdminSettings from './pages/Admin/Settings';
-import APIMonitor from './pages/Admin/APIMonitor';
-import DatabaseSync from './pages/Admin/DatabaseSync';
-import DataSyncPanel from './pages/DataSyncPanel';
+import DataTools from './pages/Admin/DataTools';
+import Overview from './pages/Admin/Overview';
+import GuildView from './pages/Admin/GuildView';
 import Profile from './pages/Profile';
 import PasswordReset from './pages/PasswordReset';
-import { useEffect } from 'react';
-import { useState } from 'react';
+import { lazy, Suspense, useEffect, useState } from 'react';
+import { useTranslation } from 'react-i18next';
 
 import { AuthProvider } from './context/AuthContext';
+import { WorkspaceProvider } from './context/WorkspaceContext';
 import { ToastProvider } from './context/ToastContext';
 import Login from './pages/auth/Login';
 import Register from './pages/auth/Register';
@@ -28,16 +30,29 @@ import GuildMembersPage from './pages/guild/Members';
 import Announcements from './pages/guild/Announcements';
 import Events from './pages/guild/Events';
 import HuntCatalog from './pages/guild/HuntCatalog';
-import Raffle from './pages/guild/Raffle';
+import RafflesWorkspace from './pages/guild/RafflesWorkspace';
+import GuildDirectory from './pages/Admin/GuildDirectory';
+import AdminUsers from './pages/Admin/Users';
+import AdminGuildWorkspace from './pages/Admin/AdminGuildWorkspace';
+import AdminGuildRaffles from './pages/Admin/AdminGuildRaffles';
+import GlobalActivities from './pages/Admin/GlobalActivities';
+import NotificationsPage from './pages/guild/Notifications';
 import RafflePublicPage from './pages/RafflePublicPage';
 import PublicRafflePage from './pages/PublicRafflePage';
 import NotFound from './pages/NotFound';
 import { systemApi } from './services/api';
 
+const Leadership = lazy(() => import('./pages/guild/Leadership'));
+const LeadershipRecruitment = lazy(() => import('./pages/guild/LeadershipRecruitment'));
+const LeadershipApplicationDetail = lazy(() => import('./pages/guild/LeadershipApplicationDetail'));
+const AdminGuildLeadership = lazy(() => import('./pages/Admin/AdminGuildLeadership'));
+
 function App() {
   const location = useLocation();
   const navigate = useNavigate();
-  const [latestDataVersion, setLatestDataVersion] = useState<string>('Latest data version unavailable');
+  const [latestDataVersion, setLatestDataVersion] = useState<string>('');
+  const { t } = useTranslation();
+  const leadershipFallback = <div role="status" className="p-8 text-center text-slate-400">{t('leadership.loading')}</div>;
 
   // Keyboard shortcut listener for Ctrl+Alt+G (Guild) and Ctrl+Alt+A (Admin)
   useEffect(() => {
@@ -73,6 +88,7 @@ function App() {
 
   return (
     <AuthProvider>
+      <WorkspaceProvider>
       <ToastProvider>
         <div className="min-h-screen text-[color:var(--color-text)] font-sans pt-20" style={{ backgroundColor: 'var(--color-bg)' }}>
           <Navigation />
@@ -111,19 +127,38 @@ function App() {
                 <Route path="members" element={<GuildMembersPage />} />
                 <Route path="announcements" element={<Announcements />} />
                 <Route path="events" element={<Events />} />
-                <Route path="recruitment" element={<Navigate to="/guild/events?type=contest" replace />} />
+                <Route path="leadership" element={<Suspense fallback={leadershipFallback}><Leadership /></Suspense>} />
+                <Route path="leadership/recruitment" element={<Suspense fallback={leadershipFallback}><LeadershipRecruitment /></Suspense>} />
+                <Route path="leadership/recruitment/applications/:applicationId" element={<Suspense fallback={leadershipFallback}><LeadershipApplicationDetail /></Suspense>} />
+                <Route path="recruitment" element={<Navigate to="/guild/leadership/recruitment" replace />} />
                 <Route path="hunts" element={<HuntCatalog />} />
-                <Route path="raffle" element={<Raffle />} />
+                <Route path="raffles" element={<RafflesWorkspace />} />
+                <Route path="raffle" element={<Navigate to="/guild/raffles?section=history" replace />} />
+                <Route path="automatic-raffles" element={<Navigate to="/guild/raffles" replace />} />
+                <Route path="notifications" element={<NotificationsPage />} />
               </Route>
 
               {/* Admin Routes */}
               <Route path="/admin" element={<AdminLayout />}>
                 <Route index element={<AdminRedirect />} />
+                <Route path="overview" element={<Overview />} />
+                <Route path="guilds" element={<GuildDirectory />} />
+                <Route path="users" element={<AdminUsers />} />
+                <Route path="guilds/:guildKey" element={<AdminGuildWorkspace />} />
+                <Route path="guilds/:guildKey/raffles" element={<AdminGuildRaffles />} />
+                <Route path="guilds/:guildKey/leadership" element={<Suspense fallback={leadershipFallback}><AdminGuildLeadership /></Suspense>} />
+                <Route path="guilds/:guildKey/leadership/recruitment" element={<Suspense fallback={leadershipFallback}><AdminGuildLeadership recruitment /></Suspense>} />
+                <Route path="guilds/:guildKey/leadership/recruitment/applications/:applicationId" element={<Suspense fallback={leadershipFallback}><LeadershipApplicationDetail admin /></Suspense>} />
+                <Route path="activities" element={<GlobalActivities />} />
                 <Route path="management" element={<GuildManagementDashboard />} />
-                <Route path="api-monitor" element={<APIMonitor />} />
-                <Route path="database-sync" element={<DatabaseSync />} />
-                <Route path="sync" element={<DataSyncPanel />} />
+                <Route path="guild-view" element={<GuildView />} />
+                <Route path="bestiary" element={<BestiaryManagement />} />
+                <Route path="data-tools" element={<DataTools />} />
                 <Route path="settings" element={<AdminSettings />} />
+                {/* Legacy redirects */}
+                <Route path="api-monitor" element={<Navigate to="/admin/data-tools" replace />} />
+                <Route path="database-sync" element={<Navigate to="/admin/data-tools" replace />} />
+                <Route path="sync" element={<Navigate to="/admin/data-tools" replace />} />
               </Route>
 
               {/* Catch-All */}
@@ -134,17 +169,18 @@ function App() {
           {/* Footer */}
           <footer className="mt-24 text-center border-t border-slate-800 pt-8 pb-8">
             <div className="inline-block">
-              <p className="text-slate-400 text-sm">Tibia Cyclopedia - Fan-made project ({latestDataVersion})</p>
+              <p className="text-slate-400 text-sm">{t('footer.project', { version: latestDataVersion || t('footer.unavailable') })}</p>
               <p className="mt-2 text-slate-600 text-xs">
-                Tibia is a registered trademark of CipSoft GmbH
+                {t('footer.trademark')}
               </p>
               <p className="mt-2 text-slate-500 text-xs">
-                Data sourced from <a href="https://tibia.fandom.com" target="_blank" rel="noopener noreferrer" className="text-amber-500 hover:text-amber-400 transition-colors">TibiaWiki</a>
+                {t('footer.dataSource')} <a href="https://tibia.fandom.com" target="_blank" rel="noopener noreferrer" className="text-amber-500 hover:text-amber-400 transition-colors">TibiaWiki</a>
               </p>
             </div>
           </footer>
         </div>
       </ToastProvider>
+      </WorkspaceProvider>
     </AuthProvider>
   );
 }

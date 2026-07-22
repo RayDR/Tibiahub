@@ -1,5 +1,4 @@
 import React, { useState, useEffect } from 'react';
-import { useNavigate } from 'react-router-dom';
 
 interface SyncLog {
   id: number;
@@ -57,7 +56,6 @@ interface SyncJobStatus {
 }
 
 const DataSyncPanel: React.FC = () => {
-  const navigate = useNavigate();
   const [activeTab, setActiveTab] = useState<'sync' | 'logs' | 'stats'>('sync');
   const [syncLogs, setSyncLogs] = useState<SyncLog[]>([]);
   const [stats, setStats] = useState<SyncStats | null>(null);

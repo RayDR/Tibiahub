@@ -31,6 +31,8 @@ def get_my_profile(
     
     return ProfileResponse(
         username=current_user.username,
+        display_name=current_user.display_name,
+        title=current_user.title,
         email=current_user.email,
         avatar_url=current_user.avatar_url,
         tibia_character_name=current_user.tibia_character_name,
@@ -73,6 +75,12 @@ def update_my_profile(
         
         current_user.email = profile_in.email
 
+    if profile_in.display_name is not None:
+        current_user.display_name = profile_in.display_name.strip() or None
+
+    if profile_in.title is not None:
+        current_user.title = profile_in.title.strip() or None
+
     if profile_in.avatar_url is not None:
         current_user.avatar_url = profile_in.avatar_url or None
 
@@ -98,6 +106,8 @@ def update_my_profile(
     
     return ProfileResponse(
         username=current_user.username,
+        display_name=current_user.display_name,
+        title=current_user.title,
         email=current_user.email,
         avatar_url=current_user.avatar_url,
         tibia_character_name=current_user.tibia_character_name,

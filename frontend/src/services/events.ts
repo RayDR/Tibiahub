@@ -38,6 +38,9 @@ export interface Event {
   announcement_id?: number;
   participants: EventParticipant[];
   participant_count: number;
+  participant_mode?: string;
+  guild_name?: string;
+  guild_world?: string;
   created_at: string;
   updated_at: string;
 }

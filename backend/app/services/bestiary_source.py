@@ -304,6 +304,118 @@ async def get_page_wikitext(title: str) -> str:
     return wikitext
 
 
+async def get_page_links(title: str) -> List[str]:
+    """Return internal page links for a given wiki page title."""
+    data = await _request_json(
+        url=settings.TIBIAWIKI_API_URL,
+        params={"action": "parse", "page": title, "prop": "links", "format": "json"},
+        cache_key=f"page-links:{title}",
+        ttl_seconds=settings.EXTERNAL_API_CACHE_TTL_SECONDS,
+    )
+    links = (data.get("parse") or {}).get("links") or []
+    names: List[str] = []
+    seen: set[str] = set()
+    for entry in links:
+        link_name = (entry or {}).get("*")
+        if not link_name or ":" in link_name:
+            continue
+        normalized = normalize_name(link_name)
+        if not normalized or normalized in seen:
+            continue
+        seen.add(normalized)
+        names.append(link_name)
+    return names
+
+
+def _slugify(value: str) -> str:
+    return re.sub(r"[^a-z0-9]+", "-", normalize_name(value)).strip("-")
+
+
+def _extract_string_list(value: Optional[str]) -> List[str]:
+    if not value:
+        return []
+    cleaned = _strip_markup(value)
+    if not cleaned:
+        return []
+    parts = [item.strip() for item in re.split(r"[,;]", cleaned) if item.strip()]
+    return parts
+
+
+def _extract_requirement_lines(wikitext: str) -> List[str]:
+    found: List[str] = []
+    in_section = False
+    for line in wikitext.splitlines():
+        section_match = re.match(r"^==+\s*(.+?)\s*==+\s*$", line.strip())
+        if section_match:
+            section_name = normalize_name(section_match.group(1))
+            in_section = section_name in {"requirements", "requirement", "missions", "mission"}
+            continue
+        if not in_section:
+            continue
+        raw = line.strip().lstrip("*#")
+        if not raw:
+            continue
+        parsed = _strip_markup(raw)
+        if parsed:
+            found.append(parsed)
+        if len(found) >= 20:
+            break
+    return found
+
+
+async def get_quest_page_summary(title: str) -> Dict[str, Any]:
+    """Extract lightweight quest metadata from page wikitext."""
+    wikitext = await get_page_wikitext(title)
+    params = _extract_infobox_param_map(wikitext)
+    display_name = _strip_markup(params.get("name") or title)
+    source_url = _build_wiki_page_url(display_name)
+
+    rewards = _extract_string_list(params.get("reward") or params.get("rewards") or params.get("treasure"))
+    requirements = _extract_string_list(params.get("requirements") or params.get("requirement"))
+    if not requirements:
+        requirements = _extract_requirement_lines(wikitext)
+
+    npc = _strip_markup(params.get("npc") or params.get("questgiver") or "") or None
+    location = _strip_markup(params.get("location") or params.get("startinglocation") or "") or None
+
+    return {
+        "name": display_name,
+        "slug": _slugify(display_name),
+        "description": _strip_markup(params.get("description") or params.get("summary") or "") or None,
+        "min_level": _to_int(params.get("level") or params.get("minlevel")),
+        "max_level": _to_int(params.get("maxlevel")),
+        "npc": npc,
+        "location": location,
+        "requirements": requirements,
+        "rewards": rewards,
+        "source_url": source_url,
+    }
+
+
+async def get_tibiamaps_markers(limit: int = 2000) -> List[Dict[str, Any]]:
+    """Fetch marker metadata from tibiamaps/tibia-map-data (public JSON)."""
+    data = await _request_json(
+        url="https://tibiamaps.github.io/tibia-map-data/markers.json",
+        params=None,
+        cache_key="tibiamaps:markers",
+        ttl_seconds=settings.EXTERNAL_API_LIST_CACHE_TTL_SECONDS,
+    )
+    if not isinstance(data, list):
+        return []
+    return [item for item in data if isinstance(item, dict)][:limit]
+
+
+async def get_tibiamaps_bounds() -> Dict[str, Any]:
+    """Fetch world bounds metadata from tibiamaps/tibia-map-data."""
+    data = await _request_json(
+        url="https://tibiamaps.github.io/tibia-map-data/bounds.json",
+        params=None,
+        cache_key="tibiamaps:bounds",
+        ttl_seconds=settings.EXTERNAL_API_LIST_CACHE_TTL_SECONDS,
+    )
+    return data if isinstance(data, dict) else {}
+
+
 def _build_creature_payload(name: str, wikitext: str) -> Dict[str, Any]:
     params = _extract_infobox_param_map(wikitext)
     display_name = _strip_markup(params.get("name") or name)

@@ -1,7 +1,8 @@
 import React from 'react';
-import { Link } from 'react-router-dom';
+import { Link, useLocation } from 'react-router-dom';
 import { CreatureSimple } from '../types';
 import { Heart, Star } from 'lucide-react';
+import ImageWithFallback from './ImageWithFallback';
 
 interface CreatureCardProps {
   creature: CreatureSimple;
@@ -9,6 +10,7 @@ interface CreatureCardProps {
 }
 
 const CreatureCard: React.FC<CreatureCardProps> = ({ creature, index }) => {
+  const location = useLocation();
   // Staggered animation delay
   const style = { animationDelay: `${index * 50}ms` };
   const creaturePath = creature.slug || String(creature.id);
@@ -16,6 +18,7 @@ const CreatureCard: React.FC<CreatureCardProps> = ({ creature, index }) => {
   return (
     <Link
       to={`/creatures/${creaturePath}`}
+      state={{ from: `${location.pathname}${location.search}` }}
       className="group relative bg-slate-900/40 border border-slate-700/50 rounded-xl overflow-hidden hover:border-amber-500/50 hover:shadow-lg hover:shadow-amber-500/10 transition-all duration-300 flex flex-col animate-fade-in-up"
       style={style}
     >
@@ -24,18 +27,13 @@ const CreatureCard: React.FC<CreatureCardProps> = ({ creature, index }) => {
 
       {/* Image Container */}
       <div className="h-48 w-full bg-slate-950/50 relative flex items-center justify-center p-4 overflow-hidden">
-        {creature.image_url ? (
-          <img
-            src={`/api/v1/creatures/${creature.id}/image`}
-            alt={creature.name}
-            className="w-32 h-32 object-contain filter drop-shadow-[0_0_10px_rgba(0,0,0,0.5)] group-hover:scale-110 transition-transform duration-500"
-            loading="lazy"
-          />
-        ) : (
-          <div className="text-6xl opacity-20 filter grayscale group-hover:grayscale-0 transition-all">
-            🐉
-          </div>
-        )}
+        <ImageWithFallback
+          src={`/api/v1/creatures/${creature.id}/image`}
+          alt={creature.name}
+          className="w-32 h-32 object-contain filter drop-shadow-[0_0_10px_rgba(0,0,0,0.5)] group-hover:scale-110 transition-transform duration-500"
+          containerClassName="w-32 h-32"
+          fallbackLabel="Creature"
+        />
 
         {/* Difficulty Badge */}
         {creature.difficulty && (

@@ -12,8 +12,11 @@ class HuntZone(Base):
     
     id = Column(Integer, primary_key=True, index=True)
     name = Column(String(100), unique=True, nullable=False, index=True)
+    slug = Column(String(150), nullable=True, index=True)
     normalized_name = Column(String(150), index=True)
     city = Column(String(100))  # Nearest city
+    region = Column(String(100), nullable=True)
+    source_provider = Column(String(50), nullable=True, index=True)
     source_name = Column(String(50), nullable=True, index=True)
     source_url = Column(String(255), nullable=True)
     
@@ -21,6 +24,11 @@ class HuntZone(Base):
     min_level = Column(Integer, nullable=False)
     max_level = Column(Integer)
     recommended_level = Column(Integer)
+    recommended_vocations = Column(JSON, nullable=True)
+    recommended_party_size = Column(String(50), nullable=True)
+    exp_rating = Column(String(20), nullable=True)
+    profit_rating = Column(String(20), nullable=True)
+    danger_rating = Column(String(20), nullable=True)
     
     # Vocations (professions) - Winter Update 2025 includes Monk
     knights_recommended = Column(Boolean, default=False)
@@ -52,7 +60,12 @@ class HuntZone(Base):
     location_x = Column(Integer)
     location_y = Column(Integer)
     location_z = Column(Integer)
+    map_x = Column(Integer, nullable=True)
+    map_y = Column(Integer, nullable=True)
+    map_z = Column(Integer, nullable=True)
+    map_bounds = Column(JSON, nullable=True)
     map_image_url = Column(String(255))
+    map_asset_id = Column(Integer, ForeignKey("media_assets.id"), nullable=True)
     raw_data = Column(JSON, nullable=True)
     last_synced_at = Column(DateTime(timezone=True), nullable=True)
     created_at = Column(DateTime(timezone=True), server_default=func.now())

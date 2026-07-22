@@ -1,5 +1,5 @@
 """Loot model - Items dropped by creatures."""
-from sqlalchemy import Column, Float, ForeignKey, Integer, JSON, String
+from sqlalchemy import Boolean, Column, Float, ForeignKey, Integer, JSON, String
 from sqlalchemy.orm import relationship
 
 from app.db.database import Base
@@ -24,6 +24,10 @@ class Loot(Base):
     item_value = Column(Integer)  # Gold value
     item_type = Column(String(50))  # Gold, Equipment, Resource, etc.
     item_image_url = Column(String(255), nullable=True)
+    item_image_alias = Column(String(255), nullable=True)      # alternate name for image lookup
+    item_image_url_override = Column(String(1024), nullable=True)  # manually-set override URL
+    item_image_locked = Column(Boolean, default=False)         # if True, sync must not overwrite
+    image_asset_id = Column(Integer, ForeignKey("media_assets.id"), nullable=True)
     source_url = Column(String(255), nullable=True)
     raw_data = Column(JSON, nullable=True)
     

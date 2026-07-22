@@ -9,6 +9,8 @@ class User(Base):
 
     id = Column(Integer, primary_key=True, index=True)
     username = Column(String(50), unique=True, index=True, nullable=False)
+    display_name = Column(String(100), nullable=True)
+    title = Column(String(100), nullable=True)
     email = Column(String(100), unique=True, index=True, nullable=True)
     avatar_url = Column(String(255), nullable=True)
     hashed_password = Column(String(255), nullable=False)
@@ -18,6 +20,9 @@ class User(Base):
     join_date = Column(DateTime(timezone=True), nullable=True)
     is_active = Column(Boolean, default=True)
     is_superuser = Column(Boolean, default=False)
+    # Independent platform capabilities; users may hold any combination.
+    is_moderator = Column(Boolean, default=False, nullable=False)
+    is_writer = Column(Boolean, default=False, nullable=False)
     created_at = Column(DateTime(timezone=True), server_default=func.now())
     
     # Player info from Tibia API
@@ -29,6 +34,7 @@ class User(Base):
     residence = Column(String(100), nullable=True)
     achievement_points = Column(Integer, nullable=True)
     last_login_at = Column(DateTime(timezone=True), nullable=True)
+    last_app_login_at = Column(DateTime(timezone=True), nullable=True)
     tibia_status = Column(String(50), nullable=True)
     tibia_last_error = Column(String(255), nullable=True)
     last_updated = Column(DateTime(timezone=True), nullable=True)
@@ -41,4 +47,3 @@ class User(Base):
 
     def __repr__(self):
         return f"<User {self.username}>"
-

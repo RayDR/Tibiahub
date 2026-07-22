@@ -67,10 +67,17 @@ class Loot(LootBase):
 # Hunt Zone Schemas
 class HuntZoneBase(BaseModel):
     name: str
+    slug: Optional[str] = None
     city: Optional[str] = None
+    region: Optional[str] = None
     min_level: Optional[int] = None
     max_level: Optional[int] = None
     recommended_level: Optional[int] = None
+    recommended_vocations: Optional[List[str]] = None
+    recommended_party_size: Optional[str] = None
+    exp_rating: Optional[str] = None
+    profit_rating: Optional[str] = None
+    danger_rating: Optional[str] = None
     knights_recommended: bool = False
     paladins_recommended: bool = False
     sorcerers_recommended: bool = False
@@ -88,8 +95,13 @@ class HuntZoneBase(BaseModel):
     location_x: Optional[int] = None
     location_y: Optional[int] = None
     location_z: Optional[int] = None
+    map_x: Optional[int] = None
+    map_y: Optional[int] = None
+    map_z: Optional[int] = None
+    map_bounds: Optional[dict] = None
     map_image_url: Optional[str] = None
     source_url: Optional[str] = None
+    source_provider: Optional[str] = None
 
 
 class HuntZoneCreate(HuntZoneBase):
@@ -154,10 +166,15 @@ class CreatureBase(BaseModel):
     difficulty: Optional[str] = None
     occurrence: Optional[str] = None
     is_boss: bool = False
+    is_hidden: bool = False
     loot_value: Optional[float] = None
     description: Optional[str] = None
     behavior: Optional[str] = None
     image_url: Optional[str] = None
+    image_alias: Optional[str] = None
+    image_url_override: Optional[str] = None
+    image_source_name: Optional[str] = None
+    image_locked: Optional[bool] = None
     bestiary_class: Optional[str] = None
     bestiary_level: Optional[str] = None
     charm_points: Optional[int] = None
@@ -182,6 +199,7 @@ class CreatureSimple(BaseModel):
     hitpoints: int
     experience: int
     is_boss: bool = False
+    is_hidden: bool = False
     difficulty: Optional[str] = None
     classification: Optional[str] = None
     related_tasks: Optional[List[str]] = None
@@ -230,6 +248,7 @@ class ItemDropCreature(BaseModel):
 
 
 class ItemSearchResult(BaseModel):
+    image_item_id: Optional[int] = None
     item_name: str
     normalized_name: str
     item_image_url: Optional[str] = None
@@ -251,7 +270,11 @@ class ItemDetail(BaseModel):
 class QuestSearchResult(BaseModel):
     id: Optional[int] = None
     name: str
+    slug: Optional[str] = None
     description: Optional[str] = None
+    group_name: Optional[str] = None
+    parent_page: Optional[str] = None
+    is_group: bool = False
     min_level: Optional[int] = None
     max_level: Optional[int] = None
     experience_reward: Optional[int] = None
@@ -272,14 +295,20 @@ class QuestRelatedCreature(BaseModel):
 class QuestDetail(BaseModel):
     id: int
     name: str
+    slug: Optional[str] = None
     description: Optional[str] = None
+    group_name: Optional[str] = None
+    parent_page: Optional[str] = None
+    is_group: bool = False
     min_level: Optional[int] = None
     max_level: Optional[int] = None
     experience_reward: Optional[int] = None
     location: Optional[str] = None
     npc: Optional[str] = None
+    rewards: List[str] = []
     source_url: Optional[str] = None
     requirements: List[str] = []
+    related_quest_names: List[str] = []
     related_creatures: List[QuestRelatedCreature] = []
 
 

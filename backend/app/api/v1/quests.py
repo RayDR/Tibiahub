@@ -43,26 +43,71 @@ def _rank_quest(query: str, quest_name: str) -> tuple[int, float, str]:
     return (3, -SequenceMatcher(a=normalized_query, b=normalized_name).ratio(), normalized_name)
 
 
+@router.get("/highlights", response_model=List[QuestSearchResult])
+async def get_quest_highlights(
+    limit: int = Query(12, ge=1, le=50),
+    db: Session = Depends(get_db),
+):
+    """Return top local quest records ranked by metadata search/highlight signals."""
+    metadata = EntityMetadataService.get_highlights(db, entity_type="quest", limit=limit)
+    quest_ids = [record.entity_id for record in metadata if record.entity_id is not None]
+    rows: list[TibiaWikiQuest] = []
+    if quest_ids:
+        raw = db.query(TibiaWikiQuest).filter(TibiaWikiQuest.id.in_(quest_ids)).all()
+        by_id = {row.id: row for row in raw}
+        rows = [by_id[qid] for qid in quest_ids if qid in by_id and not bool(getattr(by_id[qid], "is_group", False))]
+    if not rows:
+        rows = (
+            db.query(TibiaWikiQuest)
+            .filter((TibiaWikiQuest.is_group.is_(False)) | (TibiaWikiQuest.is_group.is_(None)))
+            .order_by(TibiaWikiQuest.updated_at.desc().nullslast(), TibiaWikiQuest.id.desc())
+            .limit(limit)
+            .all()
+        )
+
+    return [
+        QuestSearchResult(
+            id=row.id,
+            name=row.name,
+            slug=row.slug,
+            description=row.description,
+            group_name=row.group_name,
+            parent_page=row.parent_page,
+            is_group=bool(row.is_group),
+            min_level=row.min_level,
+            max_level=row.max_level,
+            experience_reward=row.experience_reward,
+            location=row.location,
+            npc=row.npc,
+            source_url=row.source_url or ((row.raw_data or {}).get("source_url") if row.raw_data else None),
+        )
+        for row in rows
+    ]
+
+
 @router.get("/", response_model=List[QuestSearchResult])
 async def search_quests(
     search: str | None = Query(None, min_length=2, description="Search term for quest name"),
+    include_groups: bool = Query(False, description="Include group/hub pages in results"),
     skip: int = Query(0, ge=0),
     limit: int = Query(50, ge=1, le=100),
     db: Session = Depends(get_db),
 ):
+    base_query = db.query(TibiaWikiQuest)
+    if not include_groups:
+        base_query = base_query.filter((TibiaWikiQuest.is_group.is_(False)) | (TibiaWikiQuest.is_group.is_(None)))
+
     if search:
-        normalized = normalize_search_text(search)
         rows = (
-            db.query(TibiaWikiQuest)
+            base_query
             .filter(TibiaWikiQuest.name.ilike(f"%{search}%"))
             .offset(skip)
             .limit(limit)
             .all()
         )
     else:
-        normalized = ""
         rows = (
-            db.query(TibiaWikiQuest)
+            base_query
             .order_by(TibiaWikiQuest.updated_at.desc().nullslast(), TibiaWikiQuest.id.desc())
             .offset(skip)
             .limit(limit)
@@ -78,75 +123,6 @@ async def search_quests(
         )
         rows = sorted(rows, key=lambda item: _rank_quest(search, item.name))[skip: skip + limit]
 
-    if not rows and not search and _is_external_detail_fallback_enabled(db):
-        external_response = await asyncio.wait_for(get_quests(expand=False), timeout=DETAIL_FALLBACK_TIMEOUT_SECONDS)
-        if external_response.success() and isinstance(external_response.data, list):
-            page_slice = external_response.data[skip: skip + limit]
-            persisted_names: list[str] = []
-            for entry in page_slice:
-                name = (entry.get("name") or "").strip()
-                if not name:
-                    continue
-                existing = db.query(TibiaWikiQuest).filter(TibiaWikiQuest.name == name).first()
-                if not existing:
-                    existing = TibiaWikiQuest(name=name)
-                    db.add(existing)
-                existing.description = entry.get("description")
-                existing.min_level = entry.get("min_level")
-                existing.max_level = entry.get("max_level")
-                existing.experience_reward = entry.get("experience_reward")
-                existing.location = entry.get("location")
-                existing.npc = entry.get("npc")
-                existing.raw_data = entry
-                persisted_names.append(name)
-            if persisted_names:
-                db.commit()
-                rows = (
-                    db.query(TibiaWikiQuest)
-                    .filter(TibiaWikiQuest.name.in_(persisted_names))
-                    .order_by(TibiaWikiQuest.id.asc())
-                    .all()
-                )
-
-    if not rows and search and _is_external_detail_fallback_enabled(db):
-        external_response = await asyncio.wait_for(get_quests(expand=False), timeout=DETAIL_FALLBACK_TIMEOUT_SECONDS)
-        if external_response.success() and isinstance(external_response.data, list):
-            candidates = [entry for entry in external_response.data if entry.get("name")]
-            candidates.sort(key=lambda entry: _rank_quest(search, entry.get("name", "")))
-            if candidates:
-                best = candidates[0]
-                if normalized in normalize_search_text(best.get("name", "")):
-                    existing = db.query(TibiaWikiQuest).filter(TibiaWikiQuest.name == best["name"]).first()
-                    if not existing:
-                        existing = TibiaWikiQuest(name=best["name"])
-                        db.add(existing)
-                    existing.description = best.get("description")
-                    existing.min_level = best.get("min_level")
-                    existing.max_level = best.get("max_level")
-                    existing.experience_reward = best.get("experience_reward")
-                    existing.location = best.get("location")
-                    existing.npc = best.get("npc")
-                    existing.raw_data = best
-                    EntityMetadataService.record_searches(
-                        db,
-                        entity_type="quest",
-                        matches=[(normalize_search_text(best["name"]), best["name"], existing.id)],
-                    )
-                    db.commit()
-                    return [
-                        QuestSearchResult(
-                            id=existing.id,
-                            name=best["name"],
-                            description=best.get("description"),
-                            min_level=best.get("min_level"),
-                            max_level=best.get("max_level"),
-                            experience_reward=best.get("experience_reward"),
-                            location=best.get("location"),
-                            npc=best.get("npc"),
-                            source_url=best.get("source_url"),
-                        )
-                    ]
-
     if rows:
         EntityMetadataService.record_searches(
             db,
@@ -159,13 +135,17 @@ async def search_quests(
         QuestSearchResult(
             id=row.id,
             name=row.name,
+            slug=row.slug,
             description=row.description,
+            group_name=row.group_name,
+            parent_page=row.parent_page,
+            is_group=bool(row.is_group),
             min_level=row.min_level,
             max_level=row.max_level,
             experience_reward=row.experience_reward,
             location=row.location,
             npc=row.npc,
-            source_url=(row.raw_data or {}).get("source_url") if row.raw_data else None,
+            source_url=row.source_url or ((row.raw_data or {}).get("source_url") if row.raw_data else None),
         )
         for row in rows
     ]
@@ -229,7 +209,8 @@ async def get_quest_detail(quest_id: int, db: Session = Depends(get_db)):
     requirements = [
         item
         for item in (
-            raw_data.get("requirements")
+            quest.requirements
+            or raw_data.get("requirements")
             or raw_data.get("related_tasks")
             or raw_data.get("missions")
             or []
@@ -248,13 +229,19 @@ async def get_quest_detail(quest_id: int, db: Session = Depends(get_db)):
     return QuestDetail(
         id=quest.id,
         name=quest.name,
+        slug=quest.slug,
         description=quest.description,
+        group_name=quest.group_name,
+        parent_page=quest.parent_page,
+        is_group=bool(quest.is_group),
         min_level=quest.min_level,
         max_level=quest.max_level,
         experience_reward=quest.experience_reward,
         location=quest.location,
         npc=quest.npc,
-        source_url=(quest.raw_data or {}).get("source_url") if quest.raw_data else None,
+        source_url=quest.source_url or ((quest.raw_data or {}).get("source_url") if quest.raw_data else None),
+        rewards=[item for item in (quest.rewards or []) if isinstance(item, str)],
         requirements=requirements,
+        related_quest_names=[item for item in (raw_data.get("related_quests") or []) if isinstance(item, str)],
         related_creatures=related_creatures,
     )

@@ -402,7 +402,7 @@ const HuntRecommendationsPage: React.FC = () => {
                           {rec.zone_name}
                         </h3>
                         <div className="flex gap-2 mt-2">
-                          <span className={`px-2 py-0.5 rounded text-xs font-bold border ${REC_COLORS[rec.difficulty] || 'bg-slate-800 text-slate-400 border-slate-700'}`}>
+                          <span className={`px-2 py-0.5 rounded text-xs font-bold border ${REC_COLORS[rec.difficulty ?? ''] || 'bg-slate-800 text-slate-400 border-slate-700'}`}>
                             {rec.difficulty}
                           </span>
                           <span className="px-2 py-0.5 rounded text-xs font-bold bg-slate-950 text-slate-400 border border-slate-800">
@@ -440,7 +440,7 @@ const HuntRecommendationsPage: React.FC = () => {
                       ))}
                       {(rec.synergy_bonus ?? 1) > 1 && (
                         <span className="bg-purple-500/10 text-purple-400 border border-purple-500/20 text-xs px-2 py-1 rounded-md flex items-center gap-1">
-                          <Sparkles size={12} /> Synergy +{Math.round((rec.synergy_bonus - 1) * 100)}%
+                          <Sparkles size={12} /> Synergy +{Math.round(((rec.synergy_bonus ?? 1) - 1) * 100)}%
                         </span>
                       )}
                     </div>

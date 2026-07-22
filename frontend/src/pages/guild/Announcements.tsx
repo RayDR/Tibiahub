@@ -5,11 +5,13 @@ import { useToast } from '../../context/ToastContext';
 import { useTranslation } from 'react-i18next';
 
 import { Plus, Megaphone, Loader2, Filter, X, CalendarClock, User } from 'lucide-react';
+import { useGuildContext } from '../../utils/guildContext';
 
 export default function Announcements() {
     const { user } = useAuth();
     const { t } = useTranslation();
     const toast = useToast();
+    const guildName = useGuildContext(user);
 
     const [announcements, setAnnouncements] = useState<Announcement[]>([]);
     const [loading, setLoading] = useState(true);
@@ -52,7 +54,11 @@ export default function Announcements() {
                 setLoadingMore(true);
             }
             
-            const data = await guildApi.getAnnouncements(currentSkip, LIMIT);
+            if (!guildName) {
+                setAnnouncements([]);
+                return;
+            }
+            const data = await guildApi.getAnnouncements(currentSkip, LIMIT, guildName);
             
             if (reset) {
                 setAnnouncements(data);
@@ -78,13 +84,14 @@ export default function Announcements() {
 
     useEffect(() => {
         loadData(true);
-    }, [filters]);
+    }, [filters, guildName]);
 
     const handleCreate = async (e: React.FormEvent) => {
         e.preventDefault();
         setCreating(true);
         try {
-            await guildApi.createAnnouncement(formData);
+            if (!guildName) throw new Error('Missing guild context');
+            await guildApi.createAnnouncement(formData, guildName);
             setShowModal(false);
             setFormData({ title: '', content: '', type: 'general' });
             loadData(true);

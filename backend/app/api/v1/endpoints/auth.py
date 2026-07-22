@@ -1,6 +1,6 @@
 import logging
 import time
-from datetime import datetime, timedelta
+from datetime import UTC, datetime, timedelta
 from typing import Any
 from fastapi import APIRouter, BackgroundTasks, Depends, HTTPException, status
 from fastapi.security import OAuth2PasswordRequestForm, OAuth2PasswordBearer
@@ -110,6 +110,11 @@ def login_access_token(
             total_ms = int((time.perf_counter() - start) * 1000)
             logger.warning("login_failed category=inactive_user status=403 username=%s total_ms=%s", user.username, total_ms)
             raise HTTPException(status_code=403, detail="Your account is inactive. Please contact an administrator.")
+
+        # Application authentication is tracked separately from Tibia character
+        # activity (`last_login_at`), which is populated by TibiaData sync.
+        user.last_app_login_at = datetime.now(UTC)
+        db.commit()
 
         token_start = time.perf_counter()
         access_token_expires = timedelta(minutes=config.settings.ACCESS_TOKEN_EXPIRE_MINUTES)

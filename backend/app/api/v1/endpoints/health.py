@@ -1,12 +1,13 @@
 from datetime import datetime
 
-from fastapi import APIRouter, Depends
+from fastapi import APIRouter, Depends, Response, status as http_status
 from sqlalchemy import text
 from sqlalchemy.orm import Session
 
 from app.db.database import get_db
 from app.models.external_data import APISync, SyncJob
 from app.models.settings import SystemSettings as SettingsModel
+from app.models.media_asset import MediaAsset
 
 router = APIRouter()
 
@@ -17,23 +18,35 @@ def healthz():
 
 
 @router.get("/ready")
-def readiness_check(db: Session = Depends(get_db)):
+def readiness_check(response: Response, db: Session = Depends(get_db)):
     try:
         db.execute(text("SELECT 1"))
     except Exception:
+        response.status_code = http_status.HTTP_503_SERVICE_UNAVAILABLE
         return {"status": "not_ready", "db": "error"}
     return {"status": "ready", "db": "ok"}
 
 
 @router.get("/health")
-def health_check(db: Session = Depends(get_db)):
+def health_check(response: Response, db: Session = Depends(get_db)):
     now = datetime.utcnow()
     db_status = "ok"
 
     try:
         db.execute(text("SELECT 1"))
     except Exception:
-        db_status = "error"
+        response.status_code = http_status.HTTP_503_SERVICE_UNAVAILABLE
+        return {
+            "status": "degraded",
+            "db": "error",
+            "external_sync": {
+                "active_jobs": None,
+                "failed_jobs_today": None,
+                "latest_data_version": None,
+                "latest_success_at": None,
+            },
+            "timestamp": now.isoformat() + "Z",
+        }
 
     active_jobs = db.query(SyncJob).filter(SyncJob.status.in_(["pending", "running"])).count()
     failed_jobs_24h = (
@@ -76,4 +89,37 @@ def health_check(db: Session = Depends(get_db)):
             "latest_success_at": latest_success_at.isoformat() + "Z" if latest_success_at else None,
         },
         "timestamp": now.isoformat() + "Z",
+    }
+
+
+@router.get("/system/version")
+def system_version(db: Session = Depends(get_db)):
+    """
+    Lightweight endpoint for frontend cache invalidation.
+    Returns timestamps the frontend can compare against its stored cache version.
+    """
+    latest_sync = (
+        db.query(SyncJob)
+        .filter(SyncJob.status == "completed")
+        .order_by(SyncJob.finished_at.desc())
+        .first()
+    )
+    latest_media = (
+        db.query(MediaAsset)
+        .filter(MediaAsset.status == "cached")
+        .order_by(MediaAsset.updated_at.desc())
+        .first()
+    )
+    latest_sync_at = None
+    if latest_sync and getattr(latest_sync, "finished_at", None):
+        latest_sync_at = latest_sync.finished_at.isoformat() + "Z"
+    latest_media_sync_at = None
+    if latest_media and getattr(latest_media, "updated_at", None):
+        latest_media_sync_at = latest_media.updated_at.isoformat() + "Z"
+    candidates = [value for value in (latest_sync_at, latest_media_sync_at) if value]
+    data_version = max(candidates) if candidates else None
+    return {
+        "data_version": data_version,
+        "latest_sync_at": latest_sync_at,
+        "latest_media_sync_at": latest_media_sync_at,
     }

@@ -31,7 +31,14 @@ from app.models.hunt_zone import HuntZone
 from app.models.loot import Loot
 from app.models.settings import SystemSettings
 from app.models.user import User
-from app.services.bestiary_source import get_category_members, get_creature_detail_by_name
+from app.services.bestiary_source import (
+    get_category_members,
+    get_creature_detail_by_name,
+    get_page_links,
+    get_quest_page_summary,
+    get_tibiamaps_bounds,
+    get_tibiamaps_markers,
+)
 from app.services.creature_storage_service import upsert_creature_payload
 from app.services.email_service import EmailService
 from app.services.text_utils import normalize_search_text
@@ -475,17 +482,33 @@ class SyncService:
         if not name:
             raise ValueError("Missing quest name")
         existing = db.query(TibiaWikiQuest).filter(TibiaWikiQuest.name == name).first()
+        if not existing:
+            # SessionLocal uses autoflush=False; inspect pending objects to avoid duplicates.
+            for pending in db.new:
+                if isinstance(pending, TibiaWikiQuest) and pending.name == name:
+                    existing = pending
+                    break
         created = existing is None
         if not existing:
             existing = TibiaWikiQuest(name=name)
             db.add(existing)
+        existing.slug = payload.get("slug") or existing.slug
         existing.description = payload.get("description") or existing.description
+        existing.source_url = payload.get("source_url") or existing.source_url
+        existing.group_name = payload.get("group_name") or existing.group_name
+        existing.parent_page = payload.get("parent_page") or existing.parent_page
+        if payload.get("is_group") is not None:
+            existing.is_group = bool(payload.get("is_group"))
         existing.min_level = payload.get("min_level") if payload.get("min_level") is not None else existing.min_level
         existing.max_level = payload.get("max_level") if payload.get("max_level") is not None else existing.max_level
         existing.experience_reward = payload.get("experience_reward") if payload.get("experience_reward") is not None else existing.experience_reward
         existing.treasure = payload.get("treasure") or existing.treasure
         existing.location = payload.get("location") or existing.location
         existing.npc = payload.get("npc") or existing.npc
+        existing.rewards = payload.get("rewards") or existing.rewards
+        existing.requirements = payload.get("requirements") or existing.requirements
+        existing.related_creatures = payload.get("related_creatures") or existing.related_creatures
+        existing.last_synced_at = datetime.utcnow()
         existing.raw_data = payload
         return "created" if created else "updated"
 
@@ -501,11 +524,27 @@ class SyncService:
             zone = HuntZone(name=name, normalized_name=normalized_name, min_level=0)
             db.add(zone)
         zone.name = name
+        zone.slug = payload.get("slug") or zone.slug
         zone.normalized_name = normalized_name
-        zone.city = payload.get("location") or zone.city
+        zone.city = payload.get("city") or payload.get("location") or zone.city
+        zone.region = payload.get("region") or zone.region
+        zone.source_provider = payload.get("source_provider") or zone.source_provider
         zone.description = payload.get("description") or zone.description
-        zone.source_name = "tibiawiki"
+        zone.source_name = payload.get("source_name") or zone.source_name or "tibiawiki"
         zone.source_url = payload.get("source_url") or zone.source_url
+        zone.recommended_level = payload.get("recommended_level") if payload.get("recommended_level") is not None else zone.recommended_level
+        zone.min_level = payload.get("min_level") if payload.get("min_level") is not None else zone.min_level
+        zone.max_level = payload.get("max_level") if payload.get("max_level") is not None else zone.max_level
+        zone.recommended_vocations = payload.get("recommended_vocations") or zone.recommended_vocations
+        zone.recommended_party_size = payload.get("recommended_party_size") or zone.recommended_party_size
+        zone.exp_rating = payload.get("exp_rating") or zone.exp_rating
+        zone.profit_rating = payload.get("profit_rating") or zone.profit_rating
+        zone.danger_rating = payload.get("danger_rating") or zone.danger_rating
+        zone.map_x = payload.get("map_x") if payload.get("map_x") is not None else zone.map_x
+        zone.map_y = payload.get("map_y") if payload.get("map_y") is not None else zone.map_y
+        zone.map_z = payload.get("map_z") if payload.get("map_z") is not None else zone.map_z
+        zone.map_bounds = payload.get("map_bounds") or zone.map_bounds
+        zone.map_image_url = payload.get("map_image_url") or zone.map_image_url
         zone.raw_data = payload
         zone.last_synced_at = datetime.utcnow()
         return "created" if created else "updated"
@@ -553,7 +592,34 @@ class SyncService:
                 force=force,
             )
 
-        if target in {"items", "quests", "hunt-zones"}:
+        if target == "quests":
+            result = await SyncService.sync_quests(
+                db,
+                limit=limit,
+                recursive=True,
+                timeout_seconds=timeout_seconds,
+            )
+            return {
+                "processed": int(result.get("total") or 0),
+                "summary": {
+                    "quests_created": int(result.get("created") or 0),
+                    "quests_updated": int(result.get("updated") or 0),
+                    "quests_failed": int(result.get("errors") or 0),
+                },
+            }
+
+        if target == "hunt-zones":
+            result = await SyncService.sync_hunt_zones_from_tibiamaps(db, limit=limit)
+            return {
+                "processed": int(result.get("total") or 0),
+                "summary": {
+                    "hunt_zones_created": int(result.get("created") or 0),
+                    "hunt_zones_updated": int(result.get("updated") or 0),
+                    "hunt_zones_failed": int(result.get("errors") or 0),
+                },
+            }
+
+        if target == "items":
             return await SyncService._sync_catalog_batched(
                 db,
                 job,
@@ -801,6 +867,226 @@ class SyncService:
 
         db.commit()
         return {"processed": processed, "summary": dict(counters)}
+
+    # Pages that are navigation/utility rather than actual quests (skip as children)
+    _QUEST_SKIP_PAGES = frozenset({
+        "quest log", "quests", "access quests", "main page", "tibia", "help",
+        "category", "template", "file", "image",
+    })
+
+    # Top-level mega-hub pages that just list all quests — skip recursive processing
+    # to avoid fetching hundreds of links (items, creatures, etc.)
+    _QUEST_MEGA_HUBS = frozenset({
+        "quests",  # The "Quests" umbrella page lists everything — skip children
+    })
+
+    @staticmethod
+    def _is_candidate_quest_link(link_name: str) -> bool:
+        """Return True if a wiki link looks like an individual quest page (not navigation).
+
+        We require either 'quest' in the name OR a pattern like 'Arena', 'Challenge', etc.
+        This prevents syncing hundreds of item/creature links from hub pages.
+        """
+        n = normalize_search_text(link_name)
+        if not n or len(n) < 3:
+            return False
+        if n in SyncService._QUEST_SKIP_PAGES:
+            return False
+        # Skip list/category/template/file pages
+        if n.startswith(("list of", "category:", "template:", "file:")):
+            return False
+        # Must contain 'quest' OR known quest-like suffixes to avoid syncing items/creatures
+        quest_keywords = ("quest", "challenge", "arena", "mission", "task", "adventure")
+        if not any(kw in n for kw in quest_keywords):
+            return False
+        return True
+
+    @staticmethod
+    async def sync_quests(
+        db: Session,
+        *,
+        limit: int | None = None,
+        recursive: bool = True,
+        timeout_seconds: int = 15,
+    ) -> dict[str, Any]:
+        """Sync quests from TibiaWiki with group/hub detection and recursive child extraction.
+
+        Strategy:
+        1. Get Category:Quests members — these are hub/group pages.
+        2. Mark each hub page as is_group=True.
+        3. For each hub page, get ALL its wiki links (not restricted to category members).
+        4. Process each non-navigation link as a potential individual quest.
+        """
+        quest_pages = await get_category_members("Quests")
+        if limit is not None and limit > 0:
+            quest_pages = quest_pages[:limit]
+
+        # All hub-page names (normalized) so we don't recurse into them as children
+        hub_set = {normalize_search_text(name) for name in quest_pages}
+
+        created = 0
+        updated = 0
+        errors = 0
+        processed = 0
+
+        for page_name in quest_pages:
+            try:
+                summary = await asyncio.wait_for(get_quest_page_summary(page_name), timeout=timeout_seconds)
+                child_links: list[str] = []
+                is_mega_hub = normalize_search_text(page_name) in SyncService._QUEST_MEGA_HUBS
+
+                if recursive and not is_mega_hub:
+                    links = await asyncio.wait_for(get_page_links(page_name), timeout=timeout_seconds)
+                    for link_name in links:
+                        normalized = normalize_search_text(link_name)
+                        if normalized == normalize_search_text(page_name):
+                            continue
+                        # Skip other hub-pages (we'll process them as top-level)
+                        if normalized in hub_set:
+                            continue
+                        if SyncService._is_candidate_quest_link(link_name):
+                            child_links.append(link_name)
+
+                # Mega hubs always stay as is_group=True (no children to process)
+                is_group = bool(child_links) or is_mega_hub
+                group_payload = {
+                    **summary,
+                    "name": page_name,
+                    "slug": normalize_search_text(page_name).replace(" ", "-"),
+                    "is_group": is_group,
+                    "group_name": page_name if is_group else summary.get("group_name"),
+                    "parent_page": None,
+                    "related_creatures": summary.get("related_creatures") or [],
+                }
+                op = SyncService._upsert_quest(db, group_payload)
+                if op == "created":
+                    created += 1
+                else:
+                    updated += 1
+                processed += 1
+
+                for child_name in child_links:
+                    try:
+                        child_summary = await asyncio.wait_for(
+                            get_quest_page_summary(child_name), timeout=timeout_seconds
+                        )
+                        child_payload = {
+                            **child_summary,
+                            "name": child_name,
+                            "slug": normalize_search_text(child_name).replace(" ", "-"),
+                            "is_group": False,
+                            "group_name": page_name,
+                            "parent_page": page_name,
+                        }
+                        child_op = SyncService._upsert_quest(db, child_payload)
+                        if child_op == "created":
+                            created += 1
+                        else:
+                            updated += 1
+                        processed += 1
+                    except Exception as child_exc:
+                        errors += 1
+                        logger.warning(
+                            "sync_quests_child_failed parent=%s child=%s error=%s",
+                            page_name, child_name, child_exc,
+                        )
+                        continue
+            except Exception as exc:
+                errors += 1
+                logger.warning("sync_quests_page_failed page=%s error=%s", page_name, exc)
+                continue
+
+        db.commit()
+        return {
+            "status": "success",
+            "created": created,
+            "updated": updated,
+            "errors": errors,
+            "total": processed,
+            "recursive": recursive,
+        }
+
+    @staticmethod
+    async def sync_hunt_zones_from_tibiamaps(
+        db: Session,
+        *,
+        limit: int | None = None,
+    ) -> dict[str, Any]:
+        """Seed/refresh hunt-zone map infrastructure from tibiamaps metadata.
+
+        tibiamaps does not provide canonical "hunt zones" as first-class entities.
+        We keep existing local zone names and enrich map metadata/provider references.
+        """
+        bounds = await get_tibiamaps_bounds()
+        markers = await get_tibiamaps_markers(limit=5000)
+
+        zones = db.query(HuntZone).order_by(HuntZone.id.asc()).all()
+        if limit is not None and limit > 0:
+            zones = zones[:limit]
+
+        created = 0
+        updated = 0
+        errors = 0
+
+        bounds_center = None
+        if bounds:
+            try:
+                min_x = int(bounds.get("minX"))
+                max_x = int(bounds.get("maxX"))
+                min_y = int(bounds.get("minY"))
+                max_y = int(bounds.get("maxY"))
+                bounds_center = {
+                    "x": int((min_x + max_x) / 2),
+                    "y": int((min_y + max_y) / 2),
+                    "z": 7,
+                }
+            except Exception:
+                bounds_center = None
+
+        for zone in zones:
+            try:
+                before_provider = zone.source_provider
+                zone.source_provider = "tibiamaps"
+                zone.source_name = zone.source_name or "tibiamaps"
+                zone.source_url = zone.source_url or "https://github.com/tibiamaps/tibia-map-data"
+                zone.map_bounds = bounds or zone.map_bounds
+                if bounds_center:
+                    zone.map_x = zone.map_x or bounds_center["x"]
+                    zone.map_y = zone.map_y or bounds_center["y"]
+                    zone.map_z = zone.map_z if zone.map_z is not None else bounds_center["z"]
+
+                # If no custom preview exists, use a stable floor preview from tibiamaps CDN.
+                if not zone.map_image_url:
+                    floor = zone.map_z if zone.map_z is not None else 7
+                    floor = max(0, min(15, int(floor)))
+                    zone.map_image_url = f"https://tibiamaps.github.io/tibia-map-data/floor-{floor:02d}-map.png"
+
+                zone.raw_data = {
+                    **(zone.raw_data or {}),
+                    "source_provider": "tibiamaps",
+                    "tibiamaps_marker_count": len(markers),
+                }
+                zone.last_synced_at = datetime.utcnow()
+                if before_provider is None:
+                    created += 1
+                else:
+                    updated += 1
+                db.add(zone)
+            except Exception as exc:
+                errors += 1
+                logger.warning("sync_hunt_zones_tibiamaps_failed zone=%s error=%s", zone.name, exc)
+
+        db.commit()
+        return {
+            "status": "success",
+            "created": created,
+            "updated": updated,
+            "errors": errors,
+            "total": len(zones),
+            "provider": "tibiamaps",
+            "marker_count": len(markers),
+            "has_bounds": bool(bounds),
+        }
 
     @staticmethod
     async def sync_bosses(db: Session, *, limit: int | None = None) -> dict[str, Any]:

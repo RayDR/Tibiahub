@@ -22,6 +22,36 @@ i18n
                         "admin": "Admin",
                         "management": "Management"
                     },
+                    "leadership": {
+                        "title": "Guild leadership",
+                        "navigation": "Leadership",
+                        "roles": { "viceleader": "Viceleader", "viceleaderDescription": "Supports the Guild Leader and guild members." },
+                        "warning": { "title": "Leadership capacity needs attention", "belowMinimum": "The guild is below the recommended minimum of four viceleaders.", "explanation": "Additional leadership coverage can help distribute member support and operational responsibilities. This is a TibiaHub policy recommendation, not guaranteed Tibia enforcement.", "metrics": "{{active}} active · {{recommended}} recommended · {{target}} target · {{positions}} open positions" },
+                        "summary": { "active": "Active viceleaders", "recommended": "Recommended minimum", "target": "Guild target", "positions": "Open positions", "applicants": "Active applicants", "interviews": "Pending interviews", "voting": "Applications in voting", "accepted": "Recently accepted", "promotions": "Promotions pending" },
+                        "dashboard": { "health": "Leadership health", "attention": "Requires attention", "assignments": "Current assignments" },
+                        "recruitment": { "title": "Viceleader recruitment", "open": "Open recruitment", "pipeline": "Application pipeline" },
+                        "openings": { "create": "Create opening", "titleField": "Opening title", "description": "Description", "responsibilities": "Responsibilities", "requirements": "Requirements", "count": "Open positions", "empty": "No open opportunities", "emptyHelp": "There are no viceleader openings accepting applications.", "defaultResponsibilities": "Support members, coordinate guild activities, and help maintain a fair and positive community.", "defaultRequirements": "Be an active guild member, communicate respectfully, and protect confidential leadership discussions.", "available": "{{count}} positions available", "deadline": "Deadline: {{date}}", "noDeadline": "No application deadline", "votingEnabled": "Reviewer voting enabled", "votingDisabled": "Voting is not required", "process": "Application, review, optional interview and voting, then a Guild Leader decision.", "allowReview": "Allow active viceleaders to review", "enableVoting": "Enable private reviewer voting" },
+                        "applications": { "apply": "Apply", "yours": "Your application", "formTitle": "Apply for viceleader", "profileNotice": "This linked guild character will be included as a read-only profile snapshot.", "candidate": "Candidate", "submitted": "Submitted", "answers": "Application answers", "timeline": "Status timeline", "communication": "Applicant communication", "internal": "Internal review comments", "interview": "Interview", "voting": "Private reviewer vote", "decision": "Final decision", "withdraw": "Withdraw application", "acceptedNotice": "Accepted in TibiaHub. The Guild Leader must still complete the in-game promotion.", "automaticProfile": "Automatic profile information", "questions": "Application questions", "characterCount": "{{count}} of {{max}} characters", "informationPending": "The guild requested more information. Open your application to reply.", "summary": "Candidate summary", "nextActions": "Available actions" },
+                        "questions": { "why_apply": "Why do you want to become a viceleader?", "contribution": "What would you contribute to the guild?", "availability": "How much time can you dedicate?", "leadership_experience": "Have you led a guild or community before?" },
+                        "conduct": { "text": "I commit to act in the best interest of the guild, treat members with respect, avoid unnecessary conflict, protect confidential leadership discussions, and make decisions that support a positive and fair community.", "accepted": "Code of conduct accepted" },
+                        "status": { "all": "All", "applied": "New", "under_review": "Review", "more_information_requested": "Information requested", "interview": "Interview", "voting": "Voting", "accepted": "Accepted", "rejected": "Rejected", "withdrawn": "Withdrawn", "cancelled": "Cancelled", "active": "Active", "ended": "Ended" },
+                        "actions": { "retry": "Retry", "save": "Save", "saving": "Saving…", "cancel": "Cancel", "submit": "Submit application", "submitting": "Submitting…", "send": "Send", "requestInfo": "Request information", "startReview": "Start review", "scheduleInterview": "Schedule interview", "startVoting": "Start voting", "accept": "Accept", "reject": "Reject", "confirm": "Confirm", "reviewCandidates": "Review candidates", "createRecruitment": "Create recruitment", "viewApplication": "View my application", "viewOpportunity": "View opportunity", "openPipeline": "Open pipeline", "backToPipeline": "Back to pipeline", "updating": "Updating…", "noneAvailable": "No actions are available for this status." },
+                        "assignment": { "manualTitle": "In-game promotion is manual", "manualNotice": "TibiaHub records the leadership decision. The Guild Leader must still promote the character in Tibia.", "pending": "In-game promotion pending", "completed": "In-game promotion completed", "empty": "No leadership assignments are recorded yet.", "started": "Started {{date}}", "markCompleted": "Mark promotion completed", "end": "End assignment", "safeNote": "Optional safe note" },
+                        "fields": { "message": "Message", "internalComment": "Internal comment", "reason": "Reason", "dateTime": "Date and time", "timezone": "Timezone", "location": "Discord channel or meeting location", "notes": "Internal interview notes", "vote": "Recommendation", "character_name": "Character", "level": "Level", "vocation": "Vocation", "guild_name": "Guild", "guild_rank": "Guild rank", "join_date": "Join date", "last_activity": "Last activity", "discord_username": "Discord", "world": "World" },
+                        "votes": { "support": "Support", "neutral": "Neutral", "oppose": "Oppose", "participation": "{{count}} reviewers participated", "comment": "Optional private vote comment", "save": "Save recommendation", "leaderAuthority": "Your review is advisory. Only the Guild Leader or assisting global admin can make the final decision." },
+                        "pipeline": { "search": "Search candidates", "sort": "Sort", "newest": "Newest first", "oldest": "Oldest first", "empty": "No candidates match", "emptyHelp": "Change the status filter or search query.", "submitted": "Submitted {{date}}", "applicantMessage": "Applicant message", "voteRequested": "Vote requested" },
+                        "helpers": { "why_apply": "Explain your motivation and the member needs you want to support.", "contribution": "Describe concrete skills, availability, or community work.", "availability": "Include your usual days, hours, and timezone.", "leadership_experience": "Guild, gaming community, or other relevant experience is useful." },
+                        "nextActions": { "withdraw": "Withdraw application", "reply": "Reply to applicant request", "comment": "Add internal comment", "vote": "Submit recommendation", "start_review": "Move to review", "request_information": "Request more information", "schedule_interview": "Schedule interview", "start_voting": "Start voting", "accept": "Accept candidate", "reject": "Reject candidate", "cancel": "Cancel application", "return_to_review": "Return to review" },
+                        "timeline": { "adminAssistance": "Admin assistance" },
+                        "interview": { "scheduled": "Scheduled", "completed": "Completed", "reschedule": "Reschedule interview" },
+                        "onboarding": { "title": "Leadership onboarding", "message": "Your application was accepted in TibiaHub. The Guild Leader must still complete the in-game promotion before your Tibia rank changes.", "role": "Assigned role", "acceptedAt": "Accepted at", "promotion": "In-game promotion", "completedAt": "Promotion completed at" },
+                        "confirmations": { "accept": "Accept this candidate? TibiaHub will create a pending assignment, but the in-game promotion remains manual.", "rejected": "Reject this application? The decision and reason remain in history.", "rejectedReason": "Enter the rejection reason", "cancelled": "Cancel this application?", "cancelledReason": "Enter the cancellation reason", "promotion": "Confirm that the in-game promotion is complete?", "endAssignment": "End this active assignment?", "endAssignmentReason": "Enter the reason for ending the assignment" },
+                        "breadcrumbs": { "label": "Leadership breadcrumb", "myGuild": "My Guild", "assistedGuild": "Assisted guild" },
+                        "common": { "unknown": "Unknown" },
+                        "errors": { "load": "Leadership data could not be loaded", "retry": "Try again without losing the rest of your workspace.", "submit": "The application could not be submitted.", "action": "The action could not be completed.", "section": "This section is unavailable", "offline": "Check your connection or retry this section." },
+                        "loading": "Loading leadership workspace…",
+                        "assistance": "You are assisting {{guild}}. The guild is fixed and your actions are audited."
+                    },
                     "hero": {
                         "title": "Tibia Cyclopedia",
                         "subtitle": "Complete your weekly tasks, find your next hunt, and plan your next set."
@@ -92,6 +122,55 @@ i18n
                         "helpers": {
                             "classification": "Classification-first mode active. Pick a category or search directly.",
                             "bosses": "Search and browse boss encounters."
+                        },
+                        "sort": {
+                            "name": "Sort by name",
+                            "experience": "Sort by experience",
+                            "hitpoints": "Sort by hitpoints",
+                            "difficulty": "Sort by difficulty",
+                            "ascending": "Ascending",
+                            "descending": "Descending"
+                        },
+                        "cards": {
+                            "recent": "Recent searches",
+                            "yourRecent": "Your recent searches",
+                            "topGlobal": "Top 5 most searched (global)"
+                        },
+                        "items": {
+                            "creaturesMatched": "{{count}} creatures matched",
+                            "chance": "Chance",
+                            "rarity": "Rarity",
+                            "zones": "Zones",
+                            "source": "Source",
+                            "sourcePage": "Source page"
+                        },
+                        "quests": {
+                            "group": "Group",
+                            "levelRange": "Lvl {{min}} - {{max}}",
+                            "noDetails": "Details not available yet.",
+                            "npc": "NPC",
+                            "location": "Location",
+                            "openDetail": "Open quest detail"
+                        },
+                        "zones": {
+                            "mapPreviewUnavailable": "Map preview unavailable",
+                            "usingPlaceholder": "Using local placeholder"
+                        },
+                        "states": {
+                            "errorTitle": "Something went wrong",
+                            "errorSubtitle": "Please try again in a moment.",
+                            "bossErrorTitle": "Boss search failed",
+                            "bossErrorSubtitle": "Unable to load bosses right now. Please try again in a moment.",
+                            "creatureEmptyTitle": "No creatures found.",
+                            "creatureEmptySubtitle": "Try another search or category.",
+                            "bossEmptyTitle": "No bosses found.",
+                            "bossEmptySubtitle": "Try another boss name or clear the search.",
+                            "unknown": "Unknown",
+                            "unknownRegion": "Unknown region",
+                            "notAvailable": "Not available"
+                        },
+                        "actions": {
+                            "loadMore": "Load more"
                         }
                     },
                     "language": {
@@ -103,12 +182,14 @@ i18n
                     "a11y": {
                         "openCyclopediaMenu": "Open Cyclopedia menu",
                         "search": "Search",
+                        "clearSearch": "Clear search",
                         "languageSelector": "Language selector",
                         "switchLanguageTo": "Switch language to {{language}}",
                         "themeSelector": "Theme selector",
                         "switchThemeTo": "Switch theme to {{theme}}"
                     },
                     "creature": {
+                        "backToCyclopedia": "Back to Cyclopedia",
                         "hp": "Hitpoints",
                         "exp": "Experience",
                         "max_dmg": "Max Damage",
@@ -253,7 +334,80 @@ i18n
                         "settings": "System Settings",
                         "database": "Database"
                     },
+                    "workspace": {
+                        "admin": { "title": "TibiaHub Administration", "badge": "Global admin", "navigation": "Administration sections", "loading": "Loading administration..." },
+                        "adminNav": { "overview": "Overview", "guilds": "Guilds", "users": "Users", "activities": "Global Activities", "cyclopedia": "Cyclopedia Data", "operations": "System Operations", "settings": "Settings" },
+                        "guild": { "badge": "My guild", "navigation": "Guild sections" },
+                        "noGuild": { "title": "No guild is linked", "help": "Link your Tibia character and guild membership from your profile to open your guild workspace.", "profile": "Open profile" },
+                        "assistance": { "title": "Admin assistance mode", "message": "You are managing {{guild}} as a global administrator.", "auditNotice": "Actions are audited and do not change your own guild membership.", "return": "Return to Guild Directory", "badge": "Admin assistance", "manage": "Manage this guild", "publicView": "Open my guild workspace" },
+                        "adminGuilds": { "title": "Registered guilds", "subtitle": "Open an explicit, audited assistance workspace.", "empty": "No registered guilds", "emptyHelp": "Guilds appear here after a member or synchronized roster identifies them.", "open": "Open workspace" },
+                        "errors": { "guildDirectory": "Guild directory unavailable", "tryAgain": "Try again in a moment.", "assistance": "Assistance workspace unavailable" },
+                        "common": { "unknownServer": "Unknown server", "leader": "Leader", "members": "Members", "setup": "Setup", "alerts": "Open alerts", "loading": "Loading workspace..." },
+                        "setup": { "ready": "Ready", "needs_attention": "Needs attention" },
+                        "roles": { "global_admin": "Global admin", "guild_leader": "Guild leader", "guild_viceleader": "Viceleader", "guild_member": "Guild member", "delegated_manager": "Delegated manager" },
+                        "recruitment": { "title": "Recruitment", "subtitle": "Grow your guild with a focused recruitment workflow.", "empty": "Recruitment tools are being prepared", "help": "Use the member roster while applications and invitations are added here.", "members": "Open members" },
+                        "raffles": { "title": "Raffles", "subtitle": "Manage scheduled draws and review historical raffles in one place.", "tabs": { "upcoming": "Upcoming", "participants": "Participants", "eligibility": "Eligibility", "draw": "Draw", "results": "Results", "history": "History" } }
+                    },
+                    "footer": { "project": "TibiaHub · {{version}}", "unavailable": "data version unavailable", "trademark": "Tibia is a trademark of CipSoft GmbH.", "dataSource": "Game data source:" },
+                    "notifications": {
+                        "title": "Notifications", "empty": "No notifications yet.", "markAll": "Mark all as read", "indicator": "{{count}} unread notifications",
+                        "types": {
+                            "raffle_scheduled": { "title": "Raffle scheduled", "message": "{{raffle}} has been scheduled." },
+                            "raffle_completed": { "title": "Raffle completed", "message": "{{raffle}} is ready for private review." },
+                            "raffle_execution_failed": { "title": "Raffle execution failed", "message": "{{raffle}} could not be completed safely." },
+                            "raffle_winner_selected": { "title": "Private winner selected", "message": "A winner for {{raffle}} is awaiting publication." },
+                            "raffle_rerun_performed": { "title": "Raffle rerun completed", "message": "Updated results for {{raffle}} are private." },
+                            "raffle_result_published": { "title": "Results published", "message": "Results for {{raffle}} are now public." },
+                            "raffle_result_unpublished": { "title": "Results unpublished", "message": "Results for {{raffle}} returned to private review." },
+                            "raffle_prize_delivered": { "title": "Prize delivered", "message": "A prize for {{raffle}} was marked delivered." },
+                            "raffle_prize_disputed": { "title": "Prize disputed", "message": "A prize for {{raffle}} requires review." },
+                            "raffle_delivery_overdue": { "title": "Prize delivery overdue", "message": "A prize for {{raffle}} passed its delivery deadline." },
+                            "leadership_opening_published": { "title": "Leadership opening published", "message": "A new guild leadership opportunity is available." },
+                            "leadership_application_received": { "title": "Leadership application received", "message": "{{character}} submitted a private leadership application." },
+                            "leadership_application_status_changed": { "title": "Application status updated", "message": "Your leadership application moved to {{status}}." },
+                            "leadership_more_information_requested": { "title": "More information requested", "message": "Your guild requested more information for your application." },
+                            "leadership_applicant_replied": { "title": "Applicant replied", "message": "{{character}} replied to the leadership review." },
+                            "leadership_interview_scheduled": { "title": "Leadership interview scheduled", "message": "Interview details are available in your application." },
+                            "leadership_application_accepted": { "title": "Leadership application accepted", "message": "{{character}} was accepted in TibiaHub; in-game promotion remains pending." }
+                        }
+                    },
                     "raffle": {
+                        "global": { "title": "Global Activities", "subtitle": "Create and monitor server-wide and cross-server contests.", "crossServer": "All Tibia servers" },
+                        "workspace": {
+                            "register": "Register for raffle", "deliveryHistory": "Delivery history",
+                            "create": "Create raffle", "manageRaffles": "Manage raffles", "retry": "Try again", "registered": "Registered", "eligible": "Eligible", "excluded": "Excluded", "unscheduled": "Not scheduled", "ready": "Ready now", "countdown": "{{days}}d {{hours}}h {{minutes}}m", "executionFailed": "Execution failed; manager review required.", "frozenAt": "Snapshot frozen at {{value}}", "snapshotPending": "Eligibility has not been frozen yet.", "privateDraw": "Draw controls are private", "privateDrawHelp": "Only an explicitly authorized raffle manager can review eligibility or operate the draw.", "privateResult": "Results are private and awaiting publication.", "publicLink": "Open published result", "historyLabel": "Historical raffle",
+                            "positions": { "second": "Second place", "first": "First place" }, "errors": { "title": "Raffle workspace unavailable", "help": "Other guild pages remain available. Try loading raffles again." },
+                            "empty": { "upcoming": "No upcoming raffles", "participants": "No participant lists yet", "eligibility": "No eligibility reviews yet", "draw": "No draw is ready", "results": "No results yet", "history": "No historical raffles", "help": "New and historical raffles will appear here when available." },
+                            "timeline": { "label": "Raffle progress", "draft": "Draft", "registration": "Registration", "eligibility": "Eligibility review", "frozen": "Snapshot frozen", "scheduled": "Scheduled", "running": "Running", "private": "Private review", "published": "Published", "delivery": "Delivery", "completed": "Completed" },
+                            "scopes": { "guild": { "title": "Guild raffle", "help": "Only the fixed guild and its eligible members." }, "server": { "title": "Server contest", "help": "Public contest limited to one Tibia server." }, "global": { "title": "Global contest", "help": "Cross-server contest managed by global admins." } },
+                            "fields": { "guild": "Guild", "server": "Server", "title": "Name", "purpose": "Purpose", "timezone": "Timezone", "schedule": "Date and time", "showParticipants": "Show participant names publicly" },
+                            "wizard": { "title": "Create an activity", "step1": "Step 1 of 2 · Choose an allowed scope", "step2": "Step 2 of 2 · Configure the activity", "continue": "Continue", "back": "Back", "create": "Create activity", "creating": "Creating...", "confirm": "I confirm the scope, schedule, private initial results, and 24-hour delivery deadline.", "confirmRequired": "Confirm the activity rules before creating it.", "invalidSchedule": "Choose a valid date, time, and timezone.", "createError": "The activity could not be created safely.", "guildRules": "Eligibility uses five days of activity. Results remain private until publication; prizes are due within 24 hours." }
+                        },
+                        "legacyLabel": "Legacy raffle history — not used by the automatic scheduler",
+                        "operations": {
+                            "navigation": "Automatic Raffles", "title": "Automatic Guild Raffles", "subtitle": "Schedule, review, publish, and deliver authoritative guild draws.",
+                            "prepare": "Prepare raffle", "purpose": "Purpose", "test": "Test", "real": "Real", "testLabel": "TEST", "guild": "Guild", "name": "Raffle name", "timezone": "IANA timezone",
+                            "localSchedule": "Scheduled date and time", "localEquivalent": "Local: {{value}}", "utcEquivalent": "UTC: {{value}}", "save": "Save scheduled raffle",
+                            "rules": "Only current guild members with qualifying activity during the five days before the draw may participate. Winners are selected automatically. Second place receives 100 Tibia Coins and first place receives 250 Tibia Coins. Prizes will be delivered within 24 hours after the draw.",
+                            "confirmReal": "I confirm this is a separate real raffle and the schedule is correct.", "fridayExample": "Preparation example: Friday, July 24, 2026 at 8:00 PM America/Chicago equals July 25, 2026 at 01:00 UTC. Do not use a past date.",
+                            "secondPlace": "Second Place", "firstPlace": "First Place", "scheduledLocal": "Scheduled local time", "scheduledUtc": "Scheduled UTC time", "retryState": "Retry count", "lastFailure": "Last failure",
+                            "preview": "Preview eligibility", "freeze": "Freeze snapshot", "testCharacter": "Existing local character", "addTestParticipant": "Add test participant", "eligibleCount": "{{count}} eligible", "excludedCount": "{{count}} excluded", "snapshotAt": "Cutoff: {{value}}", "staleWarning": "Membership or activity information may be stale. Refresh guild data before freezing.",
+                            "privateReview": "Pending private review. Public visitors cannot see these winners.", "publish": "Publish results", "unpublish": "Return to private", "rerunTitle": "Rerun positions", "rerunReason": "Required reason", "rerunWarning": "Previous results remain in history. A rerun returns publication to private review and may affect delivery tracking.", "rerun": "Run selected positions again",
+                            "execution": { "pending": "Pending", "claimed": "Claimed", "running": "Running", "failed": "Failed", "succeeded": "Completed" },
+                            "delivery": { "pending": "Pending", "delivered": "Delivered", "disputed": "Disputed", "cancelled": "Cancelled", "managerNote": "Updated by raffle manager" },
+                            "draw": { "preparing": "Preparing draw", "secondRolling": "Second-place round", "secondReveal": "Second place revealed", "pause": "Preparing first place", "firstRolling": "First-place round", "complete": "Private results ready", "publicComplete": "Published results", "replay": "Replay reveal" },
+                            "errors": { "load": "Could not load automatic raffles.", "confirmReal": "Explicit confirmation is required for a real raffle.", "future": "Real raffles require a valid future schedule.", "create": "Could not create the raffle.", "rerun": "Could not rerun the selected positions." }
+                        },
+                        "testRun": {
+                            "eligibilityDays": "Eligibility days", "participantVisibility": "Show participant list", "confirmCreation": "I confirm this is an isolated test raffle using existing local accounts only.", "deliveryNotice": "Test prizes use the same 24-hour delivery deadline as real raffles.",
+                            "enabled": "Enabled", "disabled": "Disabled", "unavailable": "Unavailable", "scheduler": "Scheduler", "heartbeat": "Last heartbeat: {{value}}", "jobState": "Job state", "notClaimed": "Not claimed yet", "publicState": "Public result state", "private": "Private", "published": "Published", "publicLink": "Public test page",
+                            "notificationsTitle": "Test notifications", "notificationsEmpty": "No notifications for this test raffle yet.", "markRead": "Mark as read",
+                            "retryReason": "Retry reason", "retry": "Retry failed test run", "testParticipants": "Test participants", "testParticipant": "TEST PARTICIPANT", "overrideReason": "Required override reason", "overrideActive": "Eligibility override: {{value}}", "forceEligible": "Force eligible", "forceExcluded": "Force excluded", "removeParticipantConfirm": "Remove this account only from the test raffle?", "removeAssociation": "Remove from test raffle",
+                            "overdue": "Overdue", "deadline": "Delivery deadline: {{value}}", "deliveredAt": "Updated {{value}} by {{actor}}", "note": "Note: {{value}}", "deliveredOverride": "Allow rerun of a delivered test prize (global admin only)", "deliveredOverrideReason": "Required delivered-prize override reason",
+                            "cleanupTitle": "Test cleanup", "cleanupWarning": "Archiving removes only test-raffle participant associations. Users, guilds, announcements, audit history, and real raffles are preserved.", "cleanupReason": "Cleanup reason", "cleanupConfirm": "Type ARCHIVE TEST RAFFLE to confirm", "cleanup": "Archive test raffle", "cleanupSummary": "Cleanup complete: {{participant_associations_removed}} participant associations removed; {{users_modified}} users, {{guilds_modified}} guilds, and {{real_raffles_modified}} real raffles modified.",
+                            "errors": { "confirmCreation": "Explicit confirmation is required before creating a test raffle." },
+                            "checklist": { "title": "Test run checklist", "schedulerHealthy": "Scheduler healthy", "snapshotFrozen": "Snapshot frozen", "participantsEligible": "Participants eligible", "drawOnce": "Draw executed once", "secondReveal": "Second-place reveal verified", "firstReveal": "First-place reveal verified", "reruns": "Reruns tested", "delivery": "Delivery tested", "publication": "Publication tested", "notifications": "Notifications tested", "cleanup": "Cleanup completed" }
+                        },
                         "eventNotFound": "Event not found",
                         "winner": "WINNER",
                         "congratsMessage": "Congratulations! Your prize awaits.",
@@ -488,6 +642,26 @@ i18n
                         "admin": "Admin",
                         "management": "Administración"
                     },
+                    "leadership": {
+                        "title": "Liderazgo de la guild",
+                        "navigation": "Liderazgo",
+                        "roles": { "viceleader": "Viceleader", "viceleaderDescription": "Apoya al Guild Leader y a los miembros de la guild." },
+                        "warning": { "title": "Aviso de capacidad del liderazgo", "belowMinimum": "La guild está por debajo del mínimo recomendado de cuatro viceleaders." },
+                        "summary": { "active": "Viceleaders activos", "recommended": "Mínimo recomendado", "target": "Objetivo de la guild", "positions": "Posiciones abiertas", "applicants": "Candidaturas activas", "interviews": "Entrevistas pendientes", "voting": "Candidaturas en votación", "accepted": "Aceptados recientemente" },
+                        "recruitment": { "title": "Reclutamiento de viceleaders", "open": "Abrir reclutamiento", "pipeline": "Flujo de candidaturas" },
+                        "openings": { "create": "Crear vacante", "titleField": "Título de la vacante", "description": "Descripción", "responsibilities": "Responsabilidades", "requirements": "Requisitos", "count": "Posiciones abiertas", "empty": "No hay oportunidades abiertas", "emptyHelp": "No hay vacantes de viceleader aceptando candidaturas.", "defaultResponsibilities": "Apoyar a los miembros, coordinar actividades y ayudar a mantener una comunidad justa y positiva.", "defaultRequirements": "Ser miembro activo, comunicarse con respeto y proteger las conversaciones confidenciales del liderazgo." },
+                        "applications": { "apply": "Postularme", "yours": "Tu candidatura", "formTitle": "Postulación a viceleader", "profileNotice": "Este personaje vinculado de la guild se incluirá como perfil de solo lectura.", "candidate": "Candidato", "submitted": "Enviada", "answers": "Respuestas de la candidatura", "timeline": "Historial de estados", "communication": "Comunicación con el candidato", "internal": "Comentarios internos de revisión", "interview": "Entrevista", "voting": "Voto privado del revisor", "decision": "Decisión final", "withdraw": "Retirar candidatura", "acceptedNotice": "Aceptado en TibiaHub. El Guild Leader todavía debe completar la promoción dentro del juego." },
+                        "questions": { "why_apply": "¿Por qué quieres convertirte en viceleader?", "contribution": "¿Qué aportarías a la guild?", "availability": "¿Cuánto tiempo puedes dedicar?", "leadership_experience": "¿Has liderado antes una guild o comunidad?" },
+                        "conduct": { "text": "Me comprometo a actuar en beneficio de la guild, tratar a los miembros con respeto, evitar conflictos innecesarios, proteger las conversaciones confidenciales del liderazgo y tomar decisiones que favorezcan una comunidad positiva y justa.", "accepted": "Código de conducta aceptado" },
+                        "status": { "all": "Todas", "applied": "Nuevas", "under_review": "Revisión", "more_information_requested": "Información solicitada", "interview": "Entrevista", "voting": "Votación", "accepted": "Aceptada", "rejected": "Rechazada", "withdrawn": "Retirada", "cancelled": "Cancelada" },
+                        "actions": { "retry": "Reintentar", "save": "Guardar", "cancel": "Cancelar", "submit": "Enviar candidatura", "submitting": "Enviando…", "send": "Enviar", "requestInfo": "Solicitar información", "startReview": "Iniciar revisión", "scheduleInterview": "Programar entrevista", "startVoting": "Iniciar votación", "accept": "Aceptar", "reject": "Rechazar", "confirm": "Confirmar" },
+                        "assignment": { "manualTitle": "La promoción dentro del juego es manual", "manualNotice": "TibiaHub registra la decisión de liderazgo. El Guild Leader todavía debe promover al personaje en Tibia.", "pending": "Promoción dentro del juego pendiente", "completed": "Promoción dentro del juego completada" },
+                        "fields": { "message": "Mensaje", "internalComment": "Comentario interno", "reason": "Razón", "dateTime": "Fecha y hora", "timezone": "Zona horaria", "location": "Canal de Discord o lugar de reunión", "notes": "Notas internas de entrevista", "vote": "Recomendación", "character_name": "Personaje", "level": "Nivel", "vocation": "Vocación", "guild_name": "Guild", "guild_rank": "Rango de guild", "join_date": "Fecha de ingreso", "last_activity": "Última actividad", "discord_username": "Discord", "world": "Mundo" },
+                        "votes": { "support": "Apoyar", "neutral": "Neutral", "oppose": "Oponerse", "participation": "Participaron {{count}} revisores" },
+                        "errors": { "load": "No se pudieron cargar los datos de liderazgo", "retry": "Reintenta sin perder el resto de tu espacio de trabajo.", "submit": "No se pudo enviar la candidatura.", "action": "No se pudo completar la acción." },
+                        "loading": "Cargando el espacio de liderazgo…",
+                        "assistance": "Estás asistiendo a {{guild}}. La guild está fija y tus acciones quedan auditadas."
+                    },
                     "hero": {
                         "title": "Cyclopedia de Tibia",
                         "subtitle": "Completa tus weekly tasks, encuentra tu próxima hunt y consigue tu próximo set."
@@ -558,6 +732,55 @@ i18n
                         "helpers": {
                             "classification": "Modo por clasificación activo. Elige una categoría o busca directamente.",
                             "bosses": "Busca y explora encuentros de bosses."
+                        },
+                        "sort": {
+                            "name": "Ordenar por nombre",
+                            "experience": "Ordenar por experiencia",
+                            "hitpoints": "Ordenar por vida",
+                            "difficulty": "Ordenar por dificultad",
+                            "ascending": "Ascendente",
+                            "descending": "Descendente"
+                        },
+                        "cards": {
+                            "recent": "Búsquedas recientes",
+                            "yourRecent": "Tus búsquedas recientes",
+                            "topGlobal": "Top 5 más buscados (global)"
+                        },
+                        "items": {
+                            "creaturesMatched": "{{count}} criaturas encontradas",
+                            "chance": "Probabilidad",
+                            "rarity": "Rareza",
+                            "zones": "Zonas",
+                            "source": "Fuente",
+                            "sourcePage": "Página fuente"
+                        },
+                        "quests": {
+                            "group": "Grupo",
+                            "levelRange": "Lvl {{min}} - {{max}}",
+                            "noDetails": "Detalles aún no disponibles.",
+                            "npc": "NPC",
+                            "location": "Ubicación",
+                            "openDetail": "Abrir detalle de quest"
+                        },
+                        "zones": {
+                            "mapPreviewUnavailable": "Vista previa del mapa no disponible",
+                            "usingPlaceholder": "Usando placeholder local"
+                        },
+                        "states": {
+                            "errorTitle": "Algo salió mal",
+                            "errorSubtitle": "Inténtalo de nuevo en un momento.",
+                            "bossErrorTitle": "Falló la búsqueda de bosses",
+                            "bossErrorSubtitle": "No se pudieron cargar los bosses ahora. Inténtalo de nuevo en un momento.",
+                            "creatureEmptyTitle": "No se encontraron criaturas.",
+                            "creatureEmptySubtitle": "Prueba otra búsqueda o categoría.",
+                            "bossEmptyTitle": "No se encontraron bosses.",
+                            "bossEmptySubtitle": "Prueba otro nombre de boss o limpia la búsqueda.",
+                            "unknown": "Desconocido",
+                            "unknownRegion": "Región desconocida",
+                            "notAvailable": "No disponible"
+                        },
+                        "actions": {
+                            "loadMore": "Cargar más"
                         }
                     },
                     "language": {
@@ -569,12 +792,14 @@ i18n
                     "a11y": {
                         "openCyclopediaMenu": "Abrir menú de Cyclopedia",
                         "search": "Buscar",
+                        "clearSearch": "Limpiar búsqueda",
                         "languageSelector": "Selector de idioma",
                         "switchLanguageTo": "Cambiar idioma a {{language}}",
                         "themeSelector": "Selector de tema",
                         "switchThemeTo": "Cambiar tema a {{theme}}"
                     },
                     "creature": {
+                        "backToCyclopedia": "Volver a Cyclopedia",
                         "hp": "Vida",
                         "exp": "Experiencia",
                         "max_dmg": "Daño Máx",
@@ -718,7 +943,80 @@ i18n
                         "management": "Gestión de Usuarios",
                         "settings": "Configuración del Sistema",
                         "database": "Base de Datos"                    },
+                    "workspace": {
+                        "admin": { "title": "Administración de TibiaHub", "badge": "Admin global", "navigation": "Secciones de administración", "loading": "Cargando administración..." },
+                        "adminNav": { "overview": "Resumen", "guilds": "Guilds", "users": "Usuarios", "activities": "Actividades globales", "cyclopedia": "Datos de Cyclopedia", "operations": "Operaciones del sistema", "settings": "Configuración" },
+                        "guild": { "badge": "Mi guild", "navigation": "Secciones de la guild" },
+                        "noGuild": { "title": "No hay una guild vinculada", "help": "Vincula tu personaje de Tibia y tu membresía desde el perfil para abrir el espacio de tu guild.", "profile": "Abrir perfil" },
+                        "assistance": { "title": "Modo de asistencia administrativa", "message": "Estás administrando {{guild}} como administrador global.", "auditNotice": "Las acciones se auditan y no cambian tu membresía personal.", "return": "Volver al directorio de guilds", "badge": "Asistencia administrativa", "manage": "Administrar esta guild", "publicView": "Abrir el espacio de mi guild" },
+                        "adminGuilds": { "title": "Guilds registradas", "subtitle": "Abre un espacio de asistencia explícito y auditado.", "empty": "No hay guilds registradas", "emptyHelp": "Las guilds aparecen después de identificar un miembro o sincronizar su lista.", "open": "Abrir espacio" },
+                        "errors": { "guildDirectory": "Directorio de guilds no disponible", "tryAgain": "Inténtalo de nuevo en un momento.", "assistance": "Espacio de asistencia no disponible" },
+                        "common": { "unknownServer": "Servidor desconocido", "leader": "Líder", "members": "Miembros", "setup": "Configuración", "alerts": "Alertas abiertas", "loading": "Cargando espacio..." },
+                        "setup": { "ready": "Listo", "needs_attention": "Requiere atención" },
+                        "roles": { "global_admin": "Admin global", "guild_leader": "Líder de guild", "guild_viceleader": "Viceleader", "guild_member": "Miembro de guild", "delegated_manager": "Gestor delegado" },
+                        "recruitment": { "title": "Reclutamiento", "subtitle": "Haz crecer tu guild con un flujo de reclutamiento enfocado.", "empty": "Las herramientas de reclutamiento están en preparación", "help": "Usa la lista de miembros mientras se agregan solicitudes e invitaciones.", "members": "Abrir miembros" },
+                        "raffles": { "title": "Rifas", "subtitle": "Administra sorteos programados y revisa el historial en un solo lugar.", "tabs": { "upcoming": "Próximas", "participants": "Participantes", "eligibility": "Elegibilidad", "draw": "Sorteo", "results": "Resultados", "history": "Historial" } }
+                    },
+                    "footer": { "project": "TibiaHub · {{version}}", "unavailable": "versión de datos no disponible", "trademark": "Tibia es una marca registrada de CipSoft GmbH.", "dataSource": "Fuente de datos del juego:" },
+                    "notifications": {
+                        "title": "Notificaciones", "empty": "Aún no hay notificaciones.", "markAll": "Marcar todas como leídas", "indicator": "{{count}} notificaciones sin leer",
+                        "types": {
+                            "raffle_scheduled": { "title": "Rifa programada", "message": "{{raffle}} ha sido programada." },
+                            "raffle_completed": { "title": "Rifa completada", "message": "{{raffle}} está lista para revisión privada." },
+                            "raffle_execution_failed": { "title": "Falló la ejecución", "message": "{{raffle}} no pudo completarse de forma segura." },
+                            "raffle_winner_selected": { "title": "Ganador privado seleccionado", "message": "Un ganador de {{raffle}} espera publicación." },
+                            "raffle_rerun_performed": { "title": "Repetición completada", "message": "Los resultados actualizados de {{raffle}} son privados." },
+                            "raffle_result_published": { "title": "Resultados publicados", "message": "Los resultados de {{raffle}} ahora son públicos." },
+                            "raffle_result_unpublished": { "title": "Resultados retirados", "message": "Los resultados de {{raffle}} volvieron a revisión privada." },
+                            "raffle_prize_delivered": { "title": "Premio entregado", "message": "Un premio de {{raffle}} fue marcado como entregado." },
+                            "raffle_prize_disputed": { "title": "Premio en disputa", "message": "Un premio de {{raffle}} requiere revisión." },
+                            "raffle_delivery_overdue": { "title": "Entrega atrasada", "message": "Un premio de {{raffle}} superó su plazo de entrega." },
+                            "leadership_opening_published": { "title": "Vacante de liderazgo publicada", "message": "Hay una nueva oportunidad de liderazgo en la guild." },
+                            "leadership_application_received": { "title": "Candidatura de liderazgo recibida", "message": "{{character}} envió una candidatura privada de liderazgo." },
+                            "leadership_application_status_changed": { "title": "Estado de candidatura actualizado", "message": "Tu candidatura de liderazgo cambió a {{status}}." },
+                            "leadership_more_information_requested": { "title": "Se solicitó más información", "message": "Tu guild solicitó más información para tu candidatura." },
+                            "leadership_applicant_replied": { "title": "El candidato respondió", "message": "{{character}} respondió a la revisión de liderazgo." },
+                            "leadership_interview_scheduled": { "title": "Entrevista de liderazgo programada", "message": "Los detalles de la entrevista están disponibles en tu candidatura." },
+                            "leadership_application_accepted": { "title": "Candidatura de liderazgo aceptada", "message": "{{character}} fue aceptado en TibiaHub; la promoción dentro del juego sigue pendiente." }
+                        }
+                    },
                     "raffle": {
+                        "global": { "title": "Actividades globales", "subtitle": "Crea y supervisa concursos por servidor y entre servidores.", "crossServer": "Todos los servidores de Tibia" },
+                        "workspace": {
+                            "register": "Registrarse en la rifa", "deliveryHistory": "Historial de entrega",
+                            "create": "Crear rifa", "manageRaffles": "Administrar rifas", "retry": "Intentar de nuevo", "registered": "Registrados", "eligible": "Elegibles", "excluded": "Excluidos", "unscheduled": "Sin programar", "ready": "Lista ahora", "countdown": "{{days}}d {{hours}}h {{minutes}}m", "executionFailed": "La ejecución falló; requiere revisión del gestor.", "frozenAt": "Snapshot congelado el {{value}}", "snapshotPending": "La elegibilidad aún no se ha congelado.", "privateDraw": "Los controles del sorteo son privados", "privateDrawHelp": "Solo un gestor explícitamente autorizado puede revisar elegibilidad u operar el sorteo.", "privateResult": "Los resultados son privados y esperan publicación.", "publicLink": "Abrir resultado publicado", "historyLabel": "Rifa histórica",
+                            "positions": { "second": "Segundo lugar", "first": "Primer lugar" }, "errors": { "title": "El espacio de rifas no está disponible", "help": "Las demás páginas siguen disponibles. Intenta cargar las rifas nuevamente." },
+                            "empty": { "upcoming": "No hay rifas próximas", "participants": "Aún no hay listas de participantes", "eligibility": "Aún no hay revisiones de elegibilidad", "draw": "Ningún sorteo está listo", "results": "Aún no hay resultados", "history": "No hay rifas históricas", "help": "Las rifas nuevas e históricas aparecerán aquí cuando estén disponibles." },
+                            "timeline": { "label": "Progreso de la rifa", "draft": "Borrador", "registration": "Registro", "eligibility": "Revisión de elegibilidad", "frozen": "Snapshot congelado", "scheduled": "Programada", "running": "En ejecución", "private": "Revisión privada", "published": "Publicada", "delivery": "Entrega", "completed": "Completada" },
+                            "scopes": { "guild": { "title": "Rifa de guild", "help": "Solo la guild fija y sus miembros elegibles." }, "server": { "title": "Concurso de servidor", "help": "Concurso público limitado a un servidor de Tibia." }, "global": { "title": "Concurso global", "help": "Concurso entre servidores administrado por admins globales." } },
+                            "fields": { "guild": "Guild", "server": "Servidor", "title": "Nombre", "purpose": "Propósito", "timezone": "Zona horaria", "schedule": "Fecha y hora", "showParticipants": "Mostrar públicamente los nombres de participantes" },
+                            "wizard": { "title": "Crear una actividad", "step1": "Paso 1 de 2 · Elige un alcance permitido", "step2": "Paso 2 de 2 · Configura la actividad", "continue": "Continuar", "back": "Atrás", "create": "Crear actividad", "creating": "Creando...", "confirm": "Confirmo el alcance, horario, resultados privados iniciales y plazo de entrega de 24 horas.", "confirmRequired": "Confirma las reglas antes de crear la actividad.", "invalidSchedule": "Elige una fecha, hora y zona horaria válidas.", "createError": "La actividad no pudo crearse de forma segura.", "guildRules": "La elegibilidad usa cinco días de actividad. Los resultados permanecen privados hasta publicarse; los premios deben entregarse en 24 horas." }
+                        },
+                        "legacyLabel": "Historial de rifas legacy — no lo utiliza el scheduler automático",
+                        "operations": {
+                            "navigation": "Rifas Automáticas", "title": "Rifas Automáticas del Gremio", "subtitle": "Programa, revisa, publica y entrega sorteos autoritativos del gremio.",
+                            "prepare": "Preparar rifa", "purpose": "Propósito", "test": "Prueba", "real": "Real", "testLabel": "PRUEBA", "guild": "Gremio", "name": "Nombre de la rifa", "timezone": "Zona horaria IANA",
+                            "localSchedule": "Fecha y hora programada", "localEquivalent": "Local: {{value}}", "utcEquivalent": "UTC: {{value}}", "save": "Guardar rifa programada",
+                            "rules": "Solo pueden participar miembros actuales del gremio con actividad válida durante los cinco días anteriores al sorteo. Los ganadores se seleccionan automáticamente. El segundo lugar recibe 100 Tibia Coins y el primer lugar recibe 250 Tibia Coins. Los premios se entregarán dentro de las 24 horas posteriores al sorteo.",
+                            "confirmReal": "Confirmo que esta es una rifa real independiente y que el horario es correcto.", "fridayExample": "Ejemplo de preparación: viernes 24 de julio de 2026 a las 8:00 PM America/Chicago equivale al 25 de julio de 2026 a la 01:00 UTC. No uses una fecha pasada.",
+                            "secondPlace": "Segundo Lugar", "firstPlace": "Primer Lugar", "scheduledLocal": "Hora local programada", "scheduledUtc": "Hora UTC programada", "retryState": "Número de reintentos", "lastFailure": "Último fallo",
+                            "preview": "Previsualizar elegibilidad", "freeze": "Congelar snapshot", "testCharacter": "Personaje local existente", "addTestParticipant": "Agregar participante de prueba", "eligibleCount": "{{count}} elegibles", "excludedCount": "{{count}} excluidos", "snapshotAt": "Corte: {{value}}", "staleWarning": "La información de membresía o actividad puede estar desactualizada. Actualiza los datos antes de congelar.",
+                            "privateReview": "Pendiente de revisión privada. Los visitantes públicos no pueden ver estos ganadores.", "publish": "Publicar resultados", "unpublish": "Volver a privado", "rerunTitle": "Repetir posiciones", "rerunReason": "Razón obligatoria", "rerunWarning": "Los resultados anteriores permanecen en el historial. Una repetición vuelve la publicación a revisión privada y puede afectar el seguimiento de entrega.", "rerun": "Repetir posiciones seleccionadas",
+                            "execution": { "pending": "Pendiente", "claimed": "Reservada", "running": "En ejecución", "failed": "Fallida", "succeeded": "Completada" },
+                            "delivery": { "pending": "Pendiente", "delivered": "Entregado", "disputed": "En disputa", "cancelled": "Cancelado", "managerNote": "Actualizado por el gestor de la rifa" },
+                            "draw": { "preparing": "Preparando sorteo", "secondRolling": "Ronda del segundo lugar", "secondReveal": "Segundo lugar revelado", "pause": "Preparando el primer lugar", "firstRolling": "Ronda del primer lugar", "complete": "Resultados privados listos", "publicComplete": "Resultados publicados", "replay": "Repetir revelación" },
+                            "errors": { "load": "No se pudieron cargar las rifas automáticas.", "confirmReal": "Se requiere confirmación explícita para una rifa real.", "future": "Las rifas reales requieren un horario futuro válido.", "create": "No se pudo crear la rifa.", "rerun": "No se pudieron repetir las posiciones seleccionadas." }
+                        },
+                        "testRun": {
+                            "eligibilityDays": "Días de elegibilidad", "participantVisibility": "Mostrar lista de participantes", "confirmCreation": "Confirmo que esta es una rifa de prueba aislada que usa únicamente cuentas locales existentes.", "deliveryNotice": "Los premios de prueba usan el mismo plazo de entrega de 24 horas que las rifas reales.",
+                            "enabled": "Habilitado", "disabled": "Deshabilitado", "unavailable": "No disponible", "scheduler": "Planificador", "heartbeat": "Último latido: {{value}}", "jobState": "Estado del trabajo", "notClaimed": "Aún no reservada", "publicState": "Estado del resultado público", "private": "Privado", "published": "Publicado", "publicLink": "Página pública de prueba",
+                            "notificationsTitle": "Notificaciones de prueba", "notificationsEmpty": "Aún no hay notificaciones para esta rifa de prueba.", "markRead": "Marcar como leída",
+                            "retryReason": "Razón del reintento", "retry": "Reintentar ejecución de prueba fallida", "testParticipants": "Participantes de prueba", "testParticipant": "PARTICIPANTE DE PRUEBA", "overrideReason": "Razón obligatoria de la excepción", "overrideActive": "Excepción de elegibilidad: {{value}}", "forceEligible": "Forzar elegible", "forceExcluded": "Forzar excluido", "removeParticipantConfirm": "¿Eliminar esta cuenta únicamente de la rifa de prueba?", "removeAssociation": "Eliminar de la rifa de prueba",
+                            "overdue": "Atrasado", "deadline": "Plazo de entrega: {{value}}", "deliveredAt": "Actualizado {{value}} por {{actor}}", "note": "Nota: {{value}}", "deliveredOverride": "Permitir repetir un premio de prueba entregado (solo administrador global)", "deliveredOverrideReason": "Razón obligatoria para ignorar la protección del premio entregado",
+                            "cleanupTitle": "Limpieza de prueba", "cleanupWarning": "Archivar elimina únicamente asociaciones de participantes de la rifa de prueba. Se preservan usuarios, gremios, anuncios, historial de auditoría y rifas reales.", "cleanupReason": "Razón de la limpieza", "cleanupConfirm": "Escribe ARCHIVE TEST RAFFLE para confirmar", "cleanup": "Archivar rifa de prueba", "cleanupSummary": "Limpieza completada: {{participant_associations_removed}} asociaciones eliminadas; {{users_modified}} usuarios, {{guilds_modified}} gremios y {{real_raffles_modified}} rifas reales modificados.",
+                            "errors": { "confirmCreation": "Se requiere confirmación explícita antes de crear una rifa de prueba." },
+                            "checklist": { "title": "Lista de verificación de prueba", "schedulerHealthy": "Planificador saludable", "snapshotFrozen": "Snapshot congelado", "participantsEligible": "Participantes elegibles", "drawOnce": "Sorteo ejecutado una vez", "secondReveal": "Revelación del segundo lugar verificada", "firstReveal": "Revelación del primer lugar verificada", "reruns": "Repeticiones probadas", "delivery": "Entrega probada", "publication": "Publicación probada", "notifications": "Notificaciones probadas", "cleanup": "Limpieza completada" }
+                        },
                         "eventNotFound": "Evento no encontrado",
                         "winner": "GANADOR",
                         "congratsMessage": "¡Felicidades! Tu premio te espera.",

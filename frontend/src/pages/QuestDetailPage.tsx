@@ -76,7 +76,13 @@ export default function QuestDetailPage() {
             <h1 className="text-3xl font-bold text-white">{quest.name}</h1>
           </div>
 
-          <p className="mb-4 text-slate-300">{quest.description || 'Description not available.'}</p>
+          {quest.group_name ? (
+            <div className="mb-4 inline-flex rounded-md border border-amber-400/30 bg-amber-500/10 px-3 py-1 text-xs text-amber-200">
+              Group: {quest.group_name}
+            </div>
+          ) : null}
+
+          <p className="mb-4 text-slate-300">{quest.description || 'Details not available yet.'}</p>
 
           <div className="mb-6 grid gap-3 sm:grid-cols-2 lg:grid-cols-4 text-sm">
             <div className="rounded-lg bg-slate-950/60 p-3 text-slate-300">Min level: {quest.min_level ?? 'N/A'}</div>
@@ -95,6 +101,19 @@ export default function QuestDetailPage() {
               </ul>
             ) : (
               <p className="text-sm text-slate-500">No explicit requirements available.</p>
+            )}
+          </div>
+
+          <div className="mb-6">
+            <h2 className="mb-2 text-lg font-semibold text-amber-200">Rewards</h2>
+            {quest.rewards && quest.rewards.length > 0 ? (
+              <ul className="space-y-2">
+                {quest.rewards.map((item, index) => (
+                  <li key={`${item}-${index}`} className="rounded-lg border border-slate-800 bg-slate-950/60 px-3 py-2 text-sm text-slate-300">{item}</li>
+                ))}
+              </ul>
+            ) : (
+              <p className="text-sm text-slate-500">Details not available yet.</p>
             )}
           </div>
 

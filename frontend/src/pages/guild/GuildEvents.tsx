@@ -2,8 +2,12 @@ import React, { useEffect, useState } from 'react';
 import { guildApi, Event } from '../../services/guild';
 
 import { Plus, CalendarClock, Clock, CheckCircle2, XCircle, HelpCircle } from 'lucide-react';
+import { useAuth } from '../../context/AuthContext';
+import { useGuildContext } from '../../utils/guildContext';
 
 export default function Events() {
+    const { user } = useAuth();
+    const guildName = useGuildContext(user);
 
     const [events, setEvents] = useState<Event[]>([]);
     const [loading, setLoading] = useState(true);
@@ -20,7 +24,11 @@ export default function Events() {
     const loadData = async () => {
         try {
             setLoading(true);
-            const data = await guildApi.getEvents();
+            if (!guildName) {
+                setEvents([]);
+                return;
+            }
+            const data = await guildApi.getEvents(0, 20, guildName);
             // Mocking attendance data for now as the API response doesn't nest it fully yet in my simple service
             // In a real app we'd fetch attendance status per event or include it in the event object
             setEvents(data);
@@ -33,17 +41,18 @@ export default function Events() {
 
     useEffect(() => {
         loadData();
-    }, []);
+    }, [guildName]);
 
     const handleCreate = async (e: React.FormEvent) => {
         e.preventDefault();
         setCreating(true);
         try {
+            if (!guildName) throw new Error('Missing guild context');
             await guildApi.createEvent({
                 ...formData,
                 start_time: new Date(formData.start_time).toISOString(),
                 end_time: formData.end_time ? new Date(formData.end_time).toISOString() : null
-            });
+            }, guildName);
             setShowModal(false);
             setFormData({ title: '', description: '', start_time: '', end_time: '', type: 'hunt' });
             loadData();

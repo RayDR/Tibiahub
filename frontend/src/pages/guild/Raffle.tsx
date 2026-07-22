@@ -23,8 +23,7 @@ import { useTranslation } from 'react-i18next';
 import { useAuth } from '../../context/AuthContext';
 import { useToast } from '../../context/ToastContext';
 import { guildApi } from '../../services/guild';
-import { guildManagementApi } from '../../services/guildManagement';
-import { Raffle, RaffleSimulation, raffleApi } from '../../services/raffle';
+import { Raffle, RaffleAccessMode, RaffleSimulation, RaffleStatus, raffleApi } from '../../services/raffle';
 
 // ---------------------------------------------------------------------------
 // Helpers
@@ -121,7 +120,14 @@ export default function RafflePage() {
   const [activeTab, setActiveTab] = useState<Tab>('overview');
   const [simulation, setSimulation] = useState<RaffleSimulation | null>(null);
 
-  const [createForm, setCreateForm] = useState({
+  const [createForm, setCreateForm] = useState<{
+    title: string;
+    description: string;
+    guild_name: string;
+    access_mode: RaffleAccessMode;
+    show_participants: boolean;
+    prizes: Array<{ name: string; reward: string }>;
+  }>({
     title: '',
     description: '',
     guild_name: '',
@@ -137,7 +143,6 @@ export default function RafflePage() {
   const [rerunReason, setRerunReason] = useState('');
   const [manualCharacter, setManualCharacter] = useState('');
   const [editMode, setEditMode] = useState(false);
-  const [availableGuilds, setAvailableGuilds] = useState<string[]>([]);
 
   const isLeader = ['leader', 'vice leader', 'guild leader', 'alpha warbringer', 'bloodhowl marshal'].includes(
     (user?.guild_rank || '').toLowerCase(),
@@ -153,13 +158,6 @@ export default function RafflePage() {
       } catch { setRafflesEnabled(true); }
     })();
   }, []);
-  useEffect(() => {
-    if (!canManage) return;
-    void (async () => {
-      try { setAvailableGuilds(await guildManagementApi.getGuilds()); }
-      catch { setAvailableGuilds([]); }
-    })();
-  }, [canManage]);
   useEffect(() => {
     if (!createForm.guild_name && user?.guild_name) {
       setCreateForm((c) => ({ ...c, guild_name: user.guild_name || '' }));
@@ -420,6 +418,7 @@ export default function RafflePage() {
   return (
     <div className="space-y-6">
       <div className="rounded-2xl border border-slate-800 bg-gradient-to-br from-slate-900/80 to-slate-950 p-6">
+        <div className="mb-3 inline-flex rounded-full border border-slate-600 px-3 py-1 text-xs text-slate-300">{t('raffle.legacyLabel')}</div>
         <div className="flex items-center gap-3">
           <FontAwesomeIcon icon={faTrophy} className="h-6 w-6 text-amber-400" />
           <h1 className="text-2xl font-bold text-slate-100">{t('raffle.console.title')}</h1>
@@ -442,27 +441,7 @@ export default function RafflePage() {
             required
           />
 
-          {user?.is_superuser && availableGuilds.length > 0 ? (
-            <select
-              value={createForm.guild_name}
-              onChange={(e) => setCreateForm((c) => ({ ...c, guild_name: e.target.value }))}
-              className="w-full rounded-xl border border-slate-700 bg-slate-950 px-4 py-2.5 text-slate-100 outline-none focus:border-amber-500"
-              required
-            >
-              <option value="">{t('raffle.create.selectGuild')}</option>
-              {availableGuilds.map((g) => (
-                <option key={g} value={g}>{g}</option>
-              ))}
-            </select>
-          ) : (
-            <input
-              value={createForm.guild_name}
-              onChange={(e) => setCreateForm((c) => ({ ...c, guild_name: e.target.value }))}
-              placeholder={t('raffle.create.guildPlaceholder')}
-              className="w-full rounded-xl border border-slate-700 bg-slate-950 px-4 py-2.5 text-slate-100 outline-none focus:border-amber-500"
-              required
-            />
-          )}
+          <input value={createForm.guild_name} readOnly aria-readonly="true" className="w-full rounded-xl border border-slate-800 bg-slate-950/60 px-4 py-2.5 text-slate-400" required />
 
           <div className="grid gap-3 sm:grid-cols-2">
             <div>
@@ -653,7 +632,7 @@ export default function RafflePage() {
                       <label className="mb-1 block text-xs text-slate-400">{t('raffle.edit.statusLabel')}</label>
                       <select
                         value={selectedRaffle.status}
-                        onChange={(e) => setRaffles((curr) => curr.map((r) => r.id === selectedRaffle.id ? { ...r, status: e.target.value } : r))}
+                        onChange={(e) => setRaffles((curr) => curr.map((r) => r.id === selectedRaffle.id ? { ...r, status: e.target.value as RaffleStatus } : r))}
                         className="w-full rounded-xl border border-slate-700 bg-slate-900 px-3 py-2 text-slate-100"
                       >
                         <option value="draft">{t('raffle.edit.statusDraft')}</option>
@@ -768,7 +747,7 @@ export default function RafflePage() {
                                 <div className={participant.is_eligible ? 'text-emerald-400' : 'text-slate-500'}>
                                   {participant.is_eligible ? t('raffle.participants.eligible') : t('raffle.participants.ineligible')}
                                 </div>
-                                <div>{t('raffle.participants.weight')} {participant.weight.toFixed(1)}</div>
+                                <div>{t('raffle.participants.weight')} {Number.isFinite(Number(participant.weight)) ? Number(participant.weight).toFixed(1) : '1.0'}</div>
                               </div>
                               <div className="flex gap-0.5">
                                 {[1, 2, 3, 4, 5].map((w) => (

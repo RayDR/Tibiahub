@@ -1,12 +1,16 @@
 import api from './api';
 
 export type RaffleAccessMode = 'guild_only' | 'world_only' | 'public';
+export type RaffleScope = 'guild' | 'server' | 'global';
 export type RaffleStatus = 'draft' | 'open' | 'closed' | 'completed' | 'cancelled' | 'deleted';
 
 export interface RafflePrizeInput {
   name: string;
   reward: string;
   order_index?: number;
+  position?: 'second' | 'first';
+  amount?: number;
+  currency?: string;
 }
 
 export interface RaffleParticipant {
@@ -19,6 +23,9 @@ export interface RaffleParticipant {
   weight_multiplier: number;
   is_eligible: boolean;
   created_at: string;
+  source?: string;
+  eligibility_override?: boolean | null;
+  eligibility_override_reason?: string;
 }
 
 export interface RafflePrize {
@@ -26,6 +33,9 @@ export interface RafflePrize {
   name: string;
   reward: string;
   order_index: number;
+  position?: 'second' | 'first';
+  amount?: number;
+  currency?: string;
 }
 
 export interface RaffleWinner {
@@ -49,6 +59,8 @@ export interface Raffle {
   title: string;
   description?: string;
   guild_name: string;
+  scope_type: RaffleScope;
+  world_name?: string;
   access_mode: RaffleAccessMode;
   show_participants: boolean;
   participant_count: number;
@@ -67,6 +79,50 @@ export interface Raffle {
   prizes: RafflePrize[];
   current_winners: RaffleWinner[];
   history: RaffleWinner[];
+  purpose: 'test' | 'real' | 'legacy';
+  timezone_name: string;
+  eligibility_days: number;
+  publication_status: 'private' | 'published';
+  execution_state: 'pending' | 'claimed' | 'running' | 'failed' | 'succeeded';
+  executed_at?: string;
+  scheduler_job_id?: string;
+  claimed_at?: string;
+  lease_expires_at?: string;
+  last_error_code?: string;
+  last_error_summary?: string;
+  retry_count: number;
+  next_retry_at?: string;
+}
+
+export interface EligibilityPreview {
+  raffle_id: number; cutoff_at: string; timezone_name: string; eligibility_days: number;
+  candidate_count: number; eligible_count: number; excluded_count: number; snapshot_hash: string;
+  persisted: boolean; snapshot_id?: number;
+  entries: Array<{ character_name?: string; guild_name?: string; guild_rank?: string; last_activity_at?: string; is_eligible: boolean; exclusion_code?: string; exclusion_summary?: string }>;
+}
+
+export interface AutomaticResult {
+  id: number; prize_id: number; prize_position: 'second' | 'first'; prize_name: string;
+  amount: number; currency: string; character_name: string; selection_index: number;
+  candidate_count: number; delivery_status: 'pending' | 'delivered' | 'disputed' | 'cancelled'; delivery_deadline_at: string;
+  delivered_at?: string; delivered_by_name?: string; delivery_note?: string;
+  delivery_history?: Array<{ previous_status: string; new_status: string; actor: string; note?: string; admin_override: boolean; created_at: string }>;
+}
+
+export interface AutomaticRun {
+  id: number; raffle_id: number; run_number: number; snapshot_id: number; parent_run_id?: number;
+  trigger: string; state: string; started_at?: string; completed_at?: string; failure_code?: string;
+  failure_summary?: string; algorithm_version: string; entropy_commitment?: string; results: AutomaticResult[];
+}
+
+export interface RaffleWorkspaceItem {
+  id: number; public_code: string; title: string; guild_name: string; scope_type: RaffleScope; world_name?: string;
+  purpose: 'test' | 'real' | 'legacy'; status: RaffleStatus; scheduled_run_at?: string;
+  publication_status: 'private' | 'published'; execution_state: Raffle['execution_state']; participant_count: number;
+  last_error_summary?: string; retry_count: number;
+  eligibility?: { candidate_count: number; eligible_count: number; excluded_count: number; cutoff_at: string; frozen: boolean };
+  winners: Array<{ prize_position: 'second' | 'first'; prize_name: string; amount: number; currency: string; character_name: string; delivery_status: AutomaticResult['delivery_status']; delivery_deadline_at: string }>;
+  capabilities: { manage: boolean; publish: boolean };
 }
 
 export interface RaffleExecution {
@@ -101,7 +157,34 @@ export interface RaffleSimulation {
   warnings: string[];
 }
 
+export interface PublicRaffle {
+  public_code: string;
+  title: string;
+  description?: string;
+  guild_name: string;
+  access_mode: RaffleAccessMode;
+  purpose: 'test' | 'real' | 'legacy';
+  timezone_name: string;
+  scheduled_run_at?: string;
+  status: RaffleStatus;
+  publication_status: 'private' | 'reviewed' | 'published';
+  show_participants: boolean;
+  participant_count: number;
+  participants: Array<{ character_name: string; guild_rank?: string }>;
+  prizes: RafflePrize[];
+  winners: Array<{
+    prize_position: 'second' | 'first';
+    prize_name: string;
+    amount: number;
+    currency: string;
+    character_name: string;
+    delivery_status: 'pending' | 'delivered' | 'disputed' | 'cancelled';
+    delivery_deadline_at: string;
+  }>;
+}
+
 export const raffleApi = {
+  async workspace(): Promise<RaffleWorkspaceItem[]> { return (await api.get('/raffles/workspace')).data; },
   async list(): Promise<Raffle[]> {
     const response = await api.get('/raffles/');
     return response.data;
@@ -112,7 +195,7 @@ export const raffleApi = {
     return response.data;
   },
 
-  async update(raffleId: number, payload: Partial<{ title: string; description: string; guild_name: string; access_mode: RaffleAccessMode; show_participants: boolean; visibility: string; registration_enabled: boolean; run_mode: string; scheduled_run_at: string; archive_after_days: number; status: RaffleStatus }>): Promise<Raffle> {
+  async update(raffleId: number, payload: Partial<{ title: string; description: string; guild_name: string; access_mode: RaffleAccessMode; show_participants: boolean; visibility: string; registration_enabled: boolean; run_mode: string; scheduled_run_at: string; timezone_name: string; eligibility_days: number; archive_after_days: number; status: RaffleStatus }>): Promise<Raffle> {
     const response = await api.put(`/raffles/${raffleId}`, payload);
     return response.data;
   },
@@ -122,7 +205,7 @@ export const raffleApi = {
     return response.data;
   },
 
-  async create(payload: { title: string; description?: string; guild_name: string; access_mode?: RaffleAccessMode; show_participants?: boolean; prizes: RafflePrizeInput[] }): Promise<Raffle> {
+  async create(payload: { title: string; description?: string; guild_name: string; scope_type?: RaffleScope; world_name?: string; access_mode?: RaffleAccessMode; show_participants?: boolean; prizes: RafflePrizeInput[]; purpose?: 'test' | 'real' | 'legacy'; run_mode?: 'manual' | 'automatic'; scheduled_run_at?: string; timezone_name?: string; eligibility_days?: number }): Promise<Raffle> {
     const response = await api.post('/raffles/', payload);
     return response.data;
   },
@@ -162,22 +245,22 @@ export const raffleApi = {
     return response.data;
   },
 
-  async getPublic(raffleId: number): Promise<Raffle> {
+  async getPublic(raffleId: number): Promise<PublicRaffle> {
     const response = await api.get(`/raffles/public/${raffleId}`);
     return response.data;
   },
 
-  async getPublicByCode(publicCode: string): Promise<Raffle> {
+  async getPublicByCode(publicCode: string): Promise<PublicRaffle> {
     const response = await api.get(`/raffles/public/code/${publicCode}`);
     return response.data;
   },
 
-  async registerPublic(raffleId: number, characterName: string): Promise<Raffle> {
+  async registerPublic(raffleId: number, characterName: string): Promise<PublicRaffle> {
     const response = await api.post(`/raffles/public/${raffleId}/register`, { character_name: characterName });
     return response.data;
   },
 
-  async registerPublicByCode(publicCode: string, characterName: string): Promise<Raffle> {
+  async registerPublicByCode(publicCode: string, characterName: string): Promise<PublicRaffle> {
     const response = await api.post(`/raffles/public/code/${publicCode}/register`, { character_name: characterName });
     return response.data;
   },
@@ -190,5 +273,35 @@ export const raffleApi = {
   async softDelete(raffleId: number, reason?: string): Promise<Raffle> {
     const response = await api.delete(`/raffles/${raffleId}`, { params: { reason } });
     return response.data;
+  },
+  async previewEligibility(raffleId: number): Promise<EligibilityPreview> {
+    const response = await api.post(`/raffles/${raffleId}/eligibility/preview`);
+    return response.data;
+  },
+  async freezeEligibility(raffleId: number): Promise<EligibilityPreview> {
+    const response = await api.post(`/raffles/${raffleId}/eligibility/freeze`);
+    return response.data;
+  },
+  async runs(raffleId: number): Promise<AutomaticRun[]> {
+    const response = await api.get(`/raffles/${raffleId}/runs`);
+    return response.data;
+  },
+  async rerunAutomatic(raffleId: number, positions: Array<'second' | 'first'>, reason: string, overrideDelivered = false, overrideReason?: string): Promise<AutomaticRun> {
+    const response = await api.post(`/raffles/${raffleId}/reruns`, { positions, reason, override_delivered: overrideDelivered, override_reason: overrideReason });
+    return response.data;
+  },
+  async publish(raffleId: number): Promise<void> { await api.post(`/raffles/${raffleId}/publish`); },
+  async unpublish(raffleId: number): Promise<void> { await api.post(`/raffles/${raffleId}/unpublish`); },
+  async updateDelivery(raffleId: number, resultId: number, status: AutomaticResult['delivery_status'], note?: string, adminOverride = false): Promise<void> {
+    await api.patch(`/raffles/${raffleId}/results/${resultId}/delivery`, { status, note, admin_override: adminOverride });
+  },
+  async overrideTestEligibility(raffleId: number, participantId: number, eligible: boolean, reason: string): Promise<void> {
+    await api.patch(`/raffles/${raffleId}/participants/${participantId}/test-eligibility-override`, { eligible, reason });
+  },
+  async retryTest(raffleId: number, reason: string): Promise<void> {
+    await api.post(`/raffles/${raffleId}/test-retry`, { reason });
+  },
+  async cleanupTest(raffleId: number, reason: string): Promise<{ raffle_id: number; archived: boolean; participant_associations_removed: number; users_modified: number; guilds_modified: number; real_raffles_modified: number }> {
+    return (await api.post(`/raffles/${raffleId}/test-cleanup`, { confirmation: 'ARCHIVE TEST RAFFLE', reason })).data;
   },
 };
