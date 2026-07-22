@@ -18,10 +18,12 @@ from app.models.user_character import UserCharacter
 from app.models.creature import Creature
 from app.models.events import Event
 from app.models.raffle import Raffle
+from app.models.workspace_audit import WorkspaceAudit
 from app.api.v1.endpoints.auth import get_current_admin_user, get_current_user
 from app.core.permissions import can_manage_guild, is_global_admin
 from app.services.media_asset_service import UnsafeMediaError, validate_raster_image
 from app.services.tibia_validation_service import TibiaValidationService
+from app.services.tibia_api import TibiaAPIError, get_guild_info
 from app.core import config, security
 from app.schemas.admin import (
     TibiaAPIStatus, 
@@ -259,7 +261,7 @@ def get_user_detail(
     
     if not user:
         raise HTTPException(status_code=404, detail="User not found")
-    
+
     characters = db.query(UserCharacter).filter(
         UserCharacter.user_id == user.id
     ).all()
@@ -515,6 +517,12 @@ def update_user(
     
     if not user:
         raise HTTPException(status_code=404, detail="User not found")
+
+    previous_capabilities = {
+        "admin": bool(user.is_superuser),
+        "moderator": bool(user.is_moderator),
+        "writer": bool(user.is_writer),
+    }
     
     # Update fields if provided
     if user_update.username is not None:
@@ -534,6 +542,8 @@ def update_user(
         user.is_active = user_update.is_active
     
     if user_update.is_superuser is not None:
+        if user.is_superuser and not user_update.is_superuser and db.query(User.id).filter(User.is_superuser.is_(True), User.is_active.is_(True)).count() <= 1:
+            raise HTTPException(status_code=409, detail="At least one active global administrator is required")
         user.is_superuser = user_update.is_superuser
     if user_update.is_moderator is not None:
         user.is_moderator = user_update.is_moderator
@@ -542,6 +552,17 @@ def update_user(
     
     if user_update.password is not None:
         user.hashed_password = security.get_password_hash(user_update.password)
+
+    current_capabilities = {
+        "admin": bool(user.is_superuser),
+        "moderator": bool(user.is_moderator),
+        "writer": bool(user.is_writer),
+    }
+    if current_capabilities != previous_capabilities:
+        db.add(WorkspaceAudit(actor_id=current_user.id, workspace_type="admin", action="user_capabilities_updated",
+                              target_type="user", target_id=str(user.id), assisted=False,
+                              safe_metadata={"actor_context": "system", "before": previous_capabilities,
+                                             "after": current_capabilities}))
     
     db.commit()
     db.refresh(user)
@@ -683,7 +704,7 @@ def update_user_character(
 
 
 @router.post("/sync-guild", response_model=GuildSyncResult)
-def sync_guild_members(
+async def sync_guild_members(
     guild_name: str = "Bloodborne Warhowl",
     current_user: User = Depends(get_admin_or_guild_leader),
     db: Session = Depends(get_db)
@@ -697,90 +718,69 @@ def sync_guild_members(
         raise HTTPException(status_code=403, detail="You can only manage your own guild")
 
     try:
-        # Fetch guild data from Tibia API with retry + bounded timeout.
-        response = None
-        last_error: Optional[str] = None
-        for _attempt in range(3):
-            try:
-                response = requests.get(
-                    f"https://api.tibiadata.com/v4/guild/{guild_name}",
-                    timeout=(5, 15),
-                )
-                break
-            except requests.exceptions.RequestException as exc:
-                last_error = str(exc)
-
-        if response is None:
-            raise HTTPException(status_code=503, detail=f"Guild sync provider unavailable: {last_error or 'timeout'}")
-        
-        if response.status_code != 200:
-            raise HTTPException(
-                status_code=500,
-                detail=f"Failed to fetch guild data. Status: {response.status_code}"
-            )
-        
-        data = response.json()
-        
-        if "guild" not in data or "members" not in data["guild"]:
-            raise HTTPException(
-                status_code=404,
-                detail="Guild not found or invalid response from Tibia API"
-            )
-        
-        guild_data = data["guild"]
-        members = guild_data.get("members", [])
-        
+        guild_data = await get_guild_info(guild_name)
+        if not guild_data:
+            raise HTTPException(status_code=404, detail="Guild not found in TibiaData")
+        members = guild_data.get("members") or []
+        member_by_name = {
+            str(member.get("name") or "").strip().casefold(): member
+            for member in members if str(member.get("name") or "").strip()
+        }
         synced_count = 0
         new_characters = 0
         updated_characters = 0
         invalid_users = []
-        
-        # Process each guild member
-        for member in members:
-            character_name = member.get("name")
-            rank = member.get("rank")
-            level = member.get("level")
-            vocation = member.get("vocation")
-            
-            if not character_name:
+        linked_user_ids: set[int] = set()
+
+        for char in db.query(UserCharacter).all():
+            member = member_by_name.get((char.character_name or "").strip().casefold())
+            if not member:
                 continue
-            
-            # Find or create character
-            char = db.query(UserCharacter).filter(
-                UserCharacter.character_name == character_name
-            ).first()
-            
-            if char:
-                # Update existing character
-                char.level = level
-                char.vocation = vocation
-                char.last_seen = datetime.utcnow()
-                updated_characters += 1
-                
-                # Update user's guild rank if they have a linked account
-                if char.user:
-                    char.user.guild_rank = rank
-                    synced_count += 1
-            else:
-                # Check if this character should be linked to a user
-                # For now, just track it as a potential new character
-                new_characters += 1
-        
-        # Find users with characters not in the guild
-        all_user_chars = db.query(UserCharacter).all()
-        guild_char_names = [m.get("name") for m in members]
-        
-        for char in all_user_chars:
-            if char.character_name not in guild_char_names and char.user:
-                invalid_users.append({
-                    "user_id": char.user.id,
-                    "username": char.user.username,
-                    "character_name": char.character_name,
-                    "reason": "Character not found in guild"
-                })
-        
+            char.level = member.get("level")
+            char.vocation = member.get("vocation")
+            char.guild_name = guild_name
+            char.guild_rank = member.get("rank")
+            char.world_name = guild_data.get("world") or char.world_name
+            char.last_seen = datetime.utcnow()
+            updated_characters += 1
+            if char.user:
+                linked_user_ids.add(char.user.id)
+                char.user.guild_name = guild_name
+                char.user.world_name = char.world_name
+                if not char.user.tibia_character_name or (char.user.tibia_character_name or "").casefold() == char.character_name.casefold():
+                    char.user.guild_rank = char.guild_rank or "Member"
+
+        existing_names = {
+            (name or "").strip().casefold()
+            for (name,) in db.query(UserCharacter.character_name).all()
+        }
+        new_characters = sum(1 for name in member_by_name if name not in existing_names)
+        synced_count = len(linked_user_ids)
+        unlinked_users = 0
+
+        scoped_users = db.query(User).filter(func.lower(User.guild_name) == guild_name.strip().lower()).all()
+        for user in scoped_users:
+            matching = [char for char in user.characters if (char.character_name or "").strip().casefold() in member_by_name]
+            if matching:
+                continue
+            for char in user.characters:
+                if (char.guild_name or "").strip().casefold() == guild_name.strip().casefold():
+                    char.guild_name = None
+                    char.guild_rank = None
+            invalid_users.append({"user_id": user.id, "username": user.username,
+                                  "character_name": user.tibia_character_name or "",
+                                  "reason": "No linked character remains in the TibiaData guild roster"})
+            user.guild_name = None
+            user.guild_rank = "Unranked"
+            unlinked_users += 1
+
+        if is_global_admin(current_user):
+            db.add(WorkspaceAudit(actor_id=current_user.id, workspace_type="admin_guild_assist",
+                                  guild_name=guild_name, action="guild_membership_synchronized",
+                                  target_type="guild", target_id=guild_name, assisted=True,
+                                  safe_metadata={"actor_context": "system", "source": "tibiadata",
+                                                 "synced_users": synced_count, "unlinked_users": unlinked_users}))
         db.commit()
-        
         return GuildSyncResult(
             success=True,
             guild_name=guild_name,
@@ -789,19 +789,17 @@ def sync_guild_members(
             updated_characters=updated_characters,
             new_characters=new_characters,
             invalid_users=invalid_users,
-            message=f"Successfully synced {synced_count} users with guild {guild_name}"
+            unlinked_users=unlinked_users,
+            message=f"Successfully synchronized {synced_count} linked users with {guild_name}"
         )
-        
-    except requests.exceptions.RequestException as e:
-        raise HTTPException(
-            status_code=503,
-            detail=f"Error connecting to Tibia API: {str(e)}"
-        )
-    except Exception as e:
-        raise HTTPException(
-            status_code=500,
-            detail=f"Error syncing guild: {str(e)}"
-        )
+    except HTTPException:
+        raise
+    except TibiaAPIError as exc:
+        db.rollback()
+        raise HTTPException(status_code=503, detail="TibiaData is temporarily unavailable") from exc
+    except Exception as exc:
+        db.rollback()
+        raise HTTPException(status_code=500, detail="Unable to synchronize guild membership") from exc
 
 
 @router.get("/api-monitor")

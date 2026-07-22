@@ -142,4 +142,5 @@ class GuildSyncResult(BaseModel):
     updated_characters: int
     new_characters: int
     invalid_users: List[dict]
+    unlinked_users: int = 0
     message: str

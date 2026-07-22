@@ -14,7 +14,7 @@ export default function AdminLayout() {
         { key: 'cyclopedia', path: '/admin/bestiary', icon: Database }, { key: 'operations', path: '/admin/data-tools', icon: Wrench },
         { key: 'settings', path: '/admin/settings', icon: Settings },
     ];
-    return <div className="mt-4 space-y-4 sm:mt-8">
+    return <div className="admin-shell mt-4 space-y-4 sm:mt-8">
         <WorkspaceHeader title={t('workspace.admin.title')} subtitle={user.username} badge={t('workspace.admin.badge')} />
         <nav className="-mx-2 flex snap-x gap-2 overflow-x-auto px-2 pb-1 lg:flex-wrap" aria-label={t('workspace.admin.navigation')}>
             {items.map(item => { const Icon = item.icon; const active = location.pathname === item.path || (item.key === 'guilds' && location.pathname.startsWith('/admin/guilds')); return <Link key={item.key} to={item.path} className={`flex min-h-11 shrink-0 items-center gap-2 rounded-lg px-3 text-sm ${active ? 'admin-primary font-semibold' : 'admin-secondary'}`}><Icon className="h-4 w-4" />{t(`workspace.adminNav.${item.key}`)}</Link>; })}
