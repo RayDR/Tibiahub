@@ -17,12 +17,12 @@ export default function AdminGuildWorkspace() {
   return <div className="space-y-4">
     <AssistanceBanner guildName={guild.name} />
     <WorkspaceHeader title={guild.name} subtitle={guild.world_name || t('workspace.common.unknownServer')} badge={t('workspace.assistance.badge')} />
-    <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">{cards.map(([key, value]) => <div key={String(key)} className="rounded-xl border border-slate-800 p-4"><p className="text-xs uppercase text-slate-500">{t(`workspace.common.${key}`)}</p><strong className="mt-1 block">{value}</strong></div>)}</div>
+    <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">{cards.map(([key, value]) => <div key={String(key)} className="admin-panel rounded-xl p-4"><p className="text-xs uppercase text-[color:var(--color-text-muted)]">{t(`workspace.common.${key}`)}</p><strong className="mt-1 block">{value}</strong></div>)}</div>
     <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
-      <Link to={`/admin/management?guild=${encodeURIComponent(guild.name)}`} className="flex min-h-11 items-center justify-center rounded-lg bg-sky-600 px-4 py-2 text-white">{t('workspace.assistance.manage')}</Link>
-      <Link to={`/admin/guilds/${guild.key}/raffles`} className="flex min-h-11 items-center justify-center rounded-lg border border-sky-700 px-4 py-2 text-sky-200">{t('raffle.workspace.manageRaffles')}</Link>
-      <Link to={`/admin/guilds/${guild.key}/leadership`} className="flex min-h-11 items-center justify-center rounded-lg border border-amber-700 px-4 py-2 text-amber-200">{t('leadership.navigation')}</Link>
-      <Link to="/guild" className="flex min-h-11 items-center justify-center rounded-lg border border-slate-700 px-4 py-2">{t('workspace.assistance.publicView')}</Link>
+      <Link to={`/admin/management?guild=${encodeURIComponent(guild.name)}`} className="admin-primary flex min-h-11 items-center justify-center rounded-lg px-4 py-2">{t('workspace.assistance.manage')}</Link>
+      <Link to={`/admin/guilds/${guild.key}/raffles`} className="admin-secondary flex min-h-11 items-center justify-center rounded-lg px-4 py-2">{t('raffle.workspace.manageRaffles')}</Link>
+      <Link to={`/admin/guilds/${guild.key}/leadership`} className="admin-secondary flex min-h-11 items-center justify-center rounded-lg px-4 py-2">{t('leadership.navigation')}</Link>
+      <Link to="/guild" className="admin-secondary flex min-h-11 items-center justify-center rounded-lg px-4 py-2">{t('workspace.assistance.publicView')}</Link>
     </div>
   </div>;
 }

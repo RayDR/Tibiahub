@@ -19,7 +19,7 @@ interface TibiaStatus {
 
 function StatCard({ label, value, sub, color = 'text-slate-100' }: { label: string; value: string | number; sub?: string; color?: string }) {
     return (
-        <div className="bg-slate-900/50 border border-slate-700 rounded-lg p-5">
+        <div className="admin-panel rounded-xl p-5">
             <div className="text-xs text-slate-400 uppercase tracking-wide mb-1">{label}</div>
             <div className={`text-3xl font-bold ${color}`}>{value}</div>
             {sub && <div className="text-xs text-slate-500 mt-1">{sub}</div>}
@@ -73,9 +73,9 @@ export default function Overview() {
     return (
         <div className="space-y-6">
             {/* Header */}
-            <div className="bg-slate-900/50 border border-slate-700 rounded-lg p-4 flex items-center justify-between gap-4">
+            <div className="admin-panel rounded-xl p-4 flex items-center justify-between gap-4">
                 <div className="flex items-center gap-3">
-                    <Activity className="w-5 h-5 text-amber-500" />
+                    <Activity className="w-5 h-5 text-[color:var(--color-primary)]" />
                     <div>
                         <h1 className="text-xl font-semibold text-slate-100">System Overview</h1>
                         <p className="text-sm text-slate-400">Live snapshot of all platform data.</p>
@@ -84,7 +84,7 @@ export default function Overview() {
                 <button
                     onClick={() => void load(true)}
                     disabled={refreshing}
-                    className="flex items-center gap-2 rounded-md border border-slate-700 px-3 py-2 text-sm text-slate-400 hover:text-slate-200 disabled:opacity-50"
+                    className="admin-secondary flex items-center gap-2 rounded-lg px-3 py-2 text-sm disabled:opacity-50"
                 >
                     <RefreshCw className={`w-4 h-4 ${refreshing ? 'animate-spin' : ''}`} />
                     Refresh
@@ -93,7 +93,7 @@ export default function Overview() {
 
             {/* API / Sync Status */}
             <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                <div className="bg-slate-900/50 border border-slate-700 rounded-lg p-5">
+                <div className="admin-panel rounded-xl p-5">
                     <div className="flex items-center gap-2 mb-3">
                         <Globe className="w-4 h-4 text-slate-400" />
                         <span className="text-sm font-medium text-slate-300">Tibia API</span>
@@ -113,7 +113,7 @@ export default function Overview() {
                     {tibiaStatus?.message && <p className="text-xs text-slate-500 mt-1">{tibiaStatus.message}</p>}
                 </div>
 
-                <div className="bg-slate-900/50 border border-slate-700 rounded-lg p-5">
+                <div className="admin-panel rounded-xl p-5">
                     <div className="flex items-center gap-2 mb-3">
                         <Database className="w-4 h-4 text-slate-400" />
                         <span className="text-sm font-medium text-slate-300">Data Version</span>
@@ -145,8 +145,8 @@ export default function Overview() {
                 <div className="grid grid-cols-2 md:grid-cols-3 gap-4">
                     <StatCard label="Quests" value={stats?.quests.total ?? '—'} />
                     <StatCard label="Hunt Zones" value={stats?.hunt_zones.total ?? '—'} />
-                    <div className="bg-slate-900/50 border border-slate-700 rounded-lg p-5 flex items-center justify-center text-slate-600 text-xs italic">
-                        More data coming soon
+                    <div className="admin-panel-muted rounded-xl p-5 flex items-center justify-center text-[color:var(--color-text-muted)] text-xs italic">
+                        No additional metrics available
                     </div>
                 </div>
             </div>

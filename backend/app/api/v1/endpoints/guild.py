@@ -11,6 +11,7 @@ from app.models.guild import Announcement, GuildEvent, EventAttendance, Recruitm
 from app.models.guild_member_snapshot import GuildMemberSnapshot
 from app.models.settings import SystemSettings
 from app.models.user import User
+from app.models.workspace_audit import WorkspaceAudit
 from app.schemas.guild import (
     AnnouncementCreate, AnnouncementResponse,
     EventCreate, EventResponse,
@@ -36,6 +37,14 @@ class SoftDeletePayload(BaseModel):
 def _require_capability(allowed: bool) -> None:
     if not allowed:
         raise HTTPException(status_code=403, detail="Insufficient guild workspace permissions")
+
+
+def _audit_admin_change(db: Session, actor: User, guild_name: str, action: str, target_type: str, target_id: int) -> None:
+    """Record assisted admin mutations as system/audited workspace actions."""
+    if is_global_admin(actor):
+        db.add(WorkspaceAudit(actor_id=actor.id, workspace_type="admin_guild_assist", guild_name=guild_name,
+                               action=action, target_type=target_type, target_id=str(target_id), assisted=True,
+                               safe_metadata={"actor_context": "system", "source": "admin_assistance"}))
 
 
 @router.get("/me")
@@ -155,6 +164,8 @@ def create_announcement(
         guild_name=scoped_guild,
     )
     db.add(announcement)
+    db.flush()
+    _audit_admin_change(db, current_user, scoped_guild, "announcement_created", "announcement", announcement.id)
     db.commit()
     db.refresh(announcement)
     return announcement
@@ -191,6 +202,7 @@ def soft_delete_announcement(
     announcement.deleted_at = datetime.utcnow()
     announcement.deleted_by_user_id = current_user.id
     announcement.delete_reason = payload.reason if payload else None
+    _audit_admin_change(db, current_user, announcement.guild_name, "announcement_deleted", "announcement", announcement.id)
     db.commit()
     db.refresh(announcement)
     return announcement
@@ -210,6 +222,7 @@ def restore_announcement(
     announcement.deleted_at = None
     announcement.deleted_by_user_id = None
     announcement.delete_reason = None
+    _audit_admin_change(db, current_user, announcement.guild_name, "announcement_restored", "announcement", announcement.id)
     db.commit()
     db.refresh(announcement)
     return announcement
@@ -236,6 +249,8 @@ def create_event(
         guild_name=scoped_guild,
     )
     db.add(event)
+    db.flush()
+    _audit_admin_change(db, current_user, scoped_guild, "event_created", "event", event.id)
     db.commit()
     db.refresh(event)
     return event
@@ -272,6 +287,7 @@ def soft_delete_guild_event(
     event.deleted_at = datetime.utcnow()
     event.deleted_by_user_id = current_user.id
     event.delete_reason = payload.reason if payload else None
+    _audit_admin_change(db, current_user, event.guild_name, "event_deleted", "event", event.id)
     db.commit()
     db.refresh(event)
     return event
@@ -291,6 +307,7 @@ def restore_guild_event(
     event.deleted_at = None
     event.deleted_by_user_id = None
     event.delete_reason = None
+    _audit_admin_change(db, current_user, event.guild_name, "event_restored", "event", event.id)
     db.commit()
     db.refresh(event)
     return event

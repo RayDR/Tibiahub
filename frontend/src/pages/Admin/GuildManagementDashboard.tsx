@@ -213,10 +213,10 @@ export default function GuildManagementDashboard() {
         <div className="space-y-4">
             <AssistanceBanner guildName={selectedGuild} />
             {/* Header with guild name and back */}
-            <div className="bg-slate-900/50 border border-slate-700 rounded-lg p-4">
+            <div className="admin-panel rounded-xl p-4">
                 <div className="flex items-center justify-between gap-4 flex-wrap">
                     <div className="flex items-center gap-3">
-                        <Shield className="w-5 h-5 text-amber-500" />
+                        <Shield className="w-5 h-5 text-[color:var(--color-primary)]" />
                         <div>
                             <h1 className="text-xl font-semibold text-slate-100">{selectedGuild}</h1>
                             <p className="text-sm text-slate-400">Guild management — members, events, announcements</p>
@@ -226,21 +226,21 @@ export default function GuildManagementDashboard() {
                         <button
                             onClick={handleSyncGuild}
                             disabled={syncing}
-                            className="flex items-center gap-2 rounded-md bg-amber-600 px-3 py-2 text-sm font-medium text-white hover:bg-amber-500 disabled:opacity-50"
+                            className="admin-primary flex items-center gap-2 rounded-lg px-3 py-2 text-sm font-medium disabled:opacity-50"
                         >
                             <RefreshCw className={`w-4 h-4 ${syncing ? 'animate-spin' : ''}`} />
                             {syncing ? 'Syncing…' : 'Sync from Tibia'}
                         </button>
                         <button
                             onClick={() => navigate('/admin/guilds')}
-                            className="rounded-md border border-slate-700 px-3 py-2 text-sm text-slate-400 hover:text-slate-200"
+                            className="admin-secondary rounded-lg px-3 py-2 text-sm"
                         >
                             ← Change guild
                         </button>
                     </div>
                 </div>
                 {syncResult && (
-                    <div className="mt-3 rounded bg-green-900/20 border border-green-700/40 px-4 py-2 text-sm text-green-300 flex flex-wrap gap-4">
+                    <div className="mt-3 rounded-lg border border-[color:var(--color-success)]/40 bg-[color:var(--color-success)]/10 px-4 py-2 text-sm text-[color:var(--color-success)] flex flex-wrap gap-4">
                         <span>Synced: <strong>{syncResult.synced_users}</strong></span>
                         <span>Updated chars: <strong>{syncResult.updated_characters}</strong></span>
                         <span>Total members: <strong>{syncResult.total_members}</strong></span>
@@ -249,7 +249,7 @@ export default function GuildManagementDashboard() {
             </div>
 
             {/* Tabs */}
-            <div className="flex gap-1 border-b border-slate-700 bg-slate-900/30 rounded-t-lg">
+            <div className="admin-panel-muted flex gap-1 rounded-t-lg border-b">
                 {([
                     { id: 'members', label: 'Members', icon: Users },
                     { id: 'events', label: 'Events', icon: Calendar },
@@ -260,8 +260,8 @@ export default function GuildManagementDashboard() {
                         onClick={() => switchTab(id)}
                         className={`flex items-center gap-2 px-4 py-2.5 border-b-2 text-sm font-medium transition-colors ${
                             activeTab === id
-                                ? 'border-amber-500 text-amber-400'
-                                : 'border-transparent text-slate-400 hover:text-slate-200'
+                                ? 'admin-tab-active'
+                                : 'admin-tab-inactive hover:text-[color:var(--color-text)]'
                         }`}
                     >
                         <Icon className="w-4 h-4" />

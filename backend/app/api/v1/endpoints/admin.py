@@ -220,11 +220,14 @@ def get_all_users(
             UserWithCharacters(
                 id=user.id,
                 username=user.username,
+                display_name=user.display_name,
                 email=user.email,
                 guild_name=user.guild_name,
                 guild_rank=user.guild_rank,
                 is_active=user.is_active,
                 is_superuser=user.is_superuser,
+                is_moderator=user.is_moderator,
+                is_writer=user.is_writer,
                 join_date=user.join_date,
                 created_at=user.created_at,
                 characters=[
@@ -264,11 +267,14 @@ def get_user_detail(
     return UserWithCharacters(
         id=user.id,
         username=user.username,
+        display_name=user.display_name,
         email=user.email,
         guild_name=user.guild_name,
         guild_rank=user.guild_rank,
         is_active=user.is_active,
         is_superuser=user.is_superuser,
+        is_moderator=user.is_moderator,
+        is_writer=user.is_writer,
         join_date=user.join_date,
         created_at=user.created_at,
         characters=[
@@ -529,6 +535,10 @@ def update_user(
     
     if user_update.is_superuser is not None:
         user.is_superuser = user_update.is_superuser
+    if user_update.is_moderator is not None:
+        user.is_moderator = user_update.is_moderator
+    if user_update.is_writer is not None:
+        user.is_writer = user_update.is_writer
     
     if user_update.password is not None:
         user.hashed_password = security.get_password_hash(user_update.password)
@@ -542,11 +552,14 @@ def update_user(
     return UserWithCharacters(
         id=user.id,
         username=user.username,
+        display_name=user.display_name,
         email=user.email,
         guild_name=user.guild_name,
         guild_rank=user.guild_rank,
         is_active=user.is_active,
         is_superuser=user.is_superuser,
+        is_moderator=user.is_moderator,
+        is_writer=user.is_writer,
         join_date=user.join_date,
         created_at=user.created_at,
         characters=[
@@ -797,68 +810,13 @@ def get_external_apis_status(
 ):
     """
     Monitor external API statuses and retrieve sample data
-    Tests: TibiaWiki, Tibia.com API, TibiaData
+    Tests: TibiaData and TibiaWiki
     Requires admin privileges
     """
     import time
     apis_status = []
     
-    # 1. Tibia.com Official API
-    try:
-        start = time.time()
-        response = requests.get(
-            "https://api.tibia.com/v1/worlds",
-            timeout=10,
-            headers={'User-Agent': 'TibiaWeeklyTasks/1.0'}
-        )
-        latency = int((time.time() - start) * 1000)
-        
-        if response.status_code == 200:
-            data = response.json()
-            apis_status.append({
-                "name": "Tibia.com Official API",
-                "url": "https://api.tibia.com/v1/worlds",
-                "status": "online",
-                "status_code": 200,
-                "latency_ms": latency,
-                "sample_data": {
-                    "worlds_count": len(data.get("worlds", {}).get("regular_worlds", [])),
-                    "first_3_worlds": [w.get("name") for w in data.get("worlds", {}).get("regular_worlds", [])[:3]]
-                },
-                "full_response": data
-            })
-        else:
-            apis_status.append({
-                "name": "Tibia.com Official API",
-                "url": "https://api.tibia.com/v1/worlds",
-                "status": "error",
-                "status_code": response.status_code,
-                "latency_ms": latency,
-                "error": f"HTTP {response.status_code} - Server returned error"
-            })
-    except requests.exceptions.Timeout:
-        apis_status.append({
-            "name": "Tibia.com Official API",
-            "url": "https://api.tibia.com/v1/worlds",
-            "status": "offline",
-            "error": "Request timeout (>10s) - API may be down or slow"
-        })
-    except requests.exceptions.ConnectionError as e:
-        apis_status.append({
-            "name": "Tibia.com Official API",
-            "url": "https://api.tibia.com/v1/worlds",
-            "status": "offline",
-            "error": f"Connection failed - DNS or network issue: {str(e)[:100]}"
-        })
-    except Exception as e:
-        apis_status.append({
-            "name": "Tibia.com Official API",
-            "url": "https://api.tibia.com/v1/worlds",
-            "status": "offline",
-            "error": f"Unexpected error: {str(e)[:100]}"
-        })
-    
-    # 2. TibiaData API
+    # TibiaData is the authoritative live game-data source.
     try:
         start = time.time()
         response = requests.get(

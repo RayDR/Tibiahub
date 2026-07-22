@@ -4,11 +4,14 @@ import api, { ADMIN_ACTION_TIMEOUT_MS } from './api';
 export interface GuildMember {
     id: number;
     username: string;
+    display_name?: string;
     email?: string;
     guild_name?: string;
     guild_rank?: string;
     is_active: boolean;
     is_superuser: boolean;
+    is_moderator: boolean;
+    is_writer: boolean;
     join_date?: string;
     created_at: string;
     characters: {

@@ -6,7 +6,7 @@
 @import url('https://fonts.googleapis.com/css2?family=Martel:wght@400;600;700;900&display=swap');
 
 :root {
-  /* Tibia Official Colors */
+  /* Tibia-inspired palette (theme tokens remain authoritative) */
   --tibia-bg-dark: #3A3A3A;
   --tibia-bg-medium: #4F4F4F;
   --tibia-bg-light: #6B6B6B;
