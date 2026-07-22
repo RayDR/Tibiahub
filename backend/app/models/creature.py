@@ -1,9 +1,10 @@
 """Creature model - Represents monsters in Tibia."""
-from sqlalchemy import Boolean, Column, DateTime, Float, ForeignKey, Integer, JSON, String, Table, Text
+from sqlalchemy import Boolean, Column, DateTime, Float, ForeignKey, Integer, String, Table, Text
 from sqlalchemy.orm import relationship
 from sqlalchemy.sql import func
 
 from app.db.database import Base
+from app.db.types import JSONBType
 
 
 # Association table for creature weaknesses (many-to-many)
@@ -76,11 +77,11 @@ class Creature(Base):
     image_source_name = Column(String(255), nullable=True)  # e.g. "tibiawiki"
     image_locked = Column(Boolean, default=False)           # if True, sync must not overwrite image fields
     image_asset_id = Column(Integer, ForeignKey("media_assets.id"), nullable=True)
-    data_sources = Column(JSON, nullable=True)
-    missing_fields = Column(JSON, nullable=True)
-    related_tasks = Column(JSON, nullable=True)
-    locations = Column(JSON, nullable=True)
-    raw_data = Column(JSON, nullable=True)
+    data_sources = Column(JSONBType, nullable=True)
+    missing_fields = Column(JSONBType, nullable=True)
+    related_tasks = Column(JSONBType, nullable=True)
+    locations = Column(JSONBType, nullable=True)
+    raw_data = Column(JSONBType, nullable=True)
     last_synced_at = Column(DateTime(timezone=True), nullable=True)
     created_at = Column(DateTime(timezone=True), server_default=func.now())
     updated_at = Column(DateTime(timezone=True), server_default=func.now(), onupdate=func.now())

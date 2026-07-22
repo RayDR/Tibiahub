@@ -6,7 +6,7 @@ explicitly enabled, the response is marked as mock so tests can assert on it.
 """
 from __future__ import annotations
 
-from datetime import datetime
+from datetime import UTC, datetime
 from enum import Enum
 from typing import Any, Dict, Optional
 
@@ -31,7 +31,7 @@ class APIResponse:
         self.source = source
         self.error = error
         self.is_mock = is_mock
-        self.timestamp = datetime.utcnow()
+        self.timestamp = datetime.now(UTC)
 
     def success(self) -> bool:
         return self.data is not None and self.error is None

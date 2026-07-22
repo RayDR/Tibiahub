@@ -1,7 +1,7 @@
 """Local metadata management for featured and most-searched entities."""
 from __future__ import annotations
 
-from datetime import datetime
+from datetime import UTC, datetime
 from typing import Iterable, Optional
 
 from sqlalchemy.orm import Session
@@ -50,7 +50,7 @@ class EntityMetadataService:
             display_name=display_name,
             entity_id=entity_id,
         )
-        record.last_synced_at = datetime.utcnow()
+        record.last_synced_at = datetime.now(UTC)
 
     @staticmethod
     def record_searches(
@@ -69,7 +69,7 @@ class EntityMetadataService:
                 entity_id=entity_id,
             )
             record.search_count = max(0, (record.search_count or 0) + increment)
-            record.last_viewed_at = datetime.utcnow()
+            record.last_viewed_at = datetime.now(UTC)
 
     @staticmethod
     def set_flags(
@@ -99,7 +99,7 @@ class EntityMetadataService:
             record.is_favorite = is_favorite
         if notes is not None:
             record.notes = notes
-        record.updated_at = datetime.utcnow()
+        record.updated_at = datetime.now(UTC)
         db.flush()
         return record
 

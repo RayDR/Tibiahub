@@ -1,83 +1,120 @@
-# PostgreSQL Migration Readiness (without migrating data yet)
+# PostgreSQL foundation operations
 
-This project supports connecting to SQLite or PostgreSQL through `DATABASE_URL`.
-Existing PostgreSQL databases are **not** migrated by `create_all()` and must be
-upgraded with the versioned Alembic migration before deploying the new code.
+TibiaHub supports PostgreSQL 16+ as its sole development and production runtime database. SQLite remains only in isolated unit tests and archived prototype utilities. The API and scheduler never create or alter tables at startup; Alembic is the schema authority.
 
-## 1) Set DATABASE_URL
+## Architecture and scope
 
-Use one of these formats:
+- Database: `tibiahub`
+- Application role: `tibiahub_app`
+- Connectivity: localhost only (`127.0.0.1`, `localhost`, or `::1`)
+- Credentials: `backend/.env` or process environment, never source control
+- Required extensions: `pg_trgm`, `unaccent`
+- Optional Stage 1 extension: `postgis`
+- Deferred: pgvector, PostGIS domain models, Redis, S3, new search, and sync redesign
 
-- SQLite:
-  - `DATABASE_URL=sqlite:///./tibia_bestiary.db`
-- PostgreSQL (recommended for runtime):
-  - `DATABASE_URL=postgresql+psycopg2://user:password@127.0.0.1:5432/tibiahub`
-- PostgreSQL async URL (accepted in env):
-  - `DATABASE_URL=postgresql+asyncpg://user:password@127.0.0.1:5432/tibiahub`
+On Ubuntu with PostgreSQL 16, install PostGIS later with `postgresql-16-postgis-3` if `pg_available_extensions` does not list `postgis`. Its absence does not block Stage 1.
 
-Note: the backend currently uses SQLAlchemy sync engine. If `postgresql+asyncpg://` is provided, runtime normalizes to `postgresql+psycopg2://` automatically.
+## Configuration
 
-## 2) Install DB driver
+Copy `backend/.env.example` to `backend/.env`, replace every placeholder, and keep the file mode restricted. `DATABASE_URL` has no default. Outside `APP_ENV=test`, a non-PostgreSQL URL is rejected immediately.
 
-Inside your backend virtualenv:
+The API, raffle scheduler, Alembic, bootstrap command, and operational scripts all load this same backend configuration without depending on process cwd. Database logs include only dialect and database name, never host or credentials.
 
-`psycopg2-binary` is pinned in `backend/requirements.txt` and is installed with
-the normal backend dependencies.
+## Provision a new local database
 
-Optional (for future async engine migration):
+Provisioning requires an elevated local PostgreSQL URL and a password supplied only through the environment. The script refuses alternate database or role names and does not edit another database or PostgreSQL's global configuration. Confirm separately that `listen_addresses` and firewall policy do not expose port 5432 publicly.
 
 ```bash
-pip install asyncpg
+cd /forge/tibiahub
+export POSTGRES_ADMIN_URL='postgresql:///postgres'
+export TIBIAHUB_DB_PASSWORD='replace-with-a-generated-secret'
+./scripts/provision-postgres.sh --confirm-provision-tibiahub
+unset TIBIAHUB_DB_PASSWORD POSTGRES_ADMIN_URL
 ```
 
-## 3) Create PostgreSQL database
-
-Example commands:
+Set the matching application URL in `backend/.env`, then apply the schema:
 
 ```bash
-sudo -u postgres psql
-CREATE DATABASE tibiahub;
-CREATE USER tibiahub_user WITH PASSWORD 'change_me';
-GRANT ALL PRIVILEGES ON DATABASE tibiahub TO tibiahub_user;
-\q
+cd /forge/tibiahub/backend
+venv/bin/alembic -c alembic.ini upgrade head
+venv/bin/alembic -c alembic.ini current
 ```
 
-Then set:
+The clean baseline creates every currently supported table from an empty database. It installs `pg_trgm` and `unaccent`; it installs PostGIS when the server package and privileges are available.
+
+## Optional initial administrator
+
+No account is created implicitly. Supply all three values for one explicit run:
 
 ```bash
-export DATABASE_URL='postgresql+psycopg2://tibiahub_user:change_me@127.0.0.1:5432/tibiahub'
+cd /forge/tibiahub
+export BOOTSTRAP_ADMIN_USERNAME='initial-admin'
+export BOOTSTRAP_ADMIN_EMAIL='admin@example.invalid'
+export BOOTSTRAP_ADMIN_PASSWORD='replace-with-a-generated-secret'
+PYTHONPATH=backend backend/venv/bin/python scripts/bootstrap_admin.py
+unset BOOTSTRAP_ADMIN_USERNAME BOOTSTRAP_ADMIN_EMAIL BOOTSTRAP_ADMIN_PASSWORD
 ```
 
-## 4) Upgrade an existing database
+## Exact deployment sequence
 
-Back up and test against a staging copy first, then run the checked-in Alembic
-revision through the project's normal Alembic environment:
+1. Confirm PostgreSQL 16+ is available only on localhost.
+2. Preserve the previous runtime file outside the repository, if it exists: `install -m 600 backend/tibia_bestiary.db /var/backups/tibiahub/tibia_bestiary-pre-postgres.db`. Do not delete the original automatically.
+3. Run `scripts/provision-postgres.sh --confirm-provision-tibiahub` with explicit elevated credentials.
+4. Put the application `DATABASE_URL` and secrets in `backend/.env`.
+5. Run `cd backend && venv/bin/alembic -c alembic.ini upgrade head` exactly once.
+6. Optionally run the explicit bootstrap-admin command above.
+7. Start only the API: `pm2 start ecosystem.config.js --only tibiahub-api`.
+8. Require HTTP 200 from `http://127.0.0.1:8001/api/v1/ready`.
+9. Start `tibiahub-raffle-scheduler`, then build/restart the frontend.
+
+`./start.sh` performs steps 7-9 only after database verification. It never runs Alembic. PM2 uses absolute working directories, and both Python processes read the same `backend/.env`.
+
+## Backup, restore, reset, and verify
+
+Backups use PostgreSQL custom format and default to `/var/backups/tibiahub`:
 
 ```bash
-alembic upgrade product_polish_20260720
+./scripts/backup-postgres.sh
+./scripts/verify-postgres.sh
 ```
 
-The migration only creates the new media table and adds missing nullable/defaulted
-columns. Its downgrade is intentionally non-destructive.
+Restore is destructive within the configured TibiaHub database and requires an exact confirmation plus an explicit file:
 
-## 5) Run app
+```bash
+./scripts/restore-postgres.sh --confirm-restore-tibiahub /var/backups/tibiahub/tibiahub-TIMESTAMP.dump
+```
 
-Use your normal startup flow (PM2 or uvicorn). No data migration is performed automatically from SQLite to PostgreSQL yet.
+A full reset is never automatic. It validates the local dialect and exact database name, can stop only TibiaHub API/scheduler processes, preserves a legacy SQLite copy when present, recreates only the configured TibiaHub database, and applies Alembic head:
 
-## 6) Important dialect behavior
+```bash
+export POSTGRES_ADMIN_URL='postgresql:///postgres'
+export STOP_TIBIAHUB_SERVICES=1
+./scripts/reset-postgres.sh --confirm-reset-tibiahub
+```
 
-- SQLite-only PRAGMA and runtime `ALTER TABLE` auto-migrations run **only** when dialect is SQLite.
-- PostgreSQL startup skips SQLite-specific migration logic.
+## Startup and readiness
 
-## 7) Future migration notes
+API and scheduler startup verify connectivity and exact Alembic head. A missing or outdated schema terminates startup with a credential-free message. `/healthz` is liveness only; `/ready` checks connectivity and migration revision and returns HTTP 503 with a safe reason when unavailable or mismatched. No process automatically migrates, calls `create_all`, or executes runtime `ALTER TABLE`.
 
-When ready to migrate real data from SQLite to PostgreSQL:
+The scheduler claims due raffles in a short transaction using PostgreSQL `FOR UPDATE SKIP LOCKED`, a unique job ID, and the existing bounded retry/lease state. Multiple workers cannot successfully claim the same raffle.
 
-1. Freeze writes briefly (maintenance window).
-2. Export SQLite data (or use one-time ETL script).
-3. Import into PostgreSQL.
-4. Validate counts and key relations (creatures, loot, quests, hunt_zones, media_assets).
-5. Switch `DATABASE_URL` to PostgreSQL in production.
-6. Keep SQLite backup until rollback window closes.
+## Tests
 
-Do not treat `Base.metadata.create_all()` as a migration mechanism for an existing database.
+Unit tests explicitly use SQLite in memory. PostgreSQL integration tests require a disposable database whose name contains `test`; they refuse `tibiahub` or an ambiguous name.
+
+```bash
+export TEST_DATABASE_URL='postgresql+psycopg2://tibiahub_test_app:secret@127.0.0.1:5432/tibiahub_test'
+backend/venv/bin/python -m pytest backend/tests -q
+```
+
+The integration fixture destroys only the public schema in that clearly named test database, upgrades from empty to Alembic head, exercises application flows, and truncates its own tables between tests.
+
+## Rollback
+
+1. Stop `tibiahub-raffle-scheduler`, then `tibiahub-api`.
+2. Back up the failed state with `scripts/backup-postgres.sh` if it may aid diagnosis.
+3. Restore the last known-good custom dump with the explicit restore command.
+4. Check out the matching application release and run its documented Alembic target; never stamp a revision to hide a mismatch.
+5. Run `scripts/verify-postgres.sh`, start the API, confirm `/ready`, then start the scheduler and frontend.
+
+The old SQLite files are preservation artifacts, not an automatic runtime rollback path. Provider/Cyclopedia content may be rebuilt in the next sync stage; Stage 1 intentionally contains no general SQLite-to-PostgreSQL ETL.

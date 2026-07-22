@@ -338,7 +338,7 @@ def create_raffle(
             type="raffle", title=payload.title, description=payload.description or "Guild raffle event",
             rules="One participant per account. Vice leaders get +10% weight.",
             reward=", ".join([f"{prize.name}: {prize.reward}" for prize in (payload.prizes or [])]) or "Guild rewards",
-            start_date=datetime.utcnow(), draw_date=datetime.utcnow() + timedelta(days=1), status="active",
+            start_date=datetime.now(UTC), draw_date=datetime.now(UTC) + timedelta(days=1), status="active",
             is_active=True, is_public=True, participant_mode="manual", guild_name=payload.guild_name,
             creator_id=current_user.id, announcement_id=announcement.id,
         ))
@@ -629,7 +629,7 @@ def remove_participant(
     if not participant:
         raise HTTPException(status_code=404, detail="Participant not found")
     participant.is_deleted = True
-    participant.deleted_at = datetime.utcnow()
+    participant.deleted_at = datetime.now(UTC)
     participant.deleted_by_user_id = current_user.id
     participant.is_eligible = False
     participant.delete_reason = "removed by manager"
@@ -683,7 +683,7 @@ def soft_delete_raffle(
         raise HTTPException(status_code=404, detail="Raffle not found")
     _require_raffle_management(current_user, raffle)
     raffle.is_deleted = True
-    raffle.deleted_at = datetime.utcnow()
+    raffle.deleted_at = datetime.now(UTC)
     raffle.deleted_by_user_id = current_user.id
     raffle.delete_reason = reason
     raffle.is_active = False

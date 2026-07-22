@@ -1,8 +1,9 @@
 """Local metadata for featured, pinned, and search-ranked entities."""
-from sqlalchemy import Boolean, Column, DateTime, Integer, JSON, String, Text, UniqueConstraint
+from sqlalchemy import Boolean, Column, DateTime, Integer, String, Text, UniqueConstraint
 from sqlalchemy.sql import func
 
 from app.db.database import Base
+from app.db.types import JSONBType
 
 
 class EntityMetadata(Base):
@@ -23,6 +24,6 @@ class EntityMetadata(Base):
     last_synced_at = Column(DateTime(timezone=True), nullable=True)
     last_viewed_at = Column(DateTime(timezone=True), nullable=True)
     notes = Column(Text, nullable=True)
-    extra_data = Column(JSON, nullable=True)
+    extra_data = Column(JSONBType, nullable=True)
     created_at = Column(DateTime(timezone=True), server_default=func.now())
     updated_at = Column(DateTime(timezone=True), server_default=func.now(), onupdate=func.now())

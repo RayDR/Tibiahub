@@ -4,14 +4,19 @@ Uses an in-memory SQLite database — nothing touches the production DB.
 """
 from __future__ import annotations
 
+import os
+
 import pytest
 from fastapi.testclient import TestClient
 from sqlalchemy import create_engine
 from sqlalchemy.orm import sessionmaker, Session
 from sqlalchemy.pool import StaticPool
 
-# Use in-memory SQLite for all tests
+# SQLite is an explicit unit-test-only exception. PostgreSQL integration tests
+# use TEST_DATABASE_URL in a separate test module.
 TEST_DATABASE_URL = "sqlite:///:memory:"
+os.environ["APP_ENV"] = "test"
+os.environ["DATABASE_URL"] = TEST_DATABASE_URL
 
 from app.db.database import Base
 import app.models  # noqa: F401 — ensure all models are registered

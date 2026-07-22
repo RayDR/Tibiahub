@@ -112,7 +112,7 @@
       "latency_ms": 0,
       "sample_data": {
         "creature_count": 6,
-        "database": "SQLite",
+        "database": "PostgreSQL",
         "status": "healthy"
       }
     }

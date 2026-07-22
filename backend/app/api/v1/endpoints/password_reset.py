@@ -2,7 +2,7 @@
 import hashlib
 import logging
 import secrets
-from datetime import datetime, timedelta
+from datetime import UTC, datetime, timedelta
 from typing import Optional
 
 from fastapi import APIRouter, BackgroundTasks, Depends, HTTPException
@@ -46,7 +46,7 @@ def _token_hash(token: str) -> str:
 def _store_reset_token(user: User) -> str:
     raw_token = secrets.token_urlsafe(48)
     user.reset_token = _token_hash(raw_token)
-    user.reset_token_expires = datetime.utcnow() + timedelta(hours=1)
+    user.reset_token_expires = datetime.now(UTC) + timedelta(hours=1)
     return raw_token
 
 
@@ -117,7 +117,7 @@ def reset_password(
         raise HTTPException(status_code=400, detail="Invalid or expired reset token")
     
     # Check if token is expired
-    if user.reset_token_expires < datetime.utcnow():
+    if user.reset_token_expires < datetime.now(UTC):
         raise HTTPException(status_code=400, detail="Reset token has expired")
     
     # Update password

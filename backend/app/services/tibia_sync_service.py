@@ -1,7 +1,7 @@
 """Helpers to synchronize Tibia character snapshots into local user records."""
 from __future__ import annotations
 
-from datetime import datetime
+from datetime import UTC, datetime
 from typing import Optional
 
 from sqlalchemy.orm import Session
@@ -20,7 +20,7 @@ async def sync_user_character_snapshot(db: Session, user: User, *, character_nam
     if not payload:
         user.tibia_status = "not_found"
         user.tibia_last_error = f"Character '{target_name}' not found"
-        user.last_updated = datetime.utcnow()
+        user.last_updated = datetime.now(UTC)
         db.add(user)
         db.commit()
         return None
@@ -38,7 +38,7 @@ async def sync_user_character_snapshot(db: Session, user: User, *, character_nam
     user.last_login_at = payload.get("last_login_at")
     user.tibia_status = "ok"
     user.tibia_last_error = None
-    user.last_updated = datetime.utcnow()
+    user.last_updated = datetime.now(UTC)
 
     record = db.query(UserCharacter).filter(UserCharacter.user_id == user.id, UserCharacter.character_name == user.tibia_character_name).first()
     if not record:
@@ -55,7 +55,7 @@ async def sync_user_character_snapshot(db: Session, user: User, *, character_nam
     record.achievement_points = user.achievement_points
     record.sex = payload.get("sex")
     record.last_login_at = user.last_login_at
-    record.last_seen = datetime.utcnow()
+    record.last_seen = datetime.now(UTC)
 
     db.add(user)
     db.commit()
@@ -71,7 +71,7 @@ async def try_sync_user_character_snapshot(db: Session, user: User, *, character
     except TibiaAPIError as exc:
         user.tibia_status = "error"
         user.tibia_last_error = str(exc)
-        user.last_updated = datetime.utcnow()
+        user.last_updated = datetime.now(UTC)
         db.add(user)
         db.commit()
         return None, str(exc)

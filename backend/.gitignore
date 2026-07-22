@@ -8,6 +8,8 @@ env/
 ENV/
 .venv
 *.db
+*.dump
+backups/
 .env
 *.log
 .pytest_cache/

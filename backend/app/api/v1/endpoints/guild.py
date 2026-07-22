@@ -3,7 +3,7 @@ from fastapi import APIRouter, Depends, HTTPException, status
 from pydantic import BaseModel
 from sqlalchemy.orm import Session
 from sqlalchemy.exc import SQLAlchemyError
-from datetime import datetime, timedelta
+from datetime import UTC, datetime, timedelta
 from collections import OrderedDict
 
 from app.db.database import get_db
@@ -124,7 +124,7 @@ async def _sync_guild_snapshot(db: Session, guild_name: str) -> list[GuildMember
         raise ValueError("Guild data unavailable")
 
     members = guild_info.get("members") or []
-    snapshot_time = datetime.utcnow()
+    snapshot_time = datetime.now(UTC)
     created_rows: list[GuildMemberSnapshot] = []
     for member in members:
         row = GuildMemberSnapshot(
@@ -199,7 +199,7 @@ def soft_delete_announcement(
         raise HTTPException(status_code=404, detail="Announcement not found")
     _require_capability(can_manage_announcements(current_user, announcement.guild_name))
     announcement.is_deleted = True
-    announcement.deleted_at = datetime.utcnow()
+    announcement.deleted_at = datetime.now(UTC)
     announcement.deleted_by_user_id = current_user.id
     announcement.delete_reason = payload.reason if payload else None
     _audit_admin_change(db, current_user, announcement.guild_name, "announcement_deleted", "announcement", announcement.id)
@@ -284,7 +284,7 @@ def soft_delete_guild_event(
         raise HTTPException(status_code=404, detail="Event not found")
     _require_capability(can_manage_events(current_user, event.guild_name))
     event.is_deleted = True
-    event.deleted_at = datetime.utcnow()
+    event.deleted_at = datetime.now(UTC)
     event.deleted_by_user_id = current_user.id
     event.delete_reason = payload.reason if payload else None
     _audit_admin_change(db, current_user, event.guild_name, "event_deleted", "event", event.id)
@@ -434,7 +434,7 @@ async def get_guild_members_snapshot(
             .order_by(GuildMemberSnapshot.snapshot_at.desc())
             .first()
         )
-        if latest and latest.snapshot_at and datetime.utcnow() - latest.snapshot_at < timedelta(hours=1):
+        if latest and latest.snapshot_at and datetime.now(UTC) - latest.snapshot_at < timedelta(hours=1):
             retry_at = latest.snapshot_at + timedelta(hours=1)
             raise HTTPException(status_code=429, detail=f"Manual sync allowed once per hour. Retry after {retry_at.isoformat()} UTC")
 
@@ -482,7 +482,7 @@ async def sync_guild_members_snapshot(
         .order_by(GuildMemberSnapshot.snapshot_at.desc())
         .first()
     )
-    if latest and latest.snapshot_at and datetime.utcnow() - latest.snapshot_at < timedelta(hours=1):
+    if latest and latest.snapshot_at and datetime.now(UTC) - latest.snapshot_at < timedelta(hours=1):
         retry_at = latest.snapshot_at + timedelta(hours=1)
         raise HTTPException(status_code=429, detail=f"Manual sync allowed once per hour. Retry after {retry_at.isoformat()} UTC")
 

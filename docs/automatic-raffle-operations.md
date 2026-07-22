@@ -9,8 +9,7 @@ are never discovered or executed by this scheduler.
 The scheduler is a dedicated process (`python -m app.workers.raffle_scheduler`),
 not a FastAPI timer. It polls UTC schedules, claims one due row, and delegates
 selection to the Stage 1 transactional engine. PostgreSQL uses `FOR UPDATE SKIP
-LOCKED`; SQLite supports one development worker through an optimistic version
-claim. Production concurrency guarantees require PostgreSQL.
+LOCKED` together with an optimistic version claim.
 
 | Setting | Default |
 | --- | ---: |
@@ -22,14 +21,13 @@ claim. Production concurrency guarantees require PostgreSQL.
 | `RAFFLE_SCHEDULER_WORKER_ID` | `raffle-scheduler-1` |
 
 PM2 defines one `tibiahub-raffle-scheduler` instance with separate output and
-error logs. Do not increase instances on SQLite. Enable it only after migration
-and staging rehearsal.
+error logs. Enable it only after migration and staging rehearsal.
 
 ## Migration and staging rehearsal
 
 1. Back up and rehearse on a recent isolated PostgreSQL copy.
-2. Run `cd backend && alembic upgrade raffle_operations_20260721`.
-3. Confirm `alembic heads` reports `raffle_operations_20260721`.
+2. Run `cd backend && alembic upgrade head`.
+3. Confirm `alembic current` reports `postgres_foundation_20260722 (head)`.
 4. Start one enabled scheduler in staging.
 5. Create a test raffle, freeze eligibility, let the due time pass, and verify
    one successful private run, notifications, and delivery deadlines.
