@@ -27,6 +27,7 @@ class UserWithCharacters(BaseModel):
     """User information with linked characters"""
     id: int
     username: str
+    display_name: Optional[str] = None
     email: Optional[str] = None
     guild_name: Optional[str] = None
     guild_rank: Optional[str] = None
@@ -34,6 +35,8 @@ class UserWithCharacters(BaseModel):
     discord_username: Optional[str] = None
     is_active: bool
     is_superuser: bool
+    is_moderator: bool = False
+    is_writer: bool = False
     join_date: Optional[datetime] = None
     created_at: datetime
     characters: List[dict] = []
@@ -117,6 +120,8 @@ class UserUpdate(BaseModel):
     guild_rank: Optional[str] = None
     is_active: Optional[bool] = None
     is_superuser: Optional[bool] = None
+    is_moderator: Optional[bool] = None
+    is_writer: Optional[bool] = None
     password: Optional[str] = Field(None, min_length=6)
 
 

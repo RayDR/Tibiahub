@@ -10,6 +10,7 @@ from app.db.database import get_db
 from app.models import Creature, HuntZone, Loot, Element, SpawnLocation
 from app.models.user import User
 from app.models.quest import Quest
+from app.api.v1.endpoints.auth import get_current_admin_user
 from app.services import media_asset_service as media_svc
 from app.schemas import (
     CreatureCreate, Creature as CreatureSchema,
@@ -37,7 +38,7 @@ class LootImagePatch(BaseModel):
     item_image_locked: Optional[bool] = None
     clear_local_cache: Optional[bool] = False
 
-router = APIRouter()
+router = APIRouter(dependencies=[Depends(get_current_admin_user)])
 
 
 # ============================================================================
@@ -346,7 +347,7 @@ async def patch_loot_image(
 # ============================================================================
 
 @router.get("/overview/stats")
-def get_overview_stats(db: Session = Depends(get_db)):
+def get_overview_stats(db: Session = Depends(get_db), _admin: User = Depends(get_current_admin_user)):
     """Return aggregate system stats for the admin overview page."""
     total_creatures = db.query(Creature).count()
     visible_creatures = db.query(Creature).filter(Creature.is_hidden != True).count()

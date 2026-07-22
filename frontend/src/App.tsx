@@ -32,6 +32,7 @@ import Events from './pages/guild/Events';
 import HuntCatalog from './pages/guild/HuntCatalog';
 import RafflesWorkspace from './pages/guild/RafflesWorkspace';
 import GuildDirectory from './pages/Admin/GuildDirectory';
+import AdminUsers from './pages/Admin/Users';
 import AdminGuildWorkspace from './pages/Admin/AdminGuildWorkspace';
 import AdminGuildRaffles from './pages/Admin/AdminGuildRaffles';
 import GlobalActivities from './pages/Admin/GlobalActivities';
@@ -142,6 +143,7 @@ function App() {
                 <Route index element={<AdminRedirect />} />
                 <Route path="overview" element={<Overview />} />
                 <Route path="guilds" element={<GuildDirectory />} />
+                <Route path="users" element={<AdminUsers />} />
                 <Route path="guilds/:guildKey" element={<AdminGuildWorkspace />} />
                 <Route path="guilds/:guildKey/raffles" element={<AdminGuildRaffles />} />
                 <Route path="guilds/:guildKey/leadership" element={<Suspense fallback={leadershipFallback}><AdminGuildLeadership /></Suspense>} />

@@ -1,14 +1,8 @@
 {
   "timestamp": "2026-01-20T08:58:16.123400",
-  "total_apis": 4,
+  "total_apis": 3,
   "online_count": 3,
   "apis": [
-    {
-      "name": "Tibia.com Official API",
-      "url": "https://api.tibia.com/v1/worlds",
-      "status": "offline",
-      "error": "HTTPSConnectionPool(host='api.tibia.com', port=443): Max retries exceeded with url: /v1/worlds (Caused by NameResolutionError)"
-    },
     {
       "name": "TibiaData API",
       "url": "https://api.tibiadata.com/v4/worlds",

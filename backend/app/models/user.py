@@ -20,6 +20,9 @@ class User(Base):
     join_date = Column(DateTime(timezone=True), nullable=True)
     is_active = Column(Boolean, default=True)
     is_superuser = Column(Boolean, default=False)
+    # Independent platform capabilities; users may hold any combination.
+    is_moderator = Column(Boolean, default=False, nullable=False)
+    is_writer = Column(Boolean, default=False, nullable=False)
     created_at = Column(DateTime(timezone=True), server_default=func.now())
     
     # Player info from Tibia API
