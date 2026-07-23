@@ -7,6 +7,8 @@ from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[2]
 RESET = ROOT / "scripts" / "reset-postgres.sh"
+PROVISION = ROOT / "scripts" / "provision-postgres.sh"
+ECOSYSTEM = ROOT / "ecosystem.config.js"
 
 
 def run_reset(*args: str, environment: dict[str, str] | None = None):
@@ -47,3 +49,22 @@ def test_reset_refuses_database_name_mismatch_before_admin_access():
     result = run_reset("--confirm-reset-tibiahub", environment=environment)
     assert result.returncode == 2
     assert "does not match" in result.stderr.lower()
+
+
+def test_postgres_scripts_do_not_put_credentials_in_command_arguments():
+    scripts = "\n".join(
+        path.read_text(encoding="utf-8")
+        for path in (PROVISION, RESET, ROOT / "scripts" / "backup-postgres.sh", ROOT / "scripts" / "restore-postgres.sh", ROOT / "scripts" / "verify-postgres.sh")
+    )
+    assert "POSTGRES_ADMIN_URL" not in scripts
+    assert "libpq_url" not in scripts
+    assert 'role_password="$TIBIAHUB_DB_PASSWORD"' not in scripts
+    assert "\\getenv role_password TIBIAHUB_DB_PASSWORD" in PROVISION.read_text(encoding="utf-8")
+
+
+def test_pm2_configuration_contains_only_the_non_secret_file_path():
+    ecosystem = ECOSYSTEM.read_text(encoding="utf-8")
+    assert "TIBIAHUB_SECRETS_FILE" in ecosystem
+    assert "DATABASE_URL" not in ecosystem
+    assert "PGPASSWORD" not in ecosystem
+    assert "SECRET_KEY" not in ecosystem

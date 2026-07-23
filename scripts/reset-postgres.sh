@@ -9,7 +9,7 @@ fi
 
 load_tibiahub_environment
 require_local_tibiahub_target
-: "${POSTGRES_ADMIN_URL:?POSTGRES_ADMIN_URL is required for a destructive reset}"
+load_postgres_admin_environment
 
 database_name="$(database_component name)"
 application_role="${TIBIAHUB_DATABASE_ROLE:-tibiahub_app}"
@@ -27,8 +27,8 @@ if [[ "${STOP_TIBIAHUB_SERVICES:-0}" == "1" ]] && command -v pm2 >/dev/null 2>&1
   pm2 stop tibiahub-raffle-scheduler tibiahub-api || true
 fi
 
-dropdb --maintenance-db="$(libpq_url "$POSTGRES_ADMIN_URL")" --if-exists --force "$database_name"
-createdb --maintenance-db="$(libpq_url "$POSTGRES_ADMIN_URL")" --owner="$application_role" "$database_name"
+dropdb --if-exists --force "$database_name"
+createdb --owner="$application_role" "$database_name"
 run_alembic upgrade head
 
 if [[ -n "${BOOTSTRAP_ADMIN_USERNAME:-}" || -n "${BOOTSTRAP_ADMIN_PASSWORD:-}" || -n "${BOOTSTRAP_ADMIN_EMAIL:-}" ]]; then

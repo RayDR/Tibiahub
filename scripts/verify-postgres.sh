@@ -8,7 +8,7 @@ PYTHONPATH="$TIBIAHUB_BACKEND" APP_ENV="${APP_ENV:-production}" \
   "$TIBIAHUB_BACKEND/venv/bin/python" -c \
   "from app.db.database import verify_connection_and_schema; verify_connection_and_schema()"
 run_alembic current
-psql "$(libpq_url "$DATABASE_URL")" -X -v ON_ERROR_STOP=1 <<'SQL'
+postgres_exec psql -X -v ON_ERROR_STOP=1 <<'SQL'
 SELECT current_database() AS database_name, current_user AS application_role;
 SELECT extname FROM pg_extension WHERE extname IN ('pg_trgm', 'unaccent', 'postgis') ORDER BY extname;
 DO $tibiahub$
