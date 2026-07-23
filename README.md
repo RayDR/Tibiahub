@@ -10,9 +10,9 @@ Sistema completo de bestiario de Tibia con backend FastAPI y frontend React, inc
 
 ## 🎯 Características Principales
 
-### Backend (FastAPI + SQLite)
+### Backend (FastAPI + PostgreSQL)
 - ✅ API RESTful completa con documentación Swagger
-- ✅ Base de datos SQLite normalizada con relaciones
+- ✅ PostgreSQL 16+ con esquema administrado exclusivamente por Alembic
 - ✅ Integración real con TibiaData y TibiaWiki Fandom para criaturas, guilds y validación
 - ✅ Sistema de rifas de guild con participantes por cuenta local, historial y reruns administrados
 - ✅ Modo mock aislado por configuración con `USE_MOCK_DATA=false` por defecto
@@ -73,8 +73,8 @@ cp .env.example .env
 # Mantener datos reales en producción
 # USE_MOCK_DATA=false
 
-# Inicializar base de datos
-python seed_db.py
+# Aplicar el esquema a una base PostgreSQL vacía
+venv/bin/alembic -c alembic.ini upgrade head
 
 # Iniciar servidor
 python main.py
@@ -250,7 +250,7 @@ Dark Brown:  #2a1810  /* Paneles oscuros */
 - **FastAPI**: Framework web moderno y rápido
 - **SQLAlchemy**: ORM para Python
 - **Pydantic**: Validación de datos
-- **SQLite**: Base de datos ligera
+- **PostgreSQL 16+**: Base de datos de ejecución
 - **Uvicorn**: Servidor ASGI
 
 ### Frontend

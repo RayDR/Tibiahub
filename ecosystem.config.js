@@ -2,7 +2,7 @@ module.exports = {
   apps: [
     {
       name: 'tibiahub-api',
-      cwd: './backend',
+      cwd: '/forge/tibiahub/backend',
       script: 'venv/bin/python',
       args: 'main.py',
       instances: 1,
@@ -11,6 +11,7 @@ module.exports = {
       max_memory_restart: '500M',
       env: {
         PYTHONUNBUFFERED: '1',
+        APP_ENV: 'production',
         API_HOST: '127.0.0.1',
         API_PORT: '8001',
       },
@@ -21,7 +22,7 @@ module.exports = {
     },
     {
       name: 'tibiahub-frontend',
-      cwd: './frontend',
+      cwd: '/forge/tibiahub/frontend',
       script: 'npx',
       args: 'vite preview --host 0.0.0.0 --port 5174',
       instances: 1,
@@ -39,7 +40,7 @@ module.exports = {
     },
     {
       name: 'tibiahub-raffle-scheduler',
-      cwd: './backend',
+      cwd: '/forge/tibiahub/backend',
       script: 'venv/bin/python',
       args: '-m app.workers.raffle_scheduler',
       instances: 1,
@@ -48,6 +49,7 @@ module.exports = {
       max_memory_restart: '300M',
       env: {
         PYTHONUNBUFFERED: '1',
+        APP_ENV: 'production',
       },
       error_file: './logs/raffle-scheduler-error.log',
       out_file: './logs/raffle-scheduler-out.log',

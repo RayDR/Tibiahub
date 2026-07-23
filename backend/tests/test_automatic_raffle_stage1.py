@@ -2,8 +2,6 @@ from __future__ import annotations
 
 from datetime import UTC, datetime, timedelta
 from decimal import Decimal
-import os
-import subprocess
 
 import pytest
 
@@ -269,25 +267,3 @@ def test_successful_login_tracks_application_login_separately(db, client):
     db.refresh(user)
     assert user.last_app_login_at is not None
     assert user.last_login_at.replace(tzinfo=UTC) == CUTOFF_AT
-
-
-def test_stage1_migration_upgrade_on_temporary_sqlite(tmp_path):
-    from sqlalchemy import Column, DateTime, Integer, MetaData, String, Table, create_engine, inspect
-
-    database_path = tmp_path / "raffle-migration.db"
-    engine = create_engine(f"sqlite:///{database_path}")
-    legacy = MetaData()
-    Table("users", legacy, Column("id", Integer, primary_key=True))
-    Table("raffles", legacy, Column("id", Integer, primary_key=True), Column("scheduled_run_at", DateTime(timezone=True)))
-    Table("raffle_prizes", legacy, Column("id", Integer, primary_key=True), Column("raffle_id", Integer), Column("name", String(200)))
-    legacy.create_all(engine)
-    engine.dispose()
-    environment = os.environ.copy()
-    environment["DATABASE_URL"] = f"sqlite:///{database_path}"
-    subprocess.run(["venv/bin/alembic", "-c", "alembic.ini", "stamp", "product_polish_20260720"], cwd="backend", env=environment, check=True, capture_output=True, text=True)
-    subprocess.run(["venv/bin/alembic", "-c", "alembic.ini", "upgrade", "head"], cwd="backend", env=environment, check=True, capture_output=True, text=True)
-    migrated = create_engine(f"sqlite:///{database_path}")
-    inspector = inspect(migrated)
-    assert "last_app_login_at" in {column["name"] for column in inspector.get_columns("users")}
-    assert {"raffle_runs", "raffle_run_results", "raffle_eligibility_snapshots", "raffle_prize_deliveries"}.issubset(inspector.get_table_names())
-    migrated.dispose()

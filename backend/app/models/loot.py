@@ -1,8 +1,9 @@
 """Loot model - Items dropped by creatures."""
-from sqlalchemy import Boolean, Column, Float, ForeignKey, Integer, JSON, String
+from sqlalchemy import Boolean, Column, Float, ForeignKey, Integer, String
 from sqlalchemy.orm import relationship
 
 from app.db.database import Base
+from app.db.types import JSONBType
 
 
 class Loot(Base):
@@ -29,7 +30,7 @@ class Loot(Base):
     item_image_locked = Column(Boolean, default=False)         # if True, sync must not overwrite
     image_asset_id = Column(Integer, ForeignKey("media_assets.id"), nullable=True)
     source_url = Column(String(255), nullable=True)
-    raw_data = Column(JSON, nullable=True)
+    raw_data = Column(JSONBType, nullable=True)
     
     # Relationships
     creature = relationship("Creature", back_populates="loot_items")

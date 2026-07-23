@@ -6,7 +6,7 @@ from sqlalchemy.orm import Session
 from sqlalchemy import desc, func
 from typing import List, Optional
 import random
-from datetime import datetime
+from datetime import UTC, datetime
 
 from app.db.database import get_db
 from app.models.events import Event, EventParticipant, PublicEventParticipant
@@ -192,7 +192,7 @@ def update_event(
     for key, value in update_data.items():
         setattr(event, key, value)
     
-    event.updated_at = datetime.utcnow()
+    event.updated_at = datetime.now(UTC)
     db.commit()
     db.refresh(event)
     
@@ -214,7 +214,7 @@ def delete_event(
     
     event.is_active = False
     event.is_deleted = True
-    event.deleted_at = datetime.utcnow()
+    event.deleted_at = datetime.now(UTC)
     event.deleted_by_user_id = current_user.id
     event.delete_reason = reason
     event.status = 'deleted'
@@ -335,7 +335,7 @@ def draw_winner(
         event.winner_number = winner_participant.assigned_number
         event.is_drawn = True
         event.status = 'completed'
-        event.updated_at = datetime.utcnow()
+        event.updated_at = datetime.now(UTC)
         
         db.commit()
         db.refresh(event)
@@ -359,7 +359,7 @@ def draw_winner(
         event.winner_number = winner_participant.assigned_number
         event.is_drawn = True
         event.status = 'completed'
-        event.updated_at = datetime.utcnow()
+        event.updated_at = datetime.now(UTC)
         
         db.commit()
         db.refresh(event)
@@ -539,7 +539,7 @@ async def load_guild_participants(
                 existing.character_vocation = member.get('vocation')
                 existing.character_world = member.get('world', event.guild_world)
                 existing.last_login = member.get('last_login')
-                existing.updated_at = datetime.utcnow()
+                existing.updated_at = datetime.now(UTC)
                 updated_count += 1
             else:
                 # Check slots
@@ -675,7 +675,7 @@ async def get_raffle_status(
     if event.is_public and event.participant_mode == 'guild_auto' and not event.is_drawn:
         if event.guild_name and event.draw_date:
             # Check if we're still before the draw date
-            now = datetime.utcnow()
+            now = datetime.now(UTC)
             draw_time = event.draw_date
             
             # Sync participants if we're within the event period
@@ -710,7 +710,7 @@ async def get_raffle_status(
                             existing.character_level = member.get('level')
                             existing.character_vocation = member.get('vocation')
                             existing.last_login = member.get('last_login')
-                            existing.updated_at = datetime.utcnow()
+                            existing.updated_at = datetime.now(UTC)
                         else:
                             # Check slots
                             if event.total_slots:
@@ -933,7 +933,7 @@ async def delete_participant(
         raise HTTPException(status_code=404, detail="Participant not found")
     
     participant.is_deleted = True
-    participant.deleted_at = datetime.utcnow()
+    participant.deleted_at = datetime.now(UTC)
     participant.deleted_by_user_id = current_user.id
     participant.delete_reason = reason
     participant.is_excluded = True
@@ -969,7 +969,7 @@ async def exclude_participant(
         raise HTTPException(status_code=404, detail="Participant not found")
     
     participant.is_excluded = True
-    participant.updated_at = datetime.utcnow()
+    participant.updated_at = datetime.now(UTC)
     db.commit()
     
     return {

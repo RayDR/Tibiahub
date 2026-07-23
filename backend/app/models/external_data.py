@@ -3,10 +3,11 @@ Extended models for Tibia items, quests, and hunting places
 Stores complete data from external APIs locally
 Note: Quest and Quest models already exist - these are for API synced data
 """
-from sqlalchemy import Column, Integer, String, Text, Float, DateTime, JSON, Boolean, ForeignKey
+from sqlalchemy import Column, Integer, String, Text, Float, DateTime, Boolean, ForeignKey
 from sqlalchemy.orm import relationship
 from sqlalchemy.sql import func
 from app.db.database import Base
+from app.db.types import JSONBType
 
 class Item(Base):
     """Store item data from TibiaWiki API"""
@@ -34,7 +35,7 @@ class Item(Base):
     stackable = Column(Boolean, default=False)
     
     # Full raw data from API
-    raw_data = Column(JSON, nullable=True)
+    raw_data = Column(JSONBType, nullable=True)
     
     created_at = Column(DateTime(timezone=True), server_default=func.now())
     updated_at = Column(DateTime(timezone=True), onupdate=func.now())
@@ -53,14 +54,14 @@ class HuntingPlace(Base):
     max_level_recommended = Column(Integer, nullable=True)
     
     # Creatures
-    creatures = Column(JSON, nullable=True)  # List of creature names found here
+    creatures = Column(JSONBType, nullable=True)  # List of creature names found here
     
     # Loot
     loot_expectation = Column(String(50), nullable=True)  # e.g., "low", "medium", "high"
-    common_loot = Column(JSON, nullable=True)
+    common_loot = Column(JSONBType, nullable=True)
     
     # Full raw data from API
-    raw_data = Column(JSON, nullable=True)
+    raw_data = Column(JSONBType, nullable=True)
     
     created_at = Column(DateTime(timezone=True), server_default=func.now())
     updated_at = Column(DateTime(timezone=True), onupdate=func.now())
@@ -82,19 +83,19 @@ class TibiaWikiQuest(Base):
     min_level = Column(Integer, nullable=True)
     max_level = Column(Integer, nullable=True)
     experience_reward = Column(Integer, nullable=True)
-    treasure = Column(JSON, nullable=True)  # List of reward items
+    treasure = Column(JSONBType, nullable=True)  # List of reward items
     
     # Quest details
     duration = Column(String(100), nullable=True)  # e.g., "daily", "repeatable", "one-time"
     location = Column(String(255), nullable=True)
     npc = Column(String(255), nullable=True)  # NPC who gives the quest
-    rewards = Column(JSON, nullable=True)
-    requirements = Column(JSON, nullable=True)
-    related_creatures = Column(JSON, nullable=True)
+    rewards = Column(JSONBType, nullable=True)
+    requirements = Column(JSONBType, nullable=True)
+    related_creatures = Column(JSONBType, nullable=True)
     last_synced_at = Column(DateTime(timezone=True), nullable=True)
     
     # Full raw data from API
-    raw_data = Column(JSON, nullable=True)
+    raw_data = Column(JSONBType, nullable=True)
     
     created_at = Column(DateTime(timezone=True), server_default=func.now())
     updated_at = Column(DateTime(timezone=True), onupdate=func.now())
@@ -138,7 +139,7 @@ class SyncJob(Base):
     progress_percent = Column(Integer, nullable=False, default=0)
     current_step = Column(String(255), nullable=True)
     message = Column(Text, nullable=True)
-    result_summary = Column(JSON, nullable=True)
+    result_summary = Column(JSONBType, nullable=True)
     requester = Column(String(255), nullable=True)
     job_limit = Column(Integer, nullable=True)
     requested_by_user_id = Column(Integer, nullable=True, index=True)
@@ -150,7 +151,7 @@ class SyncJob(Base):
     processed_count = Column(Integer, nullable=False, default=0)
     failed_count = Column(Integer, nullable=False, default=0)
     last_successful_external_id = Column(String(255), nullable=True)
-    checkpoint = Column(JSON, nullable=True)
+    checkpoint = Column(JSONBType, nullable=True)
     batch_size = Column(Integer, nullable=False, default=100)
     max_retries = Column(Integer, nullable=False, default=3)
     external_timeout_seconds = Column(Integer, nullable=False, default=15)

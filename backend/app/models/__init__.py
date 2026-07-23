@@ -10,6 +10,12 @@ from app.models.user_character import UserCharacter
 from app.models.quest import Quest
 from app.models.settings import SystemSettings
 from app.models.user_activity import UserActivity
+from app.models.catalog import Catalog
+from app.models.hunt import HuntCatalog
+from app.models.external_data import (
+    APISync, CachedResource, HuntingPlace, Item, SyncJob, SyncJobError,
+    TibiaWikiQuest,
+)
 from app.models.guild import GuildEvent, EventAttendance, Announcement, Recruitment
 from app.models.events import Event, EventParticipant, PublicEventParticipant
 from app.models.entity_metadata import EntityMetadata
@@ -38,6 +44,15 @@ __all__ = [
     "Quest",
     "SystemSettings",
     "UserActivity",
+    "Catalog",
+    "HuntCatalog",
+    "Item",
+    "HuntingPlace",
+    "TibiaWikiQuest",
+    "APISync",
+    "SyncJob",
+    "SyncJobError",
+    "CachedResource",
     "EntityMetadata",
     "GuildEvent",
     "EventAttendance",

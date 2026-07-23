@@ -12,6 +12,8 @@ ENV/
 # Database
 *.db
 *.db-journal
+*.dump
+backups/
 
 # Environment
 .env

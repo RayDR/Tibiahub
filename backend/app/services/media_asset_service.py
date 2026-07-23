@@ -5,7 +5,7 @@ import ipaddress
 import logging
 import re
 import socket
-from datetime import datetime
+from datetime import UTC, datetime
 from pathlib import Path
 from typing import Optional
 from urllib.parse import unquote, urlparse
@@ -294,7 +294,10 @@ async def get_or_fetch_asset(
     # Respect retry cooldown for failed assets
     if asset and asset.status == "failed" and not force_refetch:
         if asset.last_fetched_at:
-            age = (datetime.utcnow() - asset.last_fetched_at.replace(tzinfo=None)).total_seconds()
+            fetched_at = asset.last_fetched_at
+            if fetched_at.tzinfo is None:
+                fetched_at = fetched_at.replace(tzinfo=UTC)
+            age = (datetime.now(UTC) - fetched_at).total_seconds()
             if age < _RETRY_COOLDOWN_SECONDS:
                 return asset  # caller should serve placeholder
 
@@ -321,7 +324,7 @@ async def get_or_fetch_asset(
         asset.size_bytes = len(content)
         asset.sha256_hash = hashlib.sha256(content).hexdigest()
         asset.status = "cached"
-        asset.last_fetched_at = datetime.utcnow()
+        asset.last_fetched_at = datetime.now(UTC)
         asset.error_message = None
         db.commit()
         logger.info("media_asset_cached key=%s path=%s size=%d", asset_key, local_path, len(content))
@@ -334,7 +337,7 @@ async def get_or_fetch_asset(
             db.add(asset)
         asset.status = "failed"
         asset.error_message = "Image download failed validation" if isinstance(exc, UnsafeMediaError) else "Image download failed"
-        asset.last_fetched_at = datetime.utcnow()
+        asset.last_fetched_at = datetime.now(UTC)
         try:
             db.commit()
         except Exception:

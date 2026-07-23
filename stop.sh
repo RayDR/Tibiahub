@@ -5,7 +5,7 @@
 echo "⛔ Stopping TibiaHub services..."
 echo ""
 
-pm2 stop tibiahub-api tibiahub-frontend
+pm2 stop tibiahub-raffle-scheduler tibiahub-api tibiahub-frontend
 
 echo ""
 echo "✅ Services stopped!"

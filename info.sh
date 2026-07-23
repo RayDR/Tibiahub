@@ -18,11 +18,10 @@ echo "📊 PM2 Services:"
 pm2 list | grep tibiahub
 echo ""
 echo "💾 Database:"
-if [ -f "/forge/tibiahub/backend/tibia_bestiary.db" ]; then
-    SIZE=$(du -h /forge/tibiahub/backend/tibia_bestiary.db | cut -f1)
-    echo "  ✅ Database exists ($SIZE)"
+if /forge/tibiahub/scripts/verify-postgres.sh >/dev/null 2>&1; then
+    echo "  ✅ PostgreSQL is reachable and at Alembic head"
 else
-    echo "  ❌ Database not found"
+    echo "  ❌ PostgreSQL verification failed"
 fi
 echo ""
 echo "📝 Quick Commands:"
@@ -30,6 +29,7 @@ echo "  Start:     cd /forge/tibiahub && ./start.sh"
 echo "  Stop:      cd /forge/tibiahub && ./stop.sh"
 echo "  Status:    pm2 status | grep tibiahub"
 echo "  Logs API:  pm2 logs tibiahub-api"
+echo "  Logs Job:  pm2 logs tibiahub-raffle-scheduler"
 echo "  Logs UI:   pm2 logs tibiahub-frontend"
 echo "  Monitor:   pm2 monit"
 echo ""

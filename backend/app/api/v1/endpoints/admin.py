@@ -10,7 +10,7 @@ import re
 from fastapi import APIRouter, Depends, File, HTTPException, UploadFile, status
 from sqlalchemy.orm import Session
 from sqlalchemy import func
-from datetime import datetime
+from datetime import UTC, datetime
 
 from app.db.database import get_db
 from app.models.user import User
@@ -741,7 +741,7 @@ async def sync_guild_members(
             char.guild_name = guild_name
             char.guild_rank = member.get("rank")
             char.world_name = guild_data.get("world") or char.world_name
-            char.last_seen = datetime.utcnow()
+            char.last_seen = datetime.now(UTC)
             updated_characters += 1
             if char.user:
                 linked_user_ids.add(char.user.id)
@@ -948,7 +948,7 @@ def get_external_apis_status(
             "latency_ms": 0,
             "sample_data": {
                 "creature_count": creature_count,
-                "database": "SQLite",
+                "database": "PostgreSQL",
                 "status": "healthy"
             }
         })
@@ -961,7 +961,7 @@ def get_external_apis_status(
         })
     
     return {
-        "timestamp": datetime.utcnow().isoformat(),
+        "timestamp": datetime.now(UTC).isoformat(),
         "total_apis": len(apis_status),
         "online_count": len([a for a in apis_status if a["status"] == "online"]),
         "apis": apis_status

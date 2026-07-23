@@ -38,10 +38,10 @@ Acceptance creates exactly one active assignment per account, role, and guild th
 
 ## Deployment
 
-Revision `guild_leadership_20260725` follows `raffle_scopes_20260724` and adds tables and indexes only. Its downgrade is intentionally non-destructive. Before production:
+The PostgreSQL foundation baseline includes the leadership tables and partial indexes. Before production:
 
 1. Back up and rehearse against a recent database copy.
-2. Run `alembic current`, confirm `raffle_scopes_20260724`, then `alembic upgrade guild_leadership_20260725`.
+2. Run `alembic upgrade head`, then confirm `alembic current` reports `postgres_foundation_20260722 (head)`.
 3. Verify the new tables, application privacy, and admin-assisted audit records.
 4. Do not seed openings, applications, assignments, or alter legacy recruitment data automatically.
 

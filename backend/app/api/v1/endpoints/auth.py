@@ -218,7 +218,7 @@ def register_user(
         guild_name=tibia_character_data.get("guild_name") if tibia_character_data else None,
         residence=tibia_character_data.get("residence") if tibia_character_data else None,
         tibia_status="validated" if tibia_character_data else None,
-        join_date=datetime.utcnow(),
+        join_date=datetime.now(UTC),
         is_active=True,
         is_superuser=False
     )

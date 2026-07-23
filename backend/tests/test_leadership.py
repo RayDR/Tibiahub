@@ -1,8 +1,5 @@
 from __future__ import annotations
 
-import os
-import subprocess
-
 from app.core.security import create_access_token
 from app.models.leadership import GuildLeadershipApplication, GuildLeadershipAssignment
 from app.models.raffle import InternalNotification
@@ -111,18 +108,3 @@ def test_notifications_are_private_and_legacy_table_is_untouched(client, db):
     recipients = {item.recipient_user_id for item in db.query(InternalNotification).filter(InternalNotification.notification_type == "leadership_application_received").all()}
     assert recipients == {leader.id} and member.id not in recipients
     assert db.bind.dialect.has_table(db.connection(), "recruitments")
-
-
-def test_leadership_migration_upgrades_from_previous_head(tmp_path):
-    from sqlalchemy import create_engine, inspect
-    from app.db.database import Base
-    import app.models  # noqa: F401
-
-    path = tmp_path / "leadership-migration.db"; engine = create_engine(f"sqlite:///{path}")
-    excluded = {name for name in Base.metadata.tables if name.startswith("guild_leadership_")}
-    Base.metadata.create_all(engine, tables=[table for name, table in Base.metadata.tables.items() if name not in excluded]); engine.dispose()
-    environment = os.environ.copy(); environment["DATABASE_URL"] = f"sqlite:///{path}"
-    subprocess.run(["venv/bin/alembic", "-c", "alembic.ini", "stamp", "raffle_scopes_20260724"], cwd="backend", env=environment, check=True, capture_output=True, text=True)
-    subprocess.run(["venv/bin/alembic", "-c", "alembic.ini", "upgrade", "head"], cwd="backend", env=environment, check=True, capture_output=True, text=True)
-    migrated = create_engine(f"sqlite:///{path}"); tables = set(inspect(migrated).get_table_names()); migrated.dispose()
-    assert {"guild_leadership_roles", "guild_leadership_openings", "guild_leadership_applications", "guild_leadership_assignments", "guild_leadership_application_history", "guild_leadership_application_messages", "guild_leadership_interviews", "guild_leadership_votes"}.issubset(tables)

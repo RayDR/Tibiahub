@@ -129,12 +129,12 @@ class _UnavailableDatabase:
 
 def test_health_endpoints_report_database_failure_as_unavailable():
     ready_response = Response()
-    assert readiness_check(ready_response, _UnavailableDatabase()) == {"status": "not_ready", "db": "error"}
+    assert readiness_check(ready_response, _UnavailableDatabase()) == {"status": "not_ready", "db": "unavailable"}
     assert ready_response.status_code == status.HTTP_503_SERVICE_UNAVAILABLE
 
     health_response = Response()
     payload = health_check(health_response, _UnavailableDatabase())
     assert health_response.status_code == status.HTTP_503_SERVICE_UNAVAILABLE
     assert payload["status"] == "degraded"
-    assert payload["db"] == "error"
+    assert payload["db"] == "unavailable"
     assert payload["external_sync"]["active_jobs"] is None

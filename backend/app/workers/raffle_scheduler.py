@@ -5,7 +5,7 @@ import logging
 import signal
 
 from app.core.config import settings
-from app.db.database import SessionLocal
+from app.db.database import DatabaseNotReadyError, SessionLocal, verify_connection_and_schema
 from app.services.raffle_scheduler_service import RaffleSchedulerService
 
 logging.basicConfig(level=logging.INFO, format="%(asctime)s %(levelname)s %(name)s %(message)s")
@@ -16,6 +16,11 @@ async def run() -> None:
     if not settings.RAFFLE_SCHEDULER_ENABLED:
         logger.info("raffle_scheduler_disabled worker_id=%s", settings.RAFFLE_SCHEDULER_WORKER_ID)
         return
+    try:
+        verify_connection_and_schema()
+    except DatabaseNotReadyError as exc:
+        logger.error("raffle_scheduler_startup_failed reason=%s", exc)
+        raise RuntimeError(str(exc)) from None
     stop = asyncio.Event()
     loop = asyncio.get_running_loop()
     for sig in (signal.SIGINT, signal.SIGTERM):

@@ -11,7 +11,7 @@ from fastapi.routing import APIRoute
 from contextlib import asynccontextmanager
 
 from app.core.config import settings
-from app.db.database import SessionLocal, init_db
+from app.db.database import DatabaseNotReadyError, SessionLocal, verify_connection_and_schema
 from app.api.v1.router import api_router
 from app.services.sync_service import SyncService
 
@@ -23,8 +23,12 @@ SLOW_REQUEST_MS = 1000
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     """Lifecycle manager for the application"""
-    # Startup: Initialize database
-    init_db()
+    # Migrations are an explicit deployment step. Startup only verifies them.
+    try:
+        verify_connection_and_schema()
+    except DatabaseNotReadyError as exc:
+        logger.error("application_startup_failed reason=%s", exc)
+        raise RuntimeError(str(exc)) from None
 
     db = SessionLocal()
     try:
