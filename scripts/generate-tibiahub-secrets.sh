@@ -9,6 +9,7 @@ database_host="${TIBIAHUB_DATABASE_HOST:-127.0.0.1}"
 database_port="${TIBIAHUB_DATABASE_PORT:-5432}"
 postgres_admin_user="${TIBIAHUB_POSTGRES_ADMIN_USER:-}"
 postgres_admin_password="${TIBIAHUB_POSTGRES_ADMIN_PASSWORD:-}"
+postgres_admin_mode="${TIBIAHUB_POSTGRES_ADMIN_MODE:-credential_file}"
 
 if [[ "${1:-}" != "--confirm-create-tibiahub-secrets" || $# -ne 1 ]]; then
   echo "Usage: $0 --confirm-create-tibiahub-secrets" >&2
@@ -25,6 +26,10 @@ if [[ "$database_host" != "127.0.0.1" && "$database_host" != "localhost" && "$da
 fi
 if [[ ! "$database_port" =~ ^[0-9]+$ ]]; then
   echo "TibiaHub PostgreSQL port must be numeric." >&2
+  exit 2
+fi
+if [[ "$postgres_admin_mode" != "peer" && "$postgres_admin_mode" != "credential_file" ]]; then
+  echo "TIBIAHUB_POSTGRES_ADMIN_MODE must be peer or credential_file." >&2
   exit 2
 fi
 
@@ -82,6 +87,7 @@ trap cleanup EXIT
 
 {
   printf "# Fill PGUSER and PGPASSWORD with an elevated local PostgreSQL identity.\n"
+  printf "TIBIAHUB_POSTGRES_ADMIN_MODE='%s'\n" "$postgres_admin_mode"
   printf "PGHOST='%s'\n" "$database_host"
   printf "PGPORT='%s'\n" "$database_port"
   printf "PGDATABASE='postgres'\n"

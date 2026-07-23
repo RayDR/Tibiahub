@@ -72,6 +72,7 @@ def test_generator_creates_external_owner_only_files_without_secret_output(tmp_p
     bootstrap_text = files["bootstrap.env"].read_text(encoding="utf-8")
     assert "DATABASE_URL=" in runtime_text and "SECRET_KEY=" in runtime_text
     assert "PGUSER=''" in provision_text and "PGPASSWORD=''" in provision_text
+    assert "TIBIAHUB_POSTGRES_ADMIN_MODE='credential_file'" in provision_text
     assert "TIBIAHUB_DB_PASSWORD=" in provision_text
     assert "BOOTSTRAP_ADMIN_PASSWORD=" in bootstrap_text
     for secret_value in (

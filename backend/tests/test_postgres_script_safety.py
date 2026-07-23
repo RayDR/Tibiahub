@@ -59,7 +59,15 @@ def test_postgres_scripts_do_not_put_credentials_in_command_arguments():
     assert "POSTGRES_ADMIN_URL" not in scripts
     assert "libpq_url" not in scripts
     assert 'role_password="$TIBIAHUB_DB_PASSWORD"' not in scripts
-    assert "\\getenv role_password TIBIAHUB_DB_PASSWORD" in PROVISION.read_text(encoding="utf-8")
+    assert "-v role_password" not in scripts
+    assert "\\set role_password" in PROVISION.read_text(encoding="utf-8")
+
+
+def test_peer_admin_mode_uses_non_interactive_sudo_without_fallback():
+    common = (ROOT / "scripts" / "postgres-common.sh").read_text(encoding="utf-8")
+    assert "sudo -n -u postgres psql" in common
+    assert "no fallback was attempted" in common
+    assert 'TIBIAHUB_POSTGRES_ADMIN_MODE" == "peer"' in common
 
 
 def test_pm2_configuration_contains_only_the_non_secret_file_path():

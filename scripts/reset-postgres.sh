@@ -27,8 +27,9 @@ if [[ "${STOP_TIBIAHUB_SERVICES:-0}" == "1" ]] && command -v pm2 >/dev/null 2>&1
   pm2 stop tibiahub-raffle-scheduler tibiahub-api || true
 fi
 
-dropdb --if-exists --force "$database_name"
-createdb --owner="$application_role" "$database_name"
+require_postgres_admin_access
+postgres_admin_dropdb --if-exists --force "$database_name"
+postgres_admin_createdb --owner="$application_role" "$database_name"
 run_alembic upgrade head
 
 if [[ -n "${BOOTSTRAP_ADMIN_USERNAME:-}" || -n "${BOOTSTRAP_ADMIN_PASSWORD:-}" || -n "${BOOTSTRAP_ADMIN_EMAIL:-}" ]]; then

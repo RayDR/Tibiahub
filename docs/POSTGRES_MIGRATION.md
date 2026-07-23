@@ -24,13 +24,18 @@ Generate the runtime, provisioning, and bootstrap files without printing their v
 ./scripts/generate-tibiahub-secrets.sh --confirm-create-tibiahub-secrets
 ```
 
-The generator never overwrites an existing file. It leaves the elevated PostgreSQL identity blank in `provision.env`; fill `PGUSER` and `PGPASSWORD` through secure server access before provisioning. Do not place those values in shell history, Git, PM2, or command arguments.
+The generator never overwrites an existing file. Administration mode is explicit:
+
+- `TIBIAHUB_POSTGRES_ADMIN_MODE=peer` uses non-interactive `sudo -n -u postgres` over the local PostgreSQL socket. It never needs or stores a PostgreSQL administrator password and never falls back silently.
+- `TIBIAHUB_POSTGRES_ADMIN_MODE=credential_file` reads `PGUSER` and `PGPASSWORD` from `provision.env`. Fill those fields through secure server access and never place the values in shell history, Git, PM2, or command arguments.
 
 The API, raffle scheduler, Alembic, bootstrap command, and operational scripts all load this same backend configuration without depending on process cwd. Database logs include only dialect and database name, never host or credentials.
 
 ## Provision a new local database
 
 Provisioning reads an elevated local PostgreSQL identity from `/forge/tibiahub-secrets/provision.env`. Libpq receives credentials only through the child process environment, never through command arguments. The script refuses alternate database or role names and does not edit another database or PostgreSQL's global configuration. Confirm separately that `listen_addresses` and firewall policy do not expose port 5432 publicly.
+
+Peer administration is preferred where exact passwordless sudo permission is available. Selecting peer mode when it is unavailable stops provisioning; the script does not try the credential file as a fallback.
 
 ```bash
 cd /forge/tibiahub
@@ -118,3 +123,8 @@ The integration fixture destroys only the public schema in that clearly named te
 5. Run `scripts/verify-postgres.sh`, start the API, confirm `/ready`, then start the scheduler and frontend.
 
 The old SQLite files are preservation artifacts, not an automatic runtime rollback path. Provider/Cyclopedia content may be rebuilt in the next sync stage; Stage 1 intentionally contains no general SQLite-to-PostgreSQL ETL.
+
+## Deferred operational migrations
+
+- Move TibiaHub secrets from `/forge/tibiahub-secrets/` to `/etc/tibiahub/` after this cutover is stable.
+- Replace TibiaHub PM2 processes with systemd services and serve the frontend through atomic Nginx releases after PostgreSQL and provider-sync stabilization.

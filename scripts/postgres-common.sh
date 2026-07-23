@@ -44,18 +44,64 @@ load_tibiahub_environment() {
 
 load_postgres_admin_environment() {
   load_secure_file "$TIBIAHUB_PROVISION_SECRETS_FILE" "TibiaHub provisioning secret file"
-  : "${PGHOST:?PGHOST is required in the provisioning secret file}"
-  : "${PGPORT:?PGPORT is required in the provisioning secret file}"
-  : "${PGDATABASE:?PGDATABASE is required in the provisioning secret file}"
-  : "${PGUSER:?PGUSER is required in the provisioning secret file}"
-  : "${PGPASSWORD:?PGPASSWORD is required in the provisioning secret file}"
+  : "${TIBIAHUB_POSTGRES_ADMIN_MODE:?TIBIAHUB_POSTGRES_ADMIN_MODE must explicitly select peer or credential_file}"
   : "${TIBIAHUB_DB_PASSWORD:?TIBIAHUB_DB_PASSWORD is required in the provisioning secret file}"
-  if [[ "$PGHOST" != "127.0.0.1" && "$PGHOST" != "localhost" && "$PGHOST" != "::1" ]]; then
-    echo "Provisioning administrator connectivity must remain localhost-only." >&2
-    exit 2
+  case "$TIBIAHUB_POSTGRES_ADMIN_MODE" in
+    peer)
+      ;;
+    credential_file)
+      : "${PGHOST:?PGHOST is required in credential_file mode}"
+      : "${PGPORT:?PGPORT is required in credential_file mode}"
+      : "${PGDATABASE:?PGDATABASE is required in credential_file mode}"
+      : "${PGUSER:?PGUSER is required in credential_file mode}"
+      : "${PGPASSWORD:?PGPASSWORD is required in credential_file mode}"
+      if [[ "$PGHOST" != "127.0.0.1" && "$PGHOST" != "localhost" && "$PGHOST" != "::1" ]]; then
+        echo "Provisioning administrator connectivity must remain localhost-only." >&2
+        exit 2
+      fi
+      if [[ "$PGDATABASE" != "postgres" ]]; then
+        echo "Provisioning administrator maintenance database must be exactly postgres." >&2
+        exit 2
+      fi
+      ;;
+    *)
+      echo "Unsupported TIBIAHUB_POSTGRES_ADMIN_MODE; use peer or credential_file." >&2
+      exit 2
+      ;;
+  esac
+}
+
+postgres_admin_psql() {
+  if [[ "$TIBIAHUB_POSTGRES_ADMIN_MODE" == "peer" ]]; then
+    sudo -n -u postgres psql -p "${TIBIAHUB_DATABASE_PORT:-5432}" -d postgres "$@"
+  else
+    psql "$@"
   fi
-  if [[ "$PGDATABASE" != "postgres" ]]; then
-    echo "Provisioning administrator maintenance database must be exactly postgres." >&2
+}
+
+postgres_admin_createdb() {
+  if [[ "$TIBIAHUB_POSTGRES_ADMIN_MODE" == "peer" ]]; then
+    sudo -n -u postgres createdb -p "${TIBIAHUB_DATABASE_PORT:-5432}" "$@"
+  else
+    createdb "$@"
+  fi
+}
+
+postgres_admin_dropdb() {
+  if [[ "$TIBIAHUB_POSTGRES_ADMIN_MODE" == "peer" ]]; then
+    sudo -n -u postgres dropdb -p "${TIBIAHUB_DATABASE_PORT:-5432}" "$@"
+  else
+    dropdb "$@"
+  fi
+}
+
+require_postgres_admin_access() {
+  if ! postgres_admin_psql -X -A -t -c 'SELECT 1' >/dev/null; then
+    if [[ "$TIBIAHUB_POSTGRES_ADMIN_MODE" == "peer" ]]; then
+      echo "Peer administration was selected, but passwordless sudo access to local postgres is unavailable; no fallback was attempted." >&2
+    else
+      echo "Credential-file PostgreSQL administration failed; no peer fallback was attempted." >&2
+    fi
     exit 2
   fi
 }
