@@ -32,6 +32,12 @@ from app.models.leadership import (
     GuildLeadershipAssignment, GuildLeadershipApplicationHistory,
     GuildLeadershipApplicationMessage, GuildLeadershipInterview, GuildLeadershipVote,
 )
+# Alembic and test metadata registration only; Knowledge Platform behavior stays
+# inside app.knowledge.
+from app.knowledge.models import (
+    KnowledgeDocument, KnowledgeDomainEvent, KnowledgeEntity, KnowledgeEntityAlias,
+    KnowledgeEntityType, KnowledgeProvider, KnowledgeSearchMetadata,
+)
 
 __all__ = [
     "Creature",
@@ -84,5 +90,8 @@ __all__ = [
     "GuildLeadershipAssignment", "GuildLeadershipApplicationHistory",
     "GuildLeadershipApplicationMessage", "GuildLeadershipInterview", "GuildLeadershipVote",
     "creature_weaknesses",
-    "creature_resistances"
+    "creature_resistances",
+    "KnowledgeProvider", "KnowledgeEntityType", "KnowledgeEntity",
+    "KnowledgeEntityAlias", "KnowledgeDocument", "KnowledgeSearchMetadata",
+    "KnowledgeDomainEvent",
 ]

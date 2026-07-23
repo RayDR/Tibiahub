@@ -33,6 +33,11 @@ from app.models.raffle import InternalNotification, Raffle
 from app.models.user import User
 from app.models.user_character import UserCharacter
 from app.models.workspace_audit import WorkspaceAudit
+from app.knowledge.models import KnowledgeDocument
+from app.knowledge.registry import EntityTypeRegistry, ProviderRegistry
+from app.knowledge.schemas import KnowledgeDocumentCreate, KnowledgeEntityCreate
+from app.knowledge.services import KnowledgeEntityService
+from app.knowledge.storage import KnowledgeDocumentStore
 from app.services.raffle_scheduler_service import RaffleSchedulerService
 
 
@@ -143,6 +148,53 @@ def test_empty_database_upgrades_to_complete_postgresql_schema(pg_engine):
         user_columns = {column["name"]: column for column in inspect(pg_engine).get_columns("users")}
         assert {"is_superuser", "is_moderator", "is_writer"}.issubset(user_columns)
         assert all(user_columns[name]["nullable"] is False for name in ("is_superuser", "is_moderator", "is_writer"))
+
+
+def test_knowledge_platform_persists_nested_jsonb_and_provider_neutral_ids(pg_engine, pg_session):
+    EntityTypeRegistry.register_initial(pg_session)
+    ProviderRegistry.register_initial(pg_session)
+    pg_session.flush()
+    entity = KnowledgeEntityService.create(
+        pg_session,
+        KnowledgeEntityCreate(
+            entity_type="creature",
+            canonical_name="Demon",
+            language_neutral_id="creature:demon",
+            aliases=["The Demon", "demons"],
+        ),
+    )
+    document = KnowledgeDocumentStore.persist(
+        pg_session,
+        KnowledgeDocumentCreate(
+            provider_id="tibiadata",
+            provider_document_id="creatures/demon",
+            entity_uuid=entity.uuid,
+            raw_json={
+                "creature": {
+                    "name": "Demon",
+                    "stats": {"hitpoints": 8200},
+                    "voices": ["Your soul will be mine!"],
+                }
+            },
+            metadata={"retrieval": {"attempt": 1}},
+        ),
+    )
+    pg_session.commit()
+
+    stored = pg_session.get(KnowledgeDocument, document.uuid)
+    assert stored.raw_json["creature"]["stats"]["hitpoints"] == 8200
+    assert stored.document_metadata == {"retrieval": {"attempt": 1}}
+    assert stored.entity.uuid == entity.uuid
+    with pg_engine.connect() as connection:
+        jsonb_columns = set(
+            connection.execute(
+                text(
+                    "SELECT column_name FROM information_schema.columns "
+                    "WHERE table_name='knowledge_documents' AND data_type='jsonb'"
+                )
+            ).scalars()
+        )
+    assert jsonb_columns == {"raw_json", "metadata"}
 
 
 def test_auth_profile_guild_membership_event_and_join_flow(pg_client, pg_session, monkeypatch):
