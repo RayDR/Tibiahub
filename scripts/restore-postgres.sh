@@ -14,6 +14,6 @@ if [[ ! -f "$backup_path" ]]; then
 fi
 load_tibiahub_environment
 require_local_tibiahub_target
-pg_restore --exit-on-error --clean --if-exists --no-owner --no-acl --dbname="$(libpq_url "$DATABASE_URL")" "$backup_path"
+postgres_exec pg_restore --exit-on-error --clean --if-exists --no-owner --no-acl "$backup_path"
 run_alembic upgrade head
 echo "Restore completed for the configured TibiaHub database only."

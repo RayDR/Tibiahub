@@ -7,7 +7,7 @@ TibiaHub supports PostgreSQL 16+ as its sole development and production runtime 
 - Database: `tibiahub`
 - Application role: `tibiahub_app`
 - Connectivity: localhost only (`127.0.0.1`, `localhost`, or `::1`)
-- Credentials: `backend/.env` or process environment, never source control
+- Credentials: `/forge/tibiahub-secrets/*.env`, owned by the service user with mode `0600`
 - Required extensions: `pg_trgm`, `unaccent`
 - Optional Stage 1 extension: `postgis`
 - Deferred: pgvector, PostGIS domain models, Redis, S3, new search, and sync redesign
@@ -16,23 +16,33 @@ On Ubuntu with PostgreSQL 16, install PostGIS later with `postgresql-16-postgis-
 
 ## Configuration
 
-Copy `backend/.env.example` to `backend/.env`, replace every placeholder, and keep the file mode restricted. `DATABASE_URL` has no default. Outside `APP_ENV=test`, a non-PostgreSQL URL is rejected immediately.
+Production does not read `backend/.env`. It reads `/forge/tibiahub-secrets/runtime.env` (or the absolute path in `TIBIAHUB_SECRETS_FILE`) and rejects linked, foreign-owned, or group/other-accessible secret files. `DATABASE_URL` has no default. Outside `APP_ENV=test`, a non-PostgreSQL URL is rejected immediately.
+
+Generate the runtime, provisioning, and bootstrap files without printing their values:
+
+```bash
+./scripts/generate-tibiahub-secrets.sh --confirm-create-tibiahub-secrets
+```
+
+The generator never overwrites an existing file. Administration mode is explicit:
+
+- `TIBIAHUB_POSTGRES_ADMIN_MODE=peer` uses non-interactive `sudo -n -u postgres` over the local PostgreSQL socket. It never needs or stores a PostgreSQL administrator password and never falls back silently.
+- `TIBIAHUB_POSTGRES_ADMIN_MODE=credential_file` reads `PGUSER` and `PGPASSWORD` from `provision.env`. Fill those fields through secure server access and never place the values in shell history, Git, PM2, or command arguments.
 
 The API, raffle scheduler, Alembic, bootstrap command, and operational scripts all load this same backend configuration without depending on process cwd. Database logs include only dialect and database name, never host or credentials.
 
 ## Provision a new local database
 
-Provisioning requires an elevated local PostgreSQL URL and a password supplied only through the environment. The script refuses alternate database or role names and does not edit another database or PostgreSQL's global configuration. Confirm separately that `listen_addresses` and firewall policy do not expose port 5432 publicly.
+Provisioning reads an elevated local PostgreSQL identity from `/forge/tibiahub-secrets/provision.env`. Libpq receives credentials only through the child process environment, never through command arguments. The script refuses alternate database or role names and does not edit another database or PostgreSQL's global configuration. Confirm separately that `listen_addresses` and firewall policy do not expose port 5432 publicly.
+
+Peer administration is preferred where exact passwordless sudo permission is available. Selecting peer mode when it is unavailable stops provisioning; the script does not try the credential file as a fallback.
 
 ```bash
 cd /forge/tibiahub
-export POSTGRES_ADMIN_URL='postgresql:///postgres'
-export TIBIAHUB_DB_PASSWORD='replace-with-a-generated-secret'
 ./scripts/provision-postgres.sh --confirm-provision-tibiahub
-unset TIBIAHUB_DB_PASSWORD POSTGRES_ADMIN_URL
 ```
 
-Set the matching application URL in `backend/.env`, then apply the schema:
+The generated runtime file already contains the matching application connection. Apply the schema:
 
 ```bash
 cd /forge/tibiahub/backend
@@ -44,30 +54,26 @@ The clean baseline creates every currently supported table from an empty databas
 
 ## Optional initial administrator
 
-No account is created implicitly. Supply all three values for one explicit run:
+No account is created implicitly. The generated bootstrap file contains one password that is never printed. Create the account through the guarded wrapper:
 
 ```bash
 cd /forge/tibiahub
-export BOOTSTRAP_ADMIN_USERNAME='initial-admin'
-export BOOTSTRAP_ADMIN_EMAIL='admin@example.invalid'
-export BOOTSTRAP_ADMIN_PASSWORD='replace-with-a-generated-secret'
-PYTHONPATH=backend backend/venv/bin/python scripts/bootstrap_admin.py
-unset BOOTSTRAP_ADMIN_USERNAME BOOTSTRAP_ADMIN_EMAIL BOOTSTRAP_ADMIN_PASSWORD
+./scripts/bootstrap-admin.sh
 ```
 
 ## Exact deployment sequence
 
 1. Confirm PostgreSQL 16+ is available only on localhost.
 2. Preserve the previous runtime file outside the repository, if it exists: `install -m 600 backend/tibia_bestiary.db /var/backups/tibiahub/tibia_bestiary-pre-postgres.db`. Do not delete the original automatically.
-3. Run `scripts/provision-postgres.sh --confirm-provision-tibiahub` with explicit elevated credentials.
-4. Put the application `DATABASE_URL` and secrets in `backend/.env`.
+3. Generate the external secret files and securely fill only the two blank elevated PostgreSQL fields.
+4. Run `scripts/provision-postgres.sh --confirm-provision-tibiahub`.
 5. Run `cd backend && venv/bin/alembic -c alembic.ini upgrade head` exactly once.
-6. Optionally run the explicit bootstrap-admin command above.
+6. Run the explicit bootstrap-admin wrapper above when the database is empty.
 7. Start only the API: `pm2 start ecosystem.config.js --only tibiahub-api`.
 8. Require HTTP 200 from `http://127.0.0.1:8001/api/v1/ready`.
 9. Start `tibiahub-raffle-scheduler`, then build/restart the frontend.
 
-`./start.sh` performs steps 7-9 only after database verification. It never runs Alembic. PM2 uses absolute working directories, and both Python processes read the same `backend/.env`.
+`./start.sh` performs steps 7-9 only after database verification. It never runs Alembic. PM2 stores only the non-secret absolute file path; both Python processes read the same protected external runtime file.
 
 ## Backup, restore, reset, and verify
 
@@ -87,7 +93,6 @@ Restore is destructive within the configured TibiaHub database and requires an e
 A full reset is never automatic. It validates the local dialect and exact database name, can stop only TibiaHub API/scheduler processes, preserves a legacy SQLite copy when present, recreates only the configured TibiaHub database, and applies Alembic head:
 
 ```bash
-export POSTGRES_ADMIN_URL='postgresql:///postgres'
 export STOP_TIBIAHUB_SERVICES=1
 ./scripts/reset-postgres.sh --confirm-reset-tibiahub
 ```
@@ -103,7 +108,7 @@ The scheduler claims due raffles in a short transaction using PostgreSQL `FOR UP
 Unit tests explicitly use SQLite in memory. PostgreSQL integration tests require a disposable database whose name contains `test`; they refuse `tibiahub` or an ambiguous name.
 
 ```bash
-export TEST_DATABASE_URL='postgresql+psycopg2://tibiahub_test_app:secret@127.0.0.1:5432/tibiahub_test'
+export TEST_DATABASE_URL='postgresql+psycopg2://tibiahub_test_app@127.0.0.1:5432/tibiahub_test'
 backend/venv/bin/python -m pytest backend/tests -q
 ```
 
@@ -118,3 +123,8 @@ The integration fixture destroys only the public schema in that clearly named te
 5. Run `scripts/verify-postgres.sh`, start the API, confirm `/ready`, then start the scheduler and frontend.
 
 The old SQLite files are preservation artifacts, not an automatic runtime rollback path. Provider/Cyclopedia content may be rebuilt in the next sync stage; Stage 1 intentionally contains no general SQLite-to-PostgreSQL ETL.
+
+## Deferred operational migrations
+
+- Move TibiaHub secrets from `/forge/tibiahub-secrets/` to `/etc/tibiahub/` after this cutover is stable.
+- Replace TibiaHub PM2 processes with systemd services and serve the frontend through atomic Nginx releases after PostgreSQL and provider-sync stabilization.

@@ -7,8 +7,7 @@ if [[ "${1:-}" != "--confirm-provision-tibiahub" || $# -ne 1 ]]; then
   exit 2
 fi
 
-: "${POSTGRES_ADMIN_URL:?POSTGRES_ADMIN_URL must identify an elevated local PostgreSQL role}"
-: "${TIBIAHUB_DB_PASSWORD:?TIBIAHUB_DB_PASSWORD is required and will not be printed}"
+load_postgres_admin_environment
 
 database_name="${TIBIAHUB_DATABASE_NAME:-tibiahub}"
 application_role="${TIBIAHUB_DATABASE_ROLE:-tibiahub_app}"
@@ -23,19 +22,57 @@ if [[ "$database_host" != "127.0.0.1" && "$database_host" != "localhost" && "$da
   echo "Provisioning is restricted to localhost PostgreSQL." >&2
   exit 2
 fi
+if [[ "$TIBIAHUB_POSTGRES_ADMIN_MODE" == "credential_file" \
+   && ( "$database_host" != "$PGHOST" || "$database_port" != "$PGPORT" ) ]]; then
+  echo "Application and provisioning connections must use the same local PostgreSQL endpoint." >&2
+  exit 2
+fi
 
-psql "$(libpq_url "$POSTGRES_ADMIN_URL")" -X -v ON_ERROR_STOP=1 -v role_name="$application_role" -v role_password="$TIBIAHUB_DB_PASSWORD" <<'SQL'
-SELECT format('CREATE ROLE %I LOGIN PASSWORD %L', :'role_name', :'role_password')
-WHERE NOT EXISTS (SELECT 1 FROM pg_roles WHERE rolname = :'role_name') \gexec
-SELECT format('ALTER ROLE %I LOGIN PASSWORD %L', :'role_name', :'role_password') \gexec
+echo "Provision target: host=$database_host port=$database_port database=tibiahub role=tibiahub_app"
+echo "Administration mode: $TIBIAHUB_POSTGRES_ADMIN_MODE"
+require_postgres_admin_access
+
+server_version_num="$(postgres_admin_psql -X -A -t -c 'SHOW server_version_num')"
+if [[ ! "$server_version_num" =~ ^[0-9]+$ || "$server_version_num" -lt 160000 ]]; then
+  echo "TibiaHub requires PostgreSQL 16 or newer." >&2
+  exit 2
+fi
+listen_addresses="$(postgres_admin_psql -X -A -t -c 'SHOW listen_addresses')"
+IFS=',' read -r -a configured_addresses <<<"$listen_addresses"
+for configured_address in "${configured_addresses[@]}"; do
+  configured_address="${configured_address//[[:space:]]/}"
+  if [[ "$configured_address" != "localhost" && "$configured_address" != "127.0.0.1" && "$configured_address" != "::1" ]]; then
+    echo "PostgreSQL is not restricted to localhost; provisioning refused." >&2
+    exit 2
+  fi
+done
+
+if [[ ! "$TIBIAHUB_DB_PASSWORD" =~ ^[A-Za-z0-9_-]{32,}$ ]]; then
+  echo "Generated TibiaHub application-role password has an unexpected format." >&2
+  exit 2
+fi
+{
+  printf "\\set role_password '%s'\n" "$TIBIAHUB_DB_PASSWORD"
+  cat <<'SQL'
+SELECT 'CREATE ROLE tibiahub_app LOGIN NOSUPERUSER NOCREATEDB NOCREATEROLE NOREPLICATION'
+WHERE NOT EXISTS (SELECT 1 FROM pg_roles WHERE rolname = 'tibiahub_app') \gexec
+ALTER ROLE tibiahub_app LOGIN NOSUPERUSER NOCREATEDB NOCREATEROLE NOREPLICATION PASSWORD :'role_password';
+SQL
+} | postgres_admin_psql -X -v ON_ERROR_STOP=1
+
+postgres_admin_psql -X -v ON_ERROR_STOP=1 <<'SQL'
+SELECT 'CREATE DATABASE tibiahub OWNER tibiahub_app'
+WHERE NOT EXISTS (SELECT 1 FROM pg_database WHERE datname = 'tibiahub') \gexec
+ALTER DATABASE tibiahub OWNER TO tibiahub_app;
 SQL
 
-psql "$(libpq_url "$POSTGRES_ADMIN_URL")" -X -v ON_ERROR_STOP=1 -v db_name="$database_name" -v role_name="$application_role" <<'SQL'
-SELECT format('CREATE DATABASE %I OWNER %I', :'db_name', :'role_name')
-WHERE NOT EXISTS (SELECT 1 FROM pg_database WHERE datname = :'db_name') \gexec
-SQL
-
-PGPASSWORD="$TIBIAHUB_DB_PASSWORD" psql -X -h "$database_host" -p "$database_port" -U "$application_role" -d "$database_name" -v ON_ERROR_STOP=1 <<'SQL'
+PGHOST="$database_host" PGPORT="$database_port" PGUSER="$application_role" \
+  PGPASSWORD="$TIBIAHUB_DB_PASSWORD" PGDATABASE="$database_name" \
+  psql -X -v ON_ERROR_STOP=1 <<'SQL'
+REVOKE ALL ON DATABASE tibiahub FROM PUBLIC;
+GRANT CONNECT, TEMPORARY ON DATABASE tibiahub TO tibiahub_app;
+REVOKE CREATE ON SCHEMA public FROM PUBLIC;
+GRANT USAGE, CREATE ON SCHEMA public TO tibiahub_app;
 CREATE EXTENSION IF NOT EXISTS pg_trgm;
 CREATE EXTENSION IF NOT EXISTS unaccent;
 DO $tibiahub$

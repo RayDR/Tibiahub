@@ -14,6 +14,7 @@ module.exports = {
         APP_ENV: 'production',
         API_HOST: '127.0.0.1',
         API_PORT: '8001',
+        TIBIAHUB_SECRETS_FILE: '/forge/tibiahub-secrets/runtime.env',
       },
       error_file: './logs/api-error.log',
       out_file: './logs/api-out.log',
@@ -50,6 +51,7 @@ module.exports = {
       env: {
         PYTHONUNBUFFERED: '1',
         APP_ENV: 'production',
+        TIBIAHUB_SECRETS_FILE: '/forge/tibiahub-secrets/runtime.env',
       },
       error_file: './logs/raffle-scheduler-error.log',
       out_file: './logs/raffle-scheduler-out.log',

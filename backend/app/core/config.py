@@ -6,19 +6,21 @@ API, scheduler, Alembic, and scripts behave identically regardless of cwd.
 from pathlib import Path
 from typing import List, Literal
 
-from pydantic import Field, model_validator
+from pydantic import Field, SecretStr, model_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
 from sqlalchemy.engine import URL, make_url
+
+from app.core.secrets import RUNTIME_SECRETS_FILE, VALIDATED_RUNTIME_SECRETS_FILE
 
 
 BACKEND_ROOT = Path(__file__).resolve().parents[2]
 
 
 class Settings(BaseSettings):
-    """Application settings loaded from environment and ``backend/.env``."""
+    """Application settings loaded from environment or the external secret file."""
 
     model_config = SettingsConfigDict(
-        env_file=BACKEND_ROOT / ".env",
+        env_file=VALIDATED_RUNTIME_SECRETS_FILE,
         case_sensitive=True,
         extra="ignore",
     )
@@ -31,11 +33,11 @@ class Settings(BaseSettings):
     PUBLIC_DOMAIN: str = "tibiahub.domoforge.com"
 
     # Security
-    SECRET_KEY: str = "changethis-to-a-secure-secret-key-in-production"
+    SECRET_KEY: SecretStr = SecretStr("changethis-to-a-secure-secret-key-in-production")
     ACCESS_TOKEN_EXPIRE_MINUTES: int = 60 * 24 * 7
 
     # Database. There is deliberately no runtime default.
-    DATABASE_URL: str | None = None
+    DATABASE_URL: SecretStr | None = None
     DATABASE_POOL_SIZE: int = Field(5, ge=1, le=50)
     DATABASE_MAX_OVERFLOW: int = Field(10, ge=0, le=100)
     DATABASE_POOL_RECYCLE_SECONDS: int = Field(1800, ge=60)
@@ -81,15 +83,20 @@ class Settings(BaseSettings):
     def validate_database(self) -> "Settings":
         if not self.DATABASE_URL:
             raise ValueError("DATABASE_URL is required; TibiaHub has no default runtime database")
-        dialect = make_url(self.DATABASE_URL).get_backend_name()
+        database_url = self.DATABASE_URL.get_secret_value()
+        dialect = make_url(database_url).get_backend_name()
         if dialect != "postgresql" and not (self.APP_ENV == "test" and dialect == "sqlite"):
             raise ValueError("TibiaHub runtime requires PostgreSQL; SQLite is allowed only with APP_ENV=test")
+        if self.APP_ENV == "production" and VALIDATED_RUNTIME_SECRETS_FILE is None:
+            raise ValueError(f"Production requires the external TibiaHub secret file: {RUNTIME_SECRETS_FILE}")
+        if self.APP_ENV == "production" and len(self.SECRET_KEY.get_secret_value()) < 32:
+            raise ValueError("Production requires a strong SECRET_KEY in the external secret file")
         return self
 
     @property
     def database_url(self) -> URL:
         """Return a sync SQLAlchemy URL without ever rendering credentials."""
-        url = make_url(self.DATABASE_URL or "")
+        url = make_url(self.DATABASE_URL.get_secret_value() if self.DATABASE_URL else "")
         if url.drivername == "postgresql+asyncpg":
             return url.set(drivername="postgresql+psycopg2")
         return url
@@ -97,6 +104,10 @@ class Settings(BaseSettings):
     @property
     def database_name(self) -> str:
         return self.database_url.database or ""
+
+    @property
+    def secret_key(self) -> str:
+        return self.SECRET_KEY.get_secret_value()
 
     @property
     def cors_origins_list(self) -> List[str]:
