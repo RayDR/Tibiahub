@@ -210,11 +210,12 @@ def register_user(
         username=user_in.username,
         email=user_in.email,
         hashed_password=security.get_password_hash(user_in.password),
-        guild_rank="Member",
+        guild_rank=tibia_character_data.get("guild_rank") if tibia_character_data else "Unranked",
         tibia_character_name=tibia_character_data.get("name") if tibia_character_data else user_in.tibia_character_name,
         level=tibia_character_data.get("level") if tibia_character_data else None,
         vocation=tibia_character_data.get("vocation") if tibia_character_data else None,
         world_name=tibia_character_data.get("world") if tibia_character_data else None,
+        guild_name=tibia_character_data.get("guild_name") if tibia_character_data else None,
         residence=tibia_character_data.get("residence") if tibia_character_data else None,
         tibia_status="validated" if tibia_character_data else None,
         join_date=datetime.now(UTC),
@@ -233,6 +234,8 @@ def register_user(
             level=tibia_character_data.get("level") if tibia_character_data else None,
             vocation=tibia_character_data.get("vocation") if tibia_character_data else None,
             world_name=tibia_character_data.get("world") if tibia_character_data else None,
+            guild_name=tibia_character_data.get("guild_name") if tibia_character_data else None,
+            guild_rank=tibia_character_data.get("guild_rank") if tibia_character_data else None,
             residence=tibia_character_data.get("residence") if tibia_character_data else None,
         )
         db.add(user_char)

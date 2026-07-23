@@ -62,6 +62,7 @@ export interface GuildSyncResult {
         character_name: string;
         reason: string;
     }>;
+    unlinked_users: number;
     message: string;
 }
 

@@ -87,6 +87,20 @@ body {
 .admin-tab-active { border-color: var(--color-primary); color: var(--color-primary); }
 .admin-tab-inactive { border-color: transparent; color: var(--color-text-muted); }
 
+/* Legacy admin screens still contain Tailwind palette utilities. Scope their
+   visual output to the selected theme until each screen is decomposed into the
+   shared primitives above. Semantic success/danger colors remain distinct. */
+.admin-shell [class*="bg-slate-9"], .admin-shell [class*="bg-slate-8"] { background-color: var(--color-surface) !important; }
+.admin-shell [class*="bg-slate-7"] { background-color: var(--color-surface-alt) !important; }
+.admin-shell [class*="border-slate-"] { border-color: var(--color-border) !important; }
+.admin-shell [class*="text-slate-1"], .admin-shell [class*="text-slate-2"], .admin-shell [class*="text-slate-3"], .admin-shell [class*="text-white"] { color: var(--color-text) !important; }
+.admin-shell [class*="text-slate-4"], .admin-shell [class*="text-slate-5"], .admin-shell [class*="text-slate-6"] { color: var(--color-text-muted) !important; }
+.admin-shell [class*="text-amber-"], .admin-shell [class*="text-sky-"], .admin-shell [class*="text-blue-"], .admin-shell [class*="text-purple-"] { color: var(--color-primary) !important; }
+.admin-shell [class*="bg-amber-"], .admin-shell [class*="bg-sky-"], .admin-shell [class*="bg-blue-"], .admin-shell [class*="bg-purple-"] { background-color: var(--color-primary) !important; color: var(--color-bg) !important; }
+.admin-shell [class*="border-amber-"], .admin-shell [class*="border-sky-"], .admin-shell [class*="border-blue-"], .admin-shell [class*="border-purple-"] { border-color: var(--color-primary) !important; }
+.admin-shell [class*="text-green-"], .admin-shell [class*="text-emerald-"] { color: var(--color-success) !important; }
+.admin-shell [class*="text-red-"] { color: var(--color-danger) !important; }
+
 .app-page-header {
   text-align: center;
   margin-bottom: 2rem;

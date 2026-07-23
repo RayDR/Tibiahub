@@ -18,7 +18,7 @@ from sqlalchemy.engine import make_url
 from sqlalchemy.orm import Session, sessionmaker
 
 from app.core import config
-from app.core.security import get_password_hash
+from app.core.security import create_access_token, get_password_hash
 from app.db.database import (
     DatabaseNotReadyError,
     create_database_engine,
@@ -140,6 +140,9 @@ def test_empty_database_upgrades_to_complete_postgresql_schema(pg_engine):
         )).scalars())
         assert "uq_leadership_active_application" in index_definitions and " WHERE " in index_definitions
         assert "ix_raffles_scheduler_due" in index_definitions
+        user_columns = {column["name"]: column for column in inspect(pg_engine).get_columns("users")}
+        assert {"is_superuser", "is_moderator", "is_writer"}.issubset(user_columns)
+        assert all(user_columns[name]["nullable"] is False for name in ("is_superuser", "is_moderator", "is_writer"))
 
 
 def test_auth_profile_guild_membership_event_and_join_flow(pg_client, pg_session, monkeypatch):
@@ -232,6 +235,53 @@ def test_leadership_notifications_admin_audit_and_transaction_rollback(pg_sessio
     rolled_back_id = rolled_back.id
     pg_session.rollback()
     assert pg_session.get(User, rolled_back_id) is None
+
+
+def test_postgresql_capabilities_guild_reconciliation_and_system_audit(pg_client, pg_session, monkeypatch):
+    from app.api.v1.endpoints import admin as admin_endpoint
+
+    admin = _user(pg_session, "postgres-global-admin", guild="Admin Home")
+    admin.is_superuser = True
+    staying = _user(pg_session, "postgres-staying", guild="Postgres Guild")
+    departed = _user(pg_session, "postgres-departed", guild="Postgres Guild")
+    staying.tibia_character_name = "Ray On"
+    departed.tibia_character_name = "Gone Away"
+    pg_session.add_all([
+        UserCharacter(user_id=staying.id, character_name="Ray On", guild_name="Postgres Guild", guild_rank="Member"),
+        UserCharacter(user_id=departed.id, character_name="Gone Away", guild_name="Postgres Guild", guild_rank="Member"),
+    ])
+    pg_session.commit()
+    headers = {"Authorization": f"Bearer {create_access_token(admin.username)}"}
+
+    final_admin = pg_client.put(
+        f"/api/v1/guild-management/users/{admin.id}", headers=headers, json={"is_superuser": False},
+    )
+    assert final_admin.status_code == 409
+
+    capability_update = pg_client.put(
+        f"/api/v1/guild-management/users/{staying.id}", headers=headers,
+        json={"is_superuser": True, "is_moderator": True, "is_writer": True},
+    )
+    assert capability_update.status_code == 200
+    assert capability_update.json()["guild_rank"] == "Member"
+
+    async def guild_info(_name):
+        return {"name": "Postgres Guild", "world": "Antica", "members": [
+            {"name": "Ray On", "rank": "Leader", "level": 500, "vocation": "Knight"},
+        ]}
+
+    monkeypatch.setattr(admin_endpoint, "get_guild_info", guild_info)
+    synchronized = pg_client.post(
+        "/api/v1/guild-management/sync-guild?guild_name=Postgres%20Guild", headers=headers,
+    )
+    assert synchronized.status_code == 200 and synchronized.json()["unlinked_users"] == 1
+    pg_session.expire_all()
+    assert pg_session.get(User, staying.id).guild_name == "Postgres Guild"
+    assert pg_session.get(User, staying.id).guild_rank == "Leader"
+    assert pg_session.get(User, departed.id).guild_name is None
+    audits = {row.action: row for row in pg_session.query(WorkspaceAudit).all()}
+    assert audits["user_capabilities_updated"].safe_metadata["actor_context"] == "system"
+    assert audits["guild_membership_synchronized"].safe_metadata["source"] == "tibiadata"
 
 
 def test_postgresql_scheduler_claim_is_single_across_workers(pg_engine, pg_session, monkeypatch):

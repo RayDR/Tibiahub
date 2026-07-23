@@ -25,7 +25,7 @@ api_router.include_router(leadership.router, prefix="/guild", tags=["Guild Leade
 api_router.include_router(leadership.admin_router, prefix="/admin", tags=["Admin Leadership Assistance"])
 api_router.include_router(sync.router, prefix="/sync", tags=["Database Sync"])
 api_router.include_router(sync_admin.router, prefix="/admin/sync", tags=["Sync Admin"])
-api_router.include_router(tibia.router, tags=["Tibia.com API"])
+api_router.include_router(tibia.router, tags=["TibiaData API"])
 api_router.include_router(health.router, tags=["Health"])
 api_router.include_router(creatures.router)
 api_router.include_router(hunt_zones.router)

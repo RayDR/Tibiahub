@@ -145,13 +145,16 @@ class TibiaValidationService:
                         return False, None, "Character not found in Tibia"
                     
                     # Character found - extract useful data
+                    guild_data = char_data.get("guild") or {}
                     character_info = {
                         "name": char_data.get("name"),
                         "level": char_data.get("level"),
                         "vocation": char_data.get("vocation"),
                         "world": char_data.get("world"),
                         "sex": char_data.get("sex"),
-                        "residence": char_data.get("residence")
+                        "residence": char_data.get("residence"),
+                        "guild_name": guild_data.get("name") if isinstance(guild_data, dict) else guild_data,
+                        "guild_rank": guild_data.get("rank") if isinstance(guild_data, dict) else None,
                     }
                     
                     return True, character_info, None
