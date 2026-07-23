@@ -17,6 +17,7 @@ class KnowledgeEventType(StrEnum):
     PROVIDER_IMPORTED = "ProviderImported"
     PROVIDER_FAILED = "ProviderFailed"
     KNOWLEDGE_MERGED = "KnowledgeMerged"
+    KNOWLEDGE_NORMALIZED = "KnowledgeNormalized"
 
 
 def emit_event(
