@@ -3,15 +3,18 @@
  * Replaces three separate admin pages with a single tabbed interface.
  */
 import { useEffect, useState } from 'react';
+import { useTranslation } from 'react-i18next';
 import axios from 'axios';
 import { useToast } from '../../context/ToastContext';
 import {
     CheckCircle, XCircle, AlertCircle, Loader2,
     RefreshCw, Database, Globe, BookOpen, Code, Clock,
     GitBranch, Download, Eye,
+    Workflow,
 } from 'lucide-react';
+import KnowledgeOperations from './KnowledgeOperations';
 
-type Tab = 'api-monitor' | 'db-sync' | 'admin-sync';
+type Tab = 'api-monitor' | 'db-sync' | 'admin-sync' | 'knowledge';
 
 // ── API Monitor types ──────────────────────────────────────────────────────────
 interface APIStatus {
@@ -423,12 +426,14 @@ function AdminSyncTab() {
 
 // ── Main DataTools component ───────────────────────────────────────────────────
 export default function DataTools() {
+    const { t } = useTranslation();
     const [activeTab, setActiveTab] = useState<Tab>('api-monitor');
 
     const tabs: { id: Tab; label: string; icon: any; description: string }[] = [
         { id: 'api-monitor', label: 'API Monitor', icon: Globe, description: 'External API health checks' },
         { id: 'db-sync', label: 'Database Sync', icon: GitBranch, description: 'Preview and apply DB changes' },
         { id: 'admin-sync', label: 'Data Sync', icon: RefreshCw, description: 'Trigger bestiary syncs' },
+        { id: 'knowledge', label: t('knowledgeOps.navigation'), icon: Workflow, description: t('knowledgeOps.subtitle') },
     ];
 
     return (
@@ -464,6 +469,7 @@ export default function DataTools() {
                 {activeTab === 'api-monitor' && <APIMonitorTab />}
                 {activeTab === 'db-sync' && <DBSyncTab />}
                 {activeTab === 'admin-sync' && <AdminSyncTab />}
+                {activeTab === 'knowledge' && <KnowledgeOperations />}
             </div>
         </div>
     );

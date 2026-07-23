@@ -33,10 +33,10 @@ from app.models.raffle import InternalNotification, Raffle
 from app.models.user import User
 from app.models.user_character import UserCharacter
 from app.models.workspace_audit import WorkspaceAudit
-from app.knowledge.models import KnowledgeDocument
+from app.knowledge.models import KnowledgeDocument, KnowledgeJob, KnowledgeProvider
 from app.knowledge.registry import EntityTypeRegistry, ProviderRegistry
 from app.knowledge.schemas import KnowledgeDocumentCreate, KnowledgeEntityCreate
-from app.knowledge.services import KnowledgeEntityService
+from app.knowledge.services import EnqueueKnowledgeJob, KnowledgeEntityService, KnowledgeJobService
 from app.knowledge.storage import KnowledgeDocumentStore
 from app.services.raffle_scheduler_service import RaffleSchedulerService
 
@@ -118,6 +118,45 @@ def _user(session: Session, username: str, *, guild: str = "Postgres Guild", ran
     session.add(user)
     session.flush()
     return user
+
+
+def _register_reference_provider(session: Session) -> None:
+    EntityTypeRegistry.register_initial(session)
+    provider = session.get(KnowledgeProvider, "reference")
+    if provider is None:
+        provider = KnowledgeProvider(
+            provider_id="reference",
+            provider_name="Reference Adapter",
+            priority=1000,
+            enabled=True,
+            version="stage-2a-2",
+            rate_limit={"requests": 1, "window_seconds": 1},
+            health="unknown",
+            supports_entities=["creature"],
+            supports_media=False,
+            supports_search=False,
+        )
+        session.add(provider)
+    else:
+        provider.enabled = True
+        provider.health = "unknown"
+    session.flush()
+
+
+def _reference_job(*, payload_suffix: str = "demon", priority: int = 100) -> EnqueueKnowledgeJob:
+    return EnqueueKnowledgeJob(
+        provider_id="reference",
+        job_type="reference_import",
+        entity_type="creature",
+        scope={"language": "en"},
+        payload={
+            "canonical_name": payload_suffix.title(),
+            "language_neutral_id": f"creature:{payload_suffix}",
+            "provider_document_id": f"reference:{payload_suffix}",
+        },
+        priority=priority,
+        scheduled_at=datetime.now(UTC) - timedelta(seconds=1),
+    )
 
 
 def test_empty_database_upgrades_to_complete_postgresql_schema(pg_engine):
@@ -359,6 +398,88 @@ def test_postgresql_scheduler_claim_is_single_across_workers(pg_engine, pg_sessi
     assert len(successful) == 1
     pg_session.expire_all()
     assert pg_session.get(Raffle, raffle.id).execution_state == "claimed"
+
+
+def test_knowledge_worker_schema_uses_jsonb_foreign_keys_and_partial_idempotency(pg_engine):
+    inspector = inspect(pg_engine)
+    assert {
+        "knowledge_jobs",
+        "knowledge_job_attempts",
+        "knowledge_worker_heartbeats",
+        "knowledge_provider_cursors",
+    }.issubset(inspector.get_table_names())
+    with pg_engine.connect() as connection:
+        jsonb_columns = set(
+            connection.execute(
+                text(
+                    "SELECT table_name || '.' || column_name "
+                    "FROM information_schema.columns "
+                    "WHERE table_schema='public' AND data_type='jsonb' "
+                    "AND table_name IN ('knowledge_jobs','knowledge_job_attempts',"
+                    "'knowledge_worker_heartbeats','knowledge_provider_cursors')"
+                )
+            ).scalars()
+        )
+        index_definition = connection.execute(
+            text(
+                "SELECT indexdef FROM pg_indexes WHERE schemaname='public' "
+                "AND indexname='uq_knowledge_jobs_active_idempotency'"
+            )
+        ).scalar_one()
+    assert {
+        "knowledge_jobs.scope",
+        "knowledge_jobs.payload",
+        "knowledge_job_attempts.metrics",
+        "knowledge_worker_heartbeats.safe_metadata",
+        "knowledge_provider_cursors.cursor",
+    } == jsonb_columns
+    assert "UNIQUE" in index_definition and " WHERE " in index_definition
+    foreign_tables = {
+        key["referred_table"] for key in inspector.get_foreign_keys("knowledge_jobs")
+    }
+    assert {"knowledge_providers", "knowledge_entity_types", "knowledge_jobs", "users"} <= foreign_tables
+
+
+def test_postgresql_concurrent_knowledge_enqueue_has_one_active_job(pg_engine, pg_session):
+    _register_reference_provider(pg_session)
+    pg_session.commit()
+    factory = sessionmaker(bind=pg_engine, expire_on_commit=False)
+
+    def enqueue_same_job(_worker_number: int) -> tuple[str, bool]:
+        with factory() as session:
+            result = KnowledgeJobService.enqueue(session, _reference_job())
+            session.commit()
+            return str(result.job.id), result.created
+
+    with ThreadPoolExecutor(max_workers=2) as pool:
+        results = list(pool.map(enqueue_same_job, range(2)))
+
+    assert len({job_id for job_id, _created in results}) == 1
+    assert sum(created for _job_id, created in results) == 1
+    pg_session.expire_all()
+    assert pg_session.query(KnowledgeJob).filter(KnowledgeJob.state == "pending").count() == 1
+
+
+def test_postgresql_skip_locked_prevents_duplicate_knowledge_claim(pg_engine, pg_session):
+    _register_reference_provider(pg_session)
+    job = KnowledgeJobService.enqueue(pg_session, _reference_job(payload_suffix="dragon")).job
+    pg_session.commit()
+    factory = sessionmaker(bind=pg_engine, expire_on_commit=False)
+
+    def claim(worker_id: str) -> str | None:
+        with factory() as session:
+            claimed = KnowledgeJobService.claim_one(session, worker_id, lease_seconds=60)
+            session.commit()
+            return str(claimed.id) if claimed else None
+
+    with ThreadPoolExecutor(max_workers=2) as pool:
+        results = list(pool.map(claim, ["knowledge-pg-1", "knowledge-pg-2"]))
+
+    successful = [job_id for job_id in results if job_id is not None]
+    assert successful == [str(job.id)]
+    pg_session.expire_all()
+    stored = pg_session.get(KnowledgeJob, job.id)
+    assert stored.state == "claimed" and stored.worker_id in {"knowledge-pg-1", "knowledge-pg-2"}
 
 
 def test_readiness_schema_mismatch_unavailable_database_and_rollback(pg_engine):

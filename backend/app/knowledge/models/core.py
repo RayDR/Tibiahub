@@ -30,6 +30,14 @@ class KnowledgeProvider(Base):
     __tablename__ = "knowledge_providers"
     __table_args__ = (
         CheckConstraint("priority >= 0", name="ck_knowledge_provider_priority_nonnegative"),
+        CheckConstraint(
+            "health IN ('healthy','degraded','unavailable','disabled','unknown')",
+            name="ck_knowledge_provider_health",
+        ),
+        CheckConstraint(
+            "consecutive_failures >= 0",
+            name="ck_knowledge_provider_failures_nonnegative",
+        ),
         Index("ix_knowledge_providers_enabled_priority", "enabled", "priority"),
     )
 
@@ -41,6 +49,11 @@ class KnowledgeProvider(Base):
     rate_limit = Column(JSONBType, nullable=False, default=dict)
     health = Column(String(32), nullable=False, default="unknown")
     last_sync_at = Column(DateTime(timezone=True), nullable=True)
+    last_attempted_at = Column(DateTime(timezone=True), nullable=True)
+    last_success_at = Column(DateTime(timezone=True), nullable=True)
+    last_failure_at = Column(DateTime(timezone=True), nullable=True)
+    consecutive_failures = Column(Integer, nullable=False, default=0)
+    cooldown_until = Column(DateTime(timezone=True), nullable=True)
     supports_entities = Column(JSONBType, nullable=False, default=list)
     supports_media = Column(Boolean, nullable=False, default=False)
     supports_search = Column(Boolean, nullable=False, default=False)
@@ -149,6 +162,7 @@ class KnowledgeDocument(Base):
 
     __tablename__ = "knowledge_documents"
     __table_args__ = (
+        UniqueConstraint("content_identity", name="uq_knowledge_documents_content_identity"),
         Index(
             "ix_knowledge_documents_provider_document_retrieved",
             "provider_id",
@@ -186,6 +200,7 @@ class KnowledgeDocument(Base):
     etag = Column(String(512), nullable=True)
     language = Column(String(16), nullable=True)
     document_metadata = Column("metadata", JSONBType, nullable=False, default=dict)
+    content_identity = Column(String(64), nullable=True)
 
     provider = relationship("KnowledgeProvider", back_populates="documents")
     entity = relationship("KnowledgeEntity", back_populates="documents")

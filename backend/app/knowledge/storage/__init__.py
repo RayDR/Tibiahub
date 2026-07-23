@@ -1,5 +1,5 @@
 """Immutable raw document persistence."""
 
-from app.knowledge.storage.documents import KnowledgeDocumentStore, UnknownProviderError
+from app.knowledge.storage.documents import DocumentPersistenceResult, KnowledgeDocumentStore, UnknownProviderError
 
-__all__ = ["KnowledgeDocumentStore", "UnknownProviderError"]
+__all__ = ["DocumentPersistenceResult", "KnowledgeDocumentStore", "UnknownProviderError"]

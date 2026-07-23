@@ -69,6 +69,11 @@ class Settings(BaseSettings):
     RAFFLE_SCHEDULER_MAX_RETRIES: int = Field(5, ge=0, le=20)
     RAFFLE_SCHEDULER_INITIAL_RETRY_SECONDS: int = Field(60, ge=5, le=3600)
     RAFFLE_SCHEDULER_WORKER_ID: str = "raffle-scheduler-1"
+    KNOWLEDGE_WORKER_ENABLED: bool = False
+    KNOWLEDGE_WORKER_ID: str = "knowledge-worker-1"
+    KNOWLEDGE_WORKER_POLL_SECONDS: int = Field(5, ge=1, le=300)
+    KNOWLEDGE_WORKER_LEASE_SECONDS: int = Field(120, ge=30, le=3600)
+    KNOWLEDGE_WORKER_MAX_IDLE_SECONDS: int = Field(30, ge=1, le=3600)
     IMAGE_CACHE_MAX_AGE_SECONDS: int = 86400
     RESET_PASSWORD_URL: str = "https://tibiahub.domoforge.com/reset-password"
     SMTP_HOST: str = ""

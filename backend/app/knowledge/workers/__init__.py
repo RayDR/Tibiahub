@@ -1,1 +1,5 @@
-"""Provider workers and synchronization are intentionally deferred to Stage 2A-2."""
+"""Durable knowledge worker runtime."""
+
+from app.knowledge.workers.knowledge_worker import KnowledgeWorker
+
+__all__ = ["KnowledgeWorker"]

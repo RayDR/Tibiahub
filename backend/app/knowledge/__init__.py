@@ -8,6 +8,10 @@ from app.knowledge.models import (
     KnowledgeEntityType,
     KnowledgeProvider,
     KnowledgeSearchMetadata,
+    KnowledgeJob,
+    KnowledgeJobAttempt,
+    KnowledgeProviderCursor,
+    KnowledgeWorkerHeartbeat,
 )
 
 __all__ = [
@@ -18,4 +22,8 @@ __all__ = [
     "KnowledgeEntityType",
     "KnowledgeProvider",
     "KnowledgeSearchMetadata",
+    "KnowledgeJob",
+    "KnowledgeJobAttempt",
+    "KnowledgeProviderCursor",
+    "KnowledgeWorkerHeartbeat",
 ]
