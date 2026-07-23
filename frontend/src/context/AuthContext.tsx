@@ -45,7 +45,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
     const login = async (token: string) => {
         localStorage.setItem('token', token);
         const profile = await fetchUser();
-        if (profile?.is_superuser) {
+        if (profile?.is_superuser && !profile.guild_name) {
             navigate('/admin', { replace: true });
             return;
         }

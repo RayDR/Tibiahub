@@ -244,6 +244,7 @@ export default function GuildManagementDashboard() {
                         <span>Synced: <strong>{syncResult.synced_users}</strong></span>
                         <span>Updated chars: <strong>{syncResult.updated_characters}</strong></span>
                         <span>Total members: <strong>{syncResult.total_members}</strong></span>
+                        <span>Unlinked accounts: <strong>{syncResult.unlinked_users}</strong></span>
                     </div>
                 )}
             </div>
