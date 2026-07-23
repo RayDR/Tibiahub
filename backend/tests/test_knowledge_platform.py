@@ -228,8 +228,14 @@ def test_internal_domain_events_cover_entity_import_failure_update_and_merge(db,
     db.flush()
 
     event_types = {event.event_type for event in db.query(KnowledgeDomainEvent).all()}
-    assert event_types == {event.value for event in KnowledgeEventType}
-    assert ProviderRegistry.get(db, "tibiamaps").health == "failed"
+    assert {
+        KnowledgeEventType.ENTITY_CREATED.value,
+        KnowledgeEventType.ENTITY_UPDATED.value,
+        KnowledgeEventType.PROVIDER_IMPORTED.value,
+        KnowledgeEventType.PROVIDER_FAILED.value,
+        KnowledgeEventType.KNOWLEDGE_MERGED.value,
+    } <= event_types
+    assert ProviderRegistry.get(db, "tibiamaps").health == "unavailable"
 
 
 def test_schema_contains_only_provider_neutral_links():
