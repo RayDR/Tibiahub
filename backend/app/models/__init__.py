@@ -42,6 +42,7 @@ from app.knowledge.models import (
     KnowledgeCreatureItemDrop,
     KnowledgeAccess, KnowledgeQuestRelation,
     KnowledgeRelationship, KnowledgeRelationshipType,
+    SpatialEntityLocationLink, SpatialMapPoint, SpatialMapRegion, SpatialRoute, SpatialRouteStep,
 )
 
 __all__ = [
@@ -107,4 +108,5 @@ __all__ = [
     "KnowledgeCreatureItemDrop",
     "KnowledgeAccess", "KnowledgeQuestRelation",
     "KnowledgeRelationship", "KnowledgeRelationshipType",
+    "SpatialMapPoint", "SpatialMapRegion", "SpatialRoute", "SpatialRouteStep", "SpatialEntityLocationLink",
 ]

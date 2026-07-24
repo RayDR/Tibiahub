@@ -42,13 +42,15 @@ from app.knowledge.adapters import (
     KnowledgeDocumentDTO, KnowledgeNormalizationContext, TibiaWikiItemAdapter,
     TibiaWikiLocationAdapter, TibiaWikiNpcAdapter, TibiaWikiQuestAdapter,
 )
-from app.knowledge.models import KnowledgeAccess, KnowledgeCreatureItemDrop, KnowledgeDocument, KnowledgeEntity, KnowledgeExternalMapping, KnowledgeJob, KnowledgeProvider, KnowledgeQuestRelation, KnowledgeRelationship, KnowledgeRelationshipType
+from app.knowledge.dto import MapPointDTO, MapRegionDTO, RouteDTO, RouteStepDTO
+from app.knowledge.models import KnowledgeAccess, KnowledgeCreatureItemDrop, KnowledgeDocument, KnowledgeEntity, KnowledgeExternalMapping, KnowledgeJob, KnowledgeProvider, KnowledgeQuestRelation, KnowledgeRelationship, KnowledgeRelationshipType, SpatialEntityLocationLink, SpatialRoute
 from app.knowledge.registry import EntityTypeRegistry, ProviderRegistry, RelationshipTypeRegistry
 from app.knowledge.schemas import KnowledgeDocumentCreate, KnowledgeEntityCreate
 from app.knowledge.services import EnqueueKnowledgeJob, KnowledgeEntityService, KnowledgeJobService, KnowledgeGraphService, RelationshipInput
 from app.knowledge.storage import KnowledgeDocumentStore
 from app.knowledge.services.item_relationships import upsert_drop_relationship
 from app.knowledge.services.normalization import KnowledgeNormalizationService
+from app.knowledge.services.spatial import entities_inside_region, link_entity_to_location, nearby_entities, persist_map_point, persist_map_region, persist_route
 from app.services.raffle_scheduler_service import RaffleSchedulerService
 
 
@@ -73,8 +75,14 @@ def pg_engine():
     test_url = _test_url()
     engine = create_engine(test_url, pool_pre_ping=True)
     with engine.begin() as connection:
+        if not connection.execute(text(
+            "SELECT EXISTS (SELECT 1 FROM pg_available_extensions WHERE name='postgis')"
+        )).scalar_one():
+            pytest.skip("The disposable PostgreSQL server does not provide PostGIS")
+        connection.execute(text("DROP EXTENSION IF EXISTS postgis CASCADE"))
         connection.execute(text("DROP SCHEMA public CASCADE"))
         connection.execute(text("CREATE SCHEMA public"))
+        connection.execute(text("CREATE EXTENSION postgis"))
     environment = os.environ.copy()
     environment.update(APP_ENV="test", DATABASE_URL=test_url)
     subprocess.run(
@@ -190,12 +198,14 @@ def test_empty_database_upgrades_to_complete_postgresql_schema(pg_engine):
         "knowledge_creature_item_drops", "tibiawiki_items",
         "quest_missions", "knowledge_accesses", "knowledge_quest_relations",
             "knowledge_relationship_types", "knowledge_relationships",
-            "tibiawiki_npcs", "tibiawiki_locations",
+            "tibiawiki_npcs", "tibiawiki_locations", "spatial_map_points",
+            "spatial_map_regions", "spatial_routes", "spatial_route_steps",
+            "spatial_entity_location_links",
     }.issubset(tables)
     with pg_engine.connect() as connection:
         assert connection.execute(text("SELECT version_num FROM alembic_version")).scalar_one() == expected_schema_revision()
         extensions = set(connection.execute(text("SELECT extname FROM pg_extension")).scalars())
-        assert {"pg_trgm", "unaccent"}.issubset(extensions)
+        assert {"pg_trgm", "unaccent", "postgis"}.issubset(extensions)
         json_type = connection.execute(text(
             "SELECT data_type FROM information_schema.columns "
             "WHERE table_name='raffle_participants' AND column_name='source_data'"
@@ -216,6 +226,9 @@ def test_empty_database_upgrades_to_complete_postgresql_schema(pg_engine):
         assert "uq_leadership_active_application" in index_definitions and " WHERE " in index_definitions
         assert "ix_raffles_scheduler_due" in index_definitions
         assert "uq_creatures_knowledge_entity_id" in index_definitions
+        assert "ix_spatial_map_points_geom" in index_definitions and "USING gist" in index_definitions
+        assert "ix_spatial_map_regions_geom" in index_definitions
+        assert "ix_spatial_routes_geom" in index_definitions
         user_columns = {column["name"]: column for column in inspect(pg_engine).get_columns("users")}
         assert {"is_superuser", "is_moderator", "is_writer"}.issubset(user_columns)
         assert all(user_columns[name]["nullable"] is False for name in ("is_superuser", "is_moderator", "is_writer"))
@@ -228,6 +241,58 @@ def test_empty_database_upgrades_to_complete_postgresql_schema(pg_engine):
         ).one()
         assert provider_enabled is False and provider_health == "disabled"
         assert supported_entities == ["creature", "item", "quest", "npc", "location", "area", "town"]
+
+
+def test_postgis_point_region_route_nearby_and_inside_region(pg_session):
+    EntityTypeRegistry.register_initial(pg_session)
+    ProviderRegistry.register_initial(pg_session)
+    RelationshipTypeRegistry.register_initial(pg_session)
+    location = KnowledgeEntityService.create(pg_session, KnowledgeEntityCreate(
+        entity_type="location", canonical_name="PostGIS Test Square",
+        language_neutral_id="location:postgis-test-square",
+    ))
+    creature = KnowledgeEntityService.create(pg_session, KnowledgeEntityCreate(
+        entity_type="creature", canonical_name="PostGIS Test Rat",
+        language_neutral_id="creature:postgis-test-rat",
+    ))
+    point = persist_map_point(pg_session, MapPointDTO(
+        "pg-square-point", "Square Marker", 32369, 32241, 7,
+        location_name="PostGIS Test Square", confidence="high",
+    ))
+    region = persist_map_region(pg_session, MapRegionDTO(
+        "pg-square-region", "Square Region",
+        {"type": "Polygon", "coordinates": [[
+            [32360, 32230, 7], [32380, 32230, 7], [32380, 32250, 7],
+            [32360, 32250, 7], [32360, 32230, 7],
+        ]]},
+        location_name="PostGIS Test Square", minimum_z=7, maximum_z=7, confidence="high",
+    ))
+    route = persist_route(pg_session, RouteDTO(
+        "pg-test-route", "PostGIS Test Route",
+        (
+            RouteStepDTO(1, "Begin", "PostGIS Test Square", 32369, 32241, 7),
+            RouteStepDTO(2, "Finish", "PostGIS Test Square", 32372, 32243, 7),
+        ),
+        start_location_name="PostGIS Test Square", end_location_name="PostGIS Test Square",
+    ))
+    link_entity_to_location(
+        pg_session, source_entity=creature, location_name="PostGIS Test Square",
+        external_id="pg-rat-square", map_point_id=point.id,
+    )
+    pg_session.commit()
+
+    dimensions = pg_session.execute(text(
+        "SELECT ST_NDims(point.geom), ST_NDims(region.geom), ST_NDims(route.geom) "
+        "FROM spatial_map_points point, spatial_map_regions region, spatial_routes route "
+        "WHERE point.id=:point AND region.id=:region AND route.id=:route"
+    ), {"point": point.id, "region": region.id, "route": route.id}).one()
+    assert dimensions == (3, 3, 3)
+    nearby = nearby_entities(pg_session, x=32369, y=32241, z=7, distance=10, skip=0, limit=10)
+    assert any(row["source_entity_id"] == creature.uuid for row in nearby)
+    inside = entities_inside_region(pg_session, region.id, skip=0, limit=10)
+    assert any(row["source_entity_id"] == creature.uuid for row in inside)
+    assert pg_session.query(SpatialRoute).filter_by(id=route.id).one().steps[0].sequence == 1
+    assert pg_session.query(SpatialEntityLocationLink).filter_by(source_entity_id=creature.uuid).count() == 1
 
 
 def test_graph_schema_registry_dedup_inverse_and_resolution_on_postgresql(pg_session):

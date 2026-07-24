@@ -41,6 +41,16 @@ from app.knowledge.services.item_relationships import (
     link_item_drops,
     upsert_drop_relationship,
 )
+from app.knowledge.services.spatial import (
+    PostGISUnavailableError,
+    entities_inside_region,
+    link_entity_to_location,
+    nearby_entities,
+    persist_map_point,
+    persist_map_region,
+    persist_route,
+    postgis_status,
+)
 
 __all__ = [
     "DuplicateKnowledgeAliasError",
@@ -70,4 +80,12 @@ __all__ = [
     "link_creature_loot",
     "link_item_drops",
     "upsert_drop_relationship",
+    "PostGISUnavailableError",
+    "postgis_status",
+    "persist_map_point",
+    "persist_map_region",
+    "persist_route",
+    "link_entity_to_location",
+    "nearby_entities",
+    "entities_inside_region",
 ]

@@ -76,9 +76,12 @@ def test_initial_and_future_entity_types_need_no_schema_change(db, knowledge_reg
         "hunt_zone",
         "access",
         "area",
-        "town",
-        "location",
-    } == initial
+            "town",
+            "location",
+            "map_point",
+            "map_region",
+            "route",
+        } == initial
 
     future = EntityTypeRegistry.register(
         db,

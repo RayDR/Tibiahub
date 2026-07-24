@@ -18,6 +18,10 @@ from app.knowledge.models import (
     KnowledgeEntity,
     KnowledgeProvider,
     KnowledgeRelationship,
+    SpatialEntityLocationLink,
+    SpatialMapPoint,
+    SpatialMapRegion,
+    SpatialRoute,
     KnowledgeWorkerHeartbeat,
 )
 from app.knowledge.schemas import (
@@ -130,6 +134,14 @@ def _relationship_audit(db: Session, admin: User, action: str, relationship: Kno
         target_type="knowledge_relationship", target_id=str(relationship.id), assisted=False,
         safe_metadata={"relationship_type": relationship.relationship_type_code,
                        "resolution_state": relationship.resolution_state},
+    ))
+
+
+def _spatial_audit(db: Session, admin: User, action: str, kind: str, record_id: UUID) -> None:
+    db.add(WorkspaceAudit(
+        actor_id=admin.id, workspace_type="admin", action=action,
+        target_type=f"spatial_{kind}", target_id=str(record_id), assisted=False,
+        safe_metadata={"kind": kind},
     ))
 
 
@@ -249,6 +261,93 @@ def supersede_relationship(relationship_id: UUID, payload: KnowledgeRelationship
     KnowledgeGraphService.supersede(db, row)
     _relationship_audit(db, admin, "knowledge_relationship_superseded", row)
     db.commit()
+
+
+@router.get("/spatial/review")
+def review_spatial(
+    kind: str = Query("point", pattern="^(point|region|route|link)$"),
+    verification_state: str = Query("unresolved", pattern="^(pending|verified|rejected|unresolved|ambiguous)$"),
+    skip: int = Query(0, ge=0), limit: int = Query(25, ge=1, le=100),
+    db: Session = Depends(get_db), _admin: User = Depends(get_current_admin_user),
+):
+    models = {
+        "point": SpatialMapPoint,
+        "region": SpatialMapRegion,
+        "route": SpatialRoute,
+        "link": SpatialEntityLocationLink,
+    }
+    model = models[kind]
+    query = db.query(model).filter_by(verification_state=verification_state, is_current=True)
+    total = query.count()
+    rows = query.order_by(model.created_at.desc()).offset(skip).limit(limit).all()
+    return {"items": [{
+        "id": row.id, "name": getattr(row, "name", None), "external_id": row.external_id,
+        "location_entity_id": getattr(row, "location_entity_id", None),
+        "source_entity_id": getattr(row, "source_entity_id", None),
+        "unresolved_location_name": getattr(row, "unresolved_location_name", None),
+        "unresolved_references": [value for value in (
+            getattr(row, "unresolved_location_name", None),
+            getattr(row, "unresolved_start_name", None),
+            getattr(row, "unresolved_end_name", None),
+        ) if value],
+        "confidence": row.confidence, "verification_state": row.verification_state,
+        "provider_id": row.source_provider_id, "version": row.version,
+    } for row in rows], "total": total, "skip": skip, "limit": limit}
+
+
+def _spatial_record(db: Session, kind: str, record_id: UUID):
+    model = SpatialMapPoint if kind == "points" else SpatialMapRegion
+    row = db.get(model, record_id)
+    if row is None or not row.is_current:
+        raise HTTPException(status_code=404, detail={"code": "spatial_record_not_found"})
+    return row
+
+
+@router.post("/spatial/{kind}/{record_id}/verify")
+def verify_spatial(kind: str, record_id: UUID, payload: KnowledgeRelationshipAction,
+                   db: Session = Depends(get_db), admin: User = Depends(get_current_admin_user)):
+    if kind not in {"points", "regions"}:
+        raise HTTPException(status_code=404, detail={"code": "spatial_record_not_found"})
+    row = _spatial_record(db, kind, record_id)
+    if row.verification_state in {"rejected", "unresolved", "ambiguous"}:
+        raise HTTPException(status_code=409, detail={"code": "spatial_record_not_verifiable"})
+    from datetime import UTC, datetime
+    row.verification_state = "verified"; row.confidence = "verified"
+    row.verified_by_id = admin.id; row.verified_at = datetime.now(UTC)
+    row.rejection_reason = None
+    _spatial_audit(db, admin, "spatial_record_verified", kind, row.id)
+    db.commit()
+    return {"id": row.id, "verification_state": row.verification_state, "confidence": row.confidence}
+
+
+@router.post("/spatial/{kind}/{record_id}/reject")
+def reject_spatial(kind: str, record_id: UUID, payload: KnowledgeRelationshipAction,
+                   db: Session = Depends(get_db), admin: User = Depends(get_current_admin_user)):
+    if kind not in {"points", "regions"}:
+        raise HTTPException(status_code=404, detail={"code": "spatial_record_not_found"})
+    row = _spatial_record(db, kind, record_id)
+    from datetime import UTC, datetime
+    row.verification_state = "rejected"; row.rejection_reason = payload.reason
+    row.verified_by_id = admin.id; row.verified_at = datetime.now(UTC)
+    _spatial_audit(db, admin, "spatial_record_rejected", kind, row.id)
+    db.commit()
+    return {"id": row.id, "verification_state": row.verification_state}
+
+
+@router.get("/spatial/routes/{route_id}/provenance")
+def route_provenance(route_id: UUID, db: Session = Depends(get_db),
+                     _admin: User = Depends(get_current_admin_user)):
+    row = db.get(SpatialRoute, route_id)
+    if row is None:
+        raise HTTPException(status_code=404, detail={"code": "spatial_route_not_found"})
+    return {
+        "id": row.id, "provider_id": row.source_provider_id,
+        "document_id": row.source_document_id, "job_id": row.source_job_id,
+        "source_reference": row.source_reference, "confidence": row.confidence,
+        "verification_state": row.verification_state, "version": row.version,
+        "is_current": row.is_current, "valid_from": row.valid_from, "valid_until": row.valid_until,
+        "step_count": row.step_count,
+    }
 
 
 @router.get("/jobs", response_model=KnowledgeJobPage)
