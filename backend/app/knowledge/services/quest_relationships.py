@@ -9,7 +9,7 @@ from sqlalchemy.orm import Session
 
 from app.knowledge.dto import QuestAccessReference
 from app.knowledge.indexing import normalize_name
-from app.knowledge.models import KnowledgeAccess, KnowledgeEntity, KnowledgeQuestRelation
+from app.knowledge.models import KnowledgeAccess, KnowledgeEntity, KnowledgeQuestRelation, KnowledgeRelationship
 from app.knowledge.schemas import KnowledgeEntityCreate
 from app.knowledge.services.entities import KnowledgeEntityService
 from app.knowledge.services.item_relationships import exact_entity_candidates
@@ -113,11 +113,11 @@ def upsert_quest_relation(
     source_context: str,
     mission_id: UUID | None = None,
     explicit_entity_uuid: UUID | None = None,
-) -> tuple[KnowledgeQuestRelation, bool]:
+) -> tuple[KnowledgeRelationship, bool]:
     normalized = normalize_name(target_name)
     if not normalized:
         raise ValueError("Quest relationships require a target name")
-    row = db.query(KnowledgeQuestRelation).filter_by(
+    compatibility = db.query(KnowledgeQuestRelation).filter_by(
         provider_id=provider_id,
         quest_entity_uuid=quest_entity_uuid,
         scope_key=scope_key,
@@ -125,32 +125,18 @@ def upsert_quest_relation(
         target_entity_type=target_entity_type,
         normalized_target_name=normalized,
     ).first()
-    created = row is None
-    if row is None:
-        row = KnowledgeQuestRelation(
-            provider_id=provider_id,
-            quest_entity_uuid=quest_entity_uuid,
-            mission_id=mission_id,
-            scope_key=scope_key,
-            relation_type=relation_type,
-            target_entity_type=target_entity_type,
-            target_name=target_name.strip(),
-            normalized_target_name=normalized,
-        )
-        db.add(row)
-    if not row.protected:
+    protected = bool(compatibility and compatibility.protected)
+    if protected:
+        target_name = compatibility.target_name
+        entity = db.get(KnowledgeEntity, compatibility.target_entity_uuid) if compatibility.target_entity_uuid else None
+        status = compatibility.resolution_status
+    else:
         if explicit_entity_uuid is not None:
             entity, status = db.get(KnowledgeEntity, explicit_entity_uuid), "resolved"
         elif target_entity_type in {"npc", "location"}:
             entity, status = None, "unresolved"
         else:
             entity, status = _resolve(db, target_entity_type, target_name)
-        row.mission_id = mission_id
-        row.target_name = target_name.strip()
-        row.target_entity_uuid = entity.uuid if entity else None
-        row.resolution_status = status
-        row.confidence = "exact"
-        row.relation_metadata = {"resolution_policy": "exact_name_or_alias_only"}
     graph_type = {
         "unlocks_quest": "prerequisite_for",
         "involves_npc": "references_npc",
@@ -163,32 +149,30 @@ def upsert_quest_relation(
             "involves_npc": "mission_references_npc",
             "occurs_at_location": "mission_occurs_at_location",
         }.get(relation_type, graph_type)
-    graph_target = db.get(KnowledgeEntity, row.target_entity_uuid) if row.target_entity_uuid else None
-    graph_target_type = graph_target.entity_type if graph_target is not None else target_entity_type
+    graph_scope = f"mission:{mission_id}" if mission_id else "quest"
+    if protected:
+        existing = db.query(KnowledgeRelationship).filter_by(
+            source_entity_id=quest_entity_uuid, source_scope=graph_scope,
+            relationship_type_code=graph_type, manual_override=True, is_current=True,
+        ).first()
+        if existing is not None:
+            return existing, False
+    graph_target_type = entity.entity_type if entity is not None else target_entity_type
     candidate_type = "creature" if target_entity_type == "boss" else target_entity_type
-    candidates = exact_entity_candidates(db, candidate_type, row.target_name) if row.resolution_status == "ambiguous" else []
-    KnowledgeGraphService.upsert(db, RelationshipInput(
+    candidates = exact_entity_candidates(db, candidate_type, target_name) if status == "ambiguous" else []
+    mutation = KnowledgeGraphService.upsert(db, RelationshipInput(
         source_entity_id=quest_entity_uuid,
-        source_scope=f"mission:{mission_id}" if mission_id else "quest",
+        source_scope=graph_scope,
         relationship_type=graph_type,
-        target_entity_id=row.target_entity_uuid if row.resolution_status == "resolved" else None,
+        target_entity_id=entity.uuid if entity is not None and status == "resolved" else None,
         target_entity_type=graph_target_type,
-        unresolved_name=None if row.resolution_status == "resolved" else row.target_name,
-        resolution_state=row.resolution_status,
-        confidence="verified" if row.protected else "high",
+        unresolved_name=None if status == "resolved" else target_name,
+        resolution_state=status,
+        confidence="verified" if protected else "high",
         source_provider_id=provider_id,
         source_document_ref=source_document_id,
-        source_context={"context": source_context, "compatibility_table": "knowledge_quest_relations",
+        source_context={"context": source_context, "resolution_policy": "exact_name_or_alias_only",
                         "candidate_entity_ids": [str(candidate.uuid) for candidate in candidates]},
-        manual_override=row.protected,
+        manual_override=protected,
     ))
-    documents = list(row.source_document_ids or [])
-    if source_document_id not in documents:
-        documents.append(source_document_id)
-    row.source_document_ids = documents
-    contexts = list(row.source_contexts or [])
-    if source_context not in contexts:
-        contexts.append(source_context)
-    row.source_contexts = contexts
-    db.flush()
-    return row, created
+    return mutation.relationship, mutation.created

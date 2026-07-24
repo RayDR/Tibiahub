@@ -14,7 +14,7 @@ from app.knowledge.dto import QuestKnowledgeDTO
 from app.knowledge.events import KnowledgeEventType, emit_event
 from app.knowledge.indexing import normalize_name
 from app.knowledge.metadata import refresh_search_metadata
-from app.knowledge.models import KnowledgeEntity, KnowledgeEntityAlias, KnowledgeExternalMapping, KnowledgeQuestRelation
+from app.knowledge.models import KnowledgeEntity, KnowledgeEntityAlias, KnowledgeExternalMapping
 from app.knowledge.schemas import KnowledgeEntityCreate
 from app.knowledge.services.entities import DuplicateKnowledgeAliasError, DuplicateKnowledgeEntityError, KnowledgeEntityService
 from app.knowledge.services.failures import InvalidNormalizationContractError
@@ -229,7 +229,7 @@ def _relationships(db: Session, entity: KnowledgeEntity, dto: QuestKnowledgeDTO,
     for entry in references:
         relation_type, target_type, name, context, *explicit = entry
         row, created = upsert_quest_relation(db, provider_id=provider, quest_entity_uuid=entity.uuid, scope_key="quest", relation_type=relation_type, target_entity_type=target_type, target_name=name, source_document_id=document, source_context=context, explicit_entity_uuid=explicit[0] if explicit else None)
-        counts["relations_created"] += int(created); counts[f"relations_{row.resolution_status}"] += 1
+        counts["relations_created"] += int(created); counts[f"relations_{row.resolution_state}"] += 1
     for mission in dto.missions:
         row = missions[mission.sequence]; scope = f"mission:{row.identity_key}"
         mission_refs = [("requires_item", "item", x.name, "required_items") for x in mission.required_items]
@@ -239,7 +239,7 @@ def _relationships(db: Session, entity: KnowledgeEntity, dto: QuestKnowledgeDTO,
         mission_refs += [("occurs_at_location", "location", x.name, "locations") for x in mission.locations]
         for relation_type, target_type, name, context in mission_refs:
             relation, created = upsert_quest_relation(db, provider_id=provider, quest_entity_uuid=entity.uuid, mission_id=row.id, scope_key=scope, relation_type=relation_type, target_entity_type=target_type, target_name=name, source_document_id=document, source_context=f"mission.{context}")
-            counts["relations_created"] += int(created); counts[f"relations_{relation.resolution_status}"] += 1
+            counts["relations_created"] += int(created); counts[f"relations_{relation.resolution_state}"] += 1
     return counts
 
 

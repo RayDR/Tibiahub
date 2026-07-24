@@ -4,7 +4,7 @@ Stage 2B-1 introduces one provider-neutral relationship model. It is intentional
 
 ## Authority and compatibility
 
-`knowledge_relationship_types` and `knowledge_relationships` are authoritative for new relationship writes and graph reads. The Creature/Item `knowledge_creature_item_drops` and Quest `knowledge_quest_relations` tables remain compatibility mirrors while existing contracts are preserved. The migration copies their current facts idempotently and does not drop or rewrite them. Adapters write through the graph service and temporarily maintain those compatibility rows. Item drop and Quest relationship detail responses now read the graph; Creature's established loot contract remains a compatibility presentation alongside the entity graph endpoint.
+`knowledge_relationship_types` and `knowledge_relationships` are authoritative for new relationship writes and graph reads. The Creature/Item `knowledge_creature_item_drops` and Quest `knowledge_quest_relations` tables remain read-only compatibility sources while existing contracts are preserved. The migration copies their current facts idempotently and does not drop or rewrite them. Adapters write only through the graph service. Item drop and Quest relationship detail responses read the graph; Creature's established loot contract remains a compatibility presentation alongside the entity graph endpoint.
 
 The graph stores one canonical direction. Incoming traversal derives the registered inverse, so a Creature `drops` Item fact is not duplicated as an Item `dropped_by` Creature row. Mission facts retain their source quest plus a mission scope.
 

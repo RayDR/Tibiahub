@@ -735,7 +735,8 @@ def test_postgresql_quest_fixture_normalizes_missions_and_deduplicates_relations
     quest = pg_session.query(TibiaWikiQuest).one()
     assert quest.knowledge_entity_id == applied.entity_uuid and quest.data_version == 1
     assert [mission.sequence for mission in pg_session.query(QuestMission).order_by(QuestMission.sequence)] == [1, 2]
-    assert pg_session.query(KnowledgeQuestRelation).count() == 18
+    assert pg_session.query(KnowledgeRelationship).filter_by(source_entity_id=applied.entity_uuid, is_current=True).count() == 18
+    assert pg_session.query(KnowledgeQuestRelation).count() == 0
     assert stored.raw_json["future_envelope_field"] == "retained"
 
 
@@ -793,7 +794,8 @@ def test_postgresql_item_fixture_normalizes_and_relationship_deduplicates(pg_ses
     assert item.knowledge_entity_id == applied.entity_uuid
     assert item.category == "Weapon" and item.data_version == 1
     assert stored.raw_json["future_envelope_field"] == "retained"
-    assert pg_session.query(KnowledgeCreatureItemDrop).filter_by(item_name="Magic Sword").count() == 2
+    assert pg_session.query(KnowledgeRelationship).filter_by(source_entity_id=applied.entity_uuid, is_current=True).count() == 2
+    assert pg_session.query(KnowledgeCreatureItemDrop).count() == 0
 
 
 def test_postgresql_creature_bridge_allows_only_one_row_per_knowledge_entity(pg_session):

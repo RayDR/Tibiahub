@@ -8,7 +8,7 @@ from uuid import UUID
 from sqlalchemy.orm import Session
 
 from app.knowledge.indexing import normalize_name
-from app.knowledge.models import KnowledgeCreatureItemDrop, KnowledgeEntity
+from app.knowledge.models import KnowledgeEntity, KnowledgeRelationship
 from app.knowledge.services.graph import KnowledgeGraphService, RelationshipInput
 from app.models import Loot
 from app.services.text_utils import normalize_search_text
@@ -16,7 +16,7 @@ from app.services.text_utils import normalize_search_text
 
 @dataclass(frozen=True, slots=True)
 class DropRelationshipResult:
-    relationship: KnowledgeCreatureItemDrop
+    relationship: KnowledgeRelationship
     created: bool
     resolution_status: str
 
@@ -57,42 +57,13 @@ def upsert_drop_relationship(
     if not normalized_creature or not normalized_item:
         raise ValueError("Drop relationships require nonempty creature and item names")
 
-    relationship = (
-        db.query(KnowledgeCreatureItemDrop)
-        .filter_by(
-            provider_id=provider_id,
-            normalized_creature_name=normalized_creature,
-            normalized_item_name=normalized_item,
-        )
-        .first()
-    )
     identity_conflict = False
-    if relationship is not None:
-        if (
-            creature_entity_uuid is not None
-            and relationship.creature_entity_uuid is not None
-            and creature_entity_uuid != relationship.creature_entity_uuid
-        ):
-            identity_conflict = True
-            creature_entity_uuid = None
-        else:
-            creature_entity_uuid = creature_entity_uuid or relationship.creature_entity_uuid
-        if (
-            item_entity_uuid is not None
-            and relationship.item_entity_uuid is not None
-            and item_entity_uuid != relationship.item_entity_uuid
-        ):
-            identity_conflict = True
-            item_entity_uuid = None
-        else:
-            item_entity_uuid = item_entity_uuid or relationship.item_entity_uuid
-
-    # This fact is keyed by names, so an explicit UUID cannot safely disambiguate
-    # same-name variants without a stronger provider relationship identifier.
-    if creature_entity_uuid is not None and len(exact_entity_candidates(db, "creature", creature_name)) > 1:
+    # The adapter's own source UUID is authoritative. The opposite endpoint
+    # remains ambiguous when multiple exact-name entities exist.
+    if source_direction == "item_dropped_by" and creature_entity_uuid is not None and len(exact_entity_candidates(db, "creature", creature_name)) > 1:
         identity_conflict = True
         creature_entity_uuid = None
-    if item_entity_uuid is not None and len(exact_entity_candidates(db, "item", item_name)) > 1:
+    if source_direction != "item_dropped_by" and item_entity_uuid is not None and len(exact_entity_candidates(db, "item", item_name)) > 1:
         identity_conflict = True
         item_entity_uuid = None
 
@@ -111,35 +82,9 @@ def upsert_drop_relationship(
     else:
         resolution_status = "unresolved"
 
-    created = relationship is None
-    if relationship is None:
-        relationship = KnowledgeCreatureItemDrop(
-            provider_id=provider_id,
-            creature_name=creature_name.strip(),
-            item_name=item_name.strip(),
-            normalized_creature_name=normalized_creature,
-            normalized_item_name=normalized_item,
-        )
-        db.add(relationship)
-    relationship.creature_entity_uuid = creature_entity_uuid
-    relationship.item_entity_uuid = item_entity_uuid
-    relationship.resolution_status = resolution_status
-    relationship.confidence = "exact"
-    documents = list(relationship.source_document_ids or [])
-    if source_document_id not in documents:
-        documents.append(source_document_id)
-    relationship.source_document_ids = documents
-    directions = list(relationship.source_directions or [])
-    if source_direction not in directions:
-        directions.append(source_direction)
-    relationship.source_directions = directions
-    relationship.relationship_metadata = {
-        **dict(relationship.relationship_metadata or {}),
-        "resolution_policy": "exact_name_or_alias_only",
-    }
     if creature_entity_uuid is not None:
         item_candidates = exact_entity_candidates(db, "item", item_name) if resolution_status == "ambiguous" else []
-        KnowledgeGraphService.upsert(db, RelationshipInput(
+        mutation = KnowledgeGraphService.upsert(db, RelationshipInput(
             source_entity_id=creature_entity_uuid,
             relationship_type="drops",
             target_entity_id=item_entity_uuid if resolution_status == "resolved" else None,
@@ -149,12 +94,12 @@ def upsert_drop_relationship(
             confidence="high",
             source_provider_id=provider_id,
             source_document_ref=source_document_id,
-            source_context={"direction": source_direction, "compatibility_table": "knowledge_creature_item_drops",
+            source_context={"direction": source_direction, "resolution_policy": "exact_name_or_alias_only",
                             "candidate_entity_ids": [str(candidate.uuid) for candidate in item_candidates]},
         ))
     elif item_entity_uuid is not None:
         creature_candidates = exact_entity_candidates(db, "creature", creature_name) if resolution_status == "ambiguous" else []
-        KnowledgeGraphService.upsert(db, RelationshipInput(
+        mutation = KnowledgeGraphService.upsert(db, RelationshipInput(
             source_entity_id=item_entity_uuid,
             relationship_type="dropped_by",
             target_entity_type="creature",
@@ -163,11 +108,12 @@ def upsert_drop_relationship(
             confidence="high",
             source_provider_id=provider_id,
             source_document_ref=source_document_id,
-            source_context={"direction": source_direction, "compatibility_table": "knowledge_creature_item_drops",
+            source_context={"direction": source_direction, "resolution_policy": "exact_name_or_alias_only",
                             "candidate_entity_ids": [str(candidate.uuid) for candidate in creature_candidates]},
         ))
-    db.flush()
-    return DropRelationshipResult(relationship, created, resolution_status)
+    else:
+        raise ValueError("Drop relationships require one resolved source entity")
+    return DropRelationshipResult(mutation.relationship, mutation.created, resolution_status)
 
 
 def link_item_drops(
