@@ -5,6 +5,7 @@ import { Link, useNavigate, useParams } from 'react-router-dom';
 
 import { namedKnowledgeApi } from '../services/api';
 import type { LocationKnowledgeDetail, NamedKnowledgeRelationship } from '../types';
+import MapMetadataPanel from '../components/MapMetadataPanel';
 
 function relationshipPath(relationship: NamedKnowledgeRelationship): string | null {
   if (relationship.resolution_state !== 'resolved' || !relationship.target_slug) return null;
@@ -46,6 +47,7 @@ export default function LocationDetailPage() {
       </dl>
       {place.access_notes && <section className="mt-6 rounded-xl border border-slate-800 p-4"><h2 className="font-semibold text-amber-200">{t('namedKnowledge.access')}</h2><p className="mt-2 text-sm text-slate-300">{place.access_notes}</p></section>}
       {place.relationships.length > 0 && <section className="mt-6 rounded-xl border border-slate-800 p-4"><h2 className="mb-3 font-semibold text-amber-200">{t('namedKnowledge.relationships')}</h2><ul className="space-y-2">{place.relationships.map((relationship, index) => { const path = relationshipPath(relationship); const content = <><span><span className="text-xs text-slate-500">{t(`knowledgeGraph.relationships.${relationship.relationship_type}`)}</span><span className="block text-slate-200">{relationship.target_name}</span></span>{path && <ArrowUpRight size={15} className="text-amber-300" />}</>; return <li key={`${relationship.relationship_type}-${relationship.target_name}-${index}`}>{path ? <Link to={path} className="flex min-h-11 items-center justify-between rounded-lg bg-slate-950/60 px-3 py-2 hover:ring-1 hover:ring-amber-500/40">{content}</Link> : <div className="flex min-h-11 items-center rounded-lg bg-slate-950/60 px-3 py-2">{content}</div>}</li>; })}</ul></section>}
+      <MapMetadataPanel locationIdentifier={place.slug} />
       <footer className="mt-6 flex flex-wrap gap-3 text-xs text-slate-500">{place.last_synced_at && <span>{t('namedKnowledge.updated', { date: new Date(place.last_synced_at).toLocaleString() })}</span>}{place.source_url && <a href={place.source_url} target="_blank" rel="noreferrer" className="text-amber-400 hover:text-amber-300">{t('namedKnowledge.source')}</a>}</footer>
     </article>
   </div></main>;

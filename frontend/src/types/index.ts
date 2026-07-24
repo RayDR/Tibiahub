@@ -247,6 +247,7 @@ export interface QuestRelatedCreature {
 
 export interface QuestDetail {
   id: number;
+  knowledge_entity_id?: string;
   name: string;
   slug?: string;
   description?: string;
@@ -346,6 +347,28 @@ export interface LocationKnowledgeDetail extends NamedKnowledgeSummary {
   sublocations: QuestNamedValue[];
   access_notes?: string;
   relationships: NamedKnowledgeRelationship[];
+}
+
+export interface SpatialPointMetadata {
+  id: string; name: string; x?: number; y?: number; z?: number;
+  confidence: string; verification_state: string;
+}
+
+export interface SpatialRegionMetadata {
+  id: string; name: string;
+  bounds: { min_x?: number; min_y?: number; max_x?: number; max_y?: number; min_z?: number; max_z?: number };
+  confidence: string; verification_state: string;
+}
+
+export interface SpatialRouteStep {
+  id: string; sequence: number; kind: string; instruction?: string; location_name?: string;
+  x?: number; y?: number; z?: number;
+}
+
+export interface SpatialRouteMetadata {
+  id: string; name: string; slug: string; step_count: number;
+  start_location?: string; end_location?: string; confidence: string; verification_state: string;
+  steps?: SpatialRouteStep[];
 }
 
 export interface HuntRecommendation {
