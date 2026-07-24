@@ -16,6 +16,8 @@ const providerEntityJobTypes = new Set([
   'creature_catalog', 'creature_detail', 'creature_renormalize',
   'item_catalog', 'item_detail', 'item_renormalize',
   'quest_catalog', 'quest_detail', 'quest_renormalize',
+  'npc_catalog', 'npc_detail', 'npc_renormalize',
+  'location_catalog', 'location_detail', 'location_renormalize',
 ]);
 
 function JobTypeLabel({ value }: { value: string }) {
