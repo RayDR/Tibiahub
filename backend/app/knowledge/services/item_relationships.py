@@ -9,6 +9,7 @@ from sqlalchemy.orm import Session
 
 from app.knowledge.indexing import normalize_name
 from app.knowledge.models import KnowledgeCreatureItemDrop, KnowledgeEntity
+from app.knowledge.services.graph import KnowledgeGraphService, RelationshipInput
 from app.models import Loot
 from app.services.text_utils import normalize_search_text
 
@@ -136,6 +137,35 @@ def upsert_drop_relationship(
         **dict(relationship.relationship_metadata or {}),
         "resolution_policy": "exact_name_or_alias_only",
     }
+    if creature_entity_uuid is not None:
+        item_candidates = exact_entity_candidates(db, "item", item_name) if resolution_status == "ambiguous" else []
+        KnowledgeGraphService.upsert(db, RelationshipInput(
+            source_entity_id=creature_entity_uuid,
+            relationship_type="drops",
+            target_entity_id=item_entity_uuid if resolution_status == "resolved" else None,
+            target_entity_type="item",
+            unresolved_name=None if resolution_status == "resolved" else item_name,
+            resolution_state=resolution_status,
+            confidence="high",
+            source_provider_id=provider_id,
+            source_document_ref=source_document_id,
+            source_context={"direction": source_direction, "compatibility_table": "knowledge_creature_item_drops",
+                            "candidate_entity_ids": [str(candidate.uuid) for candidate in item_candidates]},
+        ))
+    elif item_entity_uuid is not None:
+        creature_candidates = exact_entity_candidates(db, "creature", creature_name) if resolution_status == "ambiguous" else []
+        KnowledgeGraphService.upsert(db, RelationshipInput(
+            source_entity_id=item_entity_uuid,
+            relationship_type="dropped_by",
+            target_entity_type="creature",
+            unresolved_name=creature_name,
+            resolution_state=resolution_status,
+            confidence="high",
+            source_provider_id=provider_id,
+            source_document_ref=source_document_id,
+            source_context={"direction": source_direction, "compatibility_table": "knowledge_creature_item_drops",
+                            "candidate_entity_ids": [str(candidate.uuid) for candidate in creature_candidates]},
+        ))
     db.flush()
     return DropRelationshipResult(relationship, created, resolution_status)
 
