@@ -1,10 +1,10 @@
 import { useEffect, useMemo, useState } from 'react';
 import { Link, useNavigate, useParams } from 'react-router-dom';
-import { ArrowLeft, Crown, Loader2, MapPin, ScrollText, UserRound } from 'lucide-react';
+import { ArrowLeft, ArrowUpRight, Crown, Loader2, MapPin, ScrollText, UserRound } from 'lucide-react';
 import { useTranslation } from 'react-i18next';
 
 import { questsApi } from '../services/api';
-import type { QuestDetail, QuestItemValue, QuestNamedValue } from '../types';
+import type { QuestDetail, QuestItemValue, QuestNamedValue, QuestRelationship } from '../types';
 import { useAuth } from '../context/AuthContext';
 import { activityApi } from '../services/activity';
 
@@ -14,6 +14,37 @@ function Names({ values }: { values: QuestNamedValue[] }) {
 
 function Items({ values }: { values: QuestItemValue[] }) {
   return <ul className="space-y-2">{values.map((value, index) => <li key={`${value.name}-${index}`} className="rounded-lg border border-slate-800 bg-slate-950/60 px-3 py-2 text-sm text-slate-300">{value.amount > 1 ? `${value.amount}× ` : ''}{value.name}{value.note ? ` — ${value.note}` : ''}</li>)}</ul>;
+}
+
+function EntityReferences({
+  values,
+  relationships,
+  entity,
+}: {
+  values: QuestNamedValue[];
+  relationships: QuestRelationship[];
+  entity: 'npc' | 'location';
+}) {
+  const { t } = useTranslation();
+  const deduplicated = values.filter((value, index) => (
+    values.findIndex(candidate => candidate.name.trim().toLocaleLowerCase() === value.name.trim().toLocaleLowerCase()) === index
+  ));
+  return <ul className="space-y-2">{deduplicated.map((value) => {
+    const normalized = value.name.trim().toLocaleLowerCase();
+    const resolved = relationships.find((relationship) => (
+      relationship.resolution_status === 'resolved'
+      && relationship.target_slug
+      && relationship.target_name.trim().toLocaleLowerCase() === normalized
+      && (entity === 'npc'
+        ? relationship.target_entity_type === 'npc'
+        : ['location', 'area', 'town'].includes(relationship.target_entity_type))
+    ));
+    const content = <><span>{value.name}</span>{resolved && <span className="flex items-center gap-1 text-xs text-amber-300">{t(`questDetail.open${entity === 'npc' ? 'Npc' : 'Location'}`)}<ArrowUpRight size={13} /></span>}</>;
+    return <li key={normalized} className="text-sm text-slate-300">{resolved
+      ? <Link to={`/${entity === 'npc' ? 'npcs' : 'locations'}/${resolved.target_slug}`} className="flex min-h-11 items-center justify-between gap-3 rounded-lg border border-amber-500/25 bg-slate-950/60 px-3 py-2 hover:border-amber-400/60 hover:text-white">{content}</Link>
+      : <div className="flex min-h-11 items-center rounded-lg border border-slate-800 bg-slate-950/60 px-3 py-2">{content}</div>}
+    </li>;
+  })}</ul>;
 }
 
 export default function QuestDetailPage() {
@@ -61,10 +92,10 @@ export default function QuestDetailPage() {
         <details open className="rounded-xl border border-slate-800 p-4"><summary className="cursor-pointer font-semibold text-amber-200">{t('questDetail.requirements', { count: requirementCount })}</summary><div className="mt-3 space-y-4">{quest.required_items.length > 0 && <div><h3 className="mb-2 text-sm text-slate-400">{t('questDetail.items')}</h3><Items values={quest.required_items} /></div>}{quest.required_quests.length > 0 && <div><h3 className="mb-2 text-sm text-slate-400">{t('questDetail.quests')}</h3><Names values={quest.required_quests} /></div>}{requirementCount === 0 && <p className="text-sm text-slate-500">{t('questDetail.noRequirements')}</p>}</div></details>
         <details open className="rounded-xl border border-slate-800 p-4"><summary className="cursor-pointer font-semibold text-amber-200">{t('questDetail.rewards', { count: quest.rewarded_items.length })}</summary><div className="mt-3">{quest.rewarded_items.length ? <Items values={quest.rewarded_items} /> : <p className="text-sm text-slate-500">{t('questDetail.noRewards')}</p>}</div></details>
       </div>
-      <details open className="mt-6 rounded-xl border border-slate-800 p-4"><summary className="cursor-pointer font-semibold text-amber-200">{t('questDetail.missions', { count: quest.missions.length })}</summary><div className="mt-3 space-y-3">{quest.missions.length ? quest.missions.map(mission => <article key={mission.id} className="rounded-lg bg-slate-950/60 p-4"><h3 className="font-semibold text-slate-100">{mission.sequence}. {mission.title}</h3>{mission.description && <p className="mt-2 text-sm text-slate-300">{mission.description}</p>}{mission.objectives.length > 0 && <ul className="mt-2 list-disc space-y-1 pl-5 text-sm text-slate-400">{mission.objectives.map((value, index) => <li key={index}>{value}</li>)}</ul>}</article>) : <p className="text-sm text-slate-500">{t('questDetail.noMissions')}</p>}</div></details>
+      <details open className="mt-6 rounded-xl border border-slate-800 p-4"><summary className="cursor-pointer font-semibold text-amber-200">{t('questDetail.missions', { count: quest.missions.length })}</summary><div className="mt-3 space-y-3">{quest.missions.length ? quest.missions.map(mission => { const missionRelationships = quest.relationships.filter(relationship => relationship.mission_id === mission.id); return <article key={mission.id} className="rounded-lg bg-slate-950/60 p-4"><h3 className="font-semibold text-slate-100">{mission.sequence}. {mission.title}</h3>{mission.description && <p className="mt-2 text-sm text-slate-300">{mission.description}</p>}{mission.objectives.length > 0 && <ul className="mt-2 list-disc space-y-1 pl-5 text-sm text-slate-400">{mission.objectives.map((value, index) => <li key={index}>{value}</li>)}</ul>}<div className="mt-3 grid gap-3 sm:grid-cols-2">{mission.related_npcs.length > 0 && <div><h4 className="mb-2 text-xs font-semibold uppercase tracking-wide text-slate-500">{t('questDetail.npcs')}</h4><EntityReferences values={mission.related_npcs} relationships={missionRelationships} entity="npc" /></div>}{mission.locations.length > 0 && <div><h4 className="mb-2 text-xs font-semibold uppercase tracking-wide text-slate-500">{t('questDetail.locations')}</h4><EntityReferences values={mission.locations} relationships={missionRelationships} entity="location" /></div>}</div></article>; }) : <p className="text-sm text-slate-500">{t('questDetail.noMissions')}</p>}</div></details>
       <div className="mt-6 grid gap-4 md:grid-cols-2">
-        {(quest.starting_npcs.length > 0 || quest.related_npcs.length > 0) && <section className="rounded-xl border border-slate-800 p-4"><h2 className="mb-2 flex items-center gap-2 font-semibold text-amber-200"><UserRound size={16} />{t('questDetail.npcs')}</h2><Names values={[...quest.starting_npcs, ...quest.related_npcs]} /></section>}
-        {quest.locations.length > 0 && <section className="rounded-xl border border-slate-800 p-4"><h2 className="mb-2 flex items-center gap-2 font-semibold text-amber-200"><MapPin size={16} />{t('questDetail.locations')}</h2><Names values={quest.locations} /></section>}
+        {(quest.starting_npcs.length > 0 || quest.related_npcs.length > 0) && <section className="rounded-xl border border-slate-800 p-4"><h2 className="mb-2 flex items-center gap-2 font-semibold text-amber-200"><UserRound size={16} />{t('questDetail.npcs')}</h2><EntityReferences values={[...quest.starting_npcs, ...quest.related_npcs]} relationships={quest.relationships.filter(relationship => !relationship.mission_id)} entity="npc" /></section>}
+        {quest.locations.length > 0 && <section className="rounded-xl border border-slate-800 p-4"><h2 className="mb-2 flex items-center gap-2 font-semibold text-amber-200"><MapPin size={16} />{t('questDetail.locations')}</h2><EntityReferences values={quest.locations} relationships={quest.relationships.filter(relationship => !relationship.mission_id)} entity="location" /></section>}
       </div>
       {quest.access_unlocks.length > 0 && <details className="mt-6 rounded-xl border border-slate-800 p-4"><summary className="cursor-pointer font-semibold text-amber-200">{t('questDetail.access')}</summary><div className="mt-3"><Names values={quest.access_unlocks} /></div></details>}
       <section className="mt-6"><h2 className="mb-2 text-lg font-semibold text-amber-200">{t('questDetail.creatures')}</h2>{quest.related_creatures.length ? <div className="grid gap-3 md:grid-cols-2 lg:grid-cols-3">{quest.related_creatures.map(creature => <Link to={`/creatures/${creature.creature_slug || creature.creature_id}`} key={creature.creature_id} className="rounded-lg border border-slate-800 bg-slate-950/60 p-3 hover:border-amber-500/40"><div className="flex items-center gap-2 text-slate-100">{creature.is_boss && <Crown size={14} className="text-red-300" />}<span className="font-semibold">{creature.creature_name}</span></div><div className="mt-1 text-xs text-slate-400">{creature.classification || t('questDetail.unknownClassification')}</div></Link>)}</div> : <p className="text-sm text-slate-500">{t('questDetail.noCreatures')}</p>}</section>

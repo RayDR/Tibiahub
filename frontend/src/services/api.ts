@@ -1,5 +1,5 @@
 import axios from 'axios';
-import type { Creature, CreatureSimple, HuntZone, HuntRecommendation, ItemDetail, ItemSearchResult, QuestDetail, QuestSearchResult, Vocation } from '../types';
+import type { Creature, CreatureSimple, HuntZone, HuntRecommendation, ItemDetail, ItemSearchResult, LocationKnowledgeDetail, NpcKnowledgeDetail, QuestDetail, QuestSearchResult, Vocation } from '../types';
 
 const API_BASE_URL = import.meta.env.VITE_API_URL || '/api/v1';
 export const REQUEST_TIMEOUT_MS = 10000;
@@ -180,6 +180,18 @@ export const questsApi = {
 
   getById: async (id: number | string, signal?: AbortSignal): Promise<QuestDetail> => {
     const response = await api.get(`/quests/${id}`, { signal });
+    return response.data;
+  },
+};
+
+export const namedKnowledgeApi = {
+  getNpc: async (identifier: string, signal?: AbortSignal): Promise<NpcKnowledgeDetail> => {
+    const response = await api.get(`/npcs/${encodeURIComponent(identifier)}`, { signal });
+    return response.data;
+  },
+
+  getLocation: async (identifier: string, signal?: AbortSignal): Promise<LocationKnowledgeDetail> => {
+    const response = await api.get(`/locations/${encodeURIComponent(identifier)}`, { signal });
     return response.data;
   },
 };

@@ -4,6 +4,8 @@ import HomePage from './pages/HomePage';
 import CreaturesPage from './pages/CreaturesPage';
 import CreatureDetailPage from './pages/CreatureDetailPage';
 import QuestDetailPage from './pages/QuestDetailPage';
+import NpcDetailPage from './pages/NpcDetailPage';
+import LocationDetailPage from './pages/LocationDetailPage';
 import HuntRecommendationsPage from './pages/HuntRecommendationsPage';
 import QuestViewerPage from './pages/QuestViewerPage';
 import GuildManagementDashboard from './pages/Admin/GuildManagementDashboard';
@@ -102,6 +104,8 @@ function App() {
               <Route path="/missions" element={<Navigate to="/cyclopedia?tab=quests" replace />} />
               <Route path="/creatures/:slug" element={<CreatureDetailPage />} />
               <Route path="/quests/:questId" element={<QuestDetailPage />} />
+              <Route path="/npcs/:identifier" element={<NpcDetailPage />} />
+              <Route path="/locations/:identifier" element={<LocationDetailPage />} />
               <Route path="/planner" element={<HuntRecommendationsPage />} />
               <Route path="/recommendations" element={<Navigate to="/planner" replace />} />
               <Route path="/hunt" element={<Navigate to="/planner" replace />} />
