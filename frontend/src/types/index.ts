@@ -300,6 +300,54 @@ export interface QuestRelationship {
   resolution_status: 'resolved' | 'unresolved' | 'ambiguous'; target_slug?: string; mission_id?: string;
 }
 
+export interface NamedKnowledgeRelationship {
+  relationship_type: string;
+  target_name: string;
+  target_type: string;
+  target_slug?: string;
+  resolution_state: 'resolved' | 'unresolved' | 'ambiguous';
+}
+
+export interface NamedKnowledgeSummary {
+  id: number;
+  name: string;
+  slug: string;
+  knowledge_entity_id: string;
+  entity_type: 'npc' | 'location' | 'area' | 'town';
+  description?: string;
+  image_url?: string;
+  source_url?: string;
+  data_version: number;
+  last_synced_at?: string;
+}
+
+export interface NpcKnowledgeDetail extends NamedKnowledgeSummary {
+  title?: string;
+  occupation?: string;
+  sex?: string;
+  location_name?: string;
+  buys: QuestNamedValue[];
+  sells: QuestNamedValue[];
+  destinations: QuestNamedValue[];
+  related_quests: QuestNamedValue[];
+  relationships: NamedKnowledgeRelationship[];
+}
+
+export interface LocationKnowledgeDetail extends NamedKnowledgeSummary {
+  location_kind?: string;
+  region?: string;
+  parent_location?: string;
+  premium_required?: boolean;
+  minimum_level?: number;
+  maximum_level?: number;
+  npcs: QuestNamedValue[];
+  creatures: QuestNamedValue[];
+  quests: QuestNamedValue[];
+  sublocations: QuestNamedValue[];
+  access_notes?: string;
+  relationships: NamedKnowledgeRelationship[];
+}
+
 export interface HuntRecommendation {
   zone: HuntZone;
   score: number;

@@ -34,6 +34,9 @@ class NamedEntityIdentityConflictError(InvalidNormalizationContractError):
     safe_message = "The provider identity conflicts with an existing canonical record."
 
 
+PLACE_ENTITY_TYPES = ("location", "area", "town")
+
+
 @dataclass(frozen=True, slots=True)
 class NamedEntityNormalizationApplied:
     status: str
@@ -44,14 +47,23 @@ class NamedEntityNormalizationApplied:
 
 
 def _provider_mapping(db: Session, provider: str, entity_type: str, external_id: str):
-    return db.query(KnowledgeExternalMapping).filter_by(
-        provider_id=provider, entity_type_id=entity_type, external_id=external_id,
-    ).first()
+    entity_types = PLACE_ENTITY_TYPES if entity_type in PLACE_ENTITY_TYPES else (entity_type,)
+    matches = db.query(KnowledgeExternalMapping).filter(
+        KnowledgeExternalMapping.provider_id == provider,
+        KnowledgeExternalMapping.entity_type_id.in_(entity_types),
+        KnowledgeExternalMapping.external_id == external_id,
+    ).all()
+    if len(matches) > 1:
+        raise NamedEntityIdentityConflictError()
+    return matches[0] if matches else None
 
 
 def _entity_mapping(db: Session, provider: str, entity_type: str, entity_uuid: UUID):
-    return db.query(KnowledgeExternalMapping).filter_by(
-        provider_id=provider, entity_type_id=entity_type, entity_uuid=entity_uuid,
+    entity_types = PLACE_ENTITY_TYPES if entity_type in PLACE_ENTITY_TYPES else (entity_type,)
+    return db.query(KnowledgeExternalMapping).filter(
+        KnowledgeExternalMapping.provider_id == provider,
+        KnowledgeExternalMapping.entity_type_id.in_(entity_types),
+        KnowledgeExternalMapping.entity_uuid == entity_uuid,
     ).first()
 
 
@@ -88,7 +100,7 @@ def _ensure_mapping(db: Session, result: KnowledgeNormalizationResult, entity: K
     try:
         with db.begin_nested():
             db.add(KnowledgeExternalMapping(
-                provider_id=result.provider_code, entity_type_id=entity_type,
+                provider_id=result.provider_code, entity_type_id=entity.entity_type,
                 external_id=result.external_id, entity_uuid=entity.uuid,
                 provider_metadata=dict(dto.provider_metadata),
             ))
@@ -218,10 +230,134 @@ def _bridge_location(db: Session, entity: KnowledgeEntity, dto: LocationKnowledg
         row.data_version = max(1, row.data_version or 1) + 1
     row.last_synced_at = datetime.now(UTC)
     EntityMetadataService.update_sync_timestamp(
-        db, entity_type="location", entity_key=row.normalized_name, display_name=row.name, entity_id=row.id,
+        db, entity_type=entity.entity_type, entity_key=row.normalized_name, display_name=row.name, entity_id=row.id,
     )
     db.flush()
     return created or changed
+
+
+def exact_place_candidates(db: Session, name: str, entity_types: tuple[str, ...] = PLACE_ENTITY_TYPES) -> list[KnowledgeEntity]:
+    matches: dict[UUID, KnowledgeEntity] = {}
+    for entity_type in entity_types:
+        for entity in exact_entity_candidates(db, entity_type, name):
+            matches[entity.uuid] = entity
+    return list(matches.values())
+
+
+def _upsert_named_relationship(
+    db: Session,
+    *,
+    source_entity: KnowledgeEntity,
+    relationship_type: str,
+    target_name: str,
+    candidate_types: tuple[str, ...],
+    unresolved_type: str,
+    provider_id: str,
+    source_document_ref: str | None,
+    source_scope: str,
+    context: str,
+) -> UUID:
+    matches = exact_place_candidates(db, target_name, candidate_types)
+    target = matches[0] if len(matches) == 1 else None
+    state = "resolved" if target is not None else "ambiguous" if len(matches) > 1 else "unresolved"
+    mutation = KnowledgeGraphService.upsert(db, RelationshipInput(
+        source_entity_id=source_entity.uuid,
+        source_scope=source_scope,
+        relationship_type=relationship_type,
+        target_entity_id=target.uuid if target else None,
+        target_entity_type=target.entity_type if target else unresolved_type,
+        unresolved_name=None if target else target_name,
+        resolution_state=state,
+        confidence="high",
+        source_provider_id=provider_id,
+        source_document_ref=source_document_ref,
+        source_context={
+            "context": context,
+            "resolution_policy": "exact_name_or_alias_only",
+            "candidate_entity_ids": [str(match.uuid) for match in matches] if len(matches) > 1 else [],
+        },
+    ))
+    return mutation.relationship.id
+
+
+def _sync_npc_location_relationships(
+    db: Session,
+    *,
+    entity: KnowledgeEntity,
+    dto: NpcKnowledgeDTO | LocationKnowledgeDTO,
+    provider_id: str,
+) -> int:
+    current_ids: set[UUID] = set()
+    relationship_types: set[str] = set()
+    source_document_ref = f"{'npc' if isinstance(dto, NpcKnowledgeDTO) else 'location'}:{dto.external_id}"
+    if isinstance(dto, NpcKnowledgeDTO):
+        relationship_types.add("located_at")
+        if dto.location_name:
+            current_ids.add(_upsert_named_relationship(
+                db, source_entity=entity, relationship_type="located_at",
+                target_name=dto.location_name, candidate_types=PLACE_ENTITY_TYPES,
+                unresolved_type="location", provider_id=provider_id,
+                source_document_ref=source_document_ref, source_scope="location",
+                context="npc.location_name",
+            ))
+    elif entity.entity_type == "location":
+        relationship_types.add("contained_in")
+        parent = dto.parent_location or dto.region
+        if parent:
+            current_ids.add(_upsert_named_relationship(
+                db, source_entity=entity, relationship_type="contained_in",
+                target_name=parent, candidate_types=("area",), unresolved_type="area",
+                provider_id=provider_id, source_document_ref=source_document_ref,
+                source_scope="parent", context="location.parent_location_or_region",
+            ))
+    elif entity.entity_type == "area":
+        relationship_types.add("contained_in")
+        parent = dto.parent_location or dto.region
+        if parent:
+            current_ids.add(_upsert_named_relationship(
+                db, source_entity=entity, relationship_type="contained_in",
+                target_name=parent, candidate_types=("town",), unresolved_type="town",
+                provider_id=provider_id, source_document_ref=source_document_ref,
+                source_scope="parent", context="area.parent_location_or_region",
+            ))
+    if relationship_types:
+        KnowledgeGraphService.reconcile_provider(
+            db, source_entity_id=entity.uuid, source_scope="location" if isinstance(dto, NpcKnowledgeDTO) else "parent",
+            provider_id=provider_id, relationship_types=relationship_types, current_ids=current_ids,
+        )
+    return len(current_ids)
+
+
+def sync_access_destination(
+    db: Session,
+    *,
+    access_entity: KnowledgeEntity,
+    destination_name: str | None,
+    provider_id: str,
+    source_document_ref: str | None,
+) -> int:
+    current_ids: set[UUID] = set()
+    if destination_name:
+        current_ids.add(_upsert_named_relationship(
+            db, source_entity=access_entity, relationship_type="leads_to",
+            target_name=destination_name, candidate_types=PLACE_ENTITY_TYPES,
+            unresolved_type="location", provider_id=provider_id,
+            source_document_ref=source_document_ref, source_scope="destination",
+            context="access.destination_name",
+        ))
+    KnowledgeGraphService.reconcile_provider(
+        db, source_entity_id=access_entity.uuid, source_scope="destination",
+        provider_id=provider_id, relationship_types={"leads_to"}, current_ids=current_ids,
+    )
+    return len(current_ids)
+
+
+def _candidate_types_for_reference(row: KnowledgeRelationship) -> tuple[str, ...]:
+    if row.relationship_type_code == "contained_in":
+        return ("town",) if row.source_entity.entity_type == "area" else ("area",)
+    if row.target_entity_type_id in PLACE_ENTITY_TYPES:
+        return PLACE_ENTITY_TYPES
+    return (row.target_entity_type_id,)
 
 
 def _resolve_exact_references(db: Session, entity: KnowledgeEntity) -> int:
@@ -231,8 +367,9 @@ def _resolve_exact_references(db: Session, entity: KnowledgeEntity) -> int:
     names.discard("")
     if not names:
         return 0
+    target_types = PLACE_ENTITY_TYPES if entity.entity_type in PLACE_ENTITY_TYPES else (entity.entity_type,)
     rows = db.query(KnowledgeRelationship).filter(
-        KnowledgeRelationship.target_entity_type_id == entity.entity_type,
+        KnowledgeRelationship.target_entity_type_id.in_(target_types),
         KnowledgeRelationship.normalized_unresolved_name.in_(names),
         KnowledgeRelationship.resolution_state.in_(("unresolved", "ambiguous")),
         KnowledgeRelationship.is_current.is_(True),
@@ -240,7 +377,13 @@ def _resolve_exact_references(db: Session, entity: KnowledgeEntity) -> int:
     ).all()
     resolved = 0
     for row in rows:
-        if exact_entity_candidates(db, entity.entity_type, row.unresolved_name or "") != [entity]:
+        candidate_types = _candidate_types_for_reference(row)
+        candidates = (
+            exact_place_candidates(db, row.unresolved_name or "", candidate_types)
+            if entity.entity_type in PLACE_ENTITY_TYPES
+            else exact_entity_candidates(db, entity.entity_type, row.unresolved_name or "")
+        )
+        if candidates != [entity]:
             continue
         document_ref = row.source_document.provider_document_id if row.source_document is not None else None
         mutation = KnowledgeGraphService.upsert(db, RelationshipInput(
@@ -264,7 +407,7 @@ class NpcLocationKnowledgeNormalizationService:
         entity_type = result.candidate.entity_type
         if entity_type == "npc":
             dto = NpcKnowledgeDTO.from_canonical_data(result.canonical_data)
-        elif entity_type == "location":
+        elif entity_type in PLACE_ENTITY_TYPES:
             dto = LocationKnowledgeDTO.from_canonical_data(result.canonical_data)
         else:
             raise InvalidNormalizationContractError()
@@ -272,11 +415,15 @@ class NpcLocationKnowledgeNormalizationService:
         _ensure_mapping(db, result, entity, dto, entity_type)
         entity_changed, aliases, warnings = _update_entity(db, entity, result)
         bridge_changed = _bridge_npc(db, entity, dto) if entity_type == "npc" else _bridge_location(db, entity, dto)
+        relationships_synced = _sync_npc_location_relationships(
+            db, entity=entity, dto=dto, provider_id=result.provider_code or "tibiawiki",
+        )
         references_resolved = _resolve_exact_references(db, entity)
         changed = entity_changed or bridge_changed
         if changed and not created:
             emit_event(db, KnowledgeEventType.ENTITY_UPDATED, entity_uuid=entity.uuid, payload={"source": f"tibiawiki_{entity_type}_normalization"})
         return NamedEntityNormalizationApplied(
             "created" if created else "updated" if changed else "unchanged",
-            entity.uuid, aliases, warnings, {"references_resolved": references_resolved},
+            entity.uuid, aliases, warnings,
+            {"references_resolved": references_resolved, "relationships_synced": relationships_synced},
         )

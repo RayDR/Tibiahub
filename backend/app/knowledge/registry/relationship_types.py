@@ -49,6 +49,9 @@ INITIAL_RELATIONSHIP_TYPES = tuple(definition for pair in (
     _pair("mission_involves_creature", "involved_in_mission", ("quest",), ("creature",)),
     _pair("mission_references_npc", "referenced_by_mission", ("quest",), ("npc",)),
     _pair("mission_occurs_at_location", "hosts_mission", ("quest",), ("area", "town", "location")),
+    _pair("located_at", "hosts_npc", ("npc",), ("area", "town", "location")),
+    _pair("contained_in", "contains", ("area", "location"), ("area", "town")),
+    _pair("leads_to", "destination_of_access", ("access",), ("area", "town", "location")),
 ) for definition in pair)
 
 

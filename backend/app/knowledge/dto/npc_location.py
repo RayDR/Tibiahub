@@ -6,6 +6,20 @@ from dataclasses import asdict, dataclass, field
 from typing import Any
 
 
+TOWN_LOCATION_KINDS = frozenset({"city", "settlement", "town", "village"})
+AREA_LOCATION_KINDS = frozenset({"area", "continent", "island", "region"})
+
+
+def canonical_place_entity_type(location_kind: str | None) -> str:
+    """Classify only explicit provider kinds; unknown kinds remain locations."""
+    normalized = " ".join((location_kind or "").strip().lower().split())
+    if normalized in TOWN_LOCATION_KINDS:
+        return "town"
+    if normalized in AREA_LOCATION_KINDS:
+        return "area"
+    return "location"
+
+
 @dataclass(frozen=True, slots=True)
 class NamedKnowledgeReference:
     name: str
@@ -89,7 +103,11 @@ class LocationKnowledgeDTO:
 
     @property
     def language_neutral_id(self) -> str:
-        return f"location:tibiawiki:{self.external_id}"
+        return f"{self.canonical_entity_type}:tibiawiki:{self.external_id}"
+
+    @property
+    def canonical_entity_type(self) -> str:
+        return canonical_place_entity_type(self.location_kind)
 
     @property
     def sufficient_detail(self) -> bool:
