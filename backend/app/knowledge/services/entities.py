@@ -44,7 +44,8 @@ class KnowledgeEntityService:
         entity_type = db.get(KnowledgeEntityType, command.entity_type)
         if entity_type is None or not entity_type.enabled:
             raise UnknownEntityTypeError(f"Unknown or disabled entity type: {command.entity_type}")
-        if cls.resolve(db, command.entity_type, command.canonical_name) is not None:
+        name_owner = cls.resolve(db, command.entity_type, command.canonical_name)
+        if name_owner is not None and not command.allow_name_collision:
             raise DuplicateKnowledgeEntityError("A canonical entity already owns this name or alias")
         if (
             db.query(KnowledgeEntity)
@@ -60,7 +61,11 @@ class KnowledgeEntityService:
         entity = KnowledgeEntity(
             entity_type=command.entity_type,
             canonical_name=command.canonical_name.strip(),
-            slug=slugify(command.canonical_name),
+            slug=(
+                f"{slugify(command.canonical_name)}-{command.slug_suffix}"
+                if command.allow_name_collision and command.slug_suffix
+                else slugify(command.canonical_name)
+            ),
             language_neutral_id=command.language_neutral_id,
             status=command.status,
             source_priority=command.source_priority,
@@ -69,7 +74,8 @@ class KnowledgeEntityService:
         )
         db.add(entity)
         db.flush()
-        cls.add_alias(db, entity, command.canonical_name)
+        if name_owner is None:
+            cls.add_alias(db, entity, command.canonical_name)
         for alias in command.aliases:
             cls.add_alias(db, entity, alias)
         refresh_search_metadata(entity)

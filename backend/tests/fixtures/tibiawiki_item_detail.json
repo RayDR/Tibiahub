@@ -1,0 +1,11 @@
+{
+  "parse": {
+    "title": "Magic Sword",
+    "pageid": 111,
+    "wikitext": {
+      "*": "{{Infobox Item\n| name = Magic Sword\n| itemid = 3288\n| class = Equipment\n| type = Sword\n| category = Weapon\n| weight = 42.00 oz\n| value = 10000\n| levelrequired = 80\n| vocationrequired = [[Knight]], [[Elite Knight]]\n| attack = 48\n| defense = 35\n| range = 1\n| slots = [[Right Hand]], [[Left Hand]]\n| imbueslots = 2\n| skillboost = Sword Fighting +3\n| physical = +5%\n| speed = +10\n| flavortext = A blade of extraordinary sharpness.\n| notes = An official rare sword.\n| buyfrom = [[A Sweaty Cyclops]]\n| sellto = [[Rashid]]\n| droppedby = [[Demon]], [[Ferumbras]]\n| rewardfrom = [[The Annihilator Quest]]\n| requiredfor = [[Sword Test]]\n| tradeable = yes\n| stackable = no\n}}"
+    },
+    "future_detail_field": {"preserved": [1, 2, 3]}
+  },
+  "future_envelope_field": "retained"
+}

@@ -29,6 +29,7 @@ def arguments() -> argparse.Namespace:
     parser.add_argument("--provider-document-id")
     parser.add_argument("--external-id")
     parser.add_argument("--creature-name")
+    parser.add_argument("--item-name")
     parser.add_argument("--batch-limit", type=int)
     parser.add_argument("--confirm-catalog-sync", action="store_true")
     parser.add_argument("--allow-completed-recreate", action="store_true")
@@ -36,11 +37,11 @@ def arguments() -> argparse.Namespace:
 
 
 def request_values(args: argparse.Namespace) -> tuple[dict, dict]:
-    if args.job_type == "creature_catalog":
+    if args.job_type in {"creature_catalog", "item_catalog"}:
         if not args.confirm_catalog_sync:
-            raise SystemExit("Creature catalog jobs require --confirm-catalog-sync.")
+            raise SystemExit("Catalog jobs require --confirm-catalog-sync.")
         if args.batch_limit is None:
-            raise SystemExit("Creature catalog jobs require an explicit --batch-limit.")
+            raise SystemExit("Catalog jobs require an explicit --batch-limit.")
         return {"batch_limit": args.batch_limit}, {}
     if args.job_type in {"creature_detail", "creature_renormalize"}:
         return {}, {
@@ -48,6 +49,15 @@ def request_values(args: argparse.Namespace) -> tuple[dict, dict]:
             for key, value in {
                 "external_id": args.external_id,
                 "page_title": args.creature_name,
+            }.items()
+            if value
+        }
+    if args.job_type in {"item_detail", "item_renormalize"}:
+        return {}, {
+            key: value
+            for key, value in {
+                "external_id": args.external_id,
+                "page_title": args.item_name,
             }.items()
             if value
         }

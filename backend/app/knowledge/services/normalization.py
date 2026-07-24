@@ -33,9 +33,16 @@ class KnowledgeNormalizationService:
         if result.action == "noop":
             return AppliedNormalization("unchanged", None, 0, len(result.warnings))
         if result.canonical_data is not None and result.provider_code == "tibiawiki":
-            from app.knowledge.services.creature_normalization import CreatureKnowledgeNormalizationService
+            if result.candidate is not None and result.candidate.entity_type == "creature":
+                from app.knowledge.services.creature_normalization import CreatureKnowledgeNormalizationService
 
-            applied = CreatureKnowledgeNormalizationService.apply(db, result)
+                applied = CreatureKnowledgeNormalizationService.apply(db, result)
+            elif result.candidate is not None and result.candidate.entity_type == "item":
+                from app.knowledge.services.item_normalization import ItemKnowledgeNormalizationService
+
+                applied = ItemKnowledgeNormalizationService.apply(db, result)
+            else:
+                raise ValueError("TibiaWiki normalization requires a supported canonical entity type")
             return AppliedNormalization(
                 applied.status,
                 applied.entity_uuid,

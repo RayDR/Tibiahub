@@ -1,44 +1,36 @@
 """Items/Loot API endpoints."""
 import hashlib
-import asyncio
 from difflib import SequenceMatcher
 from typing import List
 
 from fastapi import APIRouter, Depends, Query
 from fastapi import HTTPException, Request, Response
+from sqlalchemy import or_
 from sqlalchemy.orm import Session, joinedload
 
 from app.core.config import settings
 from app.db.database import get_db
 from app.models.creature import Creature
-from app.models.settings import SystemSettings as SettingsModel
 from app.models import Loot as LootModel
 from app.models.external_data import Item as ExternalItemModel
 from app.models.spawn_location import SpawnLocation
 from app.schemas import ItemDetail, ItemDropCreature, ItemSearchResult
 from app.services.entity_metadata_service import EntityMetadataService
-from app.services.external_apis import get_items
 from app.services import media_asset_service as media_svc
 from app.services.text_utils import normalize_search_text
+from app.knowledge.models import KnowledgeCreatureItemDrop
 
 router = APIRouter(prefix="/items", tags=["items"])
-DETAIL_FALLBACK_TIMEOUT_SECONDS = 15.0
-
-
-def _get_setting(db: Session, key: str, default: str = "") -> str:
-    value = db.query(SettingsModel).filter(SettingsModel.key == key).first()
-    return value.value if value and value.value is not None else default
-
-
-def _is_external_detail_fallback_enabled(db: Session) -> bool:
-    return (
-        _get_setting(db, "external_auto_fallback_enabled", "0") == "1"
-        or _get_setting(db, "bestiary_allow_external_detail_fallback", "0") == "1"
-    )
 
 
 def _is_image_autofetch_enabled(db: Session) -> bool:
-    return _get_setting(db, "auto_fetch_missing_images_enabled", "0") == "1"
+    from app.models.settings import SystemSettings as SettingsModel
+
+    def _get_setting(key: str, default: str = "") -> str:
+        value = db.query(SettingsModel).filter(SettingsModel.key == key).first()
+        return value.value if value and value.value is not None else default
+
+    return _get_setting("auto_fetch_missing_images_enabled", "0") == "1"
 
 
 def _placeholder_svg(label: str) -> bytes:
@@ -57,16 +49,29 @@ def _placeholder_svg(label: str) -> bytes:
 @router.get("/{item_id}/image")
 async def get_item_image(item_id: int, request: Request, db: Session = Depends(get_db)):
     """Serve loot/item image from local MediaAsset cache (local-first)."""
-    loot = db.query(LootModel).filter(LootModel.id == item_id).first()
-    if not loot:
+    item = (
+        db.query(ExternalItemModel)
+        .filter(
+            ExternalItemModel.id == item_id,
+            ExternalItemModel.knowledge_entity_id.isnot(None),
+        )
+        .first()
+    )
+    loot = None if item else db.query(LootModel).filter(LootModel.id == item_id).first()
+    if not item and not loot:
         loot = db.query(LootModel).filter(LootModel.external_id == str(item_id)).first()
-    if not loot:
+    if not item and not loot:
         raise HTTPException(status_code=404, detail="Item not found")
 
-    asset_key = media_svc.build_loot_asset_key(loot)
-    source_url = media_svc.build_loot_source_url(loot)
+    label = item.name if item else loot.item_name
+    asset_key = (
+        f"item:knowledge:{item.knowledge_entity_id}"
+        if item
+        else media_svc.build_loot_asset_key(loot)
+    )
+    source_url = item.image_url if item else media_svc.build_loot_source_url(loot)
     if not source_url:
-        placeholder = _placeholder_svg(loot.item_name)
+        placeholder = _placeholder_svg(label)
         return Response(
             content=placeholder,
             media_type="image/svg+xml",
@@ -86,7 +91,7 @@ async def get_item_image(item_id: int, request: Request, db: Session = Depends(g
     )
 
     if not asset or asset.status != "cached":
-        placeholder = _placeholder_svg(loot.item_name)
+        placeholder = _placeholder_svg(label)
         return Response(
             content=placeholder,
             media_type="image/svg+xml",
@@ -100,7 +105,7 @@ async def get_item_image(item_id: int, request: Request, db: Session = Depends(g
 
     content = asset.read_bytes()
     if not content:
-        placeholder = _placeholder_svg(loot.item_name)
+        placeholder = _placeholder_svg(label)
         return Response(
             content=placeholder,
             media_type="image/svg+xml",
@@ -146,6 +151,85 @@ def _rank_item(query: str, item_name: str) -> tuple[int, float, str]:
     return (3, -SequenceMatcher(a=normalized_query, b=normalized_name).ratio(), normalized_name)
 
 
+def _hunt_zones(creature: Creature | None) -> list[dict]:
+    if creature is None:
+        return []
+    return [
+        {
+            "id": spawn.hunt_zone.id,
+            "name": spawn.hunt_zone.name,
+            "city": spawn.hunt_zone.city,
+            "min_level": None if spawn.hunt_zone.min_level == 0 else spawn.hunt_zone.min_level,
+            "max_level": spawn.hunt_zone.max_level,
+            "difficulty": spawn.hunt_zone.difficulty,
+            "source_url": getattr(spawn.hunt_zone, "source_url", None),
+        }
+        for spawn in creature.spawn_locations or []
+        if spawn.hunt_zone
+    ]
+
+
+def _canonical_item_drops(db: Session, item: ExternalItemModel) -> list[ItemDropCreature]:
+    relationships = (
+        db.query(KnowledgeCreatureItemDrop)
+        .filter(KnowledgeCreatureItemDrop.item_entity_uuid == item.knowledge_entity_id)
+        .order_by(KnowledgeCreatureItemDrop.creature_name.asc())
+        .all()
+    )
+    drops: list[ItemDropCreature] = []
+    for relationship in relationships:
+        creature = None
+        if relationship.creature_entity_uuid is not None:
+            creature = (
+                db.query(Creature)
+                .options(joinedload(Creature.spawn_locations).joinedload(SpawnLocation.hunt_zone))
+                .filter(Creature.knowledge_entity_id == relationship.creature_entity_uuid)
+                .first()
+            )
+        legacy = None
+        if creature is not None:
+            legacy = (
+                db.query(LootModel)
+                .filter(
+                    LootModel.creature_id == creature.id,
+                    LootModel.normalized_name == item.normalized_name,
+                )
+                .first()
+            )
+        drops.append(
+            ItemDropCreature(
+                creature_id=creature.id if creature else None,
+                creature_name=creature.name if creature else relationship.creature_name,
+                creature_slug=creature.slug if creature else None,
+                chance=legacy.percentage if legacy else None,
+                rarity=legacy.rarity if legacy else None,
+                hunt_zones=_hunt_zones(creature),
+                relationship_id=relationship.id,
+                knowledge_entity_id=relationship.creature_entity_uuid,
+                resolution_status=relationship.resolution_status,
+                source_provider=relationship.provider_id,
+            )
+        )
+    return drops
+
+
+def _build_canonical_item_result(db: Session, item: ExternalItemModel) -> ItemSearchResult:
+    return ItemSearchResult(
+        id=item.id,
+        image_item_id=item.id,
+        item_name=item.name,
+        normalized_name=item.normalized_name or normalize_search_text(item.name),
+        item_image_url=item.image_url,
+        source_url=item.source_url,
+        knowledge_entity_id=item.knowledge_entity_id,
+        item_type=item.type,
+        category=item.category,
+        data_version=item.data_version or 1,
+        last_synced_at=item.last_synced_at,
+        drops=_canonical_item_drops(db, item),
+    )
+
+
 @router.get("/highlights", response_model=List[ItemSearchResult])
 async def get_item_highlights(
     limit: int = Query(12, ge=1, le=50),
@@ -158,6 +242,19 @@ async def get_item_highlights(
 
         response: list[ItemSearchResult] = []
         for record in metadata:
+            canonical = (
+                db.query(ExternalItemModel)
+                .filter(
+                    ExternalItemModel.id == record.entity_id,
+                    ExternalItemModel.knowledge_entity_id.isnot(None),
+                )
+                .first()
+                if record.entity_id is not None
+                else None
+            )
+            if canonical is not None:
+                response.append(_build_canonical_item_result(db, canonical))
+                continue
             drops = (
                 db.query(LootModel)
                 .options(joinedload(LootModel.creature))
@@ -176,6 +273,8 @@ async def get_item_highlights(
 @router.get("/", response_model=List[ItemSearchResult])
 async def search_items(
     search: str | None = Query(None, min_length=2, description="Search term for item name"),
+    category: str | None = Query(None, min_length=1, max_length=100),
+    item_type: str | None = Query(None, min_length=1, max_length=100),
     skip: int = Query(0, ge=0),
     limit: int = Query(50, ge=1, le=100),
     db: Session = Depends(get_db)
@@ -184,6 +283,39 @@ async def search_items(
     Search for items/loot by name.
     Returns grouped results sorted by exactness and fuzzy similarity.
     """
+    canonical_query = db.query(ExternalItemModel).filter(ExternalItemModel.knowledge_entity_id.isnot(None))
+    if search:
+        canonical_query = canonical_query.filter(
+            ExternalItemModel.normalized_name.contains(normalize_search_text(search))
+        )
+    if category:
+        canonical_query = canonical_query.filter(ExternalItemModel.category.ilike(category))
+    if item_type:
+        canonical_query = canonical_query.filter(ExternalItemModel.type.ilike(item_type))
+    canonical_match_count = canonical_query.count()
+    canonical_items = (
+        canonical_query.order_by(ExternalItemModel.name.asc(), ExternalItemModel.id.asc())
+        .offset(skip)
+        .limit(limit)
+        .all()
+    )
+    if canonical_items:
+        if search:
+            EntityMetadataService.record_searches(
+                db,
+                entity_type="item",
+                matches=[
+                    (item.normalized_name, item.name, item.id)
+                    for item in canonical_items
+                ],
+            )
+            db.commit()
+        return [_build_canonical_item_result(db, item) for item in canonical_items]
+    if canonical_match_count:
+        return []
+    if category or item_type:
+        return []
+
     if not search:
         rows = (
             db.query(LootModel)
@@ -247,9 +379,79 @@ async def search_items(
     return [_build_item_result(grouped[key][0].item_name, grouped[key]) for key in selected_keys]
 
 
-@router.get("/{item_id}", response_model=ItemDetail)
-async def get_item_detail(item_id: int, db: Session = Depends(get_db)):
-    """Get item detail from local cache first, then controlled external fallback."""
+@router.get("/{item_identifier}", response_model=ItemDetail)
+async def get_item_detail(
+    item_identifier: str,
+    response: Response,
+    db: Session = Depends(get_db),
+):
+    """Get item detail exclusively from local PostgreSQL records."""
+    normalized_identifier = normalize_search_text(item_identifier.replace("-", " ").replace("_", " "))
+    canonical_query = db.query(ExternalItemModel).filter(ExternalItemModel.knowledge_entity_id.isnot(None))
+    if item_identifier.isdigit():
+        numeric_identifier = int(item_identifier)
+        canonical_query = canonical_query.filter(
+            or_(
+                ExternalItemModel.id == numeric_identifier,
+                ExternalItemModel.item_id == numeric_identifier,
+                ExternalItemModel.external_id == item_identifier,
+            )
+        )
+    else:
+        canonical_query = canonical_query.filter(
+            or_(
+                ExternalItemModel.slug == item_identifier,
+                ExternalItemModel.normalized_name == normalized_identifier,
+            )
+        )
+    canonical = canonical_query.order_by(ExternalItemModel.id.asc()).first()
+    if canonical is not None:
+        drops = _canonical_item_drops(db, canonical)
+        top_drop = max((drop.chance for drop in drops if drop.chance is not None), default=None)
+        rarity = next((drop.rarity for drop in drops if drop.rarity), None)
+        if canonical.last_synced_at:
+            response.headers["X-Last-Synced-At"] = canonical.last_synced_at.isoformat()
+        return ItemDetail(
+            id=canonical.id,
+            item_name=canonical.name,
+            normalized_name=canonical.normalized_name or normalize_search_text(canonical.name),
+            item_image_url=canonical.image_url,
+            source_url=canonical.source_url,
+            rarity=rarity,
+            drop_chance=top_drop,
+            knowledge_entity_id=canonical.knowledge_entity_id,
+            data_version=canonical.data_version or 1,
+            last_synced_at=canonical.last_synced_at,
+            game_item_id=canonical.item_id,
+            item_class=canonical.item_class,
+            item_type=canonical.type,
+            category=canonical.category,
+            weight=canonical.weight,
+            value=canonical.value,
+            level_requirement=canonical.level_required,
+            vocation_requirements=list(canonical.vocation_requirements or []),
+            attack=canonical.attack,
+            defense=canonical.defense,
+            armor=canonical.armor,
+            range=canonical.range,
+            slots=list(canonical.slots or []),
+            imbuement_slots=canonical.imbuement_slots,
+            attributes=dict(canonical.attributes or {}),
+            resistances=dict(canonical.resistances or {}),
+            bonuses=dict(canonical.bonuses or {}),
+            description=canonical.description,
+            notes=canonical.notes,
+            buy_from=list(canonical.buy_from or []),
+            sell_to=list(canonical.sell_to or []),
+            rewards_from=list(canonical.rewards_from or []),
+            required_for=list(canonical.required_for or []),
+            drops=drops,
+        )
+
+    if not item_identifier.isdigit():
+        raise HTTPException(status_code=404, detail="Item not found")
+
+    item_id = int(item_identifier)
     local_by_id = (
         db.query(LootModel)
         .options(
@@ -297,44 +499,6 @@ async def get_item_detail(item_id: int, db: Session = Depends(get_db)):
             drop_chance=top_drop,
             drops=mapped.drops,
         )
-
-    if _is_external_detail_fallback_enabled(db):
-        external_response = await asyncio.wait_for(get_items(expand=True), timeout=DETAIL_FALLBACK_TIMEOUT_SECONDS)
-        if external_response.success() and isinstance(external_response.data, list):
-            best = next(
-                (
-                    entry for entry in external_response.data
-                    if entry.get("item_id") == item_id
-                    or str(entry.get("item_id") or "") == str(item_id)
-                ),
-                None,
-            )
-            if best:
-                name = (best.get("name") or "").strip()
-                if not name:
-                    raise HTTPException(status_code=404, detail="Item not found")
-
-                normalized_name = normalize_search_text(name)
-                existing = db.query(ExternalItemModel).filter(ExternalItemModel.name == name).first()
-                if not existing:
-                    existing = ExternalItemModel(name=name)
-                    db.add(existing)
-                existing.item_id = best.get("item_id")
-                existing.description = best.get("description")
-                existing.type = best.get("type")
-                existing.raw_data = best
-                db.commit()
-
-                return ItemDetail(
-                    id=existing.id,
-                    item_name=name,
-                    normalized_name=normalized_name,
-                    item_image_url=best.get("image_url"),
-                    source_url=best.get("source_url"),
-                    rarity=None,
-                    drop_chance=None,
-                    drops=[],
-                )
 
     raise HTTPException(status_code=404, detail="Item not found")
 

@@ -109,7 +109,7 @@ class KnowledgeWorker:
                 .where(KnowledgeProvider.provider_id == job.provider_id)
                 .with_for_update()
             ).scalar_one()
-            if provider.provider_id == "tibiawiki" and job.job_type != "creature_renormalize":
+            if provider.provider_id == "tibiawiki" and not job.job_type.endswith("_renormalize"):
                 requests = provider.rate_limit.get("requests") if isinstance(provider.rate_limit, dict) else None
                 window_seconds = provider.rate_limit.get("window_seconds") if isinstance(provider.rate_limit, dict) else None
                 if (
@@ -283,7 +283,12 @@ class KnowledgeWorker:
             logger.warning("knowledge_job_ownership_lost job_id=%s code=%s", job_id, failure.code)
 
     def _load_stored_document(self, request: KnowledgeFetchRequest) -> KnowledgeFetchRequest:
-        if request.job_type != "creature_renormalize":
+        prefixes = {
+            "creature_renormalize": "creature",
+            "item_renormalize": "item",
+        }
+        document_prefix = prefixes.get(request.job_type)
+        if document_prefix is None:
             return request
         external_id = str(request.payload.get("external_id") or "").strip()
         if not external_id:
@@ -293,7 +298,7 @@ class KnowledgeWorker:
                 db.query(KnowledgeDocument)
                 .filter(
                     KnowledgeDocument.provider_id == request.provider_code,
-                    KnowledgeDocument.provider_document_id == f"creature:{external_id}",
+                    KnowledgeDocument.provider_document_id == f"{document_prefix}:{external_id}",
                 )
                 .order_by(KnowledgeDocument.retrieved_at.desc())
                 .first()

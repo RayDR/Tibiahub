@@ -20,6 +20,8 @@ class KnowledgeEntityCreate(BaseModel):
     source_priority: int = Field(default=100, ge=0)
     visibility: str = Field(default="public", pattern=r"^(public|internal|private)$")
     search_weight: float = Field(default=1.0, ge=0)
+    allow_name_collision: bool = False
+    slug_suffix: str | None = Field(default=None, pattern=r"^[a-z0-9-]{1,80}$")
 
 
 class KnowledgeDocumentCreate(BaseModel):

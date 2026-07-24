@@ -151,20 +151,30 @@ export interface HuntZone {
 }
 
 export interface ItemDropCreature {
-  creature_id: number;
+  creature_id?: number | null;
   creature_name: string;
   creature_slug?: string;
   chance?: number | null;
   rarity?: string | null;
   hunt_zones: HuntZoneSimple[];
+  relationship_id?: string | null;
+  knowledge_entity_id?: string | null;
+  resolution_status?: 'resolved' | 'unresolved' | 'ambiguous' | null;
+  source_provider?: string | null;
 }
 
 export interface ItemSearchResult {
+  id?: number | null;
   image_item_id?: number | null;
   item_name: string;
   normalized_name: string;
   item_image_url?: string | null;
   source_url?: string | null;
+  knowledge_entity_id?: string | null;
+  item_type?: string | null;
+  category?: string | null;
+  data_version: number;
+  last_synced_at?: string | null;
   drops: ItemDropCreature[];
 }
 
@@ -176,6 +186,32 @@ export interface ItemDetail {
   source_url?: string | null;
   rarity?: string | null;
   drop_chance?: number | null;
+  knowledge_entity_id?: string | null;
+  data_version: number;
+  last_synced_at?: string | null;
+  game_item_id?: number | null;
+  item_class?: string | null;
+  item_type?: string | null;
+  category?: string | null;
+  weight?: number | null;
+  value?: number | null;
+  level_requirement?: number | null;
+  vocation_requirements: string[];
+  attack?: number | null;
+  defense?: number | null;
+  armor?: number | null;
+  range?: number | null;
+  slots: string[];
+  imbuement_slots?: number | null;
+  attributes: Record<string, unknown>;
+  resistances: Record<string, unknown>;
+  bonuses: Record<string, unknown>;
+  description?: string | null;
+  notes?: string | null;
+  buy_from: Record<string, unknown>[];
+  sell_to: Record<string, unknown>[];
+  rewards_from: string[];
+  required_for: string[];
   drops: ItemDropCreature[];
 }
 

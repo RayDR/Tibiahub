@@ -22,6 +22,7 @@ from app.knowledge.services.entities import (
     KnowledgeEntityService,
 )
 from app.knowledge.services.failures import InvalidNormalizationContractError
+from app.knowledge.services.item_relationships import link_creature_loot
 from app.models import Creature, Loot
 from app.services.entity_metadata_service import EntityMetadataService
 from app.services.text_utils import normalize_search_text
@@ -335,6 +336,15 @@ class CreatureKnowledgeNormalizationService:
         )
         entity_changed, aliases_created, warnings = _update_entity(db, entity, result)
         _creature, creature_changed = _bridge_creature(db, entity, dto)
+        _relationships_created, unresolved = link_creature_loot(
+            db,
+            creature_entity_uuid=entity.uuid,
+            creature_name=dto.canonical_name,
+            loot_references=dto.loot,
+            provider_id=result.provider_code or "tibiawiki",
+            source_document_id=f"creature:{dto.external_id}",
+        )
+        warnings += unresolved
         changed = entity_changed or creature_changed
         if changed and not created:
             emit_event(

@@ -3,7 +3,7 @@ Extended models for Tibia items, quests, and hunting places
 Stores complete data from external APIs locally
 Note: Quest and Quest models already exist - these are for API synced data
 """
-from sqlalchemy import Column, Integer, String, Text, Float, DateTime, Boolean, ForeignKey
+from sqlalchemy import Column, Integer, String, Text, Float, DateTime, Boolean, ForeignKey, Index, UniqueConstraint, Uuid
 from sqlalchemy.orm import relationship
 from sqlalchemy.sql import func
 from app.db.database import Base
@@ -12,12 +12,32 @@ from app.db.types import JSONBType
 class Item(Base):
     """Store item data from TibiaWiki API"""
     __tablename__ = "tibiawiki_items"
+    __table_args__ = (
+        UniqueConstraint("source_name", "external_id", name="uq_tibiawiki_items_source_external"),
+        Index("uq_tibiawiki_items_knowledge_entity_id", "knowledge_entity_id", unique=True),
+    )
     
     id = Column(Integer, primary_key=True, index=True)
-    name = Column(String(255), unique=True, index=True, nullable=False)
+    name = Column(String(255), index=True, nullable=False)
+    normalized_name = Column(String(255), nullable=True, index=True)
+    slug = Column(String(255), nullable=True, index=True)
     item_id = Column(Integer, nullable=True, unique=True)  # Tibia item ID
+    external_id = Column(String(100), nullable=True, index=True)  # Stable provider page ID
+    source_name = Column(String(50), nullable=True, index=True)
+    source_url = Column(String(1024), nullable=True)
+    image_url = Column(String(1024), nullable=True)
+    knowledge_entity_id = Column(
+        Uuid(as_uuid=True),
+        ForeignKey("knowledge_entities.uuid", ondelete="SET NULL"),
+        nullable=True,
+    )
+    data_version = Column(Integer, nullable=False, default=1)
+    protected_fields = Column(JSONBType, nullable=False, default=list)
     description = Column(Text, nullable=True)
+    notes = Column(Text, nullable=True)
     type = Column(String(100), nullable=True, index=True)  # e.g., "weapon", "armor", "consumable"
+    item_class = Column(String(100), nullable=True, index=True)
+    category = Column(String(100), nullable=True, index=True)
     
     # Item properties
     weight = Column(Float, nullable=True)
@@ -25,20 +45,34 @@ class Item(Base):
     attack = Column(Integer, nullable=True)
     defense = Column(Integer, nullable=True)
     armor = Column(Integer, nullable=True)
+    range = Column(Integer, nullable=True)
+    imbuement_slots = Column(Integer, nullable=True)
+    slots = Column(JSONBType, nullable=False, default=list)
+    attributes = Column(JSONBType, nullable=False, default=dict)
+    resistances = Column(JSONBType, nullable=False, default=dict)
+    bonuses = Column(JSONBType, nullable=False, default=dict)
     
     # Requirements
     level_required = Column(Integer, nullable=True)
     vocation_required = Column(String(100), nullable=True)
+    vocation_requirements = Column(JSONBType, nullable=False, default=list)
     
     # Classification
     tradeable = Column(Boolean, default=True)
     stackable = Column(Boolean, default=False)
+    buy_from = Column(JSONBType, nullable=False, default=list)
+    sell_to = Column(JSONBType, nullable=False, default=list)
+    rewards_from = Column(JSONBType, nullable=False, default=list)
+    required_for = Column(JSONBType, nullable=False, default=list)
     
     # Full raw data from API
     raw_data = Column(JSONBType, nullable=True)
+    last_synced_at = Column(DateTime(timezone=True), nullable=True)
     
     created_at = Column(DateTime(timezone=True), server_default=func.now())
     updated_at = Column(DateTime(timezone=True), onupdate=func.now())
+
+    knowledge_entity = relationship("KnowledgeEntity")
 
 class HuntingPlace(Base):
     """Store hunting place data from TibiaWiki API"""
