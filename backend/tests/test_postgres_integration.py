@@ -227,7 +227,7 @@ def test_empty_database_upgrades_to_complete_postgresql_schema(pg_engine):
             text("SELECT enabled, health, supports_entities FROM knowledge_providers WHERE provider_id='tibiawiki'")
         ).one()
         assert provider_enabled is False and provider_health == "disabled"
-        assert supported_entities == ["creature", "item", "quest", "npc", "location"]
+        assert supported_entities == ["creature", "item", "quest", "npc", "location", "area", "town"]
 
 
 def test_graph_schema_registry_dedup_inverse_and_resolution_on_postgresql(pg_session):
