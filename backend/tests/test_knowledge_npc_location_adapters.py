@@ -24,6 +24,7 @@ from app.knowledge.registry import EntityTypeRegistry, ProviderRegistry
 from app.knowledge.schemas import KnowledgeEntityCreate
 from app.knowledge.services import EnqueueKnowledgeJob, KnowledgeEntityService, KnowledgeGraphService, KnowledgeJobService
 from app.knowledge.services.graph import RelationshipInput
+from app.knowledge.services.npc_location_normalization import sync_access_destination
 from app.knowledge.services.normalization import KnowledgeNormalizationService
 from app.knowledge.workers.knowledge_worker import KnowledgeWorker
 from app.models import TibiaWikiLocation, TibiaWikiNpc
@@ -157,12 +158,16 @@ def test_normalization_is_idempotent_preserves_protected_fields_and_resolves_exa
     npc = db.query(TibiaWikiNpc).one()
     location = db.query(TibiaWikiLocation).one()
     assert npc_applied.status == location_applied.status == "created"
-    assert npc_applied.metrics["references_resolved"] == location_applied.metrics["references_resolved"] == 1
+    assert npc_applied.metrics["references_resolved"] == 1
+    assert location_applied.metrics["references_resolved"] == 2
     assert not db.get(KnowledgeRelationship, npc_ref.id).is_current
     assert not db.get(KnowledgeRelationship, location_ref.id).is_current
     resolved = db.query(KnowledgeRelationship).filter_by(is_current=True).all()
     assert {row.target_entity_id for row in resolved} == {npc.knowledge_entity_id, location.knowledge_entity_id}
-    assert db.query(KnowledgeExternalMapping).filter(KnowledgeExternalMapping.entity_type_id.in_(["npc", "location"])).count() == 2
+    assert db.query(KnowledgeExternalMapping).filter(
+        KnowledgeExternalMapping.entity_type_id.in_(["npc", "location", "area", "town"])
+    ).count() == 2
+    assert location.knowledge_entity.entity_type == "town"
 
     npc.protected_fields = ["description"]
     npc.description = "Editorial NPC description"
@@ -195,6 +200,95 @@ def test_ambiguous_exact_names_remain_unresolved(db, named_registry):
     assert db.get(KnowledgeRelationship, reference.id).is_current
 
 
+def _place_fixture(*, page_id: int, name: str, kind: str, parent: str | None = None) -> dict:
+    raw = deepcopy(fixture("tibiawiki_location_detail.json"))
+    raw["parse"]["pageid"] = page_id
+    raw["parse"]["title"] = name
+    parent_line = f"| parent = {parent}\n" if parent else ""
+    raw["parse"]["wikitext"]["*"] = (
+        "{{Infobox Location\n"
+        f"| name = {name}\n"
+        f"| type = {kind}\n"
+        f"{parent_line}"
+        f"| description = Local fixture for {name}.\n"
+        "}}"
+    )
+    return raw
+
+
+def test_named_places_and_access_use_canonical_entities_and_deduplicated_graph(db, named_registry):
+    town = apply_detail(db, "location", _place_fixture(page_id=1900, name="Port Hope", kind="Town"))
+    area = apply_detail(db, "location", _place_fixture(
+        page_id=1901, name="Tiquanda", kind="Region", parent="Port Hope",
+    ))
+    location = apply_detail(db, "location", _place_fixture(
+        page_id=1902, name="Banuta", kind="Hunting Place", parent="Tiquanda",
+    ))
+    npc = apply_detail(db, "npc", fixture("tibiawiki_npc_detail.json"))
+    assert [db.get(KnowledgeEntity, value.entity_uuid).entity_type for value in (town, area, location, npc)] == [
+        "town", "area", "location", "npc",
+    ]
+
+    access_entity = KnowledgeEntityService.create(db, KnowledgeEntityCreate(
+        entity_type="access", canonical_name="Banuta passage", language_neutral_id="access:test:banuta",
+    ))
+    assert sync_access_destination(
+        db, access_entity=access_entity, destination_name="Banuta",
+        provider_id="tibiawiki", source_document_ref="quest:test",
+    ) == 1
+    assert sync_access_destination(
+        db, access_entity=access_entity, destination_name="Banuta",
+        provider_id="tibiawiki", source_document_ref="quest:test",
+    ) == 1
+
+    rows = db.query(KnowledgeRelationship).filter(
+        KnowledgeRelationship.relationship_type_code.in_(["located_at", "contained_in", "leads_to"]),
+        KnowledgeRelationship.is_current.is_(True),
+    ).all()
+    assert {(row.source_entity.entity_type, row.relationship_type_code, row.target_entity.entity_type) for row in rows} == {
+        ("npc", "located_at", "town"),
+        ("area", "contained_in", "town"),
+        ("location", "contained_in", "area"),
+        ("access", "leads_to", "location"),
+    }
+    assert len(rows) == 4
+
+
+def test_named_place_relationships_preserve_unresolved_and_ambiguous_names(db, named_registry):
+    place = KnowledgeEntityService.create(db, KnowledgeEntityCreate(
+        entity_type="location", canonical_name="Shared Destination",
+        language_neutral_id="location:test:shared-destination",
+    ))
+    KnowledgeEntityService.create(db, KnowledgeEntityCreate(
+        entity_type="town", canonical_name="Shared Destination",
+        language_neutral_id="town:test:shared-destination",
+    ))
+    access = KnowledgeEntityService.create(db, KnowledgeEntityCreate(
+        entity_type="access", canonical_name="Test passage", language_neutral_id="access:test:passage",
+    ))
+    sync_access_destination(
+        db, access_entity=access, destination_name="Shared Destination",
+        provider_id="tibiawiki", source_document_ref=None,
+    )
+    ambiguous = db.query(KnowledgeRelationship).filter_by(
+        source_entity_id=access.uuid, relationship_type_code="leads_to", is_current=True,
+    ).one()
+    assert ambiguous.resolution_state == "ambiguous"
+    assert ambiguous.unresolved_name == "Shared Destination"
+    assert len(ambiguous.source_context["candidate_entity_ids"]) == 2
+
+    sync_access_destination(
+        db, access_entity=access, destination_name="Unknown Destination",
+        provider_id="tibiawiki", source_document_ref=None,
+    )
+    unresolved = db.query(KnowledgeRelationship).filter_by(
+        source_entity_id=access.uuid, relationship_type_code="leads_to", is_current=True,
+    ).one()
+    assert unresolved.resolution_state == "unresolved"
+    assert unresolved.unresolved_name == "Unknown Destination"
+    assert db.get(KnowledgeEntity, place.uuid) is place
+
+
 def test_local_npc_and_location_apis_never_call_provider(client, db, named_registry, monkeypatch):
     apply_detail(db, "npc", fixture("tibiawiki_npc_detail.json"))
     apply_detail(db, "location", fixture("tibiawiki_location_detail.json"))
@@ -206,6 +300,7 @@ def test_local_npc_and_location_apis_never_call_provider(client, db, named_regis
     assert "provider_metadata" not in npc.json()
     location = client.get("/api/v1/locations/port-hope")
     assert location.status_code == 200 and location.json()["region"] == "Tiquanda"
+    assert location.json()["entity_type"] == "town"
     assert client.get("/api/v1/locations/not-present").status_code == 404
 
 

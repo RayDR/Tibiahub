@@ -312,7 +312,8 @@ class _TibiaWikiNamedEntityAdapter:
         return KnowledgeNormalizationResult(
             action="upsert",
             candidate=CanonicalEntityCandidate(
-                entity_type=self.entity_type, canonical_name=dto.canonical_name,
+                entity_type=(dto.canonical_entity_type if isinstance(dto, LocationKnowledgeDTO) else self.entity_type),
+                canonical_name=dto.canonical_name,
                 language_neutral_id=dto.language_neutral_id, aliases=dto.aliases,
                 source_priority=20, search_weight=1.0,
             ),

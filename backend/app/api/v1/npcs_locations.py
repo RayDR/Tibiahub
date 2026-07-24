@@ -28,6 +28,7 @@ class NamedReferenceSummary(BaseModel):
     name: str
     slug: str
     knowledge_entity_id: UUID
+    entity_type: str
     description: str | None = None
     image_url: str | None = None
     source_url: str | None = None
@@ -71,7 +72,18 @@ class LocationDetail(NamedReferenceSummary):
 
 
 def _summary(row) -> NamedReferenceSummary:
-    return NamedReferenceSummary.model_validate(row)
+    return NamedReferenceSummary(
+        id=row.id,
+        name=row.name,
+        slug=row.slug,
+        knowledge_entity_id=row.knowledge_entity_id,
+        entity_type=row.knowledge_entity.entity_type,
+        description=row.description,
+        image_url=row.image_url,
+        source_url=row.source_url,
+        data_version=row.data_version,
+        last_synced_at=row.last_synced_at,
+    )
 
 
 def _relationships(db: Session, entity_id: UUID) -> list[NamedRelationship]:
@@ -140,9 +152,11 @@ def search_locations(
         query = query.filter(TibiaWikiLocation.region.ilike(region))
     rows = query.order_by(TibiaWikiLocation.name.asc()).offset(skip).limit(limit).all()
     if rows and search:
-        EntityMetadataService.record_searches(db, entity_type="location", matches=[
-            (row.normalized_name, row.name, row.id) for row in rows[:5]
-        ])
+        for entity_type in {row.knowledge_entity.entity_type for row in rows[:5]}:
+            EntityMetadataService.record_searches(db, entity_type=entity_type, matches=[
+                (row.normalized_name, row.name, row.id)
+                for row in rows[:5] if row.knowledge_entity.entity_type == entity_type
+            ])
         db.commit()
     return [_summary(row) for row in rows]
 

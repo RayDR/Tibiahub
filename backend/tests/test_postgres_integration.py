@@ -15,7 +15,7 @@ from uuid import uuid4
 
 import pytest
 from fastapi.testclient import TestClient
-from sqlalchemy import create_engine, inspect, text
+from sqlalchemy import create_engine, inspect, or_, text
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.engine import make_url
 from sqlalchemy.orm import Session, sessionmaker
@@ -42,7 +42,7 @@ from app.knowledge.adapters import (
     KnowledgeDocumentDTO, KnowledgeNormalizationContext, TibiaWikiItemAdapter,
     TibiaWikiLocationAdapter, TibiaWikiNpcAdapter, TibiaWikiQuestAdapter,
 )
-from app.knowledge.models import KnowledgeCreatureItemDrop, KnowledgeDocument, KnowledgeJob, KnowledgeProvider, KnowledgeQuestRelation, KnowledgeRelationship, KnowledgeRelationshipType
+from app.knowledge.models import KnowledgeAccess, KnowledgeCreatureItemDrop, KnowledgeDocument, KnowledgeEntity, KnowledgeExternalMapping, KnowledgeJob, KnowledgeProvider, KnowledgeQuestRelation, KnowledgeRelationship, KnowledgeRelationshipType
 from app.knowledge.registry import EntityTypeRegistry, ProviderRegistry, RelationshipTypeRegistry
 from app.knowledge.schemas import KnowledgeDocumentCreate, KnowledgeEntityCreate
 from app.knowledge.services import EnqueueKnowledgeJob, KnowledgeEntityService, KnowledgeJobService, KnowledgeGraphService, RelationshipInput
@@ -440,6 +440,131 @@ def test_npc_location_backfill_resolves_only_unique_exact_historical_references(
                 connection.execute(text(
                     "DELETE FROM knowledge_entities WHERE language_neutral_id LIKE :pattern"
                 ), {"pattern": "%:backfill-%"})
+
+
+def test_named_place_migration_reclassifies_and_backfills_exact_edges_idempotently(pg_engine):
+    test_url = _test_url()
+    environment = os.environ.copy()
+    environment.update(APP_ENV="test", DATABASE_URL=test_url)
+    subprocess.run(
+        ["venv/bin/alembic", "downgrade", "knowledge_npc_loc_ref_20260724"],
+        cwd=BACKEND_ROOT, env=environment, check=True, capture_output=True, text=True,
+    )
+    entity_ids = []
+    try:
+        with Session(pg_engine, expire_on_commit=False) as session:
+            town = KnowledgeEntityService.create(session, KnowledgeEntityCreate(
+                entity_type="location", canonical_name="Migration Port Hope",
+                language_neutral_id="location:tibiawiki:migration-port-hope",
+            ))
+            area = KnowledgeEntityService.create(session, KnowledgeEntityCreate(
+                entity_type="area", canonical_name="Migration Tiquanda",
+                language_neutral_id="area:tibiawiki:migration-tiquanda",
+            ))
+            location = KnowledgeEntityService.create(session, KnowledgeEntityCreate(
+                entity_type="location", canonical_name="Migration Banuta",
+                language_neutral_id="location:tibiawiki:migration-banuta",
+            ))
+            npc = KnowledgeEntityService.create(session, KnowledgeEntityCreate(
+                entity_type="npc", canonical_name="Migration Angus",
+                language_neutral_id="npc:tibiawiki:migration-angus",
+            ))
+            access = KnowledgeEntityService.create(session, KnowledgeEntityCreate(
+                entity_type="access", canonical_name="Migration passage",
+                language_neutral_id="access:migration-passage",
+            ))
+            quest = KnowledgeEntityService.create(session, KnowledgeEntityCreate(
+                entity_type="quest", canonical_name="Migration Quest",
+                language_neutral_id="quest:migration-place-test",
+            ))
+            entity_ids = [town.uuid, area.uuid, location.uuid, npc.uuid, access.uuid, quest.uuid]
+            session.add(KnowledgeExternalMapping(
+                provider_id="tibiawiki", entity_type_id="location", external_id="m1900",
+                entity_uuid=town.uuid, provider_metadata={},
+            ))
+            session.add_all([
+                TibiaWikiLocation(
+                    name="Migration Port Hope", normalized_name="migration port hope", slug=town.slug,
+                    external_id="m1900", source_name="tibiawiki", knowledge_entity_id=town.uuid,
+                    location_kind="City", description="Migration fixture",
+                ),
+                TibiaWikiLocation(
+                    name="Migration Tiquanda", normalized_name="migration tiquanda", slug=area.slug,
+                    external_id="m1901", source_name="tibiawiki", knowledge_entity_id=area.uuid,
+                    location_kind="Region", parent_location="Migration Port Hope", description="Migration fixture",
+                ),
+                TibiaWikiLocation(
+                    name="Migration Banuta", normalized_name="migration banuta", slug=location.slug,
+                    external_id="m1902", source_name="tibiawiki", knowledge_entity_id=location.uuid,
+                    location_kind="Hunting Place", parent_location="Migration Tiquanda", description="Migration fixture",
+                ),
+                TibiaWikiNpc(
+                    name="Migration Angus", normalized_name="migration angus", slug=npc.slug,
+                    external_id="m1800", source_name="tibiawiki", knowledge_entity_id=npc.uuid,
+                    location_name="Migration Port Hope", description="Migration fixture",
+                ),
+                KnowledgeAccess(
+                    knowledge_entity_id=access.uuid, access_code="migration:passage",
+                    canonical_name="Migration passage", normalized_name="migration passage",
+                    destination_name="Migration Banuta", provider_metadata={"provider": "tibiawiki"},
+                ),
+            ])
+            unresolved = KnowledgeGraphService.upsert(session, RelationshipInput(
+                source_entity_id=quest.uuid, relationship_type="occurs_at_location",
+                target_entity_type="location", unresolved_name="Migration Port Hope",
+                resolution_state="unresolved", source_provider_id="tibiawiki",
+            )).relationship
+            unresolved_id = unresolved.id
+            session.commit()
+
+        subprocess.run(
+            ["venv/bin/alembic", "upgrade", "head"], cwd=BACKEND_ROOT,
+            env=environment, check=True, capture_output=True, text=True,
+        )
+        with Session(pg_engine) as session:
+            assert session.get(KnowledgeEntity, town.uuid).entity_type == "town"
+            mapping = session.query(KnowledgeExternalMapping).filter_by(external_id="m1900").one()
+            assert mapping.entity_type_id == "town"
+            edges = session.query(KnowledgeRelationship).filter(
+                KnowledgeRelationship.relationship_type_code.in_(["located_at", "contained_in", "leads_to"]),
+                KnowledgeRelationship.is_current.is_(True),
+            ).all()
+            assert {(edge.source_entity_id, edge.relationship_type_code, edge.target_entity_id) for edge in edges} == {
+                (npc.uuid, "located_at", town.uuid),
+                (area.uuid, "contained_in", town.uuid),
+                (location.uuid, "contained_in", area.uuid),
+                (access.uuid, "leads_to", location.uuid),
+            }
+            original = session.get(KnowledgeRelationship, unresolved_id)
+            assert original.resolution_state == "superseded" and not original.is_current
+            replacement = session.get(KnowledgeRelationship, original.superseded_by_id)
+            assert replacement.target_entity_id == town.uuid
+            edge_count = len(edges)
+
+        subprocess.run(
+            ["venv/bin/alembic", "upgrade", "head"], cwd=BACKEND_ROOT,
+            env=environment, check=True, capture_output=True, text=True,
+        )
+        with Session(pg_engine) as session:
+            assert session.query(KnowledgeRelationship).filter(
+                KnowledgeRelationship.relationship_type_code.in_(["located_at", "contained_in", "leads_to"]),
+                KnowledgeRelationship.is_current.is_(True),
+            ).count() == edge_count
+    finally:
+        subprocess.run(
+            ["venv/bin/alembic", "upgrade", "head"], cwd=BACKEND_ROOT,
+            env=environment, check=True, capture_output=True, text=True,
+        )
+        if entity_ids:
+            with Session(pg_engine) as session:
+                session.query(KnowledgeRelationship).filter(or_(
+                    KnowledgeRelationship.source_entity_id.in_(entity_ids),
+                    KnowledgeRelationship.target_entity_id.in_(entity_ids),
+                )).delete(synchronize_session=False)
+                session.query(KnowledgeEntity).filter(KnowledgeEntity.uuid.in_(entity_ids)).delete(
+                    synchronize_session=False,
+                )
+                session.commit()
 
 
 def test_knowledge_platform_persists_nested_jsonb_and_provider_neutral_ids(pg_engine, pg_session):

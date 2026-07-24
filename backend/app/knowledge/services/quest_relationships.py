@@ -13,6 +13,7 @@ from app.knowledge.models import KnowledgeAccess, KnowledgeEntity, KnowledgeQues
 from app.knowledge.schemas import KnowledgeEntityCreate
 from app.knowledge.services.entities import KnowledgeEntityService
 from app.knowledge.services.item_relationships import exact_entity_candidates
+from app.knowledge.services.npc_location_normalization import exact_place_candidates
 from app.knowledge.services.graph import KnowledgeGraphService, RelationshipInput
 from app.models import Creature
 from app.services.text_utils import slugify
@@ -27,7 +28,11 @@ class QuestRelationCounts:
 
 
 def _resolve(db: Session, entity_type: str, name: str) -> tuple[KnowledgeEntity | None, str]:
-    matches = exact_entity_candidates(db, entity_type, name)
+    matches = (
+        exact_place_candidates(db, name)
+        if entity_type in {"location", "area", "town"}
+        else exact_entity_candidates(db, entity_type, name)
+    )
     if entity_type in {"creature", "boss"}:
         filtered: list[KnowledgeEntity] = []
         for match in matches:
@@ -133,8 +138,6 @@ def upsert_quest_relation(
     else:
         if explicit_entity_uuid is not None:
             entity, status = db.get(KnowledgeEntity, explicit_entity_uuid), "resolved"
-        elif target_entity_type in {"npc", "location"}:
-            entity, status = None, "unresolved"
         else:
             entity, status = _resolve(db, target_entity_type, target_name)
     graph_type = {
@@ -159,7 +162,11 @@ def upsert_quest_relation(
             return existing, False
     graph_target_type = entity.entity_type if entity is not None else target_entity_type
     candidate_type = "creature" if target_entity_type == "boss" else target_entity_type
-    candidates = exact_entity_candidates(db, candidate_type, target_name) if status == "ambiguous" else []
+    candidates = (
+        exact_place_candidates(db, target_name)
+        if status == "ambiguous" and candidate_type in {"location", "area", "town"}
+        else exact_entity_candidates(db, candidate_type, target_name) if status == "ambiguous" else []
+    )
     mutation = KnowledgeGraphService.upsert(db, RelationshipInput(
         source_entity_id=quest_entity_uuid,
         source_scope=graph_scope,

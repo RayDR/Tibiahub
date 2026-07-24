@@ -19,6 +19,7 @@ from app.knowledge.schemas import KnowledgeEntityCreate
 from app.knowledge.services.entities import DuplicateKnowledgeAliasError, DuplicateKnowledgeEntityError, KnowledgeEntityService
 from app.knowledge.services.failures import InvalidNormalizationContractError
 from app.knowledge.services.item_relationships import exact_entity_candidates
+from app.knowledge.services.npc_location_normalization import sync_access_destination
 from app.knowledge.services.quest_relationships import ensure_access, upsert_quest_relation
 from app.models.external_data import QuestMission, TibiaWikiQuest
 from app.services.entity_metadata_service import EntityMetadataService
@@ -225,6 +226,13 @@ def _relationships(db: Session, entity: KnowledgeEntity, dto: QuestKnowledgeDTO,
     references += [("occurs_at_location", "location", value.name, "locations") for value in dto.locations]
     for access in dto.access_unlocks:
         access_entity = ensure_access(db, quest_entity_uuid=entity.uuid, quest_external_id=dto.external_id, access=access, provider_id=provider)
+        sync_access_destination(
+            db,
+            access_entity=access_entity,
+            destination_name=access.destination_name,
+            provider_id=provider,
+            source_document_ref=document,
+        )
         references.append(("unlocks_access", "access", access.name, "access_unlocks", access_entity.uuid))
     for entry in references:
         relation_type, target_type, name, context, *explicit = entry

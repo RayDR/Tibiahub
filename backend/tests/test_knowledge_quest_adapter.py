@@ -223,6 +223,8 @@ def test_relationships_resolve_exactly_retain_ambiguity_and_create_access(db, qu
 
 
 def test_local_quest_api_orders_missions_filters_and_never_needs_network(client, db, quest_registry, monkeypatch):
+    npc = entity(db, "npc", "Angus")
+    town = entity(db, "town", "Port Hope")
     apply_detail(db, fixture("tibiawiki_quest_detail.json")); db.commit()
     monkeypatch.setattr("requests.sessions.Session.request", lambda *args, **kwargs: (_ for _ in ()).throw(AssertionError("network forbidden")))
     listed = client.get("/api/v1/quests/", params={"category": "Exploration", "level": 50, "premium": True})
@@ -231,6 +233,14 @@ def test_local_quest_api_orders_missions_filters_and_never_needs_network(client,
     assert detail.status_code == 200
     payload = detail.json()
     assert [mission["sequence"] for mission in payload["missions"]] == [1, 2]
+    resolved = {
+        (relationship["relation_type"], relationship["target_name"]): relationship
+        for relationship in payload["relationships"]
+        if relationship["resolution_status"] == "resolved"
+    }
+    assert resolved[("starts_at_npc", "Angus")]["target_slug"] == npc.slug
+    assert resolved[("occurs_at_location", "Port Hope")]["target_slug"] == town.slug
+    assert resolved[("occurs_at_location", "Port Hope")]["target_entity_type"] == "town"
     assert "raw_data" not in payload and "wikitext" not in json.dumps(payload).lower()
     assert client.get("/api/v1/quests/not-present").status_code == 404
 
