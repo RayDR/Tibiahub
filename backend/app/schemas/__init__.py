@@ -320,6 +320,11 @@ class QuestSearchResult(BaseModel):
     location: Optional[str] = None
     npc: Optional[str] = None
     source_url: Optional[str] = None
+    category: Optional[str] = None
+    quest_type: Optional[str] = None
+    premium_required: Optional[bool] = None
+    repeatable: Optional[bool] = None
+    last_synced_at: Optional[datetime] = None
 
 
 class QuestRelatedCreature(BaseModel):
@@ -329,6 +334,39 @@ class QuestRelatedCreature(BaseModel):
     is_boss: bool = False
     classification: Optional[str] = None
     image_url: Optional[str] = None
+
+
+class QuestNamedValue(BaseModel):
+    name: str
+    external_id: Optional[str] = None
+
+
+class QuestItemValue(QuestNamedValue):
+    amount: int = 1
+    note: Optional[str] = None
+
+
+class QuestMissionResult(BaseModel):
+    id: UUID
+    external_id: Optional[str] = None
+    title: str
+    sequence: int
+    description: Optional[str] = None
+    objectives: List[str] = []
+    required_items: List[QuestItemValue] = []
+    rewarded_items: List[QuestItemValue] = []
+    related_npcs: List[QuestNamedValue] = []
+    related_creatures: List[QuestNamedValue] = []
+    locations: List[QuestNamedValue] = []
+
+
+class QuestRelationResult(BaseModel):
+    relation_type: str
+    target_entity_type: str
+    target_name: str
+    resolution_status: str
+    target_slug: Optional[str] = None
+    mission_id: Optional[UUID] = None
 
 
 class QuestDetail(BaseModel):
@@ -349,6 +387,29 @@ class QuestDetail(BaseModel):
     requirements: List[str] = []
     related_quest_names: List[str] = []
     related_creatures: List[QuestRelatedCreature] = []
+    summary: Optional[str] = None
+    image_url: Optional[str] = None
+    quest_type: Optional[str] = None
+    category: Optional[str] = None
+    difficulty: Optional[str] = None
+    duration: Optional[str] = None
+    premium_required: Optional[bool] = None
+    repeatable: Optional[bool] = None
+    solo_possible: Optional[bool] = None
+    data_version: int = 1
+    last_synced_at: Optional[datetime] = None
+    starting_npcs: List[QuestNamedValue] = []
+    related_npcs: List[QuestNamedValue] = []
+    required_items: List[QuestItemValue] = []
+    rewarded_items: List[QuestItemValue] = []
+    required_quests: List[QuestNamedValue] = []
+    unlocked_quests: List[QuestNamedValue] = []
+    required_creatures: List[QuestNamedValue] = []
+    bosses: List[QuestNamedValue] = []
+    locations: List[QuestNamedValue] = []
+    access_unlocks: List[dict] = []
+    missions: List[QuestMissionResult] = []
+    relationships: List[QuestRelationResult] = []
 
 
 class HomeHighlights(BaseModel):
