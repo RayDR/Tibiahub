@@ -20,6 +20,7 @@ from app.knowledge.models.jobs import (
 )
 from app.knowledge.models.mappings import KnowledgeExternalMapping
 from app.knowledge.models.relationships import KnowledgeCreatureItemDrop
+from app.knowledge.models.quest_relationships import KnowledgeAccess, KnowledgeQuestRelation
 
 __all__ = [
     "KnowledgeDocument",
@@ -35,6 +36,8 @@ __all__ = [
     "KnowledgeWorkerHeartbeat",
     "KnowledgeExternalMapping",
     "KnowledgeCreatureItemDrop",
+    "KnowledgeAccess",
+    "KnowledgeQuestRelation",
     "ACTIVE_KNOWLEDGE_JOB_STATES",
     "KNOWLEDGE_JOB_STATES",
     "KNOWLEDGE_JOB_TRIGGERS",

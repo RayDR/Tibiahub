@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from uuid import UUID
 
 from sqlalchemy.orm import Session
@@ -25,6 +25,7 @@ class AppliedNormalization:
     entity_uuid: UUID | None
     aliases_created: int
     warnings: int
+    metrics: dict[str, int] = field(default_factory=dict)
 
 
 class KnowledgeNormalizationService:
@@ -41,6 +42,10 @@ class KnowledgeNormalizationService:
                 from app.knowledge.services.item_normalization import ItemKnowledgeNormalizationService
 
                 applied = ItemKnowledgeNormalizationService.apply(db, result)
+            elif result.candidate is not None and result.candidate.entity_type == "quest":
+                from app.knowledge.services.quest_normalization import QuestKnowledgeNormalizationService
+
+                applied = QuestKnowledgeNormalizationService.apply(db, result)
             else:
                 raise ValueError("TibiaWiki normalization requires a supported canonical entity type")
             return AppliedNormalization(
@@ -48,6 +53,7 @@ class KnowledgeNormalizationService:
                 applied.entity_uuid,
                 applied.aliases_created,
                 applied.warnings,
+                getattr(applied, "metrics", {}),
             )
         candidate = result.candidate
         if candidate is None:

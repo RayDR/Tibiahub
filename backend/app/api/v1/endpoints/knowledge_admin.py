@@ -172,7 +172,7 @@ def enqueue_job(
         raise HTTPException(status_code=400, detail={"code": "knowledge_adapter_unsupported"}) from exc
     except ValueError as exc:
         raise HTTPException(status_code=400, detail={"code": "knowledge_job_input_invalid"}) from exc
-    if payload.job_type in {"creature_catalog", "item_catalog"} and not payload.confirm_catalog_sync:
+    if payload.job_type in {"creature_catalog", "item_catalog", "quest_catalog"} and not payload.confirm_catalog_sync:
         raise HTTPException(status_code=400, detail={"code": "knowledge_catalog_confirmation_required"})
     try:
         result = KnowledgeJobService.enqueue(

@@ -211,6 +211,8 @@ class KnowledgeWorker:
                 metric_values[f"entities_{applied.status}"] += 1
                 metric_values["aliases_created"] += applied.aliases_created
                 metric_values["warnings"] += applied.warnings
+                for metric_name, metric_value in applied.metrics.items():
+                    metric_values[metric_name] = metric_values.get(metric_name, 0) + metric_value
                 if applied.status in {"created", "updated"}:
                     emit_event(
                         db,
@@ -286,6 +288,7 @@ class KnowledgeWorker:
         prefixes = {
             "creature_renormalize": "creature",
             "item_renormalize": "item",
+            "quest_renormalize": "quest",
         }
         document_prefix = prefixes.get(request.job_type)
         if document_prefix is None:
