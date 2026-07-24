@@ -29,6 +29,12 @@ from app.knowledge.services.quest_normalization import (
     QuestIdentityConflictError,
     QuestKnowledgeNormalizationService,
 )
+from app.knowledge.services.graph import (
+    ConsolidatedRelationship,
+    KnowledgeGraphService,
+    RelationshipInput,
+    RelationshipMutation,
+)
 from app.knowledge.services.item_relationships import (
     DropRelationshipResult,
     link_creature_loot,
@@ -55,6 +61,10 @@ __all__ = [
     "ItemKnowledgeNormalizationService",
     "QuestIdentityConflictError",
     "QuestKnowledgeNormalizationService",
+    "ConsolidatedRelationship",
+    "KnowledgeGraphService",
+    "RelationshipInput",
+    "RelationshipMutation",
     "ItemNormalizationApplied",
     "DropRelationshipResult",
     "link_creature_loot",
