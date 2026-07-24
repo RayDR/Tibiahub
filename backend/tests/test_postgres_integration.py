@@ -333,6 +333,115 @@ def test_graph_migration_bridges_legacy_facts_once_without_inverse_rows(pg_engin
                                {"creature": creature_id, "item": item_id, "quest": quest_id})
 
 
+def test_npc_location_backfill_resolves_only_unique_exact_historical_references(pg_engine):
+    test_url = _test_url()
+    environment = os.environ.copy()
+    environment.update(APP_ENV="test", DATABASE_URL=test_url)
+    subprocess.run(
+        ["venv/bin/alembic", "downgrade", "knowledge_npc_location_20260724"],
+        cwd=BACKEND_ROOT, env=environment, check=True, capture_output=True, text=True,
+    )
+    relationship_ids: dict[str, object] = {}
+    quest_id = None
+    try:
+        with Session(pg_engine) as session:
+            EntityTypeRegistry.register_initial(session)
+            ProviderRegistry.register_initial(session)
+            RelationshipTypeRegistry.register_initial(session)
+            quest = KnowledgeEntityService.create(session, KnowledgeEntityCreate(
+                entity_type="quest", canonical_name="Backfill Quest",
+                language_neutral_id="quest:backfill-reference-test",
+            ))
+            quest_id = quest.uuid
+            npc = KnowledgeEntityService.create(session, KnowledgeEntityCreate(
+                entity_type="npc", canonical_name="Backfill Angus",
+                language_neutral_id="npc:backfill-angus",
+            ))
+            KnowledgeEntityService.add_alias(session, npc, "Backfill Explorer")
+            location = KnowledgeEntityService.create(session, KnowledgeEntityCreate(
+                entity_type="location", canonical_name="Backfill Port Hope",
+                language_neutral_id="location:backfill-port-hope",
+            ))
+            KnowledgeEntityService.create(session, KnowledgeEntityCreate(
+                entity_type="npc", canonical_name="Backfill Guide",
+                language_neutral_id="npc:backfill-guide-one",
+            ))
+            KnowledgeEntityService.create(session, KnowledgeEntityCreate(
+                entity_type="npc", canonical_name="Backfill Guide",
+                language_neutral_id="npc:backfill-guide-two",
+                allow_name_collision=True, slug_suffix="two",
+            ))
+            values = {
+                "npc": RelationshipInput(
+                    source_entity_id=quest.uuid, source_scope="quest",
+                    relationship_type="references_npc", target_entity_type="npc",
+                    unresolved_name="Backfill Angus", resolution_state="unresolved",
+                    source_provider_id="tibiawiki",
+                    source_context={"fixture": "canonical"},
+                ),
+                "npc_alias": RelationshipInput(
+                    source_entity_id=quest.uuid, source_scope="mission:backfill",
+                    relationship_type="mission_references_npc", target_entity_type="npc",
+                    unresolved_name="Backfill Explorer", resolution_state="unresolved",
+                    source_provider_id="tibiawiki",
+                    source_context={"fixture": "alias"},
+                ),
+                "location": RelationshipInput(
+                    source_entity_id=quest.uuid, source_scope="quest",
+                    relationship_type="occurs_at_location", target_entity_type="location",
+                    unresolved_name="Backfill Port Hope", resolution_state="unresolved",
+                    source_provider_id="tibiawiki",
+                ),
+                "ambiguous": RelationshipInput(
+                    source_entity_id=quest.uuid, source_scope="quest:ambiguous",
+                    relationship_type="references_npc", target_entity_type="npc",
+                    unresolved_name="Backfill Guide", resolution_state="ambiguous",
+                    source_provider_id="tibiawiki",
+                ),
+                "manual": RelationshipInput(
+                    source_entity_id=quest.uuid, source_scope="quest:manual",
+                    relationship_type="references_npc", target_entity_type="npc",
+                    unresolved_name="Backfill Angus", resolution_state="unresolved",
+                    source_provider_id="tibiawiki", manual_override=True,
+                ),
+            }
+            for key, value in values.items():
+                relationship_ids[key] = KnowledgeGraphService.upsert(session, value).relationship.id
+            expected_targets = {"npc": npc.uuid, "npc_alias": npc.uuid, "location": location.uuid}
+            session.commit()
+
+        subprocess.run(
+            ["venv/bin/alembic", "upgrade", "head"], cwd=BACKEND_ROOT,
+            env=environment, check=True, capture_output=True, text=True,
+        )
+        with Session(pg_engine) as session:
+            for key, target_id in expected_targets.items():
+                original = session.get(KnowledgeRelationship, relationship_ids[key])
+                replacement = session.get(KnowledgeRelationship, original.superseded_by_id)
+                assert original.is_current is False and original.resolution_state == "superseded"
+                assert replacement.is_current is True and replacement.target_entity_id == target_id
+                assert replacement.source_provider_id == "tibiawiki"
+                assert replacement.source_context["resolution_policy"] == "exact_name_or_alias_only"
+                assert replacement.source_context["resolution_migration"] == "knowledge_npc_loc_ref_20260724"
+            ambiguous = session.get(KnowledgeRelationship, relationship_ids["ambiguous"])
+            manual = session.get(KnowledgeRelationship, relationship_ids["manual"])
+            assert ambiguous.is_current is True and ambiguous.resolution_state == "ambiguous"
+            assert manual.is_current is True and manual.resolution_state == "unresolved"
+    finally:
+        subprocess.run(
+            ["venv/bin/alembic", "upgrade", "head"], cwd=BACKEND_ROOT,
+            env=environment, check=True, capture_output=True, text=True,
+        )
+        if quest_id is not None:
+            with pg_engine.begin() as connection:
+                connection.execute(text(
+                    "DELETE FROM knowledge_relationships WHERE source_entity_id=:quest"
+                ), {"quest": quest_id})
+                connection.execute(text(
+                    "DELETE FROM knowledge_entities WHERE language_neutral_id LIKE :pattern"
+                ), {"pattern": "%:backfill-%"})
+
+
 def test_knowledge_platform_persists_nested_jsonb_and_provider_neutral_ids(pg_engine, pg_session):
     EntityTypeRegistry.register_initial(pg_session)
     ProviderRegistry.register_initial(pg_session)
