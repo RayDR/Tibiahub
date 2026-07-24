@@ -9,6 +9,7 @@ import {
   type KnowledgeProvider,
   type KnowledgeWorkerHeartbeat,
 } from '../../services/knowledge';
+import KnowledgeRelationshipReviewPanel from './KnowledgeRelationshipReview';
 
 const jobStates = ['', 'pending', 'claimed', 'running', 'retrying', 'failed', 'succeeded', 'partially_succeeded', 'cancelled'];
 const providerEntityJobTypes = new Set([
@@ -143,6 +144,7 @@ export default function KnowledgeOperations() {
   };
 
   return <div className="space-y-5">
+    <KnowledgeRelationshipReviewPanel />
     <div className="flex flex-wrap items-center justify-between gap-3">
       <div><h2 className="text-lg font-semibold text-slate-100">{t('knowledgeOps.title')}</h2><p className="text-sm text-slate-400">{t('knowledgeOps.subtitle')}</p></div>
       <button onClick={() => void loadAll()} disabled={loading} className="flex min-h-11 items-center gap-2 rounded-lg border border-slate-700 px-3 text-sm text-slate-300"><RefreshCw className={`h-4 w-4 ${loading ? 'animate-spin' : ''}`} />{t('knowledgeOps.actions.refresh')}</button>
