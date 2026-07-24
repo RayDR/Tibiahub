@@ -222,6 +222,26 @@ class KnowledgeJobService:
         return attempt
 
     @staticmethod
+    def defer_claim(
+        db: Session,
+        job_id: UUID,
+        worker_id: str,
+        *,
+        scheduled_at: datetime,
+    ) -> KnowledgeJob:
+        job = db.execute(select(KnowledgeJob).where(KnowledgeJob.id == job_id).with_for_update()).scalar_one_or_none()
+        if job is None:
+            raise KnowledgeJobNotFoundError("Knowledge job not found")
+        if job.state != "claimed" or job.worker_id != worker_id:
+            raise KnowledgeJobOwnershipError("Worker does not own the claimed job")
+        job.state = "pending"
+        job.scheduled_at = max(_utc(job.scheduled_at), _utc(scheduled_at))
+        job.claimed_at = None
+        job.lease_expires_at = None
+        job.worker_id = None
+        return job
+
+    @staticmethod
     def assert_owner(job: KnowledgeJob, worker_id: str, now: datetime) -> None:
         if job.state != "running" or job.worker_id != worker_id:
             raise KnowledgeJobOwnershipError("Worker no longer owns this job")

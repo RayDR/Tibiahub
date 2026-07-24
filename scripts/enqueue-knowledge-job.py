@@ -24,17 +24,51 @@ def arguments() -> argparse.Namespace:
     parser.add_argument("--provider", required=True)
     parser.add_argument("--job-type", required=True)
     parser.add_argument("--entity-type", required=True)
-    parser.add_argument("--canonical-name", required=True)
-    parser.add_argument("--language-neutral-id", required=True)
-    parser.add_argument("--provider-document-id", required=True)
+    parser.add_argument("--canonical-name")
+    parser.add_argument("--language-neutral-id")
+    parser.add_argument("--provider-document-id")
+    parser.add_argument("--external-id")
+    parser.add_argument("--creature-name")
+    parser.add_argument("--batch-limit", type=int)
+    parser.add_argument("--confirm-catalog-sync", action="store_true")
+    parser.add_argument("--allow-completed-recreate", action="store_true")
     return parser.parse_args()
+
+
+def request_values(args: argparse.Namespace) -> tuple[dict, dict]:
+    if args.job_type == "creature_catalog":
+        if not args.confirm_catalog_sync:
+            raise SystemExit("Creature catalog jobs require --confirm-catalog-sync.")
+        if args.batch_limit is None:
+            raise SystemExit("Creature catalog jobs require an explicit --batch-limit.")
+        return {"batch_limit": args.batch_limit}, {}
+    if args.job_type in {"creature_detail", "creature_renormalize"}:
+        return {}, {
+            key: value
+            for key, value in {
+                "external_id": args.external_id,
+                "page_title": args.creature_name,
+            }.items()
+            if value
+        }
+    return {}, {
+        key: value
+        for key, value in {
+            "canonical_name": args.canonical_name,
+            "language_neutral_id": args.language_neutral_id,
+            "provider_document_id": args.provider_document_id,
+        }.items()
+        if value
+    }
 
 
 def main() -> None:
     args = arguments()
     if settings.database_name != "tibiahub":
         raise SystemExit("Refusing to enqueue outside the exact TibiaHub database.")
-    KnowledgeAdapterRegistry().resolve(args.provider, args.job_type, args.entity_type)
+    scope, payload = request_values(args)
+    registry = KnowledgeAdapterRegistry()
+    registry.validate_enqueue(args.provider, args.job_type, args.entity_type, scope, payload)
     summary = f"provider={args.provider} job_type={args.job_type} entity_type={args.entity_type}"
     if args.dry_run:
         print(f"Dry run valid: {summary}")
@@ -49,12 +83,10 @@ def main() -> None:
                 provider_id=args.provider,
                 job_type=args.job_type,
                 entity_type=args.entity_type,
-                payload={
-                    "canonical_name": args.canonical_name,
-                    "language_neutral_id": args.language_neutral_id,
-                    "provider_document_id": args.provider_document_id,
-                },
+                scope=scope,
+                payload=payload,
                 trigger="manual",
+                allow_completed_recreate=args.allow_completed_recreate,
             ),
         )
         print(f"Knowledge job {'created' if result.created else 'already active'}: id={result.job.id} {summary}")

@@ -4,6 +4,7 @@ from __future__ import annotations
 
 from app.knowledge.adapters.protocol import KnowledgeProviderAdapter
 from app.knowledge.adapters.reference import ReferenceKnowledgeAdapter
+from app.knowledge.adapters.tibiawiki_creatures import TibiaWikiCreatureAdapter
 
 
 class AdapterNotFoundError(LookupError):
@@ -12,7 +13,7 @@ class AdapterNotFoundError(LookupError):
 
 class KnowledgeAdapterRegistry:
     def __init__(self, adapters: tuple[KnowledgeProviderAdapter, ...] | None = None):
-        configured = adapters if adapters is not None else (ReferenceKnowledgeAdapter(),)
+        configured = adapters if adapters is not None else (ReferenceKnowledgeAdapter(), TibiaWikiCreatureAdapter())
         self._adapters = {adapter.provider_code: adapter for adapter in configured}
 
     def resolve(self, provider_code: str, job_type: str, entity_type: str | None) -> KnowledgeProviderAdapter:
@@ -25,9 +26,20 @@ class KnowledgeAdapterRegistry:
         adapter = self._adapters.get(provider_code)
         if adapter is None:
             return []
-        candidates = ("reference_import", "full_sync", "incremental_sync", "detail_import", "renormalize")
+        candidates = adapter.job_types
         return sorted(
             job_type
             for job_type in candidates
             if any(adapter.supports(job_type, entity_type) for entity_type in entity_types)
         )
+
+    def validate_enqueue(
+        self,
+        provider_code: str,
+        job_type: str,
+        entity_type: str | None,
+        scope: dict,
+        payload: dict,
+    ) -> None:
+        adapter = self.resolve(provider_code, job_type, entity_type)
+        adapter.validate_enqueue(job_type, scope, payload)

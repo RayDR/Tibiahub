@@ -14,6 +14,11 @@ from app.knowledge.adapters.protocol import (
 )
 from app.knowledge.adapters.reference import ReferenceKnowledgeAdapter
 from app.knowledge.adapters.registry import AdapterNotFoundError, KnowledgeAdapterRegistry
+from app.knowledge.adapters.tibiawiki_creatures import (
+    HttpTibiaWikiCreatureClient,
+    TibiaWikiCreatureAdapter,
+    TibiaWikiCreatureClient,
+)
 
 __all__ = [
     "AdapterNotFoundError",
@@ -29,4 +34,7 @@ __all__ = [
     "KnowledgeProviderAdapter",
     "KnowledgeValidationResult",
     "ReferenceKnowledgeAdapter",
+    "HttpTibiaWikiCreatureClient",
+    "TibiaWikiCreatureAdapter",
+    "TibiaWikiCreatureClient",
 ]

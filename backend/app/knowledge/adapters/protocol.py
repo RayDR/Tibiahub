@@ -42,6 +42,7 @@ class KnowledgeChildJobRequest:
     scope: JsonObject = field(default_factory=dict)
     payload: JsonObject = field(default_factory=dict)
     priority: int = 100
+    allow_completed_recreate: bool = False
 
 
 @dataclass(frozen=True, slots=True)
@@ -56,6 +57,7 @@ class KnowledgeFetchResult:
 @dataclass(frozen=True, slots=True)
 class KnowledgeValidationResult:
     valid: bool
+    classification: Literal["valid", "partial", "invalid", "empty", "provider_error", "oversized"] = "valid"
     warnings: tuple[str, ...] = ()
     safe_errors: tuple[str, ...] = ()
 
@@ -86,6 +88,9 @@ class KnowledgeNormalizationResult:
     action: Literal["noop", "upsert"] = "noop"
     candidate: CanonicalEntityCandidate | None = None
     warnings: tuple[str, ...] = ()
+    provider_code: str | None = None
+    external_id: str | None = None
+    canonical_data: JsonObject | None = None
 
 
 @dataclass(frozen=True, slots=True)
@@ -112,8 +117,11 @@ class KnowledgeNormalizationMetrics:
 
 class KnowledgeProviderAdapter(Protocol):
     provider_code: str
+    job_types: tuple[str, ...]
 
     def supports(self, job_type: str, entity_type: str | None) -> bool: ...
+
+    def validate_enqueue(self, job_type: str, scope: JsonObject, payload: JsonObject) -> None: ...
 
     def fetch(self, request: KnowledgeFetchRequest) -> KnowledgeFetchResult: ...
 

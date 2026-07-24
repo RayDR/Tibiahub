@@ -7,7 +7,8 @@ import random
 import signal
 import threading
 from copy import deepcopy
-from datetime import UTC, datetime
+from dataclasses import replace
+from datetime import UTC, datetime, timedelta
 from typing import Callable
 from uuid import UUID
 
@@ -25,11 +26,15 @@ from app.knowledge.adapters import (
     KnowledgeNormalizationMetrics,
 )
 from app.knowledge.events import KnowledgeEventType, emit_event
-from app.knowledge.models import KnowledgeJob, KnowledgeProvider, KnowledgeProviderCursor
+from app.knowledge.models import KnowledgeDocument, KnowledgeJob, KnowledgeProvider, KnowledgeProviderCursor
 from app.knowledge.schemas import KnowledgeDocumentCreate
 from app.knowledge.services.failures import (
+    EmptyProviderResponseError,
     InvalidProviderConfigurationError,
     MalformedProviderPayloadError,
+    OversizedProviderResponseError,
+    ProviderResponseEnvelopeError,
+    UnsafeProviderTextError,
     UnsupportedKnowledgeJobError,
     classify_failure,
 )
@@ -96,11 +101,39 @@ class KnowledgeWorker:
             )
             return job.id if job else None
 
-    def _start_request(self, job_id: UUID) -> tuple[UUID, KnowledgeFetchRequest]:
+    def _start_request(self, job_id: UUID) -> tuple[UUID, KnowledgeFetchRequest] | None:
         with self.session_factory.begin() as db:
-            attempt = KnowledgeJobService.start_attempt(db, job_id, self.worker_id)
             job = db.get(KnowledgeJob, job_id)
-            provider = db.get(KnowledgeProvider, job.provider_id)
+            provider = db.execute(
+                select(KnowledgeProvider)
+                .where(KnowledgeProvider.provider_id == job.provider_id)
+                .with_for_update()
+            ).scalar_one()
+            if provider.provider_id == "tibiawiki" and job.job_type != "creature_renormalize":
+                requests = provider.rate_limit.get("requests") if isinstance(provider.rate_limit, dict) else None
+                window_seconds = provider.rate_limit.get("window_seconds") if isinstance(provider.rate_limit, dict) else None
+                if (
+                    isinstance(requests, int)
+                    and not isinstance(requests, bool)
+                    and requests > 0
+                    and isinstance(window_seconds, int)
+                    and not isinstance(window_seconds, bool)
+                    and window_seconds > 0
+                    and provider.last_attempted_at is not None
+                ):
+                    attempted_at = provider.last_attempted_at
+                    if attempted_at.tzinfo is None:
+                        attempted_at = attempted_at.replace(tzinfo=UTC)
+                    due_at = attempted_at + timedelta(seconds=window_seconds / requests)
+                    if due_at > datetime.now(UTC):
+                        KnowledgeJobService.defer_claim(
+                            db,
+                            job_id,
+                            self.worker_id,
+                            scheduled_at=due_at,
+                        )
+                        return None
+            attempt = KnowledgeJobService.start_attempt(db, job_id, self.worker_id)
             record_provider_attempt(provider)
             cursor_value = None
             if job.entity_type_id:
@@ -151,6 +184,9 @@ class KnowledgeWorker:
             KnowledgeJobService.assert_owner(job, self.worker_id, datetime.now(UTC))
             metrics = KnowledgeNormalizationMetrics(documents_received=len(result.documents))
             metric_values = metrics.as_dict()
+            invalid_members = result.provider_metadata.get("invalid_members")
+            if isinstance(invalid_members, int) and not isinstance(invalid_members, bool) and invalid_members >= 0:
+                metric_values["invalid_members"] = invalid_members
             for document_dto, normalization in normalized:
                 persistence = KnowledgeDocumentStore.persist_with_status(
                     db,
@@ -196,6 +232,7 @@ class KnowledgeWorker:
                         parent_job_id=job.id,
                         correlation_id=job.correlation_id,
                         trigger="system",
+                        allow_completed_recreate=child.allow_completed_recreate,
                     ),
                 )
                 metric_values["child_jobs_enqueued"] += int(enqueued.created)
@@ -245,22 +282,61 @@ class KnowledgeWorker:
         except KnowledgeJobOwnershipError:
             logger.warning("knowledge_job_ownership_lost job_id=%s code=%s", job_id, failure.code)
 
+    def _load_stored_document(self, request: KnowledgeFetchRequest) -> KnowledgeFetchRequest:
+        if request.job_type != "creature_renormalize":
+            return request
+        external_id = str(request.payload.get("external_id") or "").strip()
+        if not external_id:
+            raise MalformedProviderPayloadError()
+        with self.session_factory() as db:
+            document = (
+                db.query(KnowledgeDocument)
+                .filter(
+                    KnowledgeDocument.provider_id == request.provider_code,
+                    KnowledgeDocument.provider_document_id == f"creature:{external_id}",
+                )
+                .order_by(KnowledgeDocument.retrieved_at.desc())
+                .first()
+            )
+            if document is None:
+                raise EmptyProviderResponseError()
+            payload = dict(request.payload)
+            payload["_stored_document"] = deepcopy(document.raw_json)
+        return replace(request, payload=payload)
+
+    @staticmethod
+    def _raise_invalid_validation(classification: str, safe_errors: tuple[str, ...]) -> None:
+        if classification == "empty":
+            raise EmptyProviderResponseError()
+        if classification == "provider_error":
+            raise ProviderResponseEnvelopeError()
+        if classification == "oversized":
+            raise OversizedProviderResponseError()
+        if "unsafe_text" in safe_errors:
+            raise UnsafeProviderTextError()
+        raise MalformedProviderPayloadError()
+
     def run_once(self) -> bool:
         job_id = self._claim()
         if job_id is None:
             return False
         attempt_id: UUID | None = None
         try:
-            attempt_id, request = self._start_request(job_id)
+            started = self._start_request(job_id)
+            if started is None:
+                self._heartbeat("idle")
+                return True
+            attempt_id, request = started
             self._require_provider_available(request.provider_code)
             try:
                 adapter = self.adapters.resolve(request.provider_code, request.job_type, request.entity_type)
             except AdapterNotFoundError as exc:
                 raise UnsupportedKnowledgeJobError() from exc
+            request = self._load_stored_document(request)
             result = adapter.fetch(request)
             validation = adapter.validate(result)
             if not validation.valid:
-                raise MalformedProviderPayloadError()
+                self._raise_invalid_validation(validation.classification, validation.safe_errors)
             self._persist_result(request, result)
             return True
         except Exception as error:

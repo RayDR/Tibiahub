@@ -1,7 +1,6 @@
 """Creatures API endpoints."""
 import hashlib
 import logging
-import asyncio
 from pathlib import Path
 import re
 from typing import List, Optional
@@ -14,15 +13,13 @@ from app.db.database import get_db
 from app.models import Creature as CreatureModel
 from app.models.settings import SystemSettings as SettingsModel
 from app.schemas import Creature, CreatureCreate, CreatureSimple
-from app.services.bestiary_source import get_creature_detail_by_name
-from app.services.creature_storage_service import get_cached_creature_by_id, get_cached_creature_by_name, list_cached_creatures, resolve_cached_creature, upsert_creature_payload
+from app.services.creature_storage_service import get_cached_creature_by_id, get_cached_creature_by_name, list_cached_creatures, resolve_cached_creature
 from app.services.entity_metadata_service import EntityMetadataService
 from app.services import media_asset_service as media_svc
 from app.core.config import settings
 
 router = APIRouter(prefix="/creatures", tags=["creatures"])
 logger = logging.getLogger(__name__)
-DETAIL_FALLBACK_TIMEOUT_SECONDS = 15.0
 _CATEGORY_IMAGE_KEY_PREFIX = "cyclopedia_category_image_"
 _CATEGORY_IMAGE_DIR = Path("backend/storage/category-images")
 
@@ -30,13 +27,6 @@ _CATEGORY_IMAGE_DIR = Path("backend/storage/category-images")
 def _get_setting(db: Session, key: str, default: str = "") -> str:
     value = db.query(SettingsModel).filter(SettingsModel.key == key).first()
     return value.value if value and value.value is not None else default
-
-
-def _is_external_detail_fallback_enabled(db: Session) -> bool:
-    return (
-        _get_setting(db, "external_auto_fallback_enabled", "0") == "1"
-        or _get_setting(db, "bestiary_allow_external_detail_fallback", "0") == "1"
-    )
 
 
 def _is_image_autofetch_enabled(db: Session) -> bool:
@@ -199,37 +189,9 @@ async def get_creature(creature_identifier: str, response: Response, db: Session
         if canonical_slug:
             response.headers["X-Canonical-Slug"] = canonical_slug
         response.headers["X-Data-Status"] = "partial" if not cached.loot_items else "complete"
+        if cached.last_synced_at:
+            response.headers["X-Last-Synced-At"] = cached.last_synced_at.isoformat()
         return cached
-
-    if _is_external_detail_fallback_enabled(db):
-        guessed_name = creature_identifier.replace("-", " ").replace("_", " ").strip()
-        if guessed_name:
-            try:
-                payload = await asyncio.wait_for(
-                    get_creature_detail_by_name(guessed_name),
-                    timeout=DETAIL_FALLBACK_TIMEOUT_SECONDS,
-                )
-                upsert_creature_payload(db, payload)
-                db.commit()
-                cached = resolve_cached_creature(db, creature_identifier)
-                if not cached and payload.get("name"):
-                    cached = get_cached_creature_by_name(db, payload["name"])
-                if cached:
-                    EntityMetadataService.record_searches(
-                        db,
-                        entity_type="creature",
-                        matches=[(cached.normalized_name or cached.name, cached.name, cached.id)],
-                    )
-                    db.commit()
-                    canonical_slug = cached.slug or ""
-                    if canonical_slug:
-                        response.headers["X-Canonical-Slug"] = canonical_slug
-                    response.headers["X-Data-Status"] = "partial" if not cached.loot_items else "complete"
-                    response.headers["X-Data-Source"] = "external-fallback"
-                    return cached
-            except Exception as exc:
-                db.rollback()
-                logger.warning("creature_fallback_failed identifier=%s error=%s", creature_identifier, exc)
 
     raise HTTPException(status_code=404, detail="We couldn't find this creature.")
 
@@ -238,7 +200,7 @@ async def get_creature(creature_identifier: str, response: Response, db: Session
 async def get_creature_by_name(creature_name: str, db: Session = Depends(get_db)):
     """Get detailed information about a creature by name"""
     cached = get_cached_creature_by_name(db, creature_name)
-    if cached and cached.loot_items:
+    if cached:
         EntityMetadataService.record_searches(
             db,
             entity_type="creature",
