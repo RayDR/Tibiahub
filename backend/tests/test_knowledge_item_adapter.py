@@ -30,6 +30,7 @@ from app.knowledge.models import (
     KnowledgeJob,
     KnowledgeProvider,
     KnowledgeProviderCursor,
+    KnowledgeRelationship,
 )
 from app.knowledge.registry import EntityTypeRegistry, ProviderRegistry
 from app.knowledge.schemas import KnowledgeEntityCreate
@@ -349,15 +350,20 @@ def test_drop_relationship_resolves_deduplicates_and_retains_unresolved(db, item
         )
     )
     db.flush()
+    applied = _apply_detail(db, fixture("tibiawiki_item_detail.json"))
     _apply_detail(db, fixture("tibiawiki_item_detail.json"))
-    _apply_detail(db, fixture("tibiawiki_item_detail.json"))
-    relationships = db.query(KnowledgeCreatureItemDrop).order_by(KnowledgeCreatureItemDrop.creature_name).all()
+    relationships = db.query(KnowledgeRelationship).filter(
+        KnowledgeRelationship.is_current.is_(True),
+        (KnowledgeRelationship.source_entity_id == applied.entity_uuid)
+        | (KnowledgeRelationship.target_entity_id == applied.entity_uuid),
+    ).all()
     assert len(relationships) == 2
-    demon = next(row for row in relationships if row.creature_name == "Demon")
-    ferumbras = next(row for row in relationships if row.creature_name == "Ferumbras")
-    assert demon.resolution_status == "resolved" and demon.creature_entity_uuid == demon_entity.uuid
-    assert ferumbras.resolution_status == "unresolved" and ferumbras.creature_entity_uuid is None
-    assert demon.source_directions == ["item_dropped_by"]
+    demon = next(row for row in relationships if row.target_entity_id == applied.entity_uuid)
+    ferumbras = next(row for row in relationships if row.unresolved_name == "Ferumbras")
+    assert demon.resolution_state == "resolved" and demon.source_entity_id == demon_entity.uuid
+    assert ferumbras.resolution_state == "unresolved" and ferumbras.target_entity_id is None
+    assert demon.source_context["direction"] == "item_dropped_by"
+    assert db.query(KnowledgeCreatureItemDrop).count() == 0
 
 
 def test_ambiguous_item_variant_relationship_is_not_guessed(db, item_registry):
@@ -379,7 +385,7 @@ def test_ambiguous_item_variant_relationship_is_not_guessed(db, item_registry):
         source_document_id="creature:test",
         source_direction="creature_drops",
     ).relationship
-    assert relationship.resolution_status == "ambiguous" and relationship.item_entity_uuid is None
+    assert relationship.resolution_state == "ambiguous" and relationship.target_entity_id is None
 
 
 def worker_database():

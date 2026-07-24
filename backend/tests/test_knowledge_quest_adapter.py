@@ -31,6 +31,7 @@ from app.knowledge.models import (
     KnowledgeDocument,
     KnowledgeJob,
     KnowledgeQuestRelation,
+    KnowledgeRelationship,
 )
 from app.knowledge.registry import EntityTypeRegistry, ProviderRegistry
 from app.knowledge.schemas import KnowledgeEntityCreate
@@ -204,19 +205,20 @@ def test_relationships_resolve_exactly_retain_ambiguity_and_create_access(db, qu
     ])
     db.flush()
     applied = apply_detail(db, fixture("tibiawiki_quest_detail.json"))
-    relations = db.query(KnowledgeQuestRelation).filter_by(quest_entity_uuid=applied.entity_uuid).all()
-    by_name = {(row.relation_type, row.target_name): row for row in relations}
-    assert by_name[("requires_item", "Rope")].target_entity_uuid == rope.uuid
-    assert by_name[("requires_item", "Shovel")].resolution_status == "ambiguous"
-    assert by_name[("involves_creature", "Demon")].target_entity_uuid == demon.uuid
-    assert by_name[("involves_boss", "Ferumbras")].target_entity_uuid == boss.uuid
-    assert by_name[("starts_at_npc", "Angus")].resolution_status == "unresolved"
-    assert by_name[("occurs_at_location", "Port Hope")].resolution_status == "unresolved"
-    assert by_name[("unlocks_access", "Calassa Access")].resolution_status == "resolved"
+    relations = db.query(KnowledgeRelationship).filter_by(source_entity_id=applied.entity_uuid, is_current=True).all()
+    by_name = {(row.relationship_type_code, row.target_entity.canonical_name if row.target_entity else row.unresolved_name): row for row in relations}
+    assert by_name[("requires_item", "Rope")].target_entity_id == rope.uuid
+    assert by_name[("requires_item", "Shovel")].resolution_state == "ambiguous"
+    assert by_name[("involves_creature", "Demon")].target_entity_id == demon.uuid
+    assert by_name[("involves_boss", "Ferumbras")].target_entity_id == boss.uuid
+    assert by_name[("starts_at_npc", "Angus")].resolution_state == "unresolved"
+    assert by_name[("occurs_at_location", "Port Hope")].resolution_state == "unresolved"
+    assert by_name[("unlocks_access", "Calassa Access")].resolution_state == "resolved"
     assert db.query(KnowledgeAccess).one().canonical_name == "Calassa Access"
     count = len(relations)
     apply_detail(db, fixture("tibiawiki_quest_detail.json"))
-    assert db.query(KnowledgeQuestRelation).count() == count
+    assert db.query(KnowledgeRelationship).filter_by(source_entity_id=applied.entity_uuid, is_current=True).count() == count
+    assert db.query(KnowledgeQuestRelation).count() == 0
     assert item_two.uuid != item_one.uuid
 
 
