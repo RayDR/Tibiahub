@@ -1,0 +1,9 @@
+{
+  "parse": {
+    "title": "Demon",
+    "pageid": 321,
+    "wikitext": {
+      "*": "{{Infobox Creature\n| name = Demon\n| bestiaryclass = Demons\n| bestiarylevel = Hard\n| bestiarytext = A partial record.\n| isboss = no\n}}"
+    }
+  }
+}

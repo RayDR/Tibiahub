@@ -1,0 +1,11 @@
+{
+  "parse": {
+    "title": "Demon",
+    "pageid": 321,
+    "wikitext": {
+      "*": "{{Infobox Creature\n| name = Demon\n| article = a\n| plural = Demons\n| hp = 8200\n| exp = 6000\n| armor = 55\n| speed = 280\n| summon = --\n| convince = --\n| bestiaryclass = Demons\n| bestiarylevel = Hard\n| occurrence = Common\n| creatureclass = Demon\n| primarytype = Fire\n| bestiarytext = A powerful demonic creature.\n| strategy = Keep your distance and use ice attacks.\n| location = [[Oramond Dungeon]], [[Goroma]]\n| isboss = no\n}}\n{{Loot Item|1-3|Demon Horn|Rare}}"
+    },
+    "future_detail_field": {"preserved": true}
+  },
+  "future_envelope_field": ["preserved"]
+}

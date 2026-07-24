@@ -14,6 +14,7 @@ from pathlib import Path
 import pytest
 from fastapi.testclient import TestClient
 from sqlalchemy import create_engine, inspect, text
+from sqlalchemy.exc import IntegrityError
 from sqlalchemy.engine import make_url
 from sqlalchemy.orm import Session, sessionmaker
 
@@ -27,6 +28,7 @@ from app.db.database import (
     verify_connection_and_schema,
 )
 from app.models.events import Event, EventParticipant
+from app.models.creature import Creature
 from app.models.guild_member_snapshot import GuildMemberSnapshot
 from app.models.leadership import GuildLeadershipApplication, GuildLeadershipOpening, GuildLeadershipRole
 from app.models.raffle import InternalNotification, Raffle
@@ -143,6 +145,16 @@ def _register_reference_provider(session: Session) -> None:
     session.flush()
 
 
+def _register_tibiawiki_provider(session: Session) -> None:
+    EntityTypeRegistry.register_initial(session)
+    ProviderRegistry.register_initial(session)
+    provider = session.get(KnowledgeProvider, "tibiawiki")
+    assert provider is not None
+    provider.enabled = True
+    provider.health = "unknown"
+    session.flush()
+
+
 def _reference_job(*, payload_suffix: str = "demon", priority: int = 100) -> EnqueueKnowledgeJob:
     return EnqueueKnowledgeJob(
         provider_id="reference",
@@ -165,6 +177,7 @@ def test_empty_database_upgrades_to_complete_postgresql_schema(pg_engine):
         "users", "user_characters", "announcements", "events", "event_participants",
         "raffles", "raffle_scheduler_attempts", "internal_notifications", "sync_jobs",
         "workspace_audits", "guild_leadership_openings", "media_assets", "creatures",
+        "knowledge_external_mappings",
     }.issubset(tables)
     with pg_engine.connect() as connection:
         assert connection.execute(text("SELECT version_num FROM alembic_version")).scalar_one() == expected_schema_revision()
@@ -179,14 +192,26 @@ def test_empty_database_upgrades_to_complete_postgresql_schema(pg_engine):
             "SELECT conname FROM pg_constraint WHERE connamespace = 'public'::regnamespace"
         )).scalars())
         assert {"uq_event_participant_user", "uq_raffle_participant_user", "fk_leadership_application_assignment"}.issubset(constraints)
+        assert {
+            "uq_knowledge_external_mapping_identifier",
+            "uq_knowledge_external_mapping_entity",
+            "fk_creatures_knowledge_entity",
+        }.issubset(constraints)
         index_definitions = "\n".join(connection.execute(text(
             "SELECT indexdef FROM pg_indexes WHERE schemaname='public'"
         )).scalars())
         assert "uq_leadership_active_application" in index_definitions and " WHERE " in index_definitions
         assert "ix_raffles_scheduler_due" in index_definitions
+        assert "uq_creatures_knowledge_entity_id" in index_definitions
         user_columns = {column["name"]: column for column in inspect(pg_engine).get_columns("users")}
         assert {"is_superuser", "is_moderator", "is_writer"}.issubset(user_columns)
         assert all(user_columns[name]["nullable"] is False for name in ("is_superuser", "is_moderator", "is_writer"))
+        creature_columns = {column["name"] for column in inspect(pg_engine).get_columns("creatures")}
+        assert {"knowledge_entity_id", "data_version", "protected_fields"} <= creature_columns
+        provider_enabled, provider_health = connection.execute(
+            text("SELECT enabled, health FROM knowledge_providers WHERE provider_id='tibiawiki'")
+        ).one()
+        assert provider_enabled is False and provider_health == "disabled"
 
 
 def test_knowledge_platform_persists_nested_jsonb_and_provider_neutral_ids(pg_engine, pg_session):
@@ -458,6 +483,86 @@ def test_postgresql_concurrent_knowledge_enqueue_has_one_active_job(pg_engine, p
     assert sum(created for _job_id, created in results) == 1
     pg_session.expire_all()
     assert pg_session.query(KnowledgeJob).filter(KnowledgeJob.state == "pending").count() == 1
+
+
+def test_postgresql_concurrent_creature_child_enqueue_is_idempotent(pg_engine, pg_session):
+    _register_tibiawiki_provider(pg_session)
+    parent = KnowledgeJobService.enqueue(
+        pg_session,
+        EnqueueKnowledgeJob(
+            provider_id="tibiawiki",
+            job_type="creature_catalog",
+            entity_type="creature",
+            scope={"batch_limit": 1},
+            payload={},
+            trigger="manual",
+        ),
+    ).job
+    pg_session.commit()
+    factory = sessionmaker(bind=pg_engine, expire_on_commit=False)
+
+    def enqueue_same_child(_worker_number: int) -> tuple[str, bool]:
+        with factory() as session:
+            result = KnowledgeJobService.enqueue(
+                session,
+                EnqueueKnowledgeJob(
+                    provider_id="tibiawiki",
+                    job_type="creature_detail",
+                    entity_type="creature",
+                    scope={"external_id": "38"},
+                    payload={"external_id": "38", "page_title": "Demon"},
+                    parent_job_id=parent.id,
+                    correlation_id=parent.correlation_id,
+                    trigger="system",
+                ),
+            )
+            session.commit()
+            return str(result.job.id), result.created
+
+    with ThreadPoolExecutor(max_workers=2) as pool:
+        results = list(pool.map(enqueue_same_child, range(2)))
+
+    assert len({job_id for job_id, _created in results}) == 1
+    assert sum(created for _job_id, created in results) == 1
+    pg_session.expire_all()
+    children = pg_session.query(KnowledgeJob).filter(KnowledgeJob.parent_job_id == parent.id).all()
+    assert len(children) == 1
+    assert children[0].correlation_id == parent.correlation_id
+
+
+def test_postgresql_creature_bridge_allows_only_one_row_per_knowledge_entity(pg_session):
+    EntityTypeRegistry.register_initial(pg_session)
+    entity = KnowledgeEntityService.create(
+        pg_session,
+        KnowledgeEntityCreate(
+            entity_type="creature",
+            canonical_name="Demon",
+            language_neutral_id="creature:tibiawiki:38",
+        ),
+    )
+    pg_session.add(
+        Creature(
+            name="Demon",
+            normalized_name="demon",
+            hitpoints=8200,
+            experience=6000,
+            knowledge_entity_id=entity.uuid,
+        )
+    )
+    pg_session.commit()
+
+    pg_session.add(
+        Creature(
+            name="Duplicate Demon",
+            normalized_name="duplicate demon",
+            hitpoints=8200,
+            experience=6000,
+            knowledge_entity_id=entity.uuid,
+        )
+    )
+    with pytest.raises(IntegrityError):
+        pg_session.flush()
+    pg_session.rollback()
 
 
 def test_postgresql_skip_locked_prevents_duplicate_knowledge_claim(pg_engine, pg_session):

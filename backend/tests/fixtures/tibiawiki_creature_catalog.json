@@ -1,0 +1,14 @@
+{
+  "batchcomplete": "",
+  "continue": {
+    "cmcontinue": "page|44454d4f4e|321",
+    "continue": "-||"
+  },
+  "query": {
+    "categorymembers": [
+      {"pageid": 321, "ns": 0, "title": "Demon"},
+      {"pageid": 654, "ns": 0, "title": "Dragon"}
+    ]
+  },
+  "future_catalog_field": {"preserved": true}
+}
