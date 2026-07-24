@@ -5,6 +5,7 @@ from pydantic import BaseModel, Field
 from typing import List, Optional
 from enum import Enum
 from datetime import datetime
+from uuid import UUID
 
 
 # Vocation Enum for Winter Update 2025
@@ -220,6 +221,8 @@ class Creature(CreatureBase):
     normalized_name: Optional[str] = None
     external_id: Optional[str] = None
     source_name: Optional[str] = None
+    knowledge_entity_id: Optional[UUID] = None
+    data_version: int = 1
     last_synced_at: Optional[datetime] = None
     loot_items: List[Loot] = []
     spawn_locations: List[SpawnLocation] = []

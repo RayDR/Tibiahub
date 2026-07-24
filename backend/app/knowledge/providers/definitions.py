@@ -15,6 +15,7 @@ class ProviderDefinition:
     supports_entities: tuple[str, ...] = ()
     supports_media: bool = False
     supports_search: bool = False
+    enabled: bool = True
 
 
 INITIAL_PROVIDERS = (
@@ -26,6 +27,17 @@ INITIAL_PROVIDERS = (
         rate_limit={"requests": 30, "window_seconds": 60},
         supports_entities=("creature", "guild", "character", "world", "spell", "boss"),
         supports_search=True,
+    ),
+    ProviderDefinition(
+        provider_id="tibiawiki",
+        provider_name="TibiaWiki",
+        priority=20,
+        version="mediawiki-v1",
+        rate_limit={"requests": 12, "window_seconds": 60},
+        supports_entities=("creature",),
+        supports_media=True,
+        supports_search=True,
+        enabled=False,
     ),
     ProviderDefinition(
         provider_id="tibiamaps",
