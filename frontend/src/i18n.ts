@@ -200,6 +200,13 @@ i18n
                         "weak": "Weak to",
                         "loot": "Loot Statistics"
                     },
+                    "questDetail": {
+                        "unavailable": "Quest detail unavailable", "notFound": "Quest not found", "back": "Back to Cyclopedia", "group": "Group: {{name}}", "noDetails": "Details are not available yet.",
+                        "minimumLevel": "Minimum level", "experience": "Experience reward", "premium": "Premium", "repeatable": "Repeatable", "notAvailable": "N/A", "unknown": "Unknown", "yes": "Yes", "no": "No",
+                        "requirements": "Requirements ({{count}})", "rewards": "Rewards ({{count}})", "items": "Items", "quests": "Prerequisite quests", "noRequirements": "No explicit requirements are available.", "noRewards": "No explicit rewards are available.",
+                        "missions": "Missions ({{count}})", "noMissions": "No structured missions are available.", "npcs": "Referenced NPCs", "locations": "Locations", "access": "Unlocked access", "creatures": "Related creatures and bosses", "unknownClassification": "Unknown classification", "noCreatures": "No related creatures are linked in local data.",
+                        "updated": "Local data updated {{date}}", "referencesPending": "{{count}} references pending exact resolution", "source": "Open source page"
+                    },
                     "auth": {
                         "login": "Login",
                         "register": "Register",
@@ -343,15 +350,15 @@ i18n
                         "providers": { "title": "Providers", "failures": "{{count}} consecutive failures", "entities": "Entity types: {{value}}", "jobTypes": "Supported jobs: {{value}}", "freshness": "Last successful sync: {{value}}", "neverSynced": "No successful sync yet" },
                         "workers": { "title": "Worker heartbeat", "empty": "No knowledge worker has registered yet. The production worker remains disabled until explicitly enabled.", "lastSeen": "Last seen {{value}}" },
                         "enqueue": { "title": "Controlled enqueue", "help": "Only registered providers, entity types, and adapter-supported job types are accepted.", "disabled": "No enabled provider currently exposes a manual adapter. No production sync will start automatically.", "catalogWarning": "This queues one bounded catalog page and linked detail jobs. It never starts automatically." },
-                        "fields": { "provider": "Provider", "entityType": "Entity type", "jobType": "Job type", "canonicalName": "Canonical name", "languageNeutralId": "Language-neutral ID", "externalId": "Stable external ID", "creatureName": "Official creature name", "itemName": "Official item name", "batchLimit": "Catalog batch limit (1–50)" },
+                        "fields": { "provider": "Provider", "entityType": "Entity type", "jobType": "Job type", "canonicalName": "Canonical name", "languageNeutralId": "Language-neutral ID", "externalId": "Stable external ID", "creatureName": "Official creature name", "itemName": "Official item name", "questName": "Official quest name", "batchLimit": "Catalog batch limit (1–50)" },
                         "messages": { "enqueued": "Knowledge job enqueued.", "alreadyActive": "An identical active job already exists.", "retry": "Knowledge job scheduled for retry.", "cancel": "Knowledge job cancelled." },
                         "errors": { "providers": "Provider health is unavailable.", "workers": "Worker heartbeat is unavailable.", "jobs": "Knowledge jobs are unavailable.", "enqueue": "The knowledge job could not be enqueued safely.", "retry": "The knowledge job could not be retried.", "cancel": "The knowledge job could not be cancelled.", "details": "Attempt details are unavailable." },
                         "confirm": { "retry": "Retry this failed knowledge job?", "cancel": "Cancel this active knowledge job?", "catalog": "Queue this bounded {{entity}} catalog batch and its detail jobs?" },
                         "filters": { "provider": "Filter by provider", "entity": "Filter by entity", "state": "Filter by state", "allProviders": "All providers", "allEntities": "All entity types", "allStates": "All states" },
                         "jobs": { "title": "Recent jobs", "count": "{{count}} jobs", "attempts": "Attempt {{current}} of {{max}}", "empty": "No knowledge jobs match these filters.", "childOf": "Child of {{value}}" },
-                        "attempts": { "title": "Recent attempts", "empty": "This job has no attempts yet.", "number": "Attempt {{value}}", "worker": "Worker: {{value}}", "metrics": "Created {{created}} · Updated {{updated}} · Unchanged {{unchanged}} · Child jobs {{children}} · Warnings {{warnings}}" },
-                        "jobTypes": { "reference_import": "Reference import", "creature_catalog": "Creature catalog", "creature_detail": "One creature detail", "creature_renormalize": "Renormalize stored creature", "item_catalog": "Item catalog", "item_detail": "One item detail", "item_renormalize": "Renormalize stored item" },
-                        "entities": { "creature": "creature", "item": "item" },
+                        "attempts": { "title": "Recent attempts", "empty": "This job has no attempts yet.", "number": "Attempt {{value}}", "worker": "Worker: {{value}}", "metrics": "Created {{created}} · Updated {{updated}} · Unchanged {{unchanged}} · Child jobs {{children}} · Warnings {{warnings}}", "questMetrics": "Missions {{missions}} · Relations: {{resolved}} resolved, {{unresolved}} unresolved, {{ambiguous}} ambiguous" },
+                        "jobTypes": { "reference_import": "Reference import", "creature_catalog": "Creature catalog", "creature_detail": "One creature detail", "creature_renormalize": "Renormalize stored creature", "item_catalog": "Item catalog", "item_detail": "One item detail", "item_renormalize": "Renormalize stored item", "quest_catalog": "Quest catalog", "quest_detail": "One quest detail", "quest_renormalize": "Renormalize stored quest" },
+                        "entities": { "creature": "creature", "item": "item", "quest": "quest" },
                         "common": { "none": "None", "providerWide": "Provider-wide" }
                     },
                     "workspace": {
@@ -841,6 +848,13 @@ i18n
                         "weak": "Débil a",
                         "loot": "Estadísticas de Botín"
                     },
+                    "questDetail": {
+                        "unavailable": "El detalle de la misión no está disponible", "notFound": "Misión no encontrada", "back": "Volver a Cyclopedia", "group": "Grupo: {{name}}", "noDetails": "Los detalles aún no están disponibles.",
+                        "minimumLevel": "Nivel mínimo", "experience": "Experiencia de recompensa", "premium": "Premium", "repeatable": "Repetible", "notAvailable": "N/D", "unknown": "Desconocido", "yes": "Sí", "no": "No",
+                        "requirements": "Requisitos ({{count}})", "rewards": "Recompensas ({{count}})", "items": "Objetos", "quests": "Misiones previas", "noRequirements": "No hay requisitos explícitos disponibles.", "noRewards": "No hay recompensas explícitas disponibles.",
+                        "missions": "Etapas ({{count}})", "noMissions": "No hay etapas estructuradas disponibles.", "npcs": "NPC relacionados", "locations": "Ubicaciones", "access": "Accesos desbloqueados", "creatures": "Criaturas y jefes relacionados", "unknownClassification": "Clasificación desconocida", "noCreatures": "No hay criaturas relacionadas vinculadas en los datos locales.",
+                        "updated": "Datos locales actualizados el {{date}}", "referencesPending": "{{count}} referencias pendientes de resolución exacta", "source": "Abrir página de origen"
+                    },
                     "auth": {
                         "login": "Iniciar Sesión",
                         "register": "Registrarse",
@@ -983,15 +997,15 @@ i18n
                         "providers": { "title": "Proveedores", "failures": "{{count}} fallos consecutivos", "entities": "Tipos de entidad: {{value}}", "jobTypes": "Trabajos compatibles: {{value}}", "freshness": "Última sincronización correcta: {{value}}", "neverSynced": "Aún no hay sincronizaciones correctas" },
                         "workers": { "title": "Señal del proceso", "empty": "Ningún proceso de conocimiento se ha registrado. El proceso de producción sigue deshabilitado hasta su activación explícita.", "lastSeen": "Última señal: {{value}}" },
                         "enqueue": { "title": "Encolado controlado", "help": "Solo se aceptan proveedores, tipos de entidad y trabajos registrados por un adaptador.", "disabled": "Ningún proveedor habilitado ofrece un adaptador manual. No se iniciará una sincronización de producción automáticamente.", "catalogWarning": "Esto encola una página limitada del catálogo y sus trabajos de detalle vinculados. Nunca se inicia automáticamente." },
-                        "fields": { "provider": "Proveedor", "entityType": "Tipo de entidad", "jobType": "Tipo de trabajo", "canonicalName": "Nombre canónico", "languageNeutralId": "ID neutral al idioma", "externalId": "ID externo estable", "creatureName": "Nombre oficial de la criatura", "itemName": "Nombre oficial del objeto", "batchLimit": "Límite del lote de catálogo (1–50)" },
+                        "fields": { "provider": "Proveedor", "entityType": "Tipo de entidad", "jobType": "Tipo de trabajo", "canonicalName": "Nombre canónico", "languageNeutralId": "ID neutral al idioma", "externalId": "ID externo estable", "creatureName": "Nombre oficial de la criatura", "itemName": "Nombre oficial del objeto", "questName": "Nombre oficial de la misión", "batchLimit": "Límite del lote de catálogo (1–50)" },
                         "messages": { "enqueued": "Trabajo de conocimiento encolado.", "alreadyActive": "Ya existe un trabajo activo idéntico.", "retry": "Trabajo programado para reintento.", "cancel": "Trabajo de conocimiento cancelado." },
                         "errors": { "providers": "La salud de proveedores no está disponible.", "workers": "La señal del worker no está disponible.", "jobs": "Los trabajos de conocimiento no están disponibles.", "enqueue": "No se pudo encolar el trabajo de forma segura.", "retry": "No se pudo reintentar el trabajo.", "cancel": "No se pudo cancelar el trabajo.", "details": "Los detalles de intentos no están disponibles." },
                         "confirm": { "retry": "¿Reintentar este trabajo fallido?", "cancel": "¿Cancelar este trabajo activo?", "catalog": "¿Encolar este lote limitado del catálogo de {{entity}} y sus trabajos de detalle?" },
                         "filters": { "provider": "Filtrar por proveedor", "entity": "Filtrar por entidad", "state": "Filtrar por estado", "allProviders": "Todos los proveedores", "allEntities": "Todos los tipos", "allStates": "Todos los estados" },
                         "jobs": { "title": "Trabajos recientes", "count": "{{count}} trabajos", "attempts": "Intento {{current}} de {{max}}", "empty": "Ningún trabajo coincide con estos filtros.", "childOf": "Hijo de {{value}}" },
-                        "attempts": { "title": "Intentos recientes", "empty": "Este trabajo aún no tiene intentos.", "number": "Intento {{value}}", "worker": "Proceso: {{value}}", "metrics": "Creadas {{created}} · Actualizadas {{updated}} · Sin cambios {{unchanged}} · Trabajos hijos {{children}} · Advertencias {{warnings}}" },
-                        "jobTypes": { "reference_import": "Importación de referencia", "creature_catalog": "Catálogo de criaturas", "creature_detail": "Detalle de una criatura", "creature_renormalize": "Renormalizar criatura almacenada", "item_catalog": "Catálogo de objetos", "item_detail": "Detalle de un objeto", "item_renormalize": "Renormalizar objeto almacenado" },
-                        "entities": { "creature": "criaturas", "item": "objetos" },
+                        "attempts": { "title": "Intentos recientes", "empty": "Este trabajo aún no tiene intentos.", "number": "Intento {{value}}", "worker": "Proceso: {{value}}", "metrics": "Creadas {{created}} · Actualizadas {{updated}} · Sin cambios {{unchanged}} · Trabajos hijos {{children}} · Advertencias {{warnings}}", "questMetrics": "Misiones {{missions}} · Relaciones: {{resolved}} resueltas, {{unresolved}} sin resolver, {{ambiguous}} ambiguas" },
+                        "jobTypes": { "reference_import": "Importación de referencia", "creature_catalog": "Catálogo de criaturas", "creature_detail": "Detalle de una criatura", "creature_renormalize": "Renormalizar criatura almacenada", "item_catalog": "Catálogo de objetos", "item_detail": "Detalle de un objeto", "item_renormalize": "Renormalizar objeto almacenado", "quest_catalog": "Catálogo de misiones", "quest_detail": "Detalle de una misión", "quest_renormalize": "Renormalizar misión almacenada" },
+                        "entities": { "creature": "criaturas", "item": "objetos", "quest": "misiones" },
                         "common": { "none": "Ninguno", "providerWide": "Todo el proveedor" }
                     },
                     "workspace": {

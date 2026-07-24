@@ -229,6 +229,11 @@ export interface QuestSearchResult {
   location?: string;
   npc?: string;
   source_url?: string;
+  category?: string;
+  quest_type?: string;
+  premium_required?: boolean;
+  repeatable?: boolean;
+  last_synced_at?: string;
 }
 
 export interface QuestRelatedCreature {
@@ -258,6 +263,41 @@ export interface QuestDetail {
   requirements: string[];
   related_quest_names?: string[];
   related_creatures: QuestRelatedCreature[];
+  summary?: string;
+  image_url?: string;
+  quest_type?: string;
+  category?: string;
+  difficulty?: string;
+  duration?: string;
+  premium_required?: boolean;
+  repeatable?: boolean;
+  solo_possible?: boolean;
+  data_version: number;
+  last_synced_at?: string;
+  starting_npcs: QuestNamedValue[];
+  related_npcs: QuestNamedValue[];
+  required_items: QuestItemValue[];
+  rewarded_items: QuestItemValue[];
+  required_quests: QuestNamedValue[];
+  unlocked_quests: QuestNamedValue[];
+  required_creatures: QuestNamedValue[];
+  bosses: QuestNamedValue[];
+  locations: QuestNamedValue[];
+  access_unlocks: Array<{ name: string; description?: string; destination_name?: string }>;
+  missions: QuestMission[];
+  relationships: QuestRelationship[];
+}
+
+export interface QuestNamedValue { name: string; external_id?: string; }
+export interface QuestItemValue extends QuestNamedValue { amount: number; note?: string; }
+export interface QuestMission {
+  id: string; external_id?: string; title: string; sequence: number; description?: string;
+  objectives: string[]; required_items: QuestItemValue[]; rewarded_items: QuestItemValue[];
+  related_npcs: QuestNamedValue[]; related_creatures: QuestNamedValue[]; locations: QuestNamedValue[];
+}
+export interface QuestRelationship {
+  relation_type: string; target_entity_type: string; target_name: string;
+  resolution_status: 'resolved' | 'unresolved' | 'ambiguous'; target_slug?: string; mission_id?: string;
 }
 
 export interface HuntRecommendation {
