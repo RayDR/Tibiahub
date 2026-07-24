@@ -77,6 +77,7 @@ def test_initial_and_future_entity_types_need_no_schema_change(db, knowledge_reg
         "access",
         "area",
         "town",
+        "location",
     } == initial
 
     future = EntityTypeRegistry.register(
