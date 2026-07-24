@@ -371,6 +371,7 @@ class QuestRelationResult(BaseModel):
 
 class QuestDetail(BaseModel):
     id: int
+    knowledge_entity_id: Optional[UUID] = None
     name: str
     slug: Optional[str] = None
     description: Optional[str] = None

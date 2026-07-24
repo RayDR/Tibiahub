@@ -7,6 +7,7 @@ import { questsApi } from '../services/api';
 import type { QuestDetail, QuestItemValue, QuestNamedValue, QuestRelationship } from '../types';
 import { useAuth } from '../context/AuthContext';
 import { activityApi } from '../services/activity';
+import MapMetadataPanel from '../components/MapMetadataPanel';
 
 function Names({ values }: { values: QuestNamedValue[] }) {
   return <ul className="space-y-2">{values.map((value, index) => <li key={`${value.name}-${index}`} className="rounded-lg border border-slate-800 bg-slate-950/60 px-3 py-2 text-sm text-slate-300">{value.name}</li>)}</ul>;
@@ -99,6 +100,7 @@ export default function QuestDetailPage() {
       </div>
       {quest.access_unlocks.length > 0 && <details className="mt-6 rounded-xl border border-slate-800 p-4"><summary className="cursor-pointer font-semibold text-amber-200">{t('questDetail.access')}</summary><div className="mt-3"><Names values={quest.access_unlocks} /></div></details>}
       <section className="mt-6"><h2 className="mb-2 text-lg font-semibold text-amber-200">{t('questDetail.creatures')}</h2>{quest.related_creatures.length ? <div className="grid gap-3 md:grid-cols-2 lg:grid-cols-3">{quest.related_creatures.map(creature => <Link to={`/creatures/${creature.creature_slug || creature.creature_id}`} key={creature.creature_id} className="rounded-lg border border-slate-800 bg-slate-950/60 p-3 hover:border-amber-500/40"><div className="flex items-center gap-2 text-slate-100">{creature.is_boss && <Crown size={14} className="text-red-300" />}<span className="font-semibold">{creature.creature_name}</span></div><div className="mt-1 text-xs text-slate-400">{creature.classification || t('questDetail.unknownClassification')}</div></Link>)}</div> : <p className="text-sm text-slate-500">{t('questDetail.noCreatures')}</p>}</section>
+      <MapMetadataPanel entityId={quest.knowledge_entity_id} />
       <footer className="mt-6 flex flex-wrap items-center gap-3 text-xs text-slate-500">{quest.last_synced_at && <span>{t('questDetail.updated', { date: new Date(quest.last_synced_at).toLocaleString() })}</span>}{unresolved > 0 && <span>{t('questDetail.referencesPending', { count: unresolved })}</span>}{quest.source_url && <a href={quest.source_url} target="_blank" rel="noreferrer" className="text-amber-400 hover:text-amber-300">{t('questDetail.source')}</a>}</footer>
     </article>
   </div></div>;

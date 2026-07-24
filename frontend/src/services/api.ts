@@ -1,5 +1,5 @@
 import axios from 'axios';
-import type { Creature, CreatureSimple, HuntZone, HuntRecommendation, ItemDetail, ItemSearchResult, LocationKnowledgeDetail, NpcKnowledgeDetail, QuestDetail, QuestSearchResult, Vocation } from '../types';
+import type { Creature, CreatureSimple, HuntZone, HuntRecommendation, ItemDetail, ItemSearchResult, LocationKnowledgeDetail, NpcKnowledgeDetail, QuestDetail, QuestSearchResult, SpatialRouteMetadata, Vocation } from '../types';
 
 const API_BASE_URL = import.meta.env.VITE_API_URL || '/api/v1';
 export const REQUEST_TIMEOUT_MS = 10000;
@@ -194,6 +194,18 @@ export const namedKnowledgeApi = {
     const response = await api.get(`/locations/${encodeURIComponent(identifier)}`, { signal });
     return response.data;
   },
+};
+
+export const spatialApi = {
+  forLocation: async (identifier: string, signal?: AbortSignal) => (
+    await api.get(`/spatial/locations/${encodeURIComponent(identifier)}`, { signal })
+  ).data,
+  forEntity: async (entityId: string, signal?: AbortSignal) => (
+    await api.get(`/spatial/entities/${encodeURIComponent(entityId)}`, { signal })
+  ).data,
+  route: async (identifier: string, signal?: AbortSignal): Promise<SpatialRouteMetadata> => (
+    await api.get(`/spatial/routes/${encodeURIComponent(identifier)}`, { signal })
+  ).data,
 };
 
 export const adminCreaturesApi = {

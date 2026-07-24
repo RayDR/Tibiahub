@@ -2,6 +2,7 @@
 from __future__ import annotations
 
 import logging
+from functools import lru_cache
 from typing import Any
 
 from alembic.config import Config
@@ -81,7 +82,9 @@ def get_db():
         db.close()
 
 
+@lru_cache(maxsize=1)
 def expected_schema_revision() -> str:
+    """Pin the deploy's expected head at process startup/first readiness check."""
     config = Config(str(ALEMBIC_CONFIG_PATH))
     config.set_main_option("script_location", str(BACKEND_ROOT / "alembic"))
     head = ScriptDirectory.from_config(config).get_current_head()

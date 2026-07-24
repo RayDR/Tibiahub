@@ -8,6 +8,7 @@ from app.knowledge.dto.quest import (
 from app.knowledge.dto.npc_location import (
     LocationKnowledgeDTO, NamedKnowledgeReference, NpcKnowledgeDTO, NpcTradeReference,
 )
+from app.knowledge.dto.spatial import MapPointDTO, MapRegionDTO, RouteDTO, RouteStepDTO
 
 __all__ = [
     "CreatureKnowledgeDTO",
@@ -24,4 +25,8 @@ __all__ = [
     "NamedKnowledgeReference",
     "NpcKnowledgeDTO",
     "NpcTradeReference",
+    "MapPointDTO",
+    "MapRegionDTO",
+    "RouteDTO",
+    "RouteStepDTO",
 ]

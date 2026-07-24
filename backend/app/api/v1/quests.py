@@ -134,7 +134,8 @@ def get_quest_detail(identifier: str, db: Session = Depends(get_db)):
     rewarded_items = _safe_named(quest.rewarded_items)
     required_quests = _safe_named(quest.required_quests)
     return QuestDetail(
-        **_summary(quest).model_dump(), summary=quest.summary, image_url=quest.image_url,
+        **_summary(quest).model_dump(), knowledge_entity_id=quest.knowledge_entity_id,
+        summary=quest.summary, image_url=quest.image_url,
         difficulty=quest.difficulty, duration=quest.duration, solo_possible=quest.solo_possible,
         data_version=quest.data_version, starting_npcs=_safe_named(quest.starting_npcs),
         related_npcs=_safe_named(quest.related_npcs), required_items=required_items,

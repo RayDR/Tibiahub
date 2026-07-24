@@ -34,6 +34,9 @@ INITIAL_ENTITY_TYPES = (
     EntityTypeDefinition("area", "Area"),
     EntityTypeDefinition("town", "Town"),
     EntityTypeDefinition("location", "Location"),
+    EntityTypeDefinition("map_point", "Map Point"),
+    EntityTypeDefinition("map_region", "Map Region"),
+    EntityTypeDefinition("route", "Route"),
 )
 
 

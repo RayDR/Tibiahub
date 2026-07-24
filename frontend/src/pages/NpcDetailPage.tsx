@@ -5,6 +5,7 @@ import { Link, useNavigate, useParams } from 'react-router-dom';
 
 import { namedKnowledgeApi } from '../services/api';
 import type { NpcKnowledgeDetail } from '../types';
+import MapMetadataPanel from '../components/MapMetadataPanel';
 
 export default function NpcDetailPage() {
   const { t } = useTranslation();
@@ -39,6 +40,7 @@ export default function NpcDetailPage() {
       {(place || npc.location_name) && <section className="mt-6 rounded-xl border border-slate-800 p-4"><h2 className="mb-2 flex items-center gap-2 font-semibold text-amber-200"><MapPin size={16} />{t('namedKnowledge.location')}</h2>{place?.resolution_state === 'resolved' && place.target_slug
         ? <Link to={`/locations/${place.target_slug}`} className="flex min-h-11 items-center justify-between rounded-lg bg-slate-950/60 px-3 py-2 text-slate-200 hover:text-amber-200"><span>{place.target_name}</span><ArrowUpRight size={15} /></Link>
         : <div className="min-h-11 rounded-lg bg-slate-950/60 px-3 py-2 text-slate-300">{npc.location_name || place?.target_name}</div>}</section>}
+      <MapMetadataPanel entityId={npc.knowledge_entity_id} />
       <footer className="mt-6 flex flex-wrap gap-3 text-xs text-slate-500">{npc.last_synced_at && <span>{t('namedKnowledge.updated', { date: new Date(npc.last_synced_at).toLocaleString() })}</span>}{npc.source_url && <a href={npc.source_url} target="_blank" rel="noreferrer" className="text-amber-400 hover:text-amber-300">{t('namedKnowledge.source')}</a>}</footer>
     </article>
   </div></main>;
