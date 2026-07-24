@@ -1,0 +1,14 @@
+{
+  "batchcomplete": "",
+  "continue": {
+    "cmcontinue": "page|4d414749432053574f5244|111",
+    "continue": "-||"
+  },
+  "query": {
+    "categorymembers": [
+      {"pageid": 111, "ns": 0, "title": "Magic Sword"},
+      {"pageid": 222, "ns": 0, "title": "Demon Shield"}
+    ]
+  },
+  "future_catalog_field": {"preserved": true}
+}

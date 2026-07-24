@@ -1,0 +1,10 @@
+{
+  "parse": {
+    "title": "Magic Sword",
+    "pageid": 111,
+    "wikitext": {
+      "*": "{{Infobox Item\n| name = Magic Sword\n}}"
+    }
+  },
+  "partial_unknown": true
+}
