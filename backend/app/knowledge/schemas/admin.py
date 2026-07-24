@@ -47,6 +47,7 @@ class KnowledgeJobCreateRequest(BaseModel):
     scheduled_at: datetime | None = None
     max_attempts: int = Field(default=5, ge=1, le=20)
     allow_completed_recreate: bool = False
+    confirm_catalog_sync: bool = False
 
     @field_validator("scope", "payload")
     @classmethod

@@ -32,6 +32,16 @@ class KnowledgeNormalizationService:
     def apply(db: Session, result: KnowledgeNormalizationResult) -> AppliedNormalization:
         if result.action == "noop":
             return AppliedNormalization("unchanged", None, 0, len(result.warnings))
+        if result.canonical_data is not None and result.provider_code == "tibiawiki":
+            from app.knowledge.services.creature_normalization import CreatureKnowledgeNormalizationService
+
+            applied = CreatureKnowledgeNormalizationService.apply(db, result)
+            return AppliedNormalization(
+                applied.status,
+                applied.entity_uuid,
+                applied.aliases_created,
+                applied.warnings,
+            )
         candidate = result.candidate
         if candidate is None:
             raise ValueError("Upsert normalization requires a canonical candidate")

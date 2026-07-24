@@ -15,9 +15,14 @@ from app.knowledge.adapters.protocol import (
 
 class ReferenceKnowledgeAdapter:
     provider_code = "reference"
+    job_types = ("reference_import",)
 
     def supports(self, job_type: str, entity_type: str | None) -> bool:
         return job_type == "reference_import" and entity_type is not None
+
+    def validate_enqueue(self, job_type: str, scope: dict, payload: dict) -> None:
+        if job_type != "reference_import" or not payload.get("canonical_name") or not payload.get("language_neutral_id"):
+            raise ValueError("Reference imports require canonical_name and language_neutral_id")
 
     def fetch(self, request: KnowledgeFetchRequest) -> KnowledgeFetchResult:
         payload = dict(request.payload)

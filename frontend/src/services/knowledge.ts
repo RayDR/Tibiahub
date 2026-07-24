@@ -90,6 +90,8 @@ export const knowledgeOperationsApi = {
     entity_type: string;
     scope: Record<string, unknown>;
     payload: Record<string, unknown>;
+    confirm_catalog_sync?: boolean;
+    allow_completed_recreate?: boolean;
   }) => (await api.post<{ item: KnowledgeJob; created: boolean }>('/admin/knowledge/jobs', payload)).data,
   retry: async (jobId: string) => (await api.post<KnowledgeJob>(`/admin/knowledge/jobs/${encodeURIComponent(jobId)}/retry`)).data,
   cancel: async (jobId: string) => (await api.post<KnowledgeJob>(`/admin/knowledge/jobs/${encodeURIComponent(jobId)}/cancel`)).data,

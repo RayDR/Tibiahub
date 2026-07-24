@@ -13,7 +13,7 @@ class ProviderRegistry:
     def register(db: Session, definition: ProviderDefinition) -> KnowledgeProvider:
         provider = db.get(KnowledgeProvider, definition.provider_id)
         if provider is None:
-            provider = KnowledgeProvider(provider_id=definition.provider_id)
+            provider = KnowledgeProvider(provider_id=definition.provider_id, enabled=definition.enabled)
             db.add(provider)
         provider.provider_name = definition.provider_name
         provider.priority = definition.priority

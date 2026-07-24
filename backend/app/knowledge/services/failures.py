@@ -48,6 +48,21 @@ class MalformedProviderPayloadError(KnowledgeWorkerFailure):
     safe_message = "The provider response did not match the required contract."
 
 
+class EmptyProviderResponseError(KnowledgeWorkerFailure):
+    code = "empty_provider_response"
+    safe_message = "The provider returned no usable knowledge records."
+
+
+class ProviderResponseEnvelopeError(KnowledgeWorkerFailure):
+    code = "provider_error_envelope"
+    safe_message = "The provider returned an error response."
+
+
+class UnsafeProviderTextError(KnowledgeWorkerFailure):
+    code = "unsafe_provider_text"
+    safe_message = "The provider response contained unsafe text."
+
+
 class OversizedProviderResponseError(KnowledgeWorkerFailure):
     code = "oversized_provider_response"
     safe_message = "The provider response exceeded the safe size limit."

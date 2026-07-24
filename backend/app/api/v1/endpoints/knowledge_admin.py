@@ -161,9 +161,19 @@ def enqueue_job(
     if provider is None:
         raise HTTPException(status_code=400, detail={"code": "knowledge_provider_unknown"})
     try:
-        adapters.resolve(payload.provider_id, payload.job_type, payload.entity_type)
+        adapters.validate_enqueue(
+            payload.provider_id,
+            payload.job_type,
+            payload.entity_type,
+            payload.scope,
+            payload.payload,
+        )
     except AdapterNotFoundError as exc:
         raise HTTPException(status_code=400, detail={"code": "knowledge_adapter_unsupported"}) from exc
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail={"code": "knowledge_job_input_invalid"}) from exc
+    if payload.job_type == "creature_catalog" and not payload.confirm_catalog_sync:
+        raise HTTPException(status_code=400, detail={"code": "knowledge_catalog_confirmation_required"})
     try:
         result = KnowledgeJobService.enqueue(
             db,

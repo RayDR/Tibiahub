@@ -18,6 +18,7 @@ from app.knowledge.models.jobs import (
     KnowledgeProviderCursor,
     KnowledgeWorkerHeartbeat,
 )
+from app.knowledge.models.mappings import KnowledgeExternalMapping
 
 __all__ = [
     "KnowledgeDocument",
@@ -31,6 +32,7 @@ __all__ = [
     "KnowledgeJobAttempt",
     "KnowledgeProviderCursor",
     "KnowledgeWorkerHeartbeat",
+    "KnowledgeExternalMapping",
     "ACTIVE_KNOWLEDGE_JOB_STATES",
     "KNOWLEDGE_JOB_STATES",
     "KNOWLEDGE_JOB_TRIGGERS",

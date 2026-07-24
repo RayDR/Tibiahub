@@ -16,6 +16,10 @@ from app.knowledge.services.jobs import (
     KnowledgeJobService,
     ProviderUnavailableForJobError,
 )
+from app.knowledge.services.creature_normalization import (
+    CreatureIdentityConflictError,
+    CreatureKnowledgeNormalizationService,
+)
 
 __all__ = [
     "DuplicateKnowledgeAliasError",
@@ -30,4 +34,6 @@ __all__ = [
     "KnowledgeJobOwnershipError",
     "KnowledgeJobService",
     "ProviderUnavailableForJobError",
+    "CreatureIdentityConflictError",
+    "CreatureKnowledgeNormalizationService",
 ]

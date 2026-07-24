@@ -12,6 +12,7 @@ from app.knowledge.models import (
     KnowledgeJobAttempt,
     KnowledgeProviderCursor,
     KnowledgeWorkerHeartbeat,
+    KnowledgeExternalMapping,
 )
 
 __all__ = [
@@ -26,4 +27,5 @@ __all__ = [
     "KnowledgeJobAttempt",
     "KnowledgeProviderCursor",
     "KnowledgeWorkerHeartbeat",
+    "KnowledgeExternalMapping",
 ]
