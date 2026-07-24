@@ -29,6 +29,10 @@ from app.knowledge.adapters.tibiawiki_quests import (
     TibiaWikiQuestAdapter,
     TibiaWikiQuestClient,
 )
+from app.knowledge.adapters.tibiawiki_npcs_locations import (
+    HttpTibiaWikiNamedEntityClient, TibiaWikiLocationAdapter, TibiaWikiNamedEntityClient,
+    TibiaWikiNpcAdapter,
+)
 
 __all__ = [
     "AdapterNotFoundError",
@@ -53,4 +57,8 @@ __all__ = [
     "HttpTibiaWikiQuestClient",
     "TibiaWikiQuestAdapter",
     "TibiaWikiQuestClient",
+    "HttpTibiaWikiNamedEntityClient",
+    "TibiaWikiNamedEntityClient",
+    "TibiaWikiNpcAdapter",
+    "TibiaWikiLocationAdapter",
 ]

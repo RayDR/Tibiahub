@@ -1,0 +1,9 @@
+{
+  "batchcomplete": "",
+  "continue": {"cmcontinue": "page|414e475553|800", "continue": "-||"},
+  "query": {"categorymembers": [
+    {"pageid": 800, "ns": 0, "title": "Angus"},
+    {"pageid": 801, "ns": 0, "title": "Captain Bluebear"}
+  ]},
+  "future_catalog_field": {"preserved": true}
+}

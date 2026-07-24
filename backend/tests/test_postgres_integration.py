@@ -30,7 +30,7 @@ from app.db.database import (
     verify_connection_and_schema,
 )
 from app.models.events import Event, EventParticipant
-from app.models.external_data import Item, QuestMission, TibiaWikiQuest
+from app.models.external_data import Item, QuestMission, TibiaWikiLocation, TibiaWikiNpc, TibiaWikiQuest
 from app.models.creature import Creature
 from app.models.guild_member_snapshot import GuildMemberSnapshot
 from app.models.leadership import GuildLeadershipApplication, GuildLeadershipOpening, GuildLeadershipRole
@@ -38,7 +38,10 @@ from app.models.raffle import InternalNotification, Raffle
 from app.models.user import User
 from app.models.user_character import UserCharacter
 from app.models.workspace_audit import WorkspaceAudit
-from app.knowledge.adapters import KnowledgeDocumentDTO, KnowledgeNormalizationContext, TibiaWikiItemAdapter, TibiaWikiQuestAdapter
+from app.knowledge.adapters import (
+    KnowledgeDocumentDTO, KnowledgeNormalizationContext, TibiaWikiItemAdapter,
+    TibiaWikiLocationAdapter, TibiaWikiNpcAdapter, TibiaWikiQuestAdapter,
+)
 from app.knowledge.models import KnowledgeCreatureItemDrop, KnowledgeDocument, KnowledgeJob, KnowledgeProvider, KnowledgeQuestRelation, KnowledgeRelationship, KnowledgeRelationshipType
 from app.knowledge.registry import EntityTypeRegistry, ProviderRegistry, RelationshipTypeRegistry
 from app.knowledge.schemas import KnowledgeDocumentCreate, KnowledgeEntityCreate
@@ -186,7 +189,8 @@ def test_empty_database_upgrades_to_complete_postgresql_schema(pg_engine):
         "knowledge_external_mappings",
         "knowledge_creature_item_drops", "tibiawiki_items",
         "quest_missions", "knowledge_accesses", "knowledge_quest_relations",
-        "knowledge_relationship_types", "knowledge_relationships",
+            "knowledge_relationship_types", "knowledge_relationships",
+            "tibiawiki_npcs", "tibiawiki_locations",
     }.issubset(tables)
     with pg_engine.connect() as connection:
         assert connection.execute(text("SELECT version_num FROM alembic_version")).scalar_one() == expected_schema_revision()
@@ -223,7 +227,7 @@ def test_empty_database_upgrades_to_complete_postgresql_schema(pg_engine):
             text("SELECT enabled, health, supports_entities FROM knowledge_providers WHERE provider_id='tibiawiki'")
         ).one()
         assert provider_enabled is False and provider_health == "disabled"
-        assert supported_entities == ["creature", "item", "quest"]
+        assert supported_entities == ["creature", "item", "quest", "npc", "location"]
 
 
 def test_graph_schema_registry_dedup_inverse_and_resolution_on_postgresql(pg_session):
@@ -738,6 +742,30 @@ def test_postgresql_quest_fixture_normalizes_missions_and_deduplicates_relations
     assert pg_session.query(KnowledgeRelationship).filter_by(source_entity_id=applied.entity_uuid, is_current=True).count() == 18
     assert pg_session.query(KnowledgeQuestRelation).count() == 0
     assert stored.raw_json["future_envelope_field"] == "retained"
+
+
+def test_postgresql_npc_and_location_fixtures_normalize_idempotently(pg_session):
+    _register_tibiawiki_provider(pg_session)
+    cases = (
+        ("npc", "800", TibiaWikiNpcAdapter(), TibiaWikiNpc),
+        ("location", "900", TibiaWikiLocationAdapter(), TibiaWikiLocation),
+    )
+    for entity_type, external_id, adapter, model in cases:
+        raw = json.loads((Path(__file__).parent / "fixtures" / f"tibiawiki_{entity_type}_detail.json").read_text(encoding="utf-8"))
+        document = KnowledgeDocumentDTO(
+            provider_code="tibiawiki", provider_document_id=f"{entity_type}:{external_id}", raw_json=raw,
+            metadata={"document_kind": f"{entity_type}_detail"},
+        )
+        normalized = adapter.normalize(document, KnowledgeNormalizationContext(
+            job_id=uuid4(), attempt_id=uuid4(), correlation_id=uuid4(),
+            provider_code="tibiawiki", entity_type=entity_type,
+        ))
+        first = KnowledgeNormalizationService.apply(pg_session, normalized)
+        second = KnowledgeNormalizationService.apply(pg_session, normalized)
+        row = pg_session.query(model).one()
+        assert first.status == "created" and second.status == "unchanged"
+        assert row.knowledge_entity_id == first.entity_uuid and row.data_version == 1
+    pg_session.commit()
 
 
 def test_postgresql_item_fixture_normalizes_and_relationship_deduplicates(pg_session):

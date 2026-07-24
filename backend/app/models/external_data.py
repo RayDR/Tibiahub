@@ -101,6 +101,85 @@ class HuntingPlace(Base):
     created_at = Column(DateTime(timezone=True), server_default=func.now())
     updated_at = Column(DateTime(timezone=True), onupdate=func.now())
 
+
+class TibiaWikiNpc(Base):
+    """Canonical NPC bridge populated only by the Knowledge worker."""
+
+    __tablename__ = "tibiawiki_npcs"
+    __table_args__ = (
+        UniqueConstraint("source_name", "external_id", name="uq_tibiawiki_npcs_source_external"),
+        Index("uq_tibiawiki_npcs_knowledge_entity_id", "knowledge_entity_id", unique=True),
+    )
+
+    id = Column(Integer, primary_key=True)
+    name = Column(String(255), nullable=False, index=True)
+    normalized_name = Column(String(255), nullable=False, index=True)
+    slug = Column(String(180), nullable=False, index=True)
+    external_id = Column(String(100), nullable=False, index=True)
+    source_name = Column(String(50), nullable=False, index=True)
+    source_url = Column(String(1024), nullable=True)
+    image_url = Column(String(1024), nullable=True)
+    knowledge_entity_id = Column(Uuid(as_uuid=True), ForeignKey("knowledge_entities.uuid", ondelete="CASCADE"), nullable=False)
+    title = Column(String(255), nullable=True)
+    occupation = Column(String(255), nullable=True)
+    sex = Column(String(32), nullable=True)
+    location_name = Column(String(255), nullable=True, index=True)
+    description = Column(Text, nullable=True)
+    buys = Column(JSONBType, nullable=False, default=list)
+    sells = Column(JSONBType, nullable=False, default=list)
+    destinations = Column(JSONBType, nullable=False, default=list)
+    related_quests = Column(JSONBType, nullable=False, default=list)
+    provider_metadata = Column(JSONBType, nullable=False, default=dict)
+    supplied_fields = Column(JSONBType, nullable=False, default=list)
+    protected_fields = Column(JSONBType, nullable=False, default=list)
+    data_version = Column(Integer, nullable=False, default=1)
+    last_synced_at = Column(DateTime(timezone=True), nullable=True)
+    created_at = Column(DateTime(timezone=True), nullable=False, server_default=func.now())
+    updated_at = Column(DateTime(timezone=True), nullable=False, server_default=func.now(), onupdate=func.now())
+
+    knowledge_entity = relationship("KnowledgeEntity")
+
+
+class TibiaWikiLocation(Base):
+    """Canonical named location bridge; coordinates and map data stay out of scope."""
+
+    __tablename__ = "tibiawiki_locations"
+    __table_args__ = (
+        UniqueConstraint("source_name", "external_id", name="uq_tibiawiki_locations_source_external"),
+        Index("uq_tibiawiki_locations_knowledge_entity_id", "knowledge_entity_id", unique=True),
+    )
+
+    id = Column(Integer, primary_key=True)
+    name = Column(String(255), nullable=False, index=True)
+    normalized_name = Column(String(255), nullable=False, index=True)
+    slug = Column(String(180), nullable=False, index=True)
+    external_id = Column(String(100), nullable=False, index=True)
+    source_name = Column(String(50), nullable=False, index=True)
+    source_url = Column(String(1024), nullable=True)
+    image_url = Column(String(1024), nullable=True)
+    knowledge_entity_id = Column(Uuid(as_uuid=True), ForeignKey("knowledge_entities.uuid", ondelete="CASCADE"), nullable=False)
+    location_kind = Column(String(100), nullable=True, index=True)
+    region = Column(String(255), nullable=True, index=True)
+    parent_location = Column(String(255), nullable=True)
+    description = Column(Text, nullable=True)
+    premium_required = Column(Boolean, nullable=True)
+    minimum_level = Column(Integer, nullable=True)
+    maximum_level = Column(Integer, nullable=True)
+    npcs = Column(JSONBType, nullable=False, default=list)
+    creatures = Column(JSONBType, nullable=False, default=list)
+    quests = Column(JSONBType, nullable=False, default=list)
+    sublocations = Column(JSONBType, nullable=False, default=list)
+    access_notes = Column(Text, nullable=True)
+    provider_metadata = Column(JSONBType, nullable=False, default=dict)
+    supplied_fields = Column(JSONBType, nullable=False, default=list)
+    protected_fields = Column(JSONBType, nullable=False, default=list)
+    data_version = Column(Integer, nullable=False, default=1)
+    last_synced_at = Column(DateTime(timezone=True), nullable=True)
+    created_at = Column(DateTime(timezone=True), nullable=False, server_default=func.now())
+    updated_at = Column(DateTime(timezone=True), nullable=False, server_default=func.now(), onupdate=func.now())
+
+    knowledge_entity = relationship("KnowledgeEntity")
+
 class TibiaWikiQuest(Base):
     """Store quest data from TibiaWiki API"""
     __tablename__ = "tibiawiki_quests"

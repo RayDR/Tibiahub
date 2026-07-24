@@ -289,6 +289,8 @@ class KnowledgeWorker:
             "creature_renormalize": "creature",
             "item_renormalize": "item",
             "quest_renormalize": "quest",
+            "npc_renormalize": "npc",
+            "location_renormalize": "location",
         }
         document_prefix = prefixes.get(request.job_type)
         if document_prefix is None:

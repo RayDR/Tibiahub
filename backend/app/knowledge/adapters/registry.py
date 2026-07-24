@@ -7,6 +7,7 @@ from app.knowledge.adapters.reference import ReferenceKnowledgeAdapter
 from app.knowledge.adapters.tibiawiki_creatures import TibiaWikiCreatureAdapter
 from app.knowledge.adapters.tibiawiki_items import TibiaWikiItemAdapter
 from app.knowledge.adapters.tibiawiki_quests import TibiaWikiQuestAdapter
+from app.knowledge.adapters.tibiawiki_npcs_locations import TibiaWikiLocationAdapter, TibiaWikiNpcAdapter
 
 
 class AdapterNotFoundError(LookupError):
@@ -20,6 +21,8 @@ class KnowledgeAdapterRegistry:
             TibiaWikiCreatureAdapter(),
             TibiaWikiItemAdapter(),
             TibiaWikiQuestAdapter(),
+            TibiaWikiNpcAdapter(),
+            TibiaWikiLocationAdapter(),
         )
         self._adapters: dict[str, list[KnowledgeProviderAdapter]] = {}
         for adapter in configured:
