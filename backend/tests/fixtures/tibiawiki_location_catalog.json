@@ -1,0 +1,9 @@
+{
+  "batchcomplete": "",
+  "continue": {"cmcontinue": "page|504f525420484f5045|900", "continue": "-||"},
+  "query": {"categorymembers": [
+    {"pageid": 900, "ns": 0, "title": "Port Hope"},
+    {"pageid": 901, "ns": 0, "title": "Calassa"}
+  ]},
+  "future_catalog_field": {"preserved": true}
+}

@@ -1,0 +1,8 @@
+{
+  "parse": {
+    "title": "Angus",
+    "pageid": 800,
+    "wikitext": {"*": "{{Infobox NPC\n| name = Angus\n| title = Explorer Society Representative\n| job = Recruiter\n| sex = Male\n| location = [[Port Hope]]\n| description = Angus recruits promising explorers.\n| buys = [[Explorer Brooch]], [[Rope]]\n| sells = [[Shovel]]\n| destinations = [[Northport]], [[Liberty Bay]]\n| quests = [[Explorer Society Quest]]\n}}"}
+  },
+  "future_envelope_field": "retained"
+}

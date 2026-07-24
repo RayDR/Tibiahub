@@ -38,4 +38,4 @@ Every utility uses shared settings, refuses a database whose exact name is not `
 
 ## Deferred work
 
-Full NPC and Location ingestion, map geometry/PostGIS, recursive paths, unified search, media ingestion, embeddings/vector search, and AI consumers remain outside Stage 2B-1.
+NPC and Location ingestion is provided by the following adapter stage. Map geometry/PostGIS, recursive paths, unified search, media ingestion, embeddings/vector search, and AI consumers remain deferred.

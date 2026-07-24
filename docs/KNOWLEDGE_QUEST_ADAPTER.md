@@ -16,7 +16,7 @@ TibiaWiki may own the official English name, current description and summary, mi
 
 ## Relationships and access
 
-One provenance-bearing `knowledge_quest_relations` record stores each directed fact. Exact names and approved aliases can resolve existing Quest, Item, Creature, Boss, or Access entities; ambiguous and unresolved names remain reviewable and are never guessed. NPC and Location references remain unresolved named records until their future adapters exist. No coordinates or routes are fabricated.
+One provenance-bearing relationship stores each directed fact. Exact names and approved aliases can resolve existing Quest, Item, Creature, Boss, or Access entities; ambiguous and unresolved names remain reviewable and are never guessed. NPC and Location references are initially stored as unresolved names and are resolved only after their adapters import one unique exact canonical name or approved alias. No coordinates or routes are fabricated.
 
 Access unlocks create or reuse an `access` KnowledgeEntity and a minimal `knowledge_accesses` bridge containing an access code, name, description, unlocking Quest, requirements, destination name, and provider metadata. It deliberately contains no map geometry.
 
@@ -40,4 +40,4 @@ backend/venv/bin/python scripts/enqueue-knowledge-job.py \
   --confirm-enqueue-knowledge-job
 ```
 
-Verify the job, immutable document, mapping, Quest, ordered missions, relationships, and local API before considering a separately confirmed bounded catalog batch. NPC ingestion, Maps/PostGIS, media downloads, unified search, embeddings, and AI remain deferred.
+Verify the job, immutable document, mapping, Quest, ordered missions, relationships, and local API before considering a separately confirmed bounded catalog batch. Maps/PostGIS, media downloads, unified search, embeddings, and AI remain deferred.
