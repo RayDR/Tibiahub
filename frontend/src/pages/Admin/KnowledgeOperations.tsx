@@ -11,11 +11,14 @@ import {
 } from '../../services/knowledge';
 
 const jobStates = ['', 'pending', 'claimed', 'running', 'retrying', 'failed', 'succeeded', 'partially_succeeded', 'cancelled'];
-const creatureJobTypes = new Set(['creature_catalog', 'creature_detail', 'creature_renormalize']);
+const providerEntityJobTypes = new Set([
+  'creature_catalog', 'creature_detail', 'creature_renormalize',
+  'item_catalog', 'item_detail', 'item_renormalize',
+]);
 
 function JobTypeLabel({ value }: { value: string }) {
   const { t } = useTranslation();
-  const known = ['reference_import', 'creature_catalog', 'creature_detail', 'creature_renormalize'];
+  const known = ['reference_import', ...providerEntityJobTypes];
   return <>{known.includes(value) ? t(`knowledgeOps.jobTypes.${value}`) : value}</>;
 }
 
@@ -51,8 +54,8 @@ export default function KnowledgeOperations() {
   const [enqueueJobType, setEnqueueJobType] = useState('');
   const [canonicalName, setCanonicalName] = useState('');
   const [languageNeutralId, setLanguageNeutralId] = useState('');
-  const [creatureExternalId, setCreatureExternalId] = useState('');
-  const [creatureName, setCreatureName] = useState('');
+  const [externalId, setExternalId] = useState('');
+  const [pageTitle, setPageTitle] = useState('');
   const [batchLimit, setBatchLimit] = useState(10);
 
   const loadProviders = useCallback(async () => {
@@ -81,30 +84,33 @@ export default function KnowledgeOperations() {
   const selectedProvider = providers.find(provider => provider.provider_id === enqueueProvider);
   const availableProviders = providers.filter(provider => provider.enabled && provider.supported_job_types.length > 0);
   const entityOptions = useMemo(() => Array.from(new Set(providers.flatMap(provider => provider.supports_entities))).sort(), [providers]);
-  const isCatalog = enqueueJobType === 'creature_catalog';
-  const isCreatureDetail = enqueueJobType === 'creature_detail';
-  const isRenormalize = enqueueJobType === 'creature_renormalize';
-  const isCreatureJob = creatureJobTypes.has(enqueueJobType);
+  const availableJobTypes = (selectedProvider?.supported_job_types || []).filter(jobType => (
+    jobType === 'reference_import' ? enqueueEntity === 'creature' : jobType.startsWith(`${enqueueEntity}_`)
+  ));
+  const isCatalog = enqueueJobType.endsWith('_catalog');
+  const isDetail = enqueueJobType.endsWith('_detail');
+  const isRenormalize = enqueueJobType.endsWith('_renormalize');
+  const isProviderEntityJob = providerEntityJobTypes.has(enqueueJobType);
   const canEnqueue = Boolean(selectedProvider && enqueueEntity && enqueueJobType) && (
     isCatalog
       ? batchLimit >= 1 && batchLimit <= 50
-      : isCreatureDetail
-        ? Boolean(creatureExternalId.trim() || creatureName.trim())
+      : isDetail
+        ? Boolean(externalId.trim() || pageTitle.trim())
         : isRenormalize
-          ? Boolean(creatureExternalId.trim())
+          ? Boolean(externalId.trim())
           : Boolean(canonicalName.trim() && languageNeutralId.trim())
   );
 
   const enqueue = async () => {
     if (!canEnqueue || !selectedProvider) return;
-    if (isCatalog && !window.confirm(t('knowledgeOps.confirm.catalog'))) return;
+    if (isCatalog && !window.confirm(t('knowledgeOps.confirm.catalog', { entity: t(`knowledgeOps.entities.${enqueueEntity}`) }))) return;
     setBusyJob('enqueue');
     try {
       const scope = isCatalog ? { batch_limit: batchLimit } : {};
-      const payload = isCreatureJob
+      const payload = isProviderEntityJob
         ? {
-            ...(creatureExternalId.trim() ? { external_id: creatureExternalId.trim() } : {}),
-            ...(isCreatureDetail && creatureName.trim() ? { page_title: creatureName.trim() } : {}),
+            ...(externalId.trim() ? { external_id: externalId.trim() } : {}),
+            ...(isDetail && pageTitle.trim() ? { page_title: pageTitle.trim() } : {}),
           }
         : { canonical_name: canonicalName.trim(), language_neutral_id: languageNeutralId.trim(), provider_document_id: languageNeutralId.trim() };
       const result = await knowledgeOperationsApi.enqueue({
@@ -114,10 +120,10 @@ export default function KnowledgeOperations() {
         scope,
         payload,
         confirm_catalog_sync: isCatalog,
-        allow_completed_recreate: isCreatureJob,
+        allow_completed_recreate: isProviderEntityJob,
       });
       toast.success(t(result.created ? 'knowledgeOps.messages.enqueued' : 'knowledgeOps.messages.alreadyActive'));
-      setCanonicalName(''); setLanguageNeutralId(''); setCreatureExternalId(''); setCreatureName('');
+      setCanonicalName(''); setLanguageNeutralId(''); setExternalId(''); setPageTitle('');
       await loadJobs();
     } catch { toast.error(t('knowledgeOps.errors.enqueue')); }
     finally { setBusyJob(null); }
@@ -152,9 +158,9 @@ export default function KnowledgeOperations() {
     <section className="space-y-3 rounded-xl border border-slate-700 bg-slate-900/30 p-4"><h3 className="font-medium text-slate-200">{t('knowledgeOps.enqueue.title')}</h3><p className="text-xs text-slate-400">{t('knowledgeOps.enqueue.help')}</p>
       <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-5">
         <select aria-label={t('knowledgeOps.fields.provider')} value={enqueueProvider} onChange={event => { setEnqueueProvider(event.target.value); setEnqueueJobType(''); setEnqueueEntity(''); }} className="min-h-11 rounded-lg border border-slate-700 bg-slate-950 px-3 text-sm"><option value="">{t('knowledgeOps.fields.provider')}</option>{availableProviders.map(provider => <option key={provider.provider_id} value={provider.provider_id}>{provider.provider_name}</option>)}</select>
-        <select aria-label={t('knowledgeOps.fields.entityType')} value={enqueueEntity} onChange={event => setEnqueueEntity(event.target.value)} className="min-h-11 rounded-lg border border-slate-700 bg-slate-950 px-3 text-sm"><option value="">{t('knowledgeOps.fields.entityType')}</option>{(selectedProvider?.supports_entities || []).map(entity => <option key={entity} value={entity}>{entity}</option>)}</select>
-        <select aria-label={t('knowledgeOps.fields.jobType')} value={enqueueJobType} onChange={event => setEnqueueJobType(event.target.value)} className="min-h-11 rounded-lg border border-slate-700 bg-slate-950 px-3 text-sm"><option value="">{t('knowledgeOps.fields.jobType')}</option>{(selectedProvider?.supported_job_types || []).map(jobType => <option key={jobType} value={jobType}>{<JobTypeLabel value={jobType} />}</option>)}</select>
-        {isCatalog ? <input type="number" min={1} max={50} value={batchLimit} onChange={event => setBatchLimit(Number(event.target.value))} placeholder={t('knowledgeOps.fields.batchLimit')} aria-label={t('knowledgeOps.fields.batchLimit')} className="min-h-11 rounded-lg border border-slate-700 bg-slate-950 px-3 text-sm" /> : isCreatureJob ? <><input value={creatureExternalId} onChange={event => setCreatureExternalId(event.target.value)} placeholder={t('knowledgeOps.fields.externalId')} aria-label={t('knowledgeOps.fields.externalId')} className="min-h-11 rounded-lg border border-slate-700 bg-slate-950 px-3 text-sm" />{isCreatureDetail && <input value={creatureName} onChange={event => setCreatureName(event.target.value)} placeholder={t('knowledgeOps.fields.creatureName')} aria-label={t('knowledgeOps.fields.creatureName')} className="min-h-11 rounded-lg border border-slate-700 bg-slate-950 px-3 text-sm" />}</> : <><input value={canonicalName} onChange={event => setCanonicalName(event.target.value)} placeholder={t('knowledgeOps.fields.canonicalName')} aria-label={t('knowledgeOps.fields.canonicalName')} className="min-h-11 rounded-lg border border-slate-700 bg-slate-950 px-3 text-sm" /><input value={languageNeutralId} onChange={event => setLanguageNeutralId(event.target.value)} placeholder={t('knowledgeOps.fields.languageNeutralId')} aria-label={t('knowledgeOps.fields.languageNeutralId')} className="min-h-11 rounded-lg border border-slate-700 bg-slate-950 px-3 text-sm" /></>}
+        <select aria-label={t('knowledgeOps.fields.entityType')} value={enqueueEntity} onChange={event => { setEnqueueEntity(event.target.value); setEnqueueJobType(''); }} className="min-h-11 rounded-lg border border-slate-700 bg-slate-950 px-3 text-sm"><option value="">{t('knowledgeOps.fields.entityType')}</option>{(selectedProvider?.supports_entities || []).map(entity => <option key={entity} value={entity}>{t(`knowledgeOps.entities.${entity}`)}</option>)}</select>
+        <select aria-label={t('knowledgeOps.fields.jobType')} value={enqueueJobType} onChange={event => setEnqueueJobType(event.target.value)} className="min-h-11 rounded-lg border border-slate-700 bg-slate-950 px-3 text-sm"><option value="">{t('knowledgeOps.fields.jobType')}</option>{availableJobTypes.map(jobType => <option key={jobType} value={jobType}>{<JobTypeLabel value={jobType} />}</option>)}</select>
+        {isCatalog ? <input type="number" min={1} max={50} value={batchLimit} onChange={event => setBatchLimit(Number(event.target.value))} placeholder={t('knowledgeOps.fields.batchLimit')} aria-label={t('knowledgeOps.fields.batchLimit')} className="min-h-11 rounded-lg border border-slate-700 bg-slate-950 px-3 text-sm" /> : isProviderEntityJob ? <><input value={externalId} onChange={event => setExternalId(event.target.value)} placeholder={t('knowledgeOps.fields.externalId')} aria-label={t('knowledgeOps.fields.externalId')} className="min-h-11 rounded-lg border border-slate-700 bg-slate-950 px-3 text-sm" />{isDetail && <input value={pageTitle} onChange={event => setPageTitle(event.target.value)} placeholder={t(`knowledgeOps.fields.${enqueueEntity}Name`)} aria-label={t(`knowledgeOps.fields.${enqueueEntity}Name`)} className="min-h-11 rounded-lg border border-slate-700 bg-slate-950 px-3 text-sm" />}</> : <><input value={canonicalName} onChange={event => setCanonicalName(event.target.value)} placeholder={t('knowledgeOps.fields.canonicalName')} aria-label={t('knowledgeOps.fields.canonicalName')} className="min-h-11 rounded-lg border border-slate-700 bg-slate-950 px-3 text-sm" /><input value={languageNeutralId} onChange={event => setLanguageNeutralId(event.target.value)} placeholder={t('knowledgeOps.fields.languageNeutralId')} aria-label={t('knowledgeOps.fields.languageNeutralId')} className="min-h-11 rounded-lg border border-slate-700 bg-slate-950 px-3 text-sm" /></>}
       </div>{isCatalog && <p className="text-xs text-amber-300">{t('knowledgeOps.enqueue.catalogWarning')}</p>}<button onClick={() => void enqueue()} disabled={busyJob === 'enqueue' || !canEnqueue} className="flex min-h-11 items-center gap-2 rounded-lg bg-amber-600 px-4 text-sm font-medium text-white disabled:opacity-50">{busyJob === 'enqueue' ? <Loader2 className="h-4 w-4 animate-spin" /> : <Play className="h-4 w-4" />}{t('knowledgeOps.actions.enqueue')}</button>
       {availableProviders.length === 0 && <p className="text-xs text-amber-300">{t('knowledgeOps.enqueue.disabled')}</p>}
     </section>
