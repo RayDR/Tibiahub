@@ -39,10 +39,10 @@ from app.models.user import User
 from app.models.user_character import UserCharacter
 from app.models.workspace_audit import WorkspaceAudit
 from app.knowledge.adapters import KnowledgeDocumentDTO, KnowledgeNormalizationContext, TibiaWikiItemAdapter, TibiaWikiQuestAdapter
-from app.knowledge.models import KnowledgeCreatureItemDrop, KnowledgeDocument, KnowledgeJob, KnowledgeProvider, KnowledgeQuestRelation
-from app.knowledge.registry import EntityTypeRegistry, ProviderRegistry
+from app.knowledge.models import KnowledgeCreatureItemDrop, KnowledgeDocument, KnowledgeJob, KnowledgeProvider, KnowledgeQuestRelation, KnowledgeRelationship, KnowledgeRelationshipType
+from app.knowledge.registry import EntityTypeRegistry, ProviderRegistry, RelationshipTypeRegistry
 from app.knowledge.schemas import KnowledgeDocumentCreate, KnowledgeEntityCreate
-from app.knowledge.services import EnqueueKnowledgeJob, KnowledgeEntityService, KnowledgeJobService
+from app.knowledge.services import EnqueueKnowledgeJob, KnowledgeEntityService, KnowledgeJobService, KnowledgeGraphService, RelationshipInput
 from app.knowledge.storage import KnowledgeDocumentStore
 from app.knowledge.services.item_relationships import upsert_drop_relationship
 from app.knowledge.services.normalization import KnowledgeNormalizationService
@@ -186,6 +186,7 @@ def test_empty_database_upgrades_to_complete_postgresql_schema(pg_engine):
         "knowledge_external_mappings",
         "knowledge_creature_item_drops", "tibiawiki_items",
         "quest_missions", "knowledge_accesses", "knowledge_quest_relations",
+        "knowledge_relationship_types", "knowledge_relationships",
     }.issubset(tables)
     with pg_engine.connect() as connection:
         assert connection.execute(text("SELECT version_num FROM alembic_version")).scalar_one() == expected_schema_revision()
@@ -223,6 +224,109 @@ def test_empty_database_upgrades_to_complete_postgresql_schema(pg_engine):
         ).one()
         assert provider_enabled is False and provider_health == "disabled"
         assert supported_entities == ["creature", "item", "quest"]
+
+
+def test_graph_schema_registry_dedup_inverse_and_resolution_on_postgresql(pg_session):
+    EntityTypeRegistry.register_initial(pg_session)
+    ProviderRegistry.register_initial(pg_session)
+    RelationshipTypeRegistry.register_initial(pg_session)
+    creature = KnowledgeEntityService.create(pg_session, KnowledgeEntityCreate(
+        entity_type="creature", canonical_name="Postgres Demon", language_neutral_id="creature:postgres-demon",
+    ))
+    item = KnowledgeEntityService.create(pg_session, KnowledgeEntityCreate(
+        entity_type="item", canonical_name="Postgres Horn", language_neutral_id="item:postgres-horn",
+    ))
+    first = KnowledgeGraphService.upsert(pg_session, RelationshipInput(
+        source_entity_id=creature.uuid, relationship_type="drops", target_entity_id=item.uuid,
+        source_provider_id="tibiawiki",
+    ))
+    second = KnowledgeGraphService.upsert(pg_session, RelationshipInput(
+        source_entity_id=creature.uuid, relationship_type="drops", target_entity_id=item.uuid,
+        source_provider_id="tibiawiki",
+    ))
+    assert first.created and not second.created
+    assert pg_session.query(KnowledgeRelationship).count() == 1
+    assert pg_session.get(KnowledgeRelationshipType, "drops").inverse_code == "dropped_by"
+    assert KnowledgeGraphService.incoming(pg_session, item.uuid)[0].target_entity_id == creature.uuid
+    unresolved = KnowledgeGraphService.upsert(pg_session, RelationshipInput(
+        source_entity_id=creature.uuid, relationship_type="drops", target_entity_type="item",
+        unresolved_name="Postgres Horn Variant", resolution_state="ambiguous", confidence="low",
+        source_provider_id="tibiawiki",
+    )).relationship
+    admin = _user(pg_session, "graph_pg_admin")
+    resolved = KnowledgeGraphService.resolve_reference(
+        pg_session, unresolved, item.uuid, admin_id=admin.id, reason="Existing exact catalog entity",
+    )
+    pg_session.commit()
+    assert unresolved.is_current is False and unresolved.superseded_by_id == resolved.id
+    assert resolved.confidence == "verified"
+
+
+def test_graph_migration_bridges_legacy_facts_once_without_inverse_rows(pg_engine):
+    test_url = _test_url()
+    environment = os.environ.copy()
+    environment.update(APP_ENV="test", DATABASE_URL=test_url)
+    subprocess.run(
+        ["venv/bin/alembic", "downgrade", "knowledge_quest_20260724"],
+        cwd=BACKEND_ROOT, env=environment, check=True, capture_output=True, text=True,
+    )
+    # Other PostgreSQL tests intentionally truncate seed rows between cases;
+    # recreate the pre-graph registry state that a real upgraded database has.
+    with Session(pg_engine) as registry_session:
+        EntityTypeRegistry.register_initial(registry_session)
+        ProviderRegistry.register_initial(registry_session)
+        registry_session.commit()
+    creature_id, item_id, quest_id = uuid4(), uuid4(), uuid4()
+    drop_id, quest_relation_id = uuid4(), uuid4()
+    try:
+        with pg_engine.begin() as connection:
+            connection.execute(text("""
+                INSERT INTO knowledge_entities (uuid, entity_type, canonical_name, slug, language_neutral_id)
+                VALUES (:creature, 'creature', 'Bridge Demon', 'bridge-demon', 'creature:bridge-demon'),
+                       (:item, 'item', 'Bridge Horn', 'bridge-horn', 'item:bridge-horn'),
+                       (:quest, 'quest', 'Bridge Quest', 'bridge-quest', 'quest:bridge-quest')
+            """), {"creature": creature_id, "item": item_id, "quest": quest_id})
+            connection.execute(text("""
+                INSERT INTO knowledge_creature_item_drops
+                    (id, provider_id, creature_entity_uuid, item_entity_uuid, creature_name, item_name,
+                     normalized_creature_name, normalized_item_name, resolution_status, confidence,
+                     source_document_ids, source_directions, metadata)
+                VALUES (:id, 'tibiawiki', :creature, :item, 'Bridge Demon', 'Bridge Horn',
+                        'bridge demon', 'bridge horn', 'resolved', 'exact', '[]'::jsonb, '["creature"]'::jsonb, '{}'::jsonb)
+            """), {"id": drop_id, "creature": creature_id, "item": item_id})
+            connection.execute(text("""
+                INSERT INTO knowledge_quest_relations
+                    (id, provider_id, quest_entity_uuid, scope_key, relation_type, target_entity_type,
+                     target_entity_uuid, target_name, normalized_target_name, resolution_status, confidence,
+                     source_document_ids, source_contexts, metadata, protected)
+                VALUES (:id, 'tibiawiki', :quest, 'quest', 'requires_item', 'item', :item,
+                        'Bridge Horn', 'bridge horn', 'resolved', 'exact', '[]'::jsonb, '[]'::jsonb, '{}'::jsonb, false)
+            """), {"id": quest_relation_id, "quest": quest_id, "item": item_id})
+        subprocess.run(
+            ["venv/bin/alembic", "upgrade", "head"], cwd=BACKEND_ROOT,
+            env=environment, check=True, capture_output=True, text=True,
+        )
+        with pg_engine.connect() as connection:
+            facts = connection.execute(text("""
+                SELECT source_entity_id, relationship_type_code, target_entity_id
+                FROM knowledge_relationships ORDER BY relationship_type_code
+            """)).all()
+            assert facts == [(creature_id, "drops", item_id), (quest_id, "requires_item", item_id)]
+            assert connection.execute(text(
+                "SELECT count(*) FROM knowledge_relationships WHERE relationship_type_code IN ('dropped_by','required_by_quest')"
+            )).scalar_one() == 0
+    finally:
+        subprocess.run(
+            ["venv/bin/alembic", "upgrade", "head"], cwd=BACKEND_ROOT,
+            env=environment, check=True, capture_output=True, text=True,
+        )
+        with pg_engine.begin() as connection:
+            connection.execute(text("DELETE FROM knowledge_relationships WHERE source_entity_id IN (:creature, :quest)"),
+                               {"creature": creature_id, "quest": quest_id})
+            connection.execute(text("DELETE FROM knowledge_creature_item_drops WHERE id=:id"), {"id": drop_id})
+            connection.execute(text("DELETE FROM knowledge_quest_relations WHERE id=:id"), {"id": quest_relation_id})
+            connection.execute(text("DELETE FROM knowledge_entities WHERE uuid IN (:creature, :item, :quest)"),
+                               {"creature": creature_id, "item": item_id, "quest": quest_id})
 
 
 def test_knowledge_platform_persists_nested_jsonb_and_provider_neutral_ids(pg_engine, pg_session):
