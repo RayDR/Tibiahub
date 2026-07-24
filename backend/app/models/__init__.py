@@ -14,7 +14,7 @@ from app.models.catalog import Catalog
 from app.models.hunt import HuntCatalog
 from app.models.external_data import (
     APISync, CachedResource, HuntingPlace, Item, SyncJob, SyncJobError,
-    QuestMission, TibiaWikiQuest,
+    QuestMission, TibiaWikiLocation, TibiaWikiNpc, TibiaWikiQuest,
 )
 from app.models.guild import GuildEvent, EventAttendance, Announcement, Recruitment
 from app.models.events import Event, EventParticipant, PublicEventParticipant
@@ -60,6 +60,8 @@ __all__ = [
     "Item",
     "HuntingPlace",
     "TibiaWikiQuest",
+    "TibiaWikiNpc",
+    "TibiaWikiLocation",
     "QuestMission",
     "APISync",
     "SyncJob",

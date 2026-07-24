@@ -46,6 +46,10 @@ class KnowledgeNormalizationService:
                 from app.knowledge.services.quest_normalization import QuestKnowledgeNormalizationService
 
                 applied = QuestKnowledgeNormalizationService.apply(db, result)
+            elif result.candidate is not None and result.candidate.entity_type in {"npc", "location"}:
+                from app.knowledge.services.npc_location_normalization import NpcLocationKnowledgeNormalizationService
+
+                applied = NpcLocationKnowledgeNormalizationService.apply(db, result)
             else:
                 raise ValueError("TibiaWiki normalization requires a supported canonical entity type")
             return AppliedNormalization(

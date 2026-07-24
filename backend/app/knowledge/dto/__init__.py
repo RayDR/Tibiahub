@@ -5,6 +5,9 @@ from app.knowledge.dto.item import ItemCreatureReference, ItemKnowledgeDTO, Item
 from app.knowledge.dto.quest import (
     QuestAccessReference, QuestItemReference, QuestKnowledgeDTO, QuestMissionDTO, QuestNamedReference,
 )
+from app.knowledge.dto.npc_location import (
+    LocationKnowledgeDTO, NamedKnowledgeReference, NpcKnowledgeDTO, NpcTradeReference,
+)
 
 __all__ = [
     "CreatureKnowledgeDTO",
@@ -17,4 +20,8 @@ __all__ = [
     "QuestKnowledgeDTO",
     "QuestMissionDTO",
     "QuestNamedReference",
+    "LocationKnowledgeDTO",
+    "NamedKnowledgeReference",
+    "NpcKnowledgeDTO",
+    "NpcTradeReference",
 ]
