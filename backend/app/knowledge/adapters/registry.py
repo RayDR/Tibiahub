@@ -5,6 +5,7 @@ from __future__ import annotations
 from app.knowledge.adapters.protocol import KnowledgeProviderAdapter
 from app.knowledge.adapters.reference import ReferenceKnowledgeAdapter
 from app.knowledge.adapters.tibiawiki_creatures import TibiaWikiCreatureAdapter
+from app.knowledge.adapters.tibiawiki_items import TibiaWikiItemAdapter
 
 
 class AdapterNotFoundError(LookupError):
@@ -13,23 +14,29 @@ class AdapterNotFoundError(LookupError):
 
 class KnowledgeAdapterRegistry:
     def __init__(self, adapters: tuple[KnowledgeProviderAdapter, ...] | None = None):
-        configured = adapters if adapters is not None else (ReferenceKnowledgeAdapter(), TibiaWikiCreatureAdapter())
-        self._adapters = {adapter.provider_code: adapter for adapter in configured}
+        configured = adapters if adapters is not None else (
+            ReferenceKnowledgeAdapter(),
+            TibiaWikiCreatureAdapter(),
+            TibiaWikiItemAdapter(),
+        )
+        self._adapters: dict[str, list[KnowledgeProviderAdapter]] = {}
+        for adapter in configured:
+            self._adapters.setdefault(adapter.provider_code, []).append(adapter)
 
     def resolve(self, provider_code: str, job_type: str, entity_type: str | None) -> KnowledgeProviderAdapter:
-        adapter = self._adapters.get(provider_code)
-        if adapter is None or not adapter.supports(job_type, entity_type):
-            raise AdapterNotFoundError("No registered adapter supports this knowledge job")
-        return adapter
+        for adapter in self._adapters.get(provider_code, []):
+            if adapter.supports(job_type, entity_type):
+                return adapter
+        raise AdapterNotFoundError("No registered adapter supports this knowledge job")
 
     def supported_job_types(self, provider_code: str, entity_types: list[str]) -> list[str]:
-        adapter = self._adapters.get(provider_code)
-        if adapter is None:
+        adapters = self._adapters.get(provider_code, [])
+        if not adapters:
             return []
-        candidates = adapter.job_types
         return sorted(
             job_type
-            for job_type in candidates
+            for adapter in adapters
+            for job_type in adapter.job_types
             if any(adapter.supports(job_type, entity_type) for entity_type in entity_types)
         )
 

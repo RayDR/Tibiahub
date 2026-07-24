@@ -20,6 +20,17 @@ from app.knowledge.services.creature_normalization import (
     CreatureIdentityConflictError,
     CreatureKnowledgeNormalizationService,
 )
+from app.knowledge.services.item_normalization import (
+    ItemIdentityConflictError,
+    ItemKnowledgeNormalizationService,
+    ItemNormalizationApplied,
+)
+from app.knowledge.services.item_relationships import (
+    DropRelationshipResult,
+    link_creature_loot,
+    link_item_drops,
+    upsert_drop_relationship,
+)
 
 __all__ = [
     "DuplicateKnowledgeAliasError",
@@ -36,4 +47,11 @@ __all__ = [
     "ProviderUnavailableForJobError",
     "CreatureIdentityConflictError",
     "CreatureKnowledgeNormalizationService",
+    "ItemIdentityConflictError",
+    "ItemKnowledgeNormalizationService",
+    "ItemNormalizationApplied",
+    "DropRelationshipResult",
+    "link_creature_loot",
+    "link_item_drops",
+    "upsert_drop_relationship",
 ]

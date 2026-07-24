@@ -39,6 +39,7 @@ from app.knowledge.models import (
     KnowledgeEntityType, KnowledgeProvider, KnowledgeSearchMetadata,
     KnowledgeJob, KnowledgeJobAttempt, KnowledgeProviderCursor, KnowledgeWorkerHeartbeat,
     KnowledgeExternalMapping,
+    KnowledgeCreatureItemDrop,
 )
 
 __all__ = [
@@ -98,4 +99,5 @@ __all__ = [
     "KnowledgeDomainEvent",
     "KnowledgeJob", "KnowledgeJobAttempt", "KnowledgeProviderCursor", "KnowledgeWorkerHeartbeat",
     "KnowledgeExternalMapping",
+    "KnowledgeCreatureItemDrop",
 ]

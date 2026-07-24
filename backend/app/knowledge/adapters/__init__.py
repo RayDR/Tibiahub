@@ -19,6 +19,11 @@ from app.knowledge.adapters.tibiawiki_creatures import (
     TibiaWikiCreatureAdapter,
     TibiaWikiCreatureClient,
 )
+from app.knowledge.adapters.tibiawiki_items import (
+    HttpTibiaWikiItemClient,
+    TibiaWikiItemAdapter,
+    TibiaWikiItemClient,
+)
 
 __all__ = [
     "AdapterNotFoundError",
@@ -37,4 +42,7 @@ __all__ = [
     "HttpTibiaWikiCreatureClient",
     "TibiaWikiCreatureAdapter",
     "TibiaWikiCreatureClient",
+    "HttpTibiaWikiItemClient",
+    "TibiaWikiItemAdapter",
+    "TibiaWikiItemClient",
 ]
