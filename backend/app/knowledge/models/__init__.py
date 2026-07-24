@@ -21,6 +21,7 @@ from app.knowledge.models.jobs import (
 from app.knowledge.models.mappings import KnowledgeExternalMapping
 from app.knowledge.models.relationships import KnowledgeCreatureItemDrop
 from app.knowledge.models.quest_relationships import KnowledgeAccess, KnowledgeQuestRelation
+from app.knowledge.models.graph import KnowledgeRelationship, KnowledgeRelationshipType
 
 __all__ = [
     "KnowledgeDocument",
@@ -38,6 +39,8 @@ __all__ = [
     "KnowledgeCreatureItemDrop",
     "KnowledgeAccess",
     "KnowledgeQuestRelation",
+    "KnowledgeRelationship",
+    "KnowledgeRelationshipType",
     "ACTIVE_KNOWLEDGE_JOB_STATES",
     "KNOWLEDGE_JOB_STATES",
     "KNOWLEDGE_JOB_TRIGGERS",

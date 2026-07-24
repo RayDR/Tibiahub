@@ -9,7 +9,7 @@ from sqlalchemy import or_
 from sqlalchemy.orm import Session
 
 from app.db.database import get_db
-from app.knowledge.models import KnowledgeQuestRelation
+from app.knowledge.services import KnowledgeGraphService
 from app.models.creature import Creature
 from app.models.external_data import TibiaWikiQuest
 from app.schemas import QuestDetail, QuestRelatedCreature, QuestSearchResult
@@ -99,21 +99,24 @@ def get_quest_detail(identifier: str, db: Session = Depends(get_db)):
     relations = []
     related_creatures = []
     if quest.knowledge_entity_id:
-        relation_rows = db.query(KnowledgeQuestRelation).filter_by(quest_entity_uuid=quest.knowledge_entity_id).order_by(
-            KnowledgeQuestRelation.scope_key, KnowledgeQuestRelation.relation_type,
-            KnowledgeQuestRelation.normalized_target_name,
-        ).all()
+        relation_rows = KnowledgeGraphService.outgoing(db, quest.knowledge_entity_id)
         for relation in relation_rows:
+            relation_type = {
+                "prerequisite_for": "unlocks_quest",
+                "references_npc": "involves_npc",
+                "mission_references_npc": "involves_npc",
+            }.get(relation.relationship_type, relation.relationship_type.removeprefix("mission_"))
+            mission_id = relation.source_scope.removeprefix("mission:") if relation.source_scope.startswith("mission:") else None
             relations.append({
-                "relation_type": relation.relation_type,
-                "target_entity_type": relation.target_entity_type,
+                "relation_type": relation_type,
+                "target_entity_type": relation.target_type,
                 "target_name": relation.target_name,
-                "resolution_status": relation.resolution_status,
-                "target_slug": relation.target_entity.slug if relation.target_entity else None,
-                "mission_id": relation.mission_id,
+                "resolution_status": relation.resolution_state,
+                "target_slug": relation.target_slug,
+                "mission_id": mission_id,
             })
-            if relation.target_entity_uuid and relation.target_entity_type in {"creature", "boss"}:
-                creature = db.query(Creature).filter_by(knowledge_entity_id=relation.target_entity_uuid).first()
+            if relation.target_entity_id and relation.target_type in {"creature", "boss"}:
+                creature = db.query(Creature).filter_by(knowledge_entity_id=relation.target_entity_id).first()
                 if creature and all(item.creature_id != creature.id for item in related_creatures):
                     related_creatures.append(QuestRelatedCreature(
                         creature_id=creature.id, creature_name=creature.name, creature_slug=creature.slug,

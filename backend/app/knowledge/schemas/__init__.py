@@ -11,6 +11,14 @@ from app.knowledge.schemas.admin import (
     KnowledgeProviderResponse,
     KnowledgeWorkerResponse,
 )
+from app.knowledge.schemas.graph import (
+    KnowledgeGraphReviewItem,
+    KnowledgeGraphReviewPage,
+    KnowledgeProvenanceResponse,
+    KnowledgeRelationshipAction,
+    KnowledgeRelationshipPage,
+    KnowledgeRelationshipResponse,
+)
 
 __all__ = [
     "KnowledgeDocumentCreate",
@@ -23,4 +31,10 @@ __all__ = [
     "KnowledgeJobResponse",
     "KnowledgeProviderResponse",
     "KnowledgeWorkerResponse",
+    "KnowledgeGraphReviewItem",
+    "KnowledgeGraphReviewPage",
+    "KnowledgeProvenanceResponse",
+    "KnowledgeRelationshipAction",
+    "KnowledgeRelationshipPage",
+    "KnowledgeRelationshipResponse",
 ]

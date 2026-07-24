@@ -41,6 +41,7 @@ from app.knowledge.models import (
     KnowledgeExternalMapping,
     KnowledgeCreatureItemDrop,
     KnowledgeAccess, KnowledgeQuestRelation,
+    KnowledgeRelationship, KnowledgeRelationshipType,
 )
 
 __all__ = [
@@ -103,4 +104,5 @@ __all__ = [
     "KnowledgeExternalMapping",
     "KnowledgeCreatureItemDrop",
     "KnowledgeAccess", "KnowledgeQuestRelation",
+    "KnowledgeRelationship", "KnowledgeRelationshipType",
 ]

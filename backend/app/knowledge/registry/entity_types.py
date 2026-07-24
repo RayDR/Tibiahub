@@ -33,6 +33,7 @@ INITIAL_ENTITY_TYPES = (
     EntityTypeDefinition("access", "Access"),
     EntityTypeDefinition("area", "Area"),
     EntityTypeDefinition("town", "Town"),
+    EntityTypeDefinition("location", "Location"),
 )
 
 

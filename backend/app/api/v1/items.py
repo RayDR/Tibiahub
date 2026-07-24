@@ -18,7 +18,7 @@ from app.schemas import ItemDetail, ItemDropCreature, ItemSearchResult
 from app.services.entity_metadata_service import EntityMetadataService
 from app.services import media_asset_service as media_svc
 from app.services.text_utils import normalize_search_text
-from app.knowledge.models import KnowledgeCreatureItemDrop
+from app.knowledge.services import KnowledgeGraphService
 
 router = APIRouter(prefix="/items", tags=["items"])
 
@@ -170,20 +170,20 @@ def _hunt_zones(creature: Creature | None) -> list[dict]:
 
 
 def _canonical_item_drops(db: Session, item: ExternalItemModel) -> list[ItemDropCreature]:
-    relationships = (
-        db.query(KnowledgeCreatureItemDrop)
-        .filter(KnowledgeCreatureItemDrop.item_entity_uuid == item.knowledge_entity_id)
-        .order_by(KnowledgeCreatureItemDrop.creature_name.asc())
-        .all()
-    )
+    if item.knowledge_entity_id is None:
+        return []
+    relationships = [
+        *KnowledgeGraphService.incoming(db, item.knowledge_entity_id, relationship_type="dropped_by"),
+        *KnowledgeGraphService.outgoing(db, item.knowledge_entity_id, relationship_type="dropped_by"),
+    ]
     drops: list[ItemDropCreature] = []
     for relationship in relationships:
         creature = None
-        if relationship.creature_entity_uuid is not None:
+        if relationship.target_entity_id is not None:
             creature = (
                 db.query(Creature)
                 .options(joinedload(Creature.spawn_locations).joinedload(SpawnLocation.hunt_zone))
-                .filter(Creature.knowledge_entity_id == relationship.creature_entity_uuid)
+                .filter(Creature.knowledge_entity_id == relationship.target_entity_id)
                 .first()
             )
         legacy = None
@@ -199,15 +199,15 @@ def _canonical_item_drops(db: Session, item: ExternalItemModel) -> list[ItemDrop
         drops.append(
             ItemDropCreature(
                 creature_id=creature.id if creature else None,
-                creature_name=creature.name if creature else relationship.creature_name,
+                creature_name=creature.name if creature else relationship.target_name,
                 creature_slug=creature.slug if creature else None,
                 chance=legacy.percentage if legacy else None,
                 rarity=legacy.rarity if legacy else None,
                 hunt_zones=_hunt_zones(creature),
-                relationship_id=relationship.id,
-                knowledge_entity_id=relationship.creature_entity_uuid,
-                resolution_status=relationship.resolution_status,
-                source_provider=relationship.provider_id,
+                relationship_id=relationship.relationship_id,
+                knowledge_entity_id=relationship.target_entity_id,
+                resolution_status=relationship.resolution_state,
+                source_provider=relationship.contributing_providers[0] if relationship.contributing_providers else None,
             )
         )
     return drops

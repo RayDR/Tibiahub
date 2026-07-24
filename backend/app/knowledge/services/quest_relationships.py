@@ -13,6 +13,7 @@ from app.knowledge.models import KnowledgeAccess, KnowledgeEntity, KnowledgeQues
 from app.knowledge.schemas import KnowledgeEntityCreate
 from app.knowledge.services.entities import KnowledgeEntityService
 from app.knowledge.services.item_relationships import exact_entity_candidates
+from app.knowledge.services.graph import KnowledgeGraphService, RelationshipInput
 from app.models import Creature
 from app.services.text_utils import slugify
 
@@ -150,6 +151,37 @@ def upsert_quest_relation(
         row.resolution_status = status
         row.confidence = "exact"
         row.relation_metadata = {"resolution_policy": "exact_name_or_alias_only"}
+    graph_type = {
+        "unlocks_quest": "prerequisite_for",
+        "involves_npc": "references_npc",
+    }.get(relation_type, relation_type)
+    if mission_id is not None:
+        graph_type = {
+            "requires_item": "mission_requires_item",
+            "rewards_item": "mission_rewards_item",
+            "involves_creature": "mission_involves_creature",
+            "involves_npc": "mission_references_npc",
+            "occurs_at_location": "mission_occurs_at_location",
+        }.get(relation_type, graph_type)
+    graph_target = db.get(KnowledgeEntity, row.target_entity_uuid) if row.target_entity_uuid else None
+    graph_target_type = graph_target.entity_type if graph_target is not None else target_entity_type
+    candidate_type = "creature" if target_entity_type == "boss" else target_entity_type
+    candidates = exact_entity_candidates(db, candidate_type, row.target_name) if row.resolution_status == "ambiguous" else []
+    KnowledgeGraphService.upsert(db, RelationshipInput(
+        source_entity_id=quest_entity_uuid,
+        source_scope=f"mission:{mission_id}" if mission_id else "quest",
+        relationship_type=graph_type,
+        target_entity_id=row.target_entity_uuid if row.resolution_status == "resolved" else None,
+        target_entity_type=graph_target_type,
+        unresolved_name=None if row.resolution_status == "resolved" else row.target_name,
+        resolution_state=row.resolution_status,
+        confidence="verified" if row.protected else "high",
+        source_provider_id=provider_id,
+        source_document_ref=source_document_id,
+        source_context={"context": source_context, "compatibility_table": "knowledge_quest_relations",
+                        "candidate_entity_ids": [str(candidate.uuid) for candidate in candidates]},
+        manual_override=row.protected,
+    ))
     documents = list(row.source_document_ids or [])
     if source_document_id not in documents:
         documents.append(source_document_id)
