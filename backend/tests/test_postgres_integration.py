@@ -30,7 +30,7 @@ from app.db.database import (
     verify_connection_and_schema,
 )
 from app.models.events import Event, EventParticipant
-from app.models.external_data import Item
+from app.models.external_data import Item, QuestMission, TibiaWikiQuest
 from app.models.creature import Creature
 from app.models.guild_member_snapshot import GuildMemberSnapshot
 from app.models.leadership import GuildLeadershipApplication, GuildLeadershipOpening, GuildLeadershipRole
@@ -38,8 +38,8 @@ from app.models.raffle import InternalNotification, Raffle
 from app.models.user import User
 from app.models.user_character import UserCharacter
 from app.models.workspace_audit import WorkspaceAudit
-from app.knowledge.adapters import KnowledgeDocumentDTO, KnowledgeNormalizationContext, TibiaWikiItemAdapter
-from app.knowledge.models import KnowledgeCreatureItemDrop, KnowledgeDocument, KnowledgeJob, KnowledgeProvider
+from app.knowledge.adapters import KnowledgeDocumentDTO, KnowledgeNormalizationContext, TibiaWikiItemAdapter, TibiaWikiQuestAdapter
+from app.knowledge.models import KnowledgeCreatureItemDrop, KnowledgeDocument, KnowledgeJob, KnowledgeProvider, KnowledgeQuestRelation
 from app.knowledge.registry import EntityTypeRegistry, ProviderRegistry
 from app.knowledge.schemas import KnowledgeDocumentCreate, KnowledgeEntityCreate
 from app.knowledge.services import EnqueueKnowledgeJob, KnowledgeEntityService, KnowledgeJobService
@@ -185,6 +185,7 @@ def test_empty_database_upgrades_to_complete_postgresql_schema(pg_engine):
         "workspace_audits", "guild_leadership_openings", "media_assets", "creatures",
         "knowledge_external_mappings",
         "knowledge_creature_item_drops", "tibiawiki_items",
+        "quest_missions", "knowledge_accesses", "knowledge_quest_relations",
     }.issubset(tables)
     with pg_engine.connect() as connection:
         assert connection.execute(text("SELECT version_num FROM alembic_version")).scalar_one() == expected_schema_revision()
@@ -221,7 +222,7 @@ def test_empty_database_upgrades_to_complete_postgresql_schema(pg_engine):
             text("SELECT enabled, health, supports_entities FROM knowledge_providers WHERE provider_id='tibiawiki'")
         ).one()
         assert provider_enabled is False and provider_health == "disabled"
-        assert supported_entities == ["creature", "item"]
+        assert supported_entities == ["creature", "item", "quest"]
 
 
 def test_knowledge_platform_persists_nested_jsonb_and_provider_neutral_ids(pg_engine, pg_session):
@@ -580,6 +581,58 @@ def test_postgresql_concurrent_item_child_enqueue_is_idempotent(pg_engine, pg_se
     assert sum(created for _job_id, created in results) == 1
     pg_session.expire_all()
     assert pg_session.query(KnowledgeJob).filter(KnowledgeJob.parent_job_id == parent.id).count() == 1
+
+
+def test_postgresql_concurrent_quest_child_enqueue_is_idempotent(pg_engine, pg_session):
+    _register_tibiawiki_provider(pg_session)
+    parent = KnowledgeJobService.enqueue(pg_session, EnqueueKnowledgeJob(
+        provider_id="tibiawiki", job_type="quest_catalog", entity_type="quest",
+        scope={"batch_limit": 1}, payload={}, trigger="manual",
+    )).job
+    pg_session.commit()
+    factory = sessionmaker(bind=pg_engine, expire_on_commit=False)
+
+    def enqueue_same_child(_worker_number: int) -> tuple[str, bool]:
+        with factory() as session:
+            result = KnowledgeJobService.enqueue(session, EnqueueKnowledgeJob(
+                provider_id="tibiawiki", job_type="quest_detail", entity_type="quest",
+                payload={"external_id": "700", "page_title": "Explorer Society Quest"},
+                parent_job_id=parent.id, correlation_id=parent.correlation_id, trigger="system",
+            ))
+            session.commit()
+            return str(result.job.id), result.created
+
+    with ThreadPoolExecutor(max_workers=2) as pool:
+        results = list(pool.map(enqueue_same_child, range(2)))
+    assert len({job_id for job_id, _created in results}) == 1
+    assert sum(created for _job_id, created in results) == 1
+    pg_session.expire_all()
+    assert pg_session.query(KnowledgeJob).filter(KnowledgeJob.parent_job_id == parent.id).count() == 1
+
+
+def test_postgresql_quest_fixture_normalizes_missions_and_deduplicates_relations(pg_session):
+    _register_tibiawiki_provider(pg_session)
+    raw = json.loads((Path(__file__).parent / "fixtures" / "tibiawiki_quest_detail.json").read_text(encoding="utf-8"))
+    stored = KnowledgeDocumentStore.persist(pg_session, KnowledgeDocumentCreate(
+        provider_id="tibiawiki", provider_document_id="quest:700", raw_json=raw,
+        metadata={"document_kind": "quest_detail"},
+    ))
+    document = KnowledgeDocumentDTO(
+        provider_code="tibiawiki", provider_document_id="quest:700", raw_json=raw,
+        metadata={"document_kind": "quest_detail"},
+    )
+    normalized = TibiaWikiQuestAdapter().normalize(document, KnowledgeNormalizationContext(
+        job_id=uuid4(), attempt_id=uuid4(), correlation_id=uuid4(),
+        provider_code="tibiawiki", entity_type="quest",
+    ))
+    applied = KnowledgeNormalizationService.apply(pg_session, normalized)
+    KnowledgeNormalizationService.apply(pg_session, normalized)
+    pg_session.commit()
+    quest = pg_session.query(TibiaWikiQuest).one()
+    assert quest.knowledge_entity_id == applied.entity_uuid and quest.data_version == 1
+    assert [mission.sequence for mission in pg_session.query(QuestMission).order_by(QuestMission.sequence)] == [1, 2]
+    assert pg_session.query(KnowledgeQuestRelation).count() == 18
+    assert stored.raw_json["future_envelope_field"] == "retained"
 
 
 def test_postgresql_item_fixture_normalizes_and_relationship_deduplicates(pg_session):

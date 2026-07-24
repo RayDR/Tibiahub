@@ -6,6 +6,7 @@ Note: Quest and Quest models already exist - these are for API synced data
 from sqlalchemy import Column, Integer, String, Text, Float, DateTime, Boolean, ForeignKey, Index, UniqueConstraint, Uuid
 from sqlalchemy.orm import relationship
 from sqlalchemy.sql import func
+from uuid import uuid4
 from app.db.database import Base
 from app.db.types import JSONBType
 
@@ -103,15 +104,34 @@ class HuntingPlace(Base):
 class TibiaWikiQuest(Base):
     """Store quest data from TibiaWiki API"""
     __tablename__ = "tibiawiki_quests"
+    __table_args__ = (
+        UniqueConstraint("source_name", "external_id", name="uq_tibiawiki_quests_source_external"),
+        Index("uq_tibiawiki_quests_knowledge_entity_id", "knowledge_entity_id", unique=True),
+    )
     
     id = Column(Integer, primary_key=True, index=True)
-    name = Column(String(255), unique=True, index=True, nullable=False)
+    name = Column(String(255), index=True, nullable=False)
+    normalized_name = Column(String(255), nullable=True, index=True)
     slug = Column(String(180), nullable=True, index=True)
+    external_id = Column(String(100), nullable=True, index=True)
+    source_name = Column(String(50), nullable=True, index=True)
     description = Column(Text, nullable=True)
+    summary = Column(Text, nullable=True)
     source_url = Column(String(1024), nullable=True)
+    image_url = Column(String(1024), nullable=True)
+    knowledge_entity_id = Column(
+        Uuid(as_uuid=True),
+        ForeignKey("knowledge_entities.uuid", ondelete="SET NULL"),
+        nullable=True,
+    )
+    data_version = Column(Integer, nullable=False, default=1)
+    protected_fields = Column(JSONBType, nullable=False, default=list)
     group_name = Column(String(255), nullable=True)
     parent_page = Column(String(255), nullable=True)
     is_group = Column(Boolean, default=False, nullable=False)
+    quest_type = Column(String(100), nullable=True, index=True)
+    category = Column(String(100), nullable=True, index=True)
+    difficulty = Column(String(100), nullable=True)
     
     # Quest properties
     min_level = Column(Integer, nullable=True)
@@ -121,11 +141,25 @@ class TibiaWikiQuest(Base):
     
     # Quest details
     duration = Column(String(100), nullable=True)  # e.g., "daily", "repeatable", "one-time"
+    premium_required = Column(Boolean, nullable=True, index=True)
+    repeatable = Column(Boolean, nullable=True, index=True)
+    solo_possible = Column(Boolean, nullable=True)
     location = Column(String(255), nullable=True)
     npc = Column(String(255), nullable=True)  # NPC who gives the quest
     rewards = Column(JSONBType, nullable=True)
     requirements = Column(JSONBType, nullable=True)
     related_creatures = Column(JSONBType, nullable=True)
+    starting_npcs = Column(JSONBType, nullable=False, default=list)
+    related_npcs = Column(JSONBType, nullable=False, default=list)
+    required_items = Column(JSONBType, nullable=False, default=list)
+    rewarded_items = Column(JSONBType, nullable=False, default=list)
+    required_quests = Column(JSONBType, nullable=False, default=list)
+    unlocked_quests = Column(JSONBType, nullable=False, default=list)
+    required_creatures = Column(JSONBType, nullable=False, default=list)
+    bosses = Column(JSONBType, nullable=False, default=list)
+    locations = Column(JSONBType, nullable=False, default=list)
+    access_unlocks = Column(JSONBType, nullable=False, default=list)
+    parser_metadata = Column(JSONBType, nullable=False, default=dict)
     last_synced_at = Column(DateTime(timezone=True), nullable=True)
     
     # Full raw data from API
@@ -133,6 +167,48 @@ class TibiaWikiQuest(Base):
     
     created_at = Column(DateTime(timezone=True), server_default=func.now())
     updated_at = Column(DateTime(timezone=True), onupdate=func.now())
+
+    knowledge_entity = relationship("KnowledgeEntity")
+    missions = relationship(
+        "QuestMission",
+        back_populates="quest",
+        cascade="all, delete-orphan",
+        passive_deletes=True,
+        order_by="QuestMission.sequence",
+    )
+
+
+class QuestMission(Base):
+    """Stable, ordered mission normalized from one quest provider document."""
+
+    __tablename__ = "quest_missions"
+    __table_args__ = (
+        UniqueConstraint("quest_id", "provider_id", "identity_key", name="uq_quest_mission_identity"),
+        UniqueConstraint("quest_id", "sequence", name="uq_quest_mission_sequence"),
+        Index("ix_quest_missions_quest_sequence", "quest_id", "sequence"),
+    )
+
+    id = Column(Uuid(as_uuid=True), primary_key=True, default=uuid4)
+    quest_id = Column(Integer, ForeignKey("tibiawiki_quests.id", ondelete="CASCADE"), nullable=False)
+    provider_id = Column(String(64), ForeignKey("knowledge_providers.provider_id", ondelete="RESTRICT"), nullable=False)
+    external_id = Column(String(255), nullable=True)
+    identity_key = Column(String(512), nullable=False)
+    title = Column(String(255), nullable=False)
+    normalized_title = Column(String(255), nullable=False)
+    sequence = Column(Integer, nullable=False)
+    description = Column(Text, nullable=True)
+    objectives = Column(JSONBType, nullable=False, default=list)
+    required_items = Column(JSONBType, nullable=False, default=list)
+    rewarded_items = Column(JSONBType, nullable=False, default=list)
+    related_npcs = Column(JSONBType, nullable=False, default=list)
+    related_creatures = Column(JSONBType, nullable=False, default=list)
+    locations = Column(JSONBType, nullable=False, default=list)
+    supplied_fields = Column(JSONBType, nullable=False, default=list)
+    protected_fields = Column(JSONBType, nullable=False, default=list)
+    created_at = Column(DateTime(timezone=True), nullable=False, server_default=func.now())
+    updated_at = Column(DateTime(timezone=True), nullable=False, server_default=func.now(), onupdate=func.now())
+
+    quest = relationship("TibiaWikiQuest", back_populates="missions")
 
 class APISync(Base):
     """Track API synchronization logs and progress"""

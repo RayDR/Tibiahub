@@ -14,7 +14,7 @@ from app.models.catalog import Catalog
 from app.models.hunt import HuntCatalog
 from app.models.external_data import (
     APISync, CachedResource, HuntingPlace, Item, SyncJob, SyncJobError,
-    TibiaWikiQuest,
+    QuestMission, TibiaWikiQuest,
 )
 from app.models.guild import GuildEvent, EventAttendance, Announcement, Recruitment
 from app.models.events import Event, EventParticipant, PublicEventParticipant
@@ -40,6 +40,7 @@ from app.knowledge.models import (
     KnowledgeJob, KnowledgeJobAttempt, KnowledgeProviderCursor, KnowledgeWorkerHeartbeat,
     KnowledgeExternalMapping,
     KnowledgeCreatureItemDrop,
+    KnowledgeAccess, KnowledgeQuestRelation,
 )
 
 __all__ = [
@@ -58,6 +59,7 @@ __all__ = [
     "Item",
     "HuntingPlace",
     "TibiaWikiQuest",
+    "QuestMission",
     "APISync",
     "SyncJob",
     "SyncJobError",
@@ -100,4 +102,5 @@ __all__ = [
     "KnowledgeJob", "KnowledgeJobAttempt", "KnowledgeProviderCursor", "KnowledgeWorkerHeartbeat",
     "KnowledgeExternalMapping",
     "KnowledgeCreatureItemDrop",
+    "KnowledgeAccess", "KnowledgeQuestRelation",
 ]

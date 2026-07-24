@@ -163,7 +163,7 @@ export const itemsApi = {
 };
 
 export const questsApi = {
-  list: async (params?: { skip?: number; limit?: number; include_groups?: boolean }, signal?: AbortSignal): Promise<QuestSearchResult[]> => {
+  list: async (params?: { skip?: number; limit?: number; include_groups?: boolean; category?: string; level?: number; premium?: boolean; repeatable?: boolean }, signal?: AbortSignal): Promise<QuestSearchResult[]> => {
     const response = await api.get('/quests/', { params, signal });
     return response.data;
   },
@@ -178,7 +178,7 @@ export const questsApi = {
     return response.data;
   },
 
-  getById: async (id: number, signal?: AbortSignal): Promise<QuestDetail> => {
+  getById: async (id: number | string, signal?: AbortSignal): Promise<QuestDetail> => {
     const response = await api.get(`/quests/${id}`, { signal });
     return response.data;
   },

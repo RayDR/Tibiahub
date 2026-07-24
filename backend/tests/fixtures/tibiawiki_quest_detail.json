@@ -1,0 +1,12 @@
+{
+  "parse": {
+    "title": "Explorer Society Quest",
+    "pageid": 700,
+    "wikitext": {"*": "{{Infobox Quest\n|name=Explorer Society Quest\n|questtype=Access\n|category=Exploration\n|difficulty=Medium\n|duration=Long\n|level=50\n|maxlevel=200\n|experience=10000\n|premium=yes\n|repeatable=no\n|solopossible=yes\n|description=Join the Explorer Society and complete its expeditions.\n|summary=Earn rank and reach distant expedition sites.\n|questgiver=[[Angus]]\n|relatednpcs=[[Wyrdin]]\n|requireditems=2x [[Rope]], [[Shovel]]\n|rewards=100x [[Gold Coin]], [[Explorer Brooch]]\n|requiredquests=[[The Beginning Quest]]\n|unlockedquests=[[Calassa Quest]]\n|creatures=[[Demon]]\n|bosses=[[Ferumbras]]\n|locations=[[Port Hope]]\n|access=[[Calassa Access]]\n|image=Explorer Society Badge.gif\n}}\n== Missions ==\n=== Mission 1: Joining the Explorers ===\nMeet Angus and ask to join.\n* Obtain a recommendation.\nRequired Items: [[Rope]]\nNPC: [[Angus]]\nLocation: [[Port Hope]]\n=== Mission 2: The Calassa Expedition ===\nTravel to the underwater ruins.\n* Defeat the guardians.\nRewards: [[Explorer Brooch]]\nCreatures: [[Demon]]\nLocation: [[Calassa]]\n== Historical Notes ==\nThis source section is intentionally retained as sanitized parser metadata."},
+    "links": [
+      {"ns": 0, "*": "Angus"}, {"ns": 0, "*": "Rope"},
+      {"ns": 0, "*": "The Beginning Quest"}, {"ns": 0, "*": "Calassa Access"}
+    ]
+  },
+  "future_envelope_field": "retained"
+}
