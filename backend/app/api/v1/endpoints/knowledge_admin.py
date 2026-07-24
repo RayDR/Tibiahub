@@ -15,7 +15,9 @@ from app.knowledge.models import (
     KNOWLEDGE_JOB_STATES,
     KNOWLEDGE_JOB_TRIGGERS,
     KnowledgeJob,
+    KnowledgeEntity,
     KnowledgeProvider,
+    KnowledgeRelationship,
     KnowledgeWorkerHeartbeat,
 )
 from app.knowledge.schemas import (
@@ -27,6 +29,10 @@ from app.knowledge.schemas import (
     KnowledgeJobResponse,
     KnowledgeProviderResponse,
     KnowledgeWorkerResponse,
+    KnowledgeGraphReviewItem,
+    KnowledgeGraphReviewPage,
+    KnowledgeProvenanceResponse,
+    KnowledgeRelationshipAction,
 )
 from app.knowledge.services import (
     CompletedJobRecreationError,
@@ -34,8 +40,10 @@ from app.knowledge.services import (
     KnowledgeJobConflictError,
     KnowledgeJobNotFoundError,
     KnowledgeJobService,
+    KnowledgeGraphService,
     ProviderUnavailableForJobError,
 )
+from app.knowledge.registry import RelationshipTypeRegistry
 from app.models.user import User
 from app.models.workspace_audit import WorkspaceAudit
 
@@ -107,6 +115,140 @@ def _audit(db: Session, admin: User, action: str, job: KnowledgeJob, metadata: d
             safe_metadata={"provider_id": job.provider_id, "job_type": job.job_type, **(metadata or {})},
         )
     )
+
+
+def _relationship_or_404(db: Session, relationship_id: UUID) -> KnowledgeRelationship:
+    relationship = db.get(KnowledgeRelationship, relationship_id)
+    if relationship is None:
+        raise HTTPException(status_code=404, detail={"code": "knowledge_relationship_not_found"})
+    return relationship
+
+
+def _relationship_audit(db: Session, admin: User, action: str, relationship: KnowledgeRelationship) -> None:
+    db.add(WorkspaceAudit(
+        actor_id=admin.id, workspace_type="admin", action=action,
+        target_type="knowledge_relationship", target_id=str(relationship.id), assisted=False,
+        safe_metadata={"relationship_type": relationship.relationship_type_code,
+                       "resolution_state": relationship.resolution_state},
+    ))
+
+
+def _review_item(db: Session, relationship: KnowledgeRelationship) -> KnowledgeGraphReviewItem:
+    candidates = []
+    for raw_id in (relationship.source_context or {}).get("candidate_entity_ids", []):
+        try:
+            entity = db.get(KnowledgeEntity, UUID(str(raw_id)))
+        except (TypeError, ValueError):
+            entity = None
+        try:
+            valid = bool(entity and RelationshipTypeRegistry.validate(
+                db, relationship.relationship_type_code,
+                relationship.source_entity.entity_type, entity.entity_type,
+            ))
+        except ValueError:
+            valid = False
+        if valid:
+            candidates.append({"id": str(entity.uuid), "name": entity.canonical_name,
+                               "type": entity.entity_type, "slug": entity.slug or ""})
+    return KnowledgeGraphReviewItem(
+        id=relationship.id, source_entity_id=relationship.source_entity_id,
+        source_name=relationship.source_entity.canonical_name,
+        source_type=relationship.source_entity.entity_type, source_scope=relationship.source_scope,
+        relationship_type=relationship.relationship_type_code,
+        target_type=relationship.target_entity_type_id or "unknown",
+        target_name=relationship.target_entity.canonical_name if relationship.target_entity else None,
+        unresolved_name=relationship.unresolved_name,
+        resolution_state=relationship.resolution_state, confidence=relationship.confidence,
+        provider_id=relationship.source_provider_id, document_id=relationship.source_document_id,
+        candidates=candidates, created_at=relationship.created_at,
+    )
+
+
+@router.get("/relationships/review", response_model=KnowledgeGraphReviewPage)
+def review_relationships(
+    resolution_state: str = Query("unresolved", pattern="^(resolved|unresolved|ambiguous)$"),
+    relationship_type: str | None = None, provider_id: str | None = None,
+    skip: int = Query(0, ge=0), limit: int = Query(25, ge=1, le=100),
+    db: Session = Depends(get_db), _admin: User = Depends(get_current_admin_user),
+):
+    query = db.query(KnowledgeRelationship).filter_by(
+        resolution_state=resolution_state, is_current=True,
+    )
+    if relationship_type:
+        query = query.filter_by(relationship_type_code=relationship_type)
+    if provider_id:
+        query = query.filter_by(source_provider_id=provider_id)
+    total = query.count()
+    rows = query.order_by(KnowledgeRelationship.created_at.desc()).offset(skip).limit(limit).all()
+    return KnowledgeGraphReviewPage(items=[_review_item(db, row) for row in rows], total=total, skip=skip, limit=limit)
+
+
+@router.get("/relationships/{relationship_id}/provenance", response_model=KnowledgeProvenanceResponse)
+def relationship_provenance(relationship_id: UUID, db: Session = Depends(get_db),
+                            _admin: User = Depends(get_current_admin_user)):
+    row = _relationship_or_404(db, relationship_id)
+    safe_keys = {"source_document_ref", "direction", "compatibility_table", "reason", "verification_reason"}
+    return KnowledgeProvenanceResponse(
+        relationship_id=row.id, provider_id=row.source_provider_id, document_id=row.source_document_id,
+        job_id=row.source_job_id, confidence=row.confidence, manual_override=row.manual_override,
+        verified_at=row.verified_at, valid_from=row.valid_from, valid_until=row.valid_until,
+        is_current=row.is_current, superseded_by_id=row.superseded_by_id,
+        safe_context={key: value for key, value in (row.source_context or {}).items() if key in safe_keys},
+    )
+
+
+@router.post("/relationships/{relationship_id}/resolve", response_model=KnowledgeGraphReviewItem)
+def resolve_relationship(relationship_id: UUID, payload: KnowledgeRelationshipAction,
+                         db: Session = Depends(get_db), admin: User = Depends(get_current_admin_user)):
+    if payload.target_entity_id is None:
+        raise HTTPException(status_code=400, detail={"code": "knowledge_resolution_target_required"})
+    old = _relationship_or_404(db, relationship_id)
+    try:
+        row = KnowledgeGraphService.resolve_reference(
+            db, old, payload.target_entity_id, admin_id=admin.id, reason=payload.reason,
+        )
+    except ValueError as exc:
+        raise HTTPException(status_code=409, detail={"code": "knowledge_resolution_invalid"}) from exc
+    _relationship_audit(db, admin, "knowledge_relationship_resolved", row)
+    db.commit(); db.refresh(row)
+    return _review_item(db, row)
+
+
+@router.post("/relationships/{relationship_id}/reject", status_code=status.HTTP_204_NO_CONTENT)
+def reject_relationship(relationship_id: UUID, payload: KnowledgeRelationshipAction,
+                        db: Session = Depends(get_db), admin: User = Depends(get_current_admin_user)):
+    row = _relationship_or_404(db, relationship_id)
+    try:
+        KnowledgeGraphService.reject(db, row, admin_id=admin.id, reason=payload.reason)
+    except ValueError as exc:
+        raise HTTPException(status_code=409, detail={"code": "knowledge_relationship_not_current"}) from exc
+    _relationship_audit(db, admin, "knowledge_relationship_rejected", row)
+    db.commit()
+
+
+@router.post("/relationships/{relationship_id}/verify", response_model=KnowledgeGraphReviewItem)
+def verify_relationship(relationship_id: UUID, payload: KnowledgeRelationshipAction,
+                        db: Session = Depends(get_db), admin: User = Depends(get_current_admin_user)):
+    row = _relationship_or_404(db, relationship_id)
+    try:
+        KnowledgeGraphService.verify(db, row, admin_id=admin.id, reason=payload.reason)
+    except ValueError as exc:
+        raise HTTPException(status_code=409, detail={"code": "knowledge_relationship_not_resolved"}) from exc
+    _relationship_audit(db, admin, "knowledge_relationship_verified", row)
+    db.commit(); db.refresh(row)
+    return _review_item(db, row)
+
+
+@router.post("/relationships/{relationship_id}/supersede", status_code=status.HTTP_204_NO_CONTENT)
+def supersede_relationship(relationship_id: UUID, payload: KnowledgeRelationshipAction,
+                           db: Session = Depends(get_db), admin: User = Depends(get_current_admin_user)):
+    row = _relationship_or_404(db, relationship_id)
+    if not row.is_current:
+        raise HTTPException(status_code=409, detail={"code": "knowledge_relationship_not_current"})
+    row.rejection_reason = payload.reason
+    KnowledgeGraphService.supersede(db, row)
+    _relationship_audit(db, admin, "knowledge_relationship_superseded", row)
+    db.commit()
 
 
 @router.get("/jobs", response_model=KnowledgeJobPage)
