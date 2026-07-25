@@ -39,6 +39,12 @@ The curated themes are `default`, `medieval`, `tibia-stone`, `midnight-arcana`, 
 
 Run `npm run check:appearance` to validate sanitization, DOM attributes, versioned persistence, and legacy migration.
 
+## Application and workspace layouts
+
+Stage 3.2 uses `AppShell` for the top navigation, route context, responsive page container, mobile bottom navigation, and footer. Guild and administration areas share `WorkspaceShell`: horizontal snap navigation on phones and tablets becomes a persistent sidebar at desktop widths. `PageHeader` is the sole page/context header contract; `WorkspaceHeader` is a compatibility adapter over it.
+
+Data-heavy screens pair `.responsive-card-list` on mobile with `.responsive-data-table` from 768px onward. Run `npm run check:layouts` to validate the supported 320, 375, 390, 430, 768, 1024, and 1440px contracts, navigation semantics, translated core surfaces, and overflow guards.
+
 ## Foundation tokens
 
 | Group | Tokens |
