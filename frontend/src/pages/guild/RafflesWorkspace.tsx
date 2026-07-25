@@ -158,7 +158,7 @@ export default function RafflesWorkspace({
               <button
                 type="button"
                 onClick={() => setShowCreate((value) => !value)}
-                className="min-h-11 rounded-lg bg-amber-500 px-4 font-semibold text-slate-950"
+                className="min-h-11 rounded-lg bg-primary px-4 font-semibold text-content-inverse"
               >
                 {t("raffle.workspace.create")}
               </button>
@@ -188,7 +188,7 @@ export default function RafflesWorkspace({
           {[0, 1].map((value) => (
             <div
               key={value}
-              className="h-40 animate-pulse rounded-xl bg-slate-900"
+              className="h-40 animate-pulse rounded-xl bg-surface-base"
             />
           ))}
         </div>
@@ -199,7 +199,7 @@ export default function RafflesWorkspace({
           action={
             <button
               onClick={() => void load()}
-              className="min-h-11 rounded-lg border border-slate-700 px-4"
+              className="min-h-11 rounded-lg border border-line px-4"
             >
               {t("raffle.workspace.retry")}
             </button>
@@ -215,13 +215,13 @@ export default function RafflesWorkspace({
             .map((item) => (
               <article
                 key={item.id}
-                className="rounded-xl border border-slate-800 p-4"
+                className="rounded-xl border border-line p-4"
               >
-                <span className="text-xs uppercase text-slate-500">
+                <span className="text-xs uppercase text-content-muted">
                   {t("raffle.workspace.historyLabel")}
                 </span>
                 <h2 className="mt-1 font-semibold">{item.title}</h2>
-                <p className="mt-2 text-sm text-slate-400">
+                <p className="mt-2 text-sm text-content-secondary">
                   {item.scheduled_run_at
                     ? new Date(item.scheduled_run_at).toLocaleDateString()
                     : t("raffle.workspace.unscheduled")}
@@ -229,7 +229,7 @@ export default function RafflesWorkspace({
                 {item.publication_status === "published" && (
                   <Link
                     to={`/raffles/${item.public_code}`}
-                    className="mt-3 inline-flex min-h-11 items-center text-sky-300"
+                    className="mt-3 inline-flex min-h-11 items-center text-info"
                   >
                     {t("raffle.workspace.publicLink")}
                   </Link>
@@ -259,24 +259,24 @@ export default function RafflesWorkspace({
                 return (
                   <article
                     key={item.id}
-                    className="rounded-2xl border border-slate-800 bg-slate-950/40 p-4"
+                    className="rounded-2xl border border-line bg-surface-base/40 p-4"
                   >
                     <div className="flex items-start justify-between gap-3">
                       <div>
                         <div className="flex flex-wrap items-center gap-2">
                           <h2 className="font-semibold">{item.title}</h2>
                           {item.purpose === "test" && (
-                            <span className="rounded-full bg-violet-500/20 px-2 py-1 text-xs text-violet-200">
+                            <span className="rounded-full bg-accent/20 px-2 py-1 text-xs text-accent">
                               {t("raffle.operations.testLabel")}
                             </span>
                           )}
                         </div>
-                        <p className="mt-1 flex items-center gap-2 text-sm text-slate-400">
+                        <p className="mt-1 flex items-center gap-2 text-sm text-content-secondary">
                           <CalendarClock className="h-4 w-4" />
                           <Countdown value={item.scheduled_run_at} />
                         </p>
                       </div>
-                      <span className="rounded-full border border-slate-700 px-2 py-1 text-xs">
+                      <span className="rounded-full border border-line px-2 py-1 text-xs">
                         {t(`raffle.workspace.timeline.${timeline[current]}`)}
                       </span>
                     </div>
@@ -288,12 +288,12 @@ export default function RafflesWorkspace({
                         <span
                           key={stage}
                           title={t(`raffle.workspace.timeline.${stage}`)}
-                          className={`h-2 min-w-3 flex-1 rounded ${index <= current ? "bg-amber-500" : "bg-slate-800"}`}
+                          className={`h-2 min-w-3 flex-1 rounded ${index <= current ? "bg-primary" : "bg-surface"}`}
                         />
                       ))}
                     </div>
                     {item.last_error_summary && (
-                      <p className="mt-3 flex gap-2 text-sm text-red-300">
+                      <p className="mt-3 flex gap-2 text-sm text-danger">
                         <AlertCircle className="h-4 w-4" />
                         {t("raffle.workspace.executionFailed")}
                       </p>
@@ -301,7 +301,7 @@ export default function RafflesWorkspace({
                     {item.status === "open" && !item.capabilities.manage && (
                       <Link
                         to={`/raffles/${item.public_code}`}
-                        className="mt-4 inline-flex min-h-11 items-center rounded-lg border border-emerald-500/40 px-4 text-sm text-emerald-200"
+                        className="mt-4 inline-flex min-h-11 items-center rounded-lg border border-success/40 px-4 text-sm text-success"
                       >
                         {t("raffle.workspace.register")}
                       </Link>
@@ -316,14 +316,14 @@ export default function RafflesWorkspace({
               {modern.map((item) => (
                 <article
                   key={item.id}
-                  className="rounded-xl border border-slate-800 p-4"
+                  className="rounded-xl border border-line p-4"
                 >
-                  <Users className="h-5 w-5 text-sky-300" />
+                  <Users className="h-5 w-5 text-info" />
                   <h2 className="mt-2 font-semibold">{item.title}</h2>
                   <strong className="mt-3 block text-3xl">
                     {item.participant_count}
                   </strong>
-                  <span className="text-sm text-slate-400">
+                  <span className="text-sm text-content-secondary">
                     {t("raffle.workspace.registered")}
                   </span>
                 </article>
@@ -335,7 +335,7 @@ export default function RafflesWorkspace({
               {modern.map((item) => (
                 <article
                   key={item.id}
-                  className="rounded-xl border border-slate-800 p-4"
+                  className="rounded-xl border border-line p-4"
                 >
                   <h2 className="font-semibold">{item.title}</h2>
                   {item.eligibility ? (
@@ -344,27 +344,27 @@ export default function RafflesWorkspace({
                         <strong className="block text-2xl">
                           {item.eligibility.candidate_count}
                         </strong>
-                        <span className="text-xs text-slate-400">
+                        <span className="text-xs text-content-secondary">
                           {t("raffle.workspace.registered")}
                         </span>
                       </div>
                       <div>
-                        <strong className="block text-2xl text-emerald-300">
+                        <strong className="block text-2xl text-success">
                           {item.eligibility.eligible_count}
                         </strong>
-                        <span className="text-xs text-slate-400">
+                        <span className="text-xs text-content-secondary">
                           {t("raffle.workspace.eligible")}
                         </span>
                       </div>
                       <div>
-                        <strong className="block text-2xl text-red-300">
+                        <strong className="block text-2xl text-danger">
                           {item.eligibility.excluded_count}
                         </strong>
-                        <span className="text-xs text-slate-400">
+                        <span className="text-xs text-content-secondary">
                           {t("raffle.workspace.excluded")}
                         </span>
                       </div>
-                      <p className="col-span-3 mt-2 flex items-center justify-center gap-2 text-xs text-slate-400">
+                      <p className="col-span-3 mt-2 flex items-center justify-center gap-2 text-xs text-content-secondary">
                         <LockKeyhole className="h-4 w-4" />
                         {t("raffle.workspace.frozenAt", {
                           value: new Date(
@@ -374,7 +374,7 @@ export default function RafflesWorkspace({
                       </p>
                     </div>
                   ) : (
-                    <p className="mt-3 text-sm text-slate-400">
+                    <p className="mt-3 text-sm text-content-secondary">
                       {t("raffle.workspace.snapshotPending")}
                     </p>
                   )}
@@ -396,14 +396,14 @@ export default function RafflesWorkspace({
               {modern.map((item) => (
                 <article
                   key={item.id}
-                  className="rounded-xl border border-slate-800 p-4"
+                  className="rounded-xl border border-line p-4"
                 >
                   <div className="flex items-center gap-2">
-                    <Trophy className="h-5 w-5 text-amber-400" />
+                    <Trophy className="h-5 w-5 text-primary" />
                     <h2 className="font-semibold">{item.title}</h2>
                   </div>
                   {item.publication_status === "private" ? (
-                    <p className="mt-3 flex items-center gap-2 text-sm text-slate-400">
+                    <p className="mt-3 flex items-center gap-2 text-sm text-content-secondary">
                       <LockKeyhole className="h-4 w-4" />
                       {t("raffle.workspace.privateResult")}
                     </p>
@@ -412,9 +412,9 @@ export default function RafflesWorkspace({
                       {item.winners.map((winner) => (
                         <div
                           key={winner.prize_position}
-                          className="rounded-lg bg-slate-950 p-3"
+                          className="rounded-lg bg-surface-base p-3"
                         >
-                          <span className="text-xs text-slate-400">
+                          <span className="text-xs text-content-secondary">
                             {t(
                               `raffle.workspace.positions.${winner.prize_position}`,
                             )}
@@ -422,10 +422,10 @@ export default function RafflesWorkspace({
                           <strong className="block text-lg">
                             {winner.character_name}
                           </strong>
-                          <span className="text-amber-300">
+                          <span className="text-primary">
                             {winner.amount} {winner.currency}
                           </span>
-                          <small className="mt-1 flex items-center gap-1 text-slate-400">
+                          <small className="mt-1 flex items-center gap-1 text-content-secondary">
                             {winner.delivery_status === "delivered" ? (
                               <CheckCircle2 className="h-3 w-3" />
                             ) : (
@@ -441,7 +441,7 @@ export default function RafflesWorkspace({
                   )}
                   <Link
                     to={`/raffles/${item.public_code}`}
-                    className="mt-3 inline-flex min-h-11 items-center text-sm text-sky-300"
+                    className="mt-3 inline-flex min-h-11 items-center text-sm text-info"
                   >
                     {t("raffle.workspace.publicLink")}
                   </Link>

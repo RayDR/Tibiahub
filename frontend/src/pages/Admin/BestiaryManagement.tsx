@@ -130,12 +130,12 @@ export default function BestiaryManagement() {
 
     return (
         <div className="space-y-4">
-            <div className="bg-slate-900/50 border border-slate-700 rounded-lg p-4">
+            <div className="bg-surface-base/50 border border-line rounded-lg p-4">
                 <div className="flex items-center gap-3 mb-2">
-                    <Database className="w-5 h-5 text-amber-500" />
-                    <h1 className="text-xl font-semibold text-slate-100">Bestiary Management</h1>
+                    <Database className="w-5 h-5 text-primary" />
+                    <h1 className="text-xl font-semibold text-content-primary">Bestiary Management</h1>
                 </div>
-                <p className="text-sm text-slate-400 mb-4">Creature data and image fields. Search and paginate below.</p>
+                <p className="text-sm text-content-secondary mb-4">Creature data and image fields. Search and paginate below.</p>
                 <div className="flex w-full gap-2 md:w-auto">
                     <input
                         type="text"
@@ -148,21 +148,21 @@ export default function BestiaryManagement() {
                             }
                         }}
                         placeholder="Search creature..."
-                        className="w-full rounded-md border border-slate-700 bg-slate-950 px-3 py-2 text-sm text-slate-200 md:w-72"
+                        className="w-full rounded-md border border-line bg-surface-base px-3 py-2 text-sm text-content-primary md:w-72"
                     />
                     <button
                         onClick={handleSearch}
-                        className="rounded-md bg-amber-600 px-3 py-2 text-sm font-medium text-white hover:bg-amber-500"
+                        className="rounded-md bg-primary px-3 py-2 text-sm font-medium text-content-on-primary hover:bg-primary-hover"
                     >
                         Search
                     </button>
                 </div>
             </div>
 
-            <div className="bg-slate-900/50 border border-slate-700 rounded-lg overflow-hidden">
+            <div className="bg-surface-base/50 border border-line rounded-lg overflow-hidden">
                 {/* Pagination header */}
-                <div className="flex items-center justify-between gap-4 px-4 py-3 border-b border-slate-800 bg-slate-950/40">
-                    <div className="text-sm text-slate-400">
+                <div className="flex items-center justify-between gap-4 px-4 py-3 border-b border-line bg-surface-base/40">
+                    <div className="text-sm text-content-secondary">
                         {loadingCreatures ? (
                             <span className="inline-flex items-center gap-1.5"><Loader2 className="w-3.5 h-3.5 animate-spin" /> Loading…</span>
                         ) : (
@@ -170,12 +170,12 @@ export default function BestiaryManagement() {
                         )}
                     </div>
                     <div className="flex items-center gap-3">
-                        <div className="flex items-center gap-1.5 text-sm text-slate-400">
+                        <div className="flex items-center gap-1.5 text-sm text-content-secondary">
                             <span>Per page:</span>
                             <select
                                 value={pageSize}
                                 onChange={(e) => handlePageSizeChange(Number(e.target.value))}
-                                className="rounded border border-slate-700 bg-slate-900 px-2 py-1 text-slate-200 text-xs"
+                                className="rounded border border-line bg-surface-base px-2 py-1 text-content-primary text-xs"
                             >
                                 {PAGE_SIZES.map((s) => (
                                     <option key={s} value={s}>{s}</option>
@@ -186,15 +186,15 @@ export default function BestiaryManagement() {
                             <button
                                 onClick={() => handlePageChange(currentPage - 1)}
                                 disabled={currentPage <= 1 || loadingCreatures}
-                                className="rounded border border-slate-700 p-1 text-slate-400 hover:text-slate-200 disabled:opacity-40"
+                                className="rounded border border-line p-1 text-content-secondary hover:text-content-primary disabled:opacity-40"
                             >
                                 <ChevronLeft className="w-4 h-4" />
                             </button>
-                            <span className="text-xs text-slate-300 px-1">{currentPage} / {totalPages}</span>
+                            <span className="text-xs text-content-secondary px-1">{currentPage} / {totalPages}</span>
                             <button
                                 onClick={() => handlePageChange(currentPage + 1)}
                                 disabled={currentPage >= totalPages || loadingCreatures}
-                                className="rounded border border-slate-700 p-1 text-slate-400 hover:text-slate-200 disabled:opacity-40"
+                                className="rounded border border-line p-1 text-content-secondary hover:text-content-primary disabled:opacity-40"
                             >
                                 <ChevronRight className="w-4 h-4" />
                             </button>
@@ -204,19 +204,19 @@ export default function BestiaryManagement() {
 
                 <div className="overflow-x-auto">
                     <table className="w-full">
-                        <thead className="bg-slate-950/60">
+                        <thead className="bg-surface-base/60">
                             <tr>
-                                <th className="text-left p-3 text-xs font-semibold uppercase tracking-wide text-slate-400">Creature</th>
-                                <th className="text-left p-3 text-xs font-semibold uppercase tracking-wide text-slate-400">Class</th>
-                                <th className="text-left p-3 text-xs font-semibold uppercase tracking-wide text-slate-400">Difficulty</th>
-                                <th className="text-left p-3 text-xs font-semibold uppercase tracking-wide text-slate-400">Status</th>
-                                <th className="text-right p-3 text-xs font-semibold uppercase tracking-wide text-slate-400">Action</th>
+                                <th className="text-left p-3 text-xs font-semibold uppercase tracking-wide text-content-secondary">Creature</th>
+                                <th className="text-left p-3 text-xs font-semibold uppercase tracking-wide text-content-secondary">Class</th>
+                                <th className="text-left p-3 text-xs font-semibold uppercase tracking-wide text-content-secondary">Difficulty</th>
+                                <th className="text-left p-3 text-xs font-semibold uppercase tracking-wide text-content-secondary">Status</th>
+                                <th className="text-right p-3 text-xs font-semibold uppercase tracking-wide text-content-secondary">Action</th>
                             </tr>
                         </thead>
                         <tbody>
                             {loadingCreatures ? (
                                 <tr>
-                                    <td colSpan={5} className="p-6 text-center text-slate-400">
+                                    <td colSpan={5} className="p-6 text-center text-content-secondary">
                                         <span className="inline-flex items-center gap-2">
                                             <Loader2 className="w-4 h-4 animate-spin" />
                                             Loading creatures...
@@ -225,34 +225,34 @@ export default function BestiaryManagement() {
                                 </tr>
                             ) : adminCreatures.length === 0 ? (
                                 <tr>
-                                    <td colSpan={5} className="p-6 text-center text-slate-500">No creatures found.</td>
+                                    <td colSpan={5} className="p-6 text-center text-content-muted">No creatures found.</td>
                                 </tr>
                             ) : adminCreatures.map((creature) => {
                                 const expanded = expandedCreatureId === creature.id;
                                 return (
                                     <Fragment key={creature.id}>
-                                        <tr className="border-t border-slate-800">
-                                            <td className="p-3 text-sm text-slate-100">{creature.name}</td>
-                                            <td className="p-3 text-sm text-slate-300">{creature.classification || 'N/A'}</td>
-                                            <td className="p-3 text-sm text-slate-300">{creature.difficulty || 'N/A'}</td>
+                                        <tr className="border-t border-line">
+                                            <td className="p-3 text-sm text-content-primary">{creature.name}</td>
+                                            <td className="p-3 text-sm text-content-secondary">{creature.classification || 'N/A'}</td>
+                                            <td className="p-3 text-sm text-content-secondary">{creature.difficulty || 'N/A'}</td>
                                             <td className="p-3 text-sm">
                                                 {creature.is_hidden ? (
-                                                    <span className="rounded bg-red-900/40 px-2 py-1 text-xs text-red-300">Hidden</span>
+                                                    <span className="rounded bg-danger/40 px-2 py-1 text-xs text-danger">Hidden</span>
                                                 ) : (
-                                                    <span className="rounded bg-green-900/40 px-2 py-1 text-xs text-green-300">Visible</span>
+                                                    <span className="rounded bg-success/40 px-2 py-1 text-xs text-success">Visible</span>
                                                 )}
                                             </td>
                                             <td className="p-3 text-right">
                                                 <button
                                                     onClick={() => openCreatureEditor(creature)}
-                                                    className="rounded border border-slate-700 px-3 py-1.5 text-xs text-slate-300 hover:border-amber-500/50 hover:text-amber-300"
+                                                    className="rounded border border-line px-3 py-1.5 text-xs text-content-secondary hover:border-primary/50 hover:text-primary"
                                                 >
                                                     {expanded ? 'Close' : 'Edit'}
                                                 </button>
                                             </td>
                                         </tr>
                                         {expanded && (
-                                            <tr className="border-t border-slate-800 bg-slate-950/40">
+                                            <tr className="border-t border-line bg-surface-base/40">
                                                 <td colSpan={5} className="p-4">
                                                     <div className="grid gap-3 md:grid-cols-2 lg:grid-cols-4">
                                                         <input
@@ -260,23 +260,23 @@ export default function BestiaryManagement() {
                                                             value={editingCreatureDraft.name || ''}
                                                             onChange={(e) => setEditingCreatureDraft({ ...editingCreatureDraft, name: e.target.value })}
                                                             placeholder="Name"
-                                                            className="rounded border border-slate-700 bg-slate-900 px-3 py-2 text-sm text-slate-200"
+                                                            className="rounded border border-line bg-surface-base px-3 py-2 text-sm text-content-primary"
                                                         />
                                                         <input
                                                             type="text"
                                                             value={editingCreatureDraft.classification || ''}
                                                             onChange={(e) => setEditingCreatureDraft({ ...editingCreatureDraft, classification: e.target.value })}
                                                             placeholder="Classification"
-                                                            className="rounded border border-slate-700 bg-slate-900 px-3 py-2 text-sm text-slate-200"
+                                                            className="rounded border border-line bg-surface-base px-3 py-2 text-sm text-content-primary"
                                                         />
                                                         <input
                                                             type="text"
                                                             value={editingCreatureDraft.difficulty || ''}
                                                             onChange={(e) => setEditingCreatureDraft({ ...editingCreatureDraft, difficulty: e.target.value })}
                                                             placeholder="Difficulty"
-                                                            className="rounded border border-slate-700 bg-slate-900 px-3 py-2 text-sm text-slate-200"
+                                                            className="rounded border border-line bg-surface-base px-3 py-2 text-sm text-content-primary"
                                                         />
-                                                        <label className="inline-flex items-center gap-2 text-sm text-slate-300">
+                                                        <label className="inline-flex items-center gap-2 text-sm text-content-secondary">
                                                             <input
                                                                 type="checkbox"
                                                                 checked={!!editingCreatureDraft.is_hidden}
@@ -289,23 +289,23 @@ export default function BestiaryManagement() {
                                                             value={editingCreatureDraft.image_alias || ''}
                                                             onChange={(e) => setEditingCreatureDraft({ ...editingCreatureDraft, image_alias: e.target.value })}
                                                             placeholder="Image alias"
-                                                            className="rounded border border-slate-700 bg-slate-900 px-3 py-2 text-sm text-slate-200"
+                                                            className="rounded border border-line bg-surface-base px-3 py-2 text-sm text-content-primary"
                                                         />
                                                         <input
                                                             type="text"
                                                             value={editingCreatureDraft.image_url_override || ''}
                                                             onChange={(e) => setEditingCreatureDraft({ ...editingCreatureDraft, image_url_override: e.target.value })}
                                                             placeholder="Image URL override"
-                                                            className="rounded border border-slate-700 bg-slate-900 px-3 py-2 text-sm text-slate-200"
+                                                            className="rounded border border-line bg-surface-base px-3 py-2 text-sm text-content-primary"
                                                         />
                                                         <input
                                                             type="text"
                                                             value={editingCreatureDraft.image_source_name || ''}
                                                             onChange={(e) => setEditingCreatureDraft({ ...editingCreatureDraft, image_source_name: e.target.value })}
                                                             placeholder="Image source"
-                                                            className="rounded border border-slate-700 bg-slate-900 px-3 py-2 text-sm text-slate-200"
+                                                            className="rounded border border-line bg-surface-base px-3 py-2 text-sm text-content-primary"
                                                         />
-                                                        <label className="inline-flex items-center gap-2 text-sm text-slate-300">
+                                                        <label className="inline-flex items-center gap-2 text-sm text-content-secondary">
                                                             <input
                                                                 type="checkbox"
                                                                 checked={!!editingCreatureDraft.image_locked}
@@ -317,13 +317,13 @@ export default function BestiaryManagement() {
                                                     <div className="mt-4 flex flex-wrap gap-2">
                                                         <button
                                                             onClick={() => void saveCreatureEditor(creature.id, false)}
-                                                            className="rounded bg-emerald-600 px-3 py-2 text-xs font-medium text-white hover:bg-emerald-500"
+                                                            className="rounded bg-success px-3 py-2 text-xs font-medium text-content-on-primary hover:bg-success-hover"
                                                         >
                                                             Save changes
                                                         </button>
                                                         <button
                                                             onClick={() => void saveCreatureEditor(creature.id, true)}
-                                                            className="rounded bg-amber-600 px-3 py-2 text-xs font-medium text-white hover:bg-amber-500"
+                                                            className="rounded bg-primary px-3 py-2 text-xs font-medium text-content-on-primary hover:bg-primary-hover"
                                                         >
                                                             Save + Clear local image cache
                                                         </button>
@@ -340,16 +340,16 @@ export default function BestiaryManagement() {
 
                 {/* Pagination footer */}
                 {totalPages > 1 && !loadingCreatures && (
-                    <div className="flex items-center justify-center gap-1 px-4 py-3 border-t border-slate-800 bg-slate-950/40">
+                    <div className="flex items-center justify-center gap-1 px-4 py-3 border-t border-line bg-surface-base/40">
                         <button
                             onClick={() => handlePageChange(1)}
                             disabled={currentPage <= 1}
-                            className="rounded border border-slate-700 px-2 py-1 text-xs text-slate-400 hover:text-slate-200 disabled:opacity-40"
+                            className="rounded border border-line px-2 py-1 text-xs text-content-secondary hover:text-content-primary disabled:opacity-40"
                         >«</button>
                         <button
                             onClick={() => handlePageChange(currentPage - 1)}
                             disabled={currentPage <= 1}
-                            className="rounded border border-slate-700 p-1 text-slate-400 hover:text-slate-200 disabled:opacity-40"
+                            className="rounded border border-line p-1 text-content-secondary hover:text-content-primary disabled:opacity-40"
                         ><ChevronLeft className="w-4 h-4" /></button>
                         {Array.from({ length: Math.min(5, totalPages) }, (_, i) => {
                             const half = 2;
@@ -363,20 +363,20 @@ export default function BestiaryManagement() {
                                 onClick={() => handlePageChange(page)}
                                 className={`rounded border px-2.5 py-1 text-xs ${
                                     page === currentPage
-                                        ? 'border-amber-500 bg-amber-500/20 text-amber-300'
-                                        : 'border-slate-700 text-slate-400 hover:text-slate-200'
+                                        ? 'border-primary bg-primary/20 text-primary'
+                                        : 'border-line text-content-secondary hover:text-content-primary'
                                 }`}
                             >{page}</button>
                         ))}
                         <button
                             onClick={() => handlePageChange(currentPage + 1)}
                             disabled={currentPage >= totalPages}
-                            className="rounded border border-slate-700 p-1 text-slate-400 hover:text-slate-200 disabled:opacity-40"
+                            className="rounded border border-line p-1 text-content-secondary hover:text-content-primary disabled:opacity-40"
                         ><ChevronRight className="w-4 h-4" /></button>
                         <button
                             onClick={() => handlePageChange(totalPages)}
                             disabled={currentPage >= totalPages}
-                            className="rounded border border-slate-700 px-2 py-1 text-xs text-slate-400 hover:text-slate-200 disabled:opacity-40"
+                            className="rounded border border-line px-2 py-1 text-xs text-content-secondary hover:text-content-primary disabled:opacity-40"
                         >»</button>
                     </div>
                 )}

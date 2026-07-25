@@ -6,7 +6,7 @@ import { WorkspaceHeader } from '../components/workspace/WorkspacePrimitives';
 
 export default function AdminLayout() {
     const { t } = useTranslation(); const { user, loading, isAuthenticated } = useAuth(); const location = useLocation();
-    if (loading) return <div className="mt-20 text-center text-[color:var(--color-text-muted)]">{t('workspace.admin.loading')}</div>;
+    if (loading) return <div className="mt-20 text-center text-content-muted">{t('workspace.admin.loading')}</div>;
     if (!isAuthenticated || !user?.is_superuser) return <Navigate to="/guild" replace />;
     const items = [
         { key: 'overview', path: '/admin/overview', icon: Activity }, { key: 'guilds', path: '/admin/guilds', icon: Shield },

@@ -59,12 +59,12 @@ export default function Login() {
         <div className="flex items-center justify-center min-h-[calc(100vh-200px)]">
             <AppCard className="w-full max-w-md p-8 shadow-xl">
                 <div className="text-center mb-8">
-                    <h2 className="text-3xl font-bold text-[color:var(--color-primary)] font-serif tracking-wider">{t('auth.guildAccess')}</h2>
-                    <p className="text-[color:var(--color-text-muted)] mt-2">{t('auth.enterRealm')}</p>
+                    <h2 className="text-3xl font-bold text-primary font-serif tracking-wider">{t('auth.guildAccess')}</h2>
+                    <p className="text-content-muted mt-2">{t('auth.enterRealm')}</p>
                 </div>
 
                 {error && (
-                    <div className="mb-6 p-4 rounded flex items-center gap-3 border border-[color:var(--color-danger)]/50 bg-[color:var(--color-danger)]/20 text-[color:var(--color-text)]">
+                    <div className="mb-6 p-4 rounded flex items-center gap-3 border border-danger/50 bg-danger/20 text-content-primary">
                         <ShieldAlert className="w-5 h-5 flex-shrink-0" />
                         <span className="text-sm">{error}</span>
                     </div>
@@ -72,9 +72,9 @@ export default function Login() {
 
                 <form onSubmit={handleSubmit} className="space-y-6">
                     <div>
-                        <label className="block text-sm font-medium text-[color:var(--color-text)] mb-2">{t('auth.username')}</label>
+                        <label className="block text-sm font-medium text-content-primary mb-2">{t('auth.username')}</label>
                         <div className="relative">
-                            <Users className="absolute left-3 top-1/2 -translate-y-1/2 w-5 h-5 text-[color:var(--color-text-muted)]" />
+                            <Users className="absolute left-3 top-1/2 -translate-y-1/2 w-5 h-5 text-content-muted" />
                             <input
                                 type="text"
                                 value={username}
@@ -87,9 +87,9 @@ export default function Login() {
                     </div>
 
                     <div>
-                        <label className="block text-sm font-medium text-[color:var(--color-text)] mb-2">{t('auth.password')}</label>
+                        <label className="block text-sm font-medium text-content-primary mb-2">{t('auth.password')}</label>
                         <div className="relative">
-                            <KeyRound className="absolute left-3 top-1/2 -translate-y-1/2 w-5 h-5 text-[color:var(--color-text-muted)]" />
+                            <KeyRound className="absolute left-3 top-1/2 -translate-y-1/2 w-5 h-5 text-content-muted" />
                             <input
                                 type="password"
                                 value={password}
@@ -111,14 +111,14 @@ export default function Login() {
                 </form>
 
                 <div className="mt-4 text-center">
-                    <Link to="/reset-password" className="text-sm text-[color:var(--color-primary)] hover:text-[color:var(--color-primary-alt)] font-medium">
+                    <Link to="/reset-password" className="text-sm text-primary hover:text-primary-hover font-medium">
                         Forgot Password?
                     </Link>
                 </div>
 
-                <p className="mt-6 text-center text-[color:var(--color-text-muted)] text-sm">
+                <p className="mt-6 text-center text-content-muted text-sm">
                     {t('auth.noAccount')}{' '}
-                    <Link to="/register" className="text-[color:var(--color-primary)] hover:text-[color:var(--color-primary-alt)] font-medium">
+                    <Link to="/register" className="text-primary hover:text-primary-hover font-medium">
                         {t('auth.joinGuild')}
                     </Link>
                 </p>

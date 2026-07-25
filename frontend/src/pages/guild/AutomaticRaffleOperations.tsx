@@ -299,16 +299,16 @@ export default function AutomaticRaffleOperations({
     <div className="space-y-6">
       {!compact && (
         <header>
-          <h1 className="text-2xl font-bold text-slate-100">
+          <h1 className="text-2xl font-bold text-content-primary">
             {t("raffle.operations.title")}
           </h1>
-          <p className="text-slate-400">{t("raffle.operations.subtitle")}</p>
+          <p className="text-content-secondary">{t("raffle.operations.subtitle")}</p>
         </header>
       )}
       {error && (
         <div
           role="alert"
-          className="rounded-xl border border-red-500/40 bg-red-950/30 p-3 text-red-200"
+          className="rounded-xl border border-danger/40 bg-danger/30 p-3 text-danger"
         >
           {error}
         </div>
@@ -316,12 +316,12 @@ export default function AutomaticRaffleOperations({
       {!compact && (
         <form
           onSubmit={create}
-          className="grid gap-3 rounded-2xl border border-slate-800 bg-slate-900/70 p-5 md:grid-cols-2"
+          className="grid gap-3 rounded-2xl border border-line bg-surface-base/70 p-5 md:grid-cols-2"
         >
           <h2 className="md:col-span-2 flex items-center gap-2 text-lg font-semibold">
             {t("raffle.operations.prepare")}{" "}
             {purpose === "test" && (
-              <span className="rounded-full bg-violet-500/20 px-3 py-1 text-xs text-violet-200">
+              <span className="rounded-full bg-accent/20 px-3 py-1 text-xs text-accent">
                 {t("raffle.operations.testLabel")}
               </span>
             )}
@@ -331,7 +331,7 @@ export default function AutomaticRaffleOperations({
             <select
               value={purpose}
               onChange={(e) => setPurpose(e.target.value as "test" | "real")}
-              className="mt-1 w-full rounded-lg bg-slate-950 p-2"
+              className="mt-1 w-full rounded-lg bg-surface-base p-2"
             >
               <option value="test">{t("raffle.operations.test")}</option>
               <option value="real">{t("raffle.operations.real")}</option>
@@ -343,7 +343,7 @@ export default function AutomaticRaffleOperations({
               value={guild}
               readOnly
               aria-readonly="true"
-              className="mt-1 w-full rounded-lg border border-slate-800 bg-slate-950/60 p-2 text-slate-400"
+              className="mt-1 w-full rounded-lg border border-line bg-surface-base/60 p-2 text-content-secondary"
             />
           </label>
           <label>
@@ -352,7 +352,7 @@ export default function AutomaticRaffleOperations({
               value={title}
               onChange={(e) => setTitle(e.target.value)}
               required
-              className="mt-1 w-full rounded-lg bg-slate-950 p-2"
+              className="mt-1 w-full rounded-lg bg-surface-base p-2"
             />
           </label>
           <label>
@@ -361,7 +361,7 @@ export default function AutomaticRaffleOperations({
               value={timezone}
               onChange={(e) => setTimezone(e.target.value)}
               required
-              className="mt-1 w-full rounded-lg bg-slate-950 p-2"
+              className="mt-1 w-full rounded-lg bg-surface-base p-2"
             />
           </label>
           <label>
@@ -371,7 +371,7 @@ export default function AutomaticRaffleOperations({
               value={schedule}
               onChange={(e) => setSchedule(e.target.value)}
               required
-              className="mt-1 w-full rounded-lg bg-slate-950 p-2"
+              className="mt-1 w-full rounded-lg bg-surface-base p-2"
             />
           </label>
           <label>
@@ -382,10 +382,10 @@ export default function AutomaticRaffleOperations({
               max={30}
               value={eligibilityDays}
               onChange={(e) => setEligibilityDays(Number(e.target.value))}
-              className="mt-1 w-full rounded-lg bg-slate-950 p-2"
+              className="mt-1 w-full rounded-lg bg-surface-base p-2"
             />
           </label>
-          <label className="flex items-center gap-2 rounded-lg border border-slate-800 p-3">
+          <label className="flex items-center gap-2 rounded-lg border border-line p-3">
             <input
               type="checkbox"
               checked={showParticipants}
@@ -393,7 +393,7 @@ export default function AutomaticRaffleOperations({
             />
             {t("raffle.testRun.participantVisibility")}
           </label>
-          <div className="rounded-lg border border-slate-800 p-3 text-sm">
+          <div className="rounded-lg border border-line p-3 text-sm">
             <p>
               {t("raffle.operations.localEquivalent", {
                 value: scheduledLocal,
@@ -405,14 +405,14 @@ export default function AutomaticRaffleOperations({
               })}
             </p>
           </div>
-          <div className="md:col-span-2 rounded-xl border border-amber-500/20 p-3 text-sm text-slate-300">
+          <div className="md:col-span-2 rounded-xl border border-primary/20 p-3 text-sm text-content-secondary">
             {t("raffle.operations.rules")}
           </div>
           <div className="md:col-span-2 grid gap-2 sm:grid-cols-2">
-            <div className="rounded-lg bg-slate-950 p-3">
+            <div className="rounded-lg bg-surface-base p-3">
               {t("raffle.operations.secondPlace")} — 100 TC
             </div>
-            <div className="rounded-lg bg-slate-950 p-3">
+            <div className="rounded-lg bg-surface-base p-3">
               {t("raffle.operations.firstPlace")} — 250 TC
             </div>
           </div>
@@ -434,16 +434,16 @@ export default function AutomaticRaffleOperations({
             />
             {t("raffle.testRun.confirmCreation")}
           </label>
-          <p className="md:col-span-2 text-sm text-slate-400">
+          <p className="md:col-span-2 text-sm text-content-secondary">
             {t("raffle.testRun.deliveryNotice")}
           </p>
           <button
             disabled={busy}
-            className="md:col-span-2 rounded-lg bg-amber-500 p-2 font-bold text-slate-950"
+            className="md:col-span-2 rounded-lg bg-primary p-2 font-bold text-content-inverse"
           >
             {t("raffle.operations.save")}
           </button>
-          <p className="md:col-span-2 text-xs text-slate-500">
+          <p className="md:col-span-2 text-xs text-content-muted">
             {t("raffle.operations.fridayExample")}
           </p>
         </form>
@@ -458,22 +458,22 @@ export default function AutomaticRaffleOperations({
                 setSelectedId(raffle.id);
                 setPreview(null);
               }}
-              className={`block w-full rounded-xl border p-3 text-left ${selectedId === raffle.id ? "border-amber-500" : "border-slate-800"}`}
+              className={`block w-full rounded-xl border p-3 text-left ${selectedId === raffle.id ? "border-primary" : "border-line"}`}
             >
               <span className="font-semibold">{raffle.title}</span>
               {raffle.purpose === "test" && (
-                <span className="ml-2 rounded bg-violet-500/20 px-2 text-xs">
+                <span className="ml-2 rounded bg-accent/20 px-2 text-xs">
                   {t("raffle.operations.testLabel")}
                 </span>
               )}
-              <small className="block text-slate-400">
+              <small className="block text-content-secondary">
                 {t(`raffle.operations.execution.${raffle.execution_state}`)}
               </small>
             </button>
           ))}
         </div>
         {selected && (
-          <div className="space-y-5 rounded-2xl border border-slate-800 p-5">
+          <div className="space-y-5 rounded-2xl border border-line p-5">
             <div className="grid gap-3 sm:grid-cols-3">
               <div>
                 {t("raffle.operations.scheduledLocal")}
@@ -499,7 +499,7 @@ export default function AutomaticRaffleOperations({
               </div>
             </div>
             {selected.purpose === "test" && (
-              <div className="grid gap-2 rounded-xl border border-violet-500/30 p-3 text-sm sm:grid-cols-3">
+              <div className="grid gap-2 rounded-xl border border-accent/30 p-3 text-sm sm:grid-cols-3">
                 <div>
                   {t("raffle.testRun.scheduler")}
                   <strong className="block">
@@ -523,7 +523,7 @@ export default function AutomaticRaffleOperations({
                       `raffle.operations.execution.${selected.execution_state}`,
                     )}
                   </strong>
-                  <span className="text-xs text-slate-500">
+                  <span className="text-xs text-content-muted">
                     {selected.scheduler_job_id ||
                       t("raffle.testRun.notClaimed")}
                   </span>
@@ -531,7 +531,7 @@ export default function AutomaticRaffleOperations({
               </div>
             )}
             {selected.purpose === "test" && (
-              <div className="rounded-xl border border-slate-800 p-3 text-sm">
+              <div className="rounded-xl border border-line p-3 text-sm">
                 <span>
                   {t("raffle.testRun.publicState")}:{" "}
                   <strong>
@@ -541,7 +541,7 @@ export default function AutomaticRaffleOperations({
                   </strong>
                 </span>
                 <a
-                  className="ml-3 text-blue-300 underline"
+                  className="ml-3 text-info underline"
                   href={`/raffles/${selected.public_code}`}
                   target="_blank"
                   rel="noreferrer"
@@ -551,7 +551,7 @@ export default function AutomaticRaffleOperations({
               </div>
             )}
             {selected.last_error_summary && (
-              <div className="rounded-lg border border-red-500/30 p-3">
+              <div className="rounded-lg border border-danger/30 p-3">
                 {t("raffle.operations.lastFailure")}:{" "}
                 {selected.last_error_summary}
               </div>
@@ -564,7 +564,7 @@ export default function AutomaticRaffleOperations({
                     value={retryReason}
                     onChange={(e) => setRetryReason(e.target.value)}
                     placeholder={t("raffle.testRun.retryReason")}
-                    className="min-w-0 flex-1 rounded-lg bg-slate-950 p-2"
+                    className="min-w-0 flex-1 rounded-lg bg-surface-base p-2"
                   />
                   <button
                     onClick={async () => {
@@ -573,7 +573,7 @@ export default function AutomaticRaffleOperations({
                       setRetryReason("");
                       await refreshSelected();
                     }}
-                    className="rounded-lg border border-amber-500/50 px-3 py-2"
+                    className="rounded-lg border border-primary/50 px-3 py-2"
                   >
                     {t("raffle.testRun.retry")}
                   </button>
@@ -584,7 +584,7 @@ export default function AutomaticRaffleOperations({
                 onClick={async () =>
                   setPreview(await raffleApi.previewEligibility(selected.id))
                 }
-                className="rounded-lg border border-slate-700 px-3 py-2"
+                className="rounded-lg border border-line px-3 py-2"
               >
                 {t("raffle.operations.preview")}
               </button>
@@ -592,7 +592,7 @@ export default function AutomaticRaffleOperations({
                 onClick={async () =>
                   setPreview(await raffleApi.freezeEligibility(selected.id))
                 }
-                className="rounded-lg border border-slate-700 px-3 py-2"
+                className="rounded-lg border border-line px-3 py-2"
               >
                 {t("raffle.operations.freeze")}
               </button>
@@ -603,7 +603,7 @@ export default function AutomaticRaffleOperations({
                   value={testCharacter}
                   onChange={(e) => setTestCharacter(e.target.value)}
                   placeholder={t("raffle.operations.testCharacter")}
-                  className="min-w-0 flex-1 rounded-lg bg-slate-950 p-2"
+                  className="min-w-0 flex-1 rounded-lg bg-surface-base p-2"
                 />
                 <button
                   onClick={async () => {
@@ -615,7 +615,7 @@ export default function AutomaticRaffleOperations({
                     setTestCharacter("");
                     await refreshSelected();
                   }}
-                  className="rounded-lg border border-violet-500/50 px-3 py-2"
+                  className="rounded-lg border border-accent/50 px-3 py-2"
                 >
                   {t("raffle.operations.addTestParticipant")}
                 </button>
@@ -631,20 +631,20 @@ export default function AutomaticRaffleOperations({
                     value={overrideReason}
                     onChange={(e) => setOverrideReason(e.target.value)}
                     placeholder={t("raffle.testRun.overrideReason")}
-                    className="w-full rounded-lg bg-slate-950 p-2"
+                    className="w-full rounded-lg bg-surface-base p-2"
                   />
                   {selected.participants.map((participant) => (
                     <div
                       key={participant.id}
-                      className="flex flex-wrap items-center justify-between gap-2 rounded-lg border border-slate-800 p-3"
+                      className="flex flex-wrap items-center justify-between gap-2 rounded-lg border border-line p-3"
                     >
                       <div>
                         <strong>{participant.character_name}</strong>
-                        <span className="ml-2 rounded bg-violet-500/20 px-2 text-xs text-violet-200">
+                        <span className="ml-2 rounded bg-accent/20 px-2 text-xs text-accent">
                           {t("raffle.testRun.testParticipant")}
                         </span>
                         {participant.eligibility_override != null && (
-                          <small className="block text-slate-400">
+                          <small className="block text-content-secondary">
                             {t("raffle.testRun.overrideActive", {
                               value: participant.eligibility_override
                                 ? t("common.yes")
@@ -667,7 +667,7 @@ export default function AutomaticRaffleOperations({
                                 );
                                 await refreshSelected();
                               }}
-                              className="rounded border border-emerald-600/50 px-2 py-1 text-xs"
+                              className="rounded border border-success/50 px-2 py-1 text-xs"
                             >
                               {t("raffle.testRun.forceEligible")}
                             </button>
@@ -682,7 +682,7 @@ export default function AutomaticRaffleOperations({
                                 );
                                 await refreshSelected();
                               }}
-                              className="rounded border border-amber-600/50 px-2 py-1 text-xs"
+                              className="rounded border border-primary/50 px-2 py-1 text-xs"
                             >
                               {t("raffle.testRun.forceExcluded")}
                             </button>
@@ -702,7 +702,7 @@ export default function AutomaticRaffleOperations({
                             );
                             await refreshSelected();
                           }}
-                          className="rounded border border-red-600/50 px-2 py-1 text-xs"
+                          className="rounded border border-danger/50 px-2 py-1 text-xs"
                         >
                           {t("raffle.testRun.removeAssociation")}
                         </button>
@@ -712,7 +712,7 @@ export default function AutomaticRaffleOperations({
                 </div>
               )}
             {preview && (
-              <div className="rounded-xl bg-slate-950 p-4">
+              <div className="rounded-xl bg-surface-base p-4">
                 <p>
                   {t("raffle.operations.eligibleCount", {
                     count: preview.eligible_count,
@@ -722,13 +722,13 @@ export default function AutomaticRaffleOperations({
                     count: preview.excluded_count,
                   })}
                 </p>
-                <p className="text-xs text-slate-400">
+                <p className="text-xs text-content-secondary">
                   {t("raffle.operations.snapshotAt", {
                     value: preview.cutoff_at,
                   })}
                 </p>
                 {stale && (
-                  <p className="text-amber-300">
+                  <p className="text-primary">
                     {t("raffle.operations.staleWarning")}
                   </p>
                 )}
@@ -745,7 +745,7 @@ export default function AutomaticRaffleOperations({
             )}
             {latestRun && (
               <>
-                <div className="rounded-xl border border-blue-500/30 p-3 text-blue-200">
+                <div className="rounded-xl border border-info/30 p-3 text-info">
                   {t("raffle.operations.privateReview")}
                 </div>
                 <AutomaticRaffleDraw
@@ -763,7 +763,7 @@ export default function AutomaticRaffleOperations({
                     return (
                       <div
                         key={result.id}
-                        className="flex flex-wrap items-center justify-between gap-2 rounded-xl border border-slate-800 p-3"
+                        className="flex flex-wrap items-center justify-between gap-2 rounded-xl border border-line p-3"
                       >
                         <div>
                           <span>
@@ -774,30 +774,30 @@ export default function AutomaticRaffleOperations({
                             )}
                           </span>
                           {overdue && (
-                            <strong className="ml-2 text-red-300">
+                            <strong className="ml-2 text-danger">
                               {t("raffle.testRun.overdue")}
                             </strong>
                           )}
-                          <small className="block text-slate-500">
+                          <small className="block text-content-muted">
                             {t("raffle.testRun.deadline")}:{" "}
                             {new Date(
                               result.delivery_deadline_at,
                             ).toLocaleString()}
                           </small>
                           {result.delivered_at && (
-                            <small className="block text-slate-500">
+                            <small className="block text-content-muted">
                               {t("raffle.testRun.deliveredAt")}:{" "}
                               {new Date(result.delivered_at).toLocaleString()} ·{" "}
                               {result.delivered_by_name}
                             </small>
                           )}
                           {result.delivery_note && (
-                            <small className="block text-slate-500">
+                            <small className="block text-content-muted">
                               {t("raffle.testRun.note")}: {result.delivery_note}
                             </small>
                           )}
                           {result.delivery_history && result.delivery_history.length > 0 && (
-                            <details className="mt-2 text-xs text-slate-400">
+                            <details className="mt-2 text-xs text-content-secondary">
                               <summary className="cursor-pointer">{t("raffle.workspace.deliveryHistory")}</summary>
                               {result.delivery_history.map((entry, index) => (
                                 <p key={`${entry.created_at}-${index}`} className="mt-1">
@@ -821,7 +821,7 @@ export default function AutomaticRaffleOperations({
                             );
                             await refreshSelected();
                           }}
-                          className="rounded bg-slate-950 p-2"
+                          className="rounded bg-surface-base p-2"
                         >
                           <option value="pending">
                             {t("raffle.operations.delivery.pending")}
@@ -851,7 +851,7 @@ export default function AutomaticRaffleOperations({
                         }));
                         await refreshSelected();
                       }}
-                      className="rounded-lg bg-emerald-600 px-3 py-2"
+                      className="rounded-lg bg-success px-3 py-2"
                     >
                       {t("raffle.operations.publish")}
                     </button>
@@ -864,13 +864,13 @@ export default function AutomaticRaffleOperations({
                         }));
                         await refreshSelected();
                       }}
-                      className="rounded-lg border border-slate-700 px-3 py-2"
+                      className="rounded-lg border border-line px-3 py-2"
                     >
                       {t("raffle.operations.unpublish")}
                     </button>
                   </div>
                 )}
-                <div className="space-y-2 rounded-xl border border-slate-800 p-4">
+                <div className="space-y-2 rounded-xl border border-line p-4">
                   <h3>{t("raffle.operations.rerunTitle")}</h3>
                   {(["second", "first"] as const).map((position) => (
                     <label key={position} className="mr-4">
@@ -892,7 +892,7 @@ export default function AutomaticRaffleOperations({
                     value={rerunReason}
                     onChange={(e) => setRerunReason(e.target.value)}
                     placeholder={t("raffle.operations.rerunReason")}
-                    className="block w-full rounded bg-slate-950 p-2"
+                    className="block w-full rounded bg-surface-base p-2"
                   />
                   {user?.is_superuser && (
                     <>
@@ -913,18 +913,18 @@ export default function AutomaticRaffleOperations({
                           placeholder={t(
                             "raffle.testRun.deliveredOverrideReason",
                           )}
-                          className="block w-full rounded bg-slate-950 p-2"
+                          className="block w-full rounded bg-surface-base p-2"
                         />
                       )}
                     </>
                   )}
-                  <p className="text-sm text-amber-300">
+                  <p className="text-sm text-primary">
                     {t("raffle.operations.rerunWarning")}
                   </p>
                   <button
                     disabled={busy}
                     onClick={performRerun}
-                    className="rounded bg-amber-500 px-3 py-2 text-slate-950"
+                    className="rounded bg-primary px-3 py-2 text-content-inverse"
                   >
                     {t("raffle.operations.rerun")}
                   </button>
@@ -939,25 +939,25 @@ export default function AutomaticRaffleOperations({
               />
             )}
             {selected.purpose === "test" && (
-              <div className="space-y-2 rounded-xl border border-slate-800 p-4">
+              <div className="space-y-2 rounded-xl border border-line p-4">
                 <h3 className="font-semibold">
                   {t("raffle.testRun.notificationsTitle")}
                 </h3>
                 {raffleNotifications.length === 0 && (
-                  <p className="text-sm text-slate-400">
+                  <p className="text-sm text-content-secondary">
                     {t("raffle.testRun.notificationsEmpty")}
                   </p>
                 )}
                 {raffleNotifications.map((notification) => (
                   <div
                     key={notification.id}
-                    className="flex items-start justify-between gap-3 rounded-lg bg-slate-950 p-3 text-sm"
+                    className="flex items-start justify-between gap-3 rounded-lg bg-surface-base p-3 text-sm"
                   >
                     <div>
                       <strong>
                         {t(notification.title_key, notification.interpolation)}
                       </strong>
-                      <p className="text-slate-400">
+                      <p className="text-content-secondary">
                         {t(
                           notification.message_key,
                           notification.interpolation,
@@ -976,7 +976,7 @@ export default function AutomaticRaffleOperations({
                             ),
                           );
                         }}
-                        className="shrink-0 rounded border border-slate-700 px-2 py-1"
+                        className="shrink-0 rounded border border-line px-2 py-1"
                       >
                         {t("raffle.testRun.markRead")}
                       </button>
@@ -986,18 +986,18 @@ export default function AutomaticRaffleOperations({
               </div>
             )}
             {selected.purpose === "test" && (
-              <div className="space-y-2 rounded-xl border border-red-500/20 p-4">
+              <div className="space-y-2 rounded-xl border border-danger/20 p-4">
                 <h3 className="font-semibold">
                   {t("raffle.testRun.cleanupTitle")}
                 </h3>
-                <p className="text-sm text-slate-400">
+                <p className="text-sm text-content-secondary">
                   {t("raffle.testRun.cleanupWarning")}
                 </p>
                 <input
                   value={cleanupReason}
                   onChange={(e) => setCleanupReason(e.target.value)}
                   placeholder={t("raffle.testRun.cleanupReason")}
-                  className="w-full rounded bg-slate-950 p-2"
+                  className="w-full rounded bg-surface-base p-2"
                 />
                 <button
                   onClick={async () => {
@@ -1013,12 +1013,12 @@ export default function AutomaticRaffleOperations({
                     setCleanupSummary(summary);
                     await refreshSelected();
                   }}
-                  className="rounded border border-red-500/50 px-3 py-2"
+                  className="rounded border border-danger/50 px-3 py-2"
                 >
                   {t("raffle.testRun.cleanup")}
                 </button>
                 {cleanupSummary && (
-                  <p className="text-sm text-emerald-300">
+                  <p className="text-sm text-success">
                     {t("raffle.testRun.cleanupSummary", cleanupSummary)}
                   </p>
                 )}

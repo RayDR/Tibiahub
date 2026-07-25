@@ -38,7 +38,7 @@ export const ToastProvider: React.FC<{ children: React.ReactNode }> = ({ childre
     const showToast = useCallback((message: string, type: ToastType, duration: number = 5000) => {
         const id = `toast-${Date.now()}-${Math.random()}`;
         const newToast: Toast = { id, type, message, duration };
-        
+
         setToasts((prev) => [...prev, newToast]);
 
         if (duration > 0) {
@@ -64,16 +64,16 @@ export const ToastProvider: React.FC<{ children: React.ReactNode }> = ({ childre
 
     const getToastStyles = (type: ToastType) => {
         const baseStyles = "flex items-start gap-3 p-4 rounded-lg border shadow-lg backdrop-blur-sm min-w-[320px] max-w-md";
-        
+
         switch (type) {
             case 'success':
-                return `${baseStyles} bg-emerald-900/90 border-emerald-600/50 text-emerald-100`;
+                return `${baseStyles} bg-success/90 border-success/50 text-success`;
             case 'error':
-                return `${baseStyles} bg-red-900/90 border-red-600/50 text-red-100`;
+                return `${baseStyles} bg-danger/90 border-danger/50 text-danger`;
             case 'warning':
-                return `${baseStyles} bg-amber-900/90 border-amber-600/50 text-amber-100`;
+                return `${baseStyles} bg-primary/90 border-primary/50 text-primary`;
             case 'info':
-                return `${baseStyles} bg-blue-900/90 border-blue-600/50 text-blue-100`;
+                return `${baseStyles} bg-info/90 border-info/50 text-info`;
         }
     };
 
@@ -81,20 +81,20 @@ export const ToastProvider: React.FC<{ children: React.ReactNode }> = ({ childre
         const iconClass = "w-5 h-5 flex-shrink-0 mt-0.5";
         switch (type) {
             case 'success':
-                return <CheckCircle className={`${iconClass} text-emerald-400`} />;
+                return <CheckCircle className={`${iconClass} text-success`} />;
             case 'error':
-                return <XCircle className={`${iconClass} text-red-400`} />;
+                return <XCircle className={`${iconClass} text-danger`} />;
             case 'warning':
-                return <AlertCircle className={`${iconClass} text-amber-400`} />;
+                return <AlertCircle className={`${iconClass} text-primary`} />;
             case 'info':
-                return <Info className={`${iconClass} text-blue-400`} />;
+                return <Info className={`${iconClass} text-info`} />;
         }
     };
 
     return (
         <ToastContext.Provider value={{ showToast, success, error, warning, info }}>
             {children}
-            
+
             {/* Toast Container */}
             <div className="fixed top-4 right-4 z-[9999] space-y-2 pointer-events-none">
                 {toasts.map((toast) => (
@@ -109,7 +109,7 @@ export const ToastProvider: React.FC<{ children: React.ReactNode }> = ({ childre
                             </div>
                             <button
                                 onClick={() => removeToast(toast.id)}
-                                className="text-white/70 hover:text-white transition-colors flex-shrink-0"
+                                className="text-content-primary/70 hover:text-content-primary transition-colors flex-shrink-0"
                                 aria-label="Close notification"
                             >
                                 <X className="w-4 h-4" />

@@ -9,6 +9,6 @@ export default function AdminGuildRaffles() {
   const { t } = useTranslation(); const { guildKey = '' } = useParams(); const [data, setData] = useState<AdminGuildWorkspace | null>(null); const [error, setError] = useState(false);
   useEffect(() => { void workspaceApi.adminGuild(guildKey).then(setData).catch(() => setError(true)); }, [guildKey]);
   if (error) return <EmptyState title={t('workspace.errors.assistance')} description={t('workspace.errors.tryAgain')} />;
-  if (!data) return <div className="p-8 text-center text-slate-400">{t('workspace.common.loading')}</div>;
+  if (!data) return <div className="p-8 text-center text-content-secondary">{t('workspace.common.loading')}</div>;
   return <div className="space-y-4"><AssistanceBanner guildName={data.guild.name} /><RafflesWorkspace guildName={data.guild.name} worldName={data.guild.world_name} assistance /></div>;
 }

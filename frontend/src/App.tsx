@@ -43,6 +43,7 @@ import RafflePublicPage from './pages/RafflePublicPage';
 import PublicRafflePage from './pages/PublicRafflePage';
 import NotFound from './pages/NotFound';
 import { systemApi } from './services/api';
+import { Container } from './components/ui';
 
 const Leadership = lazy(() => import('./pages/guild/Leadership'));
 const LeadershipRecruitment = lazy(() => import('./pages/guild/LeadershipRecruitment'));
@@ -54,7 +55,7 @@ function App() {
   const navigate = useNavigate();
   const [latestDataVersion, setLatestDataVersion] = useState<string>('');
   const { t } = useTranslation();
-  const leadershipFallback = <div role="status" className="p-8 text-center text-slate-400">{t('leadership.loading')}</div>;
+  const leadershipFallback = <div role="status" className="p-8 text-center text-content-secondary">{t('leadership.loading')}</div>;
 
   // Keyboard shortcut listener for Ctrl+Alt+G (Guild) and Ctrl+Alt+A (Admin)
   useEffect(() => {
@@ -92,10 +93,10 @@ function App() {
     <AuthProvider>
       <WorkspaceProvider>
       <ToastProvider>
-        <div className="min-h-screen text-[color:var(--color-text)] font-sans pt-20" style={{ backgroundColor: 'var(--color-bg)' }}>
+        <div className="min-h-screen bg-surface-base text-content-primary font-sans pt-20">
           <Navigation />
 
-          <div className="container mx-auto px-4">
+          <Container className="container px-4">
             <Routes location={location} key={location.pathname}>
               <Route path="/" element={<HomePage />} />
               <Route path="/cyclopedia" element={<CreaturesPage />} />
@@ -168,17 +169,17 @@ function App() {
               {/* Catch-All */}
               <Route path="*" element={<NotFound />} />
             </Routes>
-          </div>
+          </Container>
 
           {/* Footer */}
-          <footer className="mt-24 text-center border-t border-slate-800 pt-8 pb-8">
+          <footer className="mt-24 text-center border-t border-line pt-8 pb-8">
             <div className="inline-block">
-              <p className="text-slate-400 text-sm">{t('footer.project', { version: latestDataVersion || t('footer.unavailable') })}</p>
-              <p className="mt-2 text-slate-600 text-xs">
+              <p className="text-content-secondary text-sm">{t('footer.project', { version: latestDataVersion || t('footer.unavailable') })}</p>
+              <p className="mt-2 text-content-muted text-xs">
                 {t('footer.trademark')}
               </p>
-              <p className="mt-2 text-slate-500 text-xs">
-                {t('footer.dataSource')} <a href="https://tibia.fandom.com" target="_blank" rel="noopener noreferrer" className="text-amber-500 hover:text-amber-400 transition-colors">TibiaWiki</a>
+              <p className="mt-2 text-content-muted text-xs">
+                {t('footer.dataSource')} <a href="https://tibia.fandom.com" target="_blank" rel="noopener noreferrer" className="text-primary hover:text-primary transition-colors">TibiaWiki</a>
               </p>
             </div>
           </footer>

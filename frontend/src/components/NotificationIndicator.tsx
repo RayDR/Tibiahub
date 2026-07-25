@@ -15,7 +15,7 @@ export default function NotificationIndicator() {
   return (
     <Link to="/guild/notifications" aria-label={t('notifications.indicator', { count })} className="app-nav-link relative rounded-xl p-2">
       <Bell size={18} />
-      {count > 0 && <span className="absolute -right-1 -top-1 min-w-4 rounded-full bg-amber-500 px-1 text-center text-[10px] font-bold text-slate-950">{Math.min(count, 99)}</span>}
+      {count > 0 && <span className="absolute -right-1 -top-1 min-w-4 rounded-full bg-primary px-1 text-center text-[10px] font-bold text-content-inverse">{Math.min(count, 99)}</span>}
     </Link>
   );
 }
