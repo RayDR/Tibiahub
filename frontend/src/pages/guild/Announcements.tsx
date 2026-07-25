@@ -238,9 +238,9 @@ export default function Announcements() {
                                     <div className="flex flex-col lg:flex-row lg:items-start lg:justify-between gap-4 mb-6">
                                         <div className="flex-1 min-w-0">
                                             <div className="flex items-center gap-3 mb-3">
-                                                <span className={`inline-block px-3 py-1 rounded-full text-xs font-bold uppercase tracking-wider whitespace-nowrap ${ann.type === 'contest' ? 'bg-accent/70 text-accent ring-1 ring-accent/60' :
-                                                    ann.type === 'hunt' ? 'bg-danger/70 text-danger ring-1 ring-danger/60' :
-                                                        'bg-primary/70 text-primary ring-1 ring-primary/60'
+                                                <span className={`inline-block px-3 py-1 rounded-full text-xs font-bold uppercase tracking-wider whitespace-nowrap ${ann.type === 'contest' ? 'bg-accent/15 text-accent ring-1 ring-accent/60' :
+                                                    ann.type === 'hunt' ? 'bg-danger/15 text-danger ring-1 ring-danger/60' :
+                                                        'bg-primary/15 text-primary ring-1 ring-primary/60'
                                                     }`}>
                                                     {t(`guild.types.${ann.type}`)}
                                                 </span>
@@ -300,7 +300,7 @@ export default function Announcements() {
             {/* Detail Modal */}
             {detailModal && (
                 <div
-                    className="fixed inset-0 bg-surface-base/90 backdrop-blur-md z-50 flex items-center justify-center p-4"
+                    className="fixed inset-0 bg-surface-base/90 backdrop-blur-md z-modal flex items-center justify-center p-4"
                     onClick={() => setDetailModal(null)}
                 >
                     <div
@@ -315,9 +315,9 @@ export default function Announcements() {
                         <div className="sticky top-0 bg-surface-base/95 backdrop-blur p-8 border-b-2 border-line/50 flex items-start justify-between">
                             <div className="flex-1 pr-4">
                                 <div className="flex items-center gap-3 mb-4">
-                                    <span className={`inline-block px-4 py-1.5 rounded-full text-xs font-bold uppercase tracking-wider ${detailModal.type === 'contest' ? 'bg-accent/70 text-accent ring-1 ring-accent/60' :
-                                        detailModal.type === 'hunt' ? 'bg-danger/70 text-danger ring-1 ring-danger/60' :
-                                            'bg-primary/70 text-primary ring-1 ring-primary/60'
+                                    <span className={`inline-block px-4 py-1.5 rounded-full text-xs font-bold uppercase tracking-wider ${detailModal.type === 'contest' ? 'bg-accent/15 text-accent ring-1 ring-accent/60' :
+                                        detailModal.type === 'hunt' ? 'bg-danger/15 text-danger ring-1 ring-danger/60' :
+                                            'bg-primary/15 text-primary ring-1 ring-primary/60'
                                         }`}>
                                         {t(`guild.types.${detailModal.type}`)}
                                     </span>
@@ -355,7 +355,7 @@ export default function Announcements() {
 
             {/* Create Modal */}
             {showModal && (
-                <div className="fixed inset-0 bg-surface-base/90 backdrop-blur-md z-50 flex items-center justify-center p-4">
+                <div className="fixed inset-0 bg-surface-base/90 backdrop-blur-md z-modal flex items-center justify-center p-4">
                     <div className="bg-gradient-to-b from-surface to-surface-base border-2 border-line/80 rounded-2xl w-full max-w-2xl shadow-2xl">
                         <div className="p-8 border-b-2 border-line/50">
                             <div className="flex items-center gap-3 mb-2">

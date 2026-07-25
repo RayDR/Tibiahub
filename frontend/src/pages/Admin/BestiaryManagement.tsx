@@ -237,9 +237,9 @@ export default function BestiaryManagement() {
                                             <td className="p-3 text-sm text-content-secondary">{creature.difficulty || 'N/A'}</td>
                                             <td className="p-3 text-sm">
                                                 {creature.is_hidden ? (
-                                                    <span className="rounded bg-danger/40 px-2 py-1 text-xs text-danger">Hidden</span>
+                                                    <span className="rounded bg-danger/15 px-2 py-1 text-xs text-danger">Hidden</span>
                                                 ) : (
-                                                    <span className="rounded bg-success/40 px-2 py-1 text-xs text-success">Visible</span>
+                                                    <span className="rounded bg-success/15 px-2 py-1 text-xs text-success">Visible</span>
                                                 )}
                                             </td>
                                             <td className="p-3 text-right">

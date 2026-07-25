@@ -90,7 +90,7 @@ export default function RafflePublicPage() {
 
   if (!raffle || error) {
     return (
-      <div className="mx-auto mt-10 max-w-3xl rounded-xl border border-danger/30 bg-danger/30 p-6 text-danger">
+      <div className="mx-auto mt-10 max-w-3xl rounded-xl border border-danger/30 bg-danger/15 p-6 text-danger">
         {error || t('raffle.publicPage.notFound')}
       </div>
     );

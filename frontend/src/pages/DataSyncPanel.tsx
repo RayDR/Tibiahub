@@ -421,8 +421,8 @@ const DataSyncPanel: React.FC = () => {
           <button
             onClick={() => setActiveTab('sync')}
             className={`px-4 sm:px-8 py-2 sm:py-3 rounded-xl font-semibold transition-all duration-300 text-sm sm:text-base ${activeTab === 'sync'
-                ? 'bg-gradient-to-r from-info to-info text-content-primary shadow-glow'
-                : 'bg-glass-bg border-2 border-glass-border text-content-primary hover:border-info'
+                ? 'bg-gradient-to-r from-info to-info-hover text-content-on-primary shadow-lg'
+                : 'bg-surface/80 border-2 border-line text-content-primary hover:border-info'
               }`}
           >
             🔄 Sincronizar
@@ -430,8 +430,8 @@ const DataSyncPanel: React.FC = () => {
           <button
             onClick={() => setActiveTab('logs')}
             className={`px-4 sm:px-8 py-2 sm:py-3 rounded-xl font-semibold transition-all duration-300 text-sm sm:text-base ${activeTab === 'logs'
-                ? 'bg-gradient-to-r from-info to-info text-content-primary shadow-glow'
-                : 'bg-glass-bg border-2 border-glass-border text-content-primary hover:border-info'
+                ? 'bg-gradient-to-r from-info to-info-hover text-content-on-primary shadow-lg'
+                : 'bg-surface/80 border-2 border-line text-content-primary hover:border-info'
               }`}
           >
             📋 Logs
@@ -439,8 +439,8 @@ const DataSyncPanel: React.FC = () => {
           <button
             onClick={() => setActiveTab('stats')}
             className={`px-4 sm:px-8 py-2 sm:py-3 rounded-xl font-semibold transition-all duration-300 text-sm sm:text-base ${activeTab === 'stats'
-                ? 'bg-gradient-to-r from-info to-info text-content-primary shadow-glow'
-                : 'bg-glass-bg border-2 border-glass-border text-content-primary hover:border-info'
+                ? 'bg-gradient-to-r from-info to-info-hover text-content-on-primary shadow-lg'
+                : 'bg-surface/80 border-2 border-line text-content-primary hover:border-info'
               }`}
           >
             📊 Estadísticas
@@ -671,7 +671,7 @@ const DataSyncPanel: React.FC = () => {
 
         {/* Conflict Modal */}
         {showConflictModal && (
-          <div className="fixed inset-0 bg-surface-base/80 flex items-center justify-center z-50 p-4">
+          <div className="fixed inset-0 bg-surface-base/80 flex items-center justify-center z-modal p-4">
             <div className="bg-surface-base rounded-2xl max-w-4xl w-full max-h-[90vh] overflow-y-auto border-2 border-primary/50">
               <div className="p-6">
                 <h2 className="text-2xl font-bold text-content-primary mb-4">

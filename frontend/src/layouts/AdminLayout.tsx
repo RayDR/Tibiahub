@@ -1,7 +1,7 @@
 import { Outlet, Link, useLocation, Navigate } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext';
 import { useTranslation } from 'react-i18next';
-import { Activity, Settings, Database, Shield, Wrench, CalendarDays, Users } from 'lucide-react';
+import { Activity, Settings, Database, Shield, Wrench, CalendarDays, Users, Palette } from 'lucide-react';
 import { WorkspaceHeader } from '../components/workspace/WorkspacePrimitives';
 
 export default function AdminLayout() {
@@ -12,6 +12,7 @@ export default function AdminLayout() {
         { key: 'overview', path: '/admin/overview', icon: Activity }, { key: 'guilds', path: '/admin/guilds', icon: Shield },
         { key: 'users', path: '/admin/users', icon: Users }, { key: 'activities', path: '/admin/activities', icon: CalendarDays },
         { key: 'cyclopedia', path: '/admin/bestiary', icon: Database }, { key: 'operations', path: '/admin/data-tools', icon: Wrench },
+        { key: 'appearance', path: '/admin/theme-playground', icon: Palette },
         { key: 'settings', path: '/admin/settings', icon: Settings },
     ];
     return <div className="admin-shell mt-4 space-y-4 sm:mt-8">

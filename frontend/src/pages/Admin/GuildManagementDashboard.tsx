@@ -316,7 +316,7 @@ export default function GuildManagementDashboard() {
                                                     <div className="font-medium text-content-primary text-sm">{member.username}</div>
                                                     <div className="text-xs text-content-muted">{member.email || 'No email'}</div>
                                                     {member.is_superuser && (
-                                                        <span className="text-xs bg-danger/50 text-danger px-1.5 py-0.5 rounded">Admin</span>
+                                                        <span className="text-xs bg-danger/15 text-danger px-1.5 py-0.5 rounded">Admin</span>
                                                     )}
                                                 </div>
                                             )}
@@ -370,7 +370,7 @@ export default function GuildManagementDashboard() {
                                             )}
                                         </td>
                                         <td className="p-3">
-                                            <span className={`text-xs px-2 py-1 rounded ${member.is_active ? 'bg-success/40 text-success' : 'bg-surface text-content-muted'}`}>
+                                            <span className={`text-xs px-2 py-1 rounded ${member.is_active ? 'bg-success/15 text-success' : 'bg-surface text-content-muted'}`}>
                                                 {member.is_active ? 'Active' : 'Inactive'}
                                             </span>
                                         </td>

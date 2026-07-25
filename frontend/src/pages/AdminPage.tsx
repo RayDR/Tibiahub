@@ -91,8 +91,8 @@ const AdminPage: React.FC = () => {
           <button
             onClick={() => setActiveTab('creatures')}
             className={`px-4 sm:px-8 py-2 sm:py-3 rounded-xl font-semibold transition-all duration-300 text-sm sm:text-base ${activeTab === 'creatures'
-                ? 'bg-gradient-to-r from-gold-400 to-gold-600 text-brown-900 shadow-glow'
-                : 'bg-glass-bg border-2 border-glass-border text-content-primary hover:border-gold-500'
+                ? 'bg-gradient-to-r from-primary-hover to-primary-active text-content-on-primary shadow-lg'
+                : 'bg-surface/80 border-2 border-line text-content-primary hover:border-primary'
               }`}
           >
             <span className="hidden xs:inline">🐉 Criaturas</span>
@@ -101,8 +101,8 @@ const AdminPage: React.FC = () => {
           <button
             onClick={() => setActiveTab('zones')}
             className={`px-4 sm:px-8 py-2 sm:py-3 rounded-xl font-semibold transition-all duration-300 text-sm sm:text-base ${activeTab === 'zones'
-                ? 'bg-gradient-to-r from-gold-400 to-gold-600 text-brown-900 shadow-glow'
-                : 'bg-glass-bg border-2 border-glass-border text-content-primary hover:border-gold-500'
+                ? 'bg-gradient-to-r from-primary-hover to-primary-active text-content-on-primary shadow-lg'
+                : 'bg-surface/80 border-2 border-line text-content-primary hover:border-primary'
               }`}
           >
             <span className="hidden xs:inline">🗺️ Zonas</span>
@@ -111,8 +111,8 @@ const AdminPage: React.FC = () => {
           <button
             onClick={() => setActiveTab('sync')}
             className={`px-4 sm:px-8 py-2 sm:py-3 rounded-xl font-semibold transition-all duration-300 text-sm sm:text-base ${activeTab === 'sync'
-                ? 'bg-gradient-to-r from-gold-400 to-gold-600 text-brown-900 shadow-glow'
-                : 'bg-glass-bg border-2 border-glass-border text-content-primary hover:border-info'
+                ? 'bg-gradient-to-r from-primary-hover to-primary-active text-content-on-primary shadow-lg'
+                : 'bg-surface/80 border-2 border-line text-content-primary hover:border-info'
               }`}
           >
             <span className="hidden xs:inline">🔄 Sincronización</span>
@@ -123,7 +123,7 @@ const AdminPage: React.FC = () => {
         {/* Form Card */}
         {activeTab === 'creatures' && (
           <div className="card ds-enter">
-            <h2 className="text-2xl sm:text-3xl font-bold mb-4 sm:mb-6 text-gold-500">Crear Nueva Criatura</h2>
+            <h2 className="text-2xl sm:text-3xl font-bold mb-4 sm:mb-6 text-primary">Crear Nueva Criatura</h2>
 
             <form onSubmit={handleSubmit} className="space-y-4 sm:space-y-6">
               {/* Información Básica */}
@@ -325,10 +325,10 @@ const AdminPage: React.FC = () => {
         <div className="mt-8 card bg-gradient-to-r from-accent/30 to-info/30 border-accent/30">
           <h3 className="text-xl font-bold text-accent mb-4">💡 Datos Reales de Tibia</h3>
           <ul className="space-y-2 text-content-secondary">
-            <li>✅ Usa sprites oficiales de TibiaWiki: <code className="text-gold-500">https://tibiawiki.dev/images/[Name].gif</code></li>
+            <li>✅ Usa sprites oficiales de TibiaWiki: <code className="text-primary">https://tibiawiki.dev/images/[Name].gif</code></li>
             <li>✅ Consulta <a href="https://tibiawiki.dev" target="_blank" rel="noopener noreferrer" className="text-info hover:underline">TibiaWiki.dev</a> para stats reales</li>
             <li>✅ Winter Update 2025: Soporte completo para vocación Monk 🧘</li>
-            <li>✅ Script de importación: <code className="text-gold-500">python import_tibiawiki.py --manual</code></li>
+            <li>✅ Script de importación: <code className="text-primary">python import_tibiawiki.py --manual</code></li>
           </ul>
         </div>
       </div>

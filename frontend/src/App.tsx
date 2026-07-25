@@ -44,6 +44,7 @@ import PublicRafflePage from './pages/PublicRafflePage';
 import NotFound from './pages/NotFound';
 import { systemApi } from './services/api';
 import { Container } from './components/ui';
+import ThemePlayground from './pages/Admin/ThemePlayground';
 
 const Leadership = lazy(() => import('./pages/guild/Leadership'));
 const LeadershipRecruitment = lazy(() => import('./pages/guild/LeadershipRecruitment'));
@@ -159,6 +160,7 @@ function App() {
                 <Route path="guild-view" element={<GuildView />} />
                 <Route path="bestiary" element={<BestiaryManagement />} />
                 <Route path="data-tools" element={<DataTools />} />
+                <Route path="theme-playground" element={<ThemePlayground />} />
                 <Route path="settings" element={<AdminSettings />} />
                 {/* Legacy redirects */}
                 <Route path="api-monitor" element={<Navigate to="/admin/data-tools" replace />} />

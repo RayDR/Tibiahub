@@ -88,7 +88,7 @@ const Navigation: React.FC = () => {
     <motion.nav
       initial={{ y: -100 }}
       animate={{ y: 0 }}
-      className="fixed top-0 left-0 right-0 z-50 px-2 sm:px-4 py-2 sm:py-4"
+      className="fixed top-0 left-0 right-0 z-sticky px-2 sm:px-4 py-2 sm:py-4"
     >
       <div className="max-w-7xl mx-auto">
         <div className="app-nav-shell backdrop-blur-md rounded-xl sm:rounded-2xl px-3 sm:px-6 py-2 sm:py-3 flex items-center justify-between shadow-2xl shadow-surface-base/20">

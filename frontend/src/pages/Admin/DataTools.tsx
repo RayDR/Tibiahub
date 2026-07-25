@@ -266,7 +266,7 @@ function DBSyncTab() {
                                                 <td className="p-3 text-sm text-content-secondary">{change.action}</td>
                                                 <td className="p-3 text-xs text-content-secondary">{change.source_api}</td>
                                                 <td className="p-3 text-xs">
-                                                    <span className={`px-2 py-1 rounded ${change.approval_required ? 'bg-primary/40 text-primary' : 'bg-surface text-content-secondary'}`}>
+                                                    <span className={`px-2 py-1 rounded ${change.approval_required ? 'bg-primary/15 text-primary' : 'bg-surface text-content-secondary'}`}>
                                                         {change.status}
                                                     </span>
                                                 </td>

@@ -390,7 +390,7 @@ export default function Profile() {
                             </label>
                             <div className="bg-surface-base/50 border border-line rounded px-3 py-2">
                                 {profileData.is_active ? (
-                                    <span className="text-xs bg-success/50 text-success px-2 py-1 rounded">Active</span>
+                                    <span className="text-xs bg-success/15 text-success px-2 py-1 rounded">Active</span>
                                 ) : (
                                     <span className="text-xs bg-surface text-content-muted px-2 py-1 rounded">Inactive</span>
                                 )}
