@@ -56,7 +56,7 @@ export default function GuildMembersPage() {
 
   if (loading) {
     return (
-      <div className="flex items-center gap-2 text-slate-400">
+      <div className="flex items-center gap-2 text-content-secondary">
         <Loader2 className="h-4 w-4 animate-spin" /> Loading guild members...
       </div>
     );
@@ -64,28 +64,28 @@ export default function GuildMembersPage() {
 
   return (
     <div className="space-y-5">
-      <div className="rounded-xl border border-slate-800 bg-slate-900/60 p-5">
+      <div className="rounded-xl border border-line bg-surface-base/60 p-5">
         <div className="mb-2 flex items-center justify-between">
-          <h1 className="flex items-center gap-2 text-2xl font-semibold text-slate-100">
-            <Users className="h-5 w-5 text-amber-400" /> Guild Members
+          <h1 className="flex items-center gap-2 text-2xl font-semibold text-content-primary">
+            <Users className="h-5 w-5 text-primary" /> Guild Members
           </h1>
           {canSync && (
             <button
               onClick={() => void forceSync()}
               disabled={busySync}
-              className="inline-flex items-center gap-2 rounded-lg border border-slate-700 px-3 py-2 text-sm text-slate-300 hover:border-slate-500 disabled:opacity-50"
+              className="inline-flex items-center gap-2 rounded-lg border border-line px-3 py-2 text-sm text-content-secondary hover:border-line disabled:opacity-50"
             >
               <RefreshCcw className={`h-4 w-4 ${busySync ? 'animate-spin' : ''}`} /> Refresh now
             </button>
           )}
         </div>
-        <p className="text-sm text-slate-400">Guild: {guildName}</p>
-        <p className="mt-1 text-xs text-slate-500">Source: {source === 'live' ? 'Live guild roster' : 'Saved guild snapshot'}</p>
-        {error && <p className="mt-2 text-sm text-red-300">{error}</p>}
+        <p className="text-sm text-content-secondary">Guild: {guildName}</p>
+        <p className="mt-1 text-xs text-content-muted">Source: {source === 'live' ? 'Live guild roster' : 'Saved guild snapshot'}</p>
+        {error && <p className="mt-2 text-sm text-danger">{error}</p>}
       </div>
 
-      <div className="overflow-hidden rounded-xl border border-slate-800 bg-slate-900/60">
-        <div className="grid grid-cols-[2fr_1fr_1.5fr_1.5fr_2fr] gap-2 border-b border-slate-800 bg-slate-950/60 px-4 py-3 text-xs font-semibold uppercase tracking-wider text-slate-400">
+      <div className="overflow-hidden rounded-xl border border-line bg-surface-base/60">
+        <div className="grid grid-cols-[2fr_1fr_1.5fr_1.5fr_2fr] gap-2 border-b border-line bg-surface-base/60 px-4 py-3 text-xs font-semibold uppercase tracking-wider text-content-secondary">
           <div>Character</div>
           <div>Level</div>
           <div>Vocation</div>
@@ -94,16 +94,16 @@ export default function GuildMembersPage() {
         </div>
         <div className="max-h-[60vh] overflow-y-auto">
           {sortedMembers.map((member) => (
-            <div key={`${member.character_name}-${member.snapshot_at}`} className="grid grid-cols-[2fr_1fr_1.5fr_1.5fr_2fr] gap-2 border-b border-slate-800/60 px-4 py-3 text-sm text-slate-300">
-              <div className="font-medium text-slate-100">{member.character_name}</div>
+            <div key={`${member.character_name}-${member.snapshot_at}`} className="grid grid-cols-[2fr_1fr_1.5fr_1.5fr_2fr] gap-2 border-b border-line/60 px-4 py-3 text-sm text-content-secondary">
+              <div className="font-medium text-content-primary">{member.character_name}</div>
               <div>{member.level ?? 'N/A'}</div>
               <div>{member.vocation || 'Unknown'}</div>
               <div>{member.rank || member.role || 'Member'}</div>
-              <div className="text-xs text-slate-500">{member.last_login || 'Unknown'}</div>
+              <div className="text-xs text-content-muted">{member.last_login || 'Unknown'}</div>
             </div>
           ))}
           {sortedMembers.length === 0 && (
-            <div className="px-4 py-6 text-sm text-slate-500">No members available.</div>
+            <div className="px-4 py-6 text-sm text-content-muted">No members available.</div>
           )}
         </div>
       </div>

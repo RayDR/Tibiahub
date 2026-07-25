@@ -17,12 +17,12 @@ interface TibiaStatus {
     last_check: string;
 }
 
-function StatCard({ label, value, sub, color = 'text-slate-100' }: { label: string; value: string | number; sub?: string; color?: string }) {
+function StatCard({ label, value, sub, color = 'text-content-primary' }: { label: string; value: string | number; sub?: string; color?: string }) {
     return (
         <div className="admin-panel rounded-xl p-5">
-            <div className="text-xs text-slate-400 uppercase tracking-wide mb-1">{label}</div>
+            <div className="text-xs text-content-secondary uppercase tracking-wide mb-1">{label}</div>
             <div className={`text-3xl font-bold ${color}`}>{value}</div>
-            {sub && <div className="text-xs text-slate-500 mt-1">{sub}</div>}
+            {sub && <div className="text-xs text-content-muted mt-1">{sub}</div>}
         </div>
     );
 }
@@ -57,15 +57,15 @@ export default function Overview() {
     useEffect(() => { void load(); }, []);
 
     const statusColor = (status?: string) => {
-        if (status === 'online') return 'text-green-400';
-        if (status === 'offline') return 'text-red-400';
-        return 'text-yellow-400';
+        if (status === 'online') return 'text-success';
+        if (status === 'offline') return 'text-danger';
+        return 'text-primary';
     };
 
     if (loading) {
         return (
             <div className="flex items-center justify-center py-16">
-                <Loader2 className="w-8 h-8 animate-spin text-amber-500" />
+                <Loader2 className="w-8 h-8 animate-spin text-primary" />
             </div>
         );
     }
@@ -75,10 +75,10 @@ export default function Overview() {
             {/* Header */}
             <div className="admin-panel rounded-xl p-4 flex items-center justify-between gap-4">
                 <div className="flex items-center gap-3">
-                    <Activity className="w-5 h-5 text-[color:var(--color-primary)]" />
+                    <Activity className="w-5 h-5 text-primary" />
                     <div>
-                        <h1 className="text-xl font-semibold text-slate-100">System Overview</h1>
-                        <p className="text-sm text-slate-400">Live snapshot of all platform data.</p>
+                        <h1 className="text-xl font-semibold text-content-primary">System Overview</h1>
+                        <p className="text-sm text-content-secondary">Live snapshot of all platform data.</p>
                     </div>
                 </div>
                 <button
@@ -95,8 +95,8 @@ export default function Overview() {
             <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                 <div className="admin-panel rounded-xl p-5">
                     <div className="flex items-center gap-2 mb-3">
-                        <Globe className="w-4 h-4 text-slate-400" />
-                        <span className="text-sm font-medium text-slate-300">Tibia API</span>
+                        <Globe className="w-4 h-4 text-content-secondary" />
+                        <span className="text-sm font-medium text-content-secondary">Tibia API</span>
                     </div>
                     {tibiaStatus ? (
                         <div className="flex items-center gap-3">
@@ -104,48 +104,48 @@ export default function Overview() {
                                 {tibiaStatus.status}
                             </span>
                             {Number.isFinite(Number(tibiaStatus.latency_ms)) && tibiaStatus.latency_ms !== null && (
-                                <span className="text-xs text-slate-500">{Number(tibiaStatus.latency_ms).toFixed(0)}ms</span>
+                                <span className="text-xs text-content-muted">{Number(tibiaStatus.latency_ms).toFixed(0)}ms</span>
                             )}
                         </div>
                     ) : (
-                        <span className="text-slate-500 text-sm">Unavailable</span>
+                        <span className="text-content-muted text-sm">Unavailable</span>
                     )}
-                    {tibiaStatus?.message && <p className="text-xs text-slate-500 mt-1">{tibiaStatus.message}</p>}
+                    {tibiaStatus?.message && <p className="text-xs text-content-muted mt-1">{tibiaStatus.message}</p>}
                 </div>
 
                 <div className="admin-panel rounded-xl p-5">
                     <div className="flex items-center gap-2 mb-3">
-                        <Database className="w-4 h-4 text-slate-400" />
-                        <span className="text-sm font-medium text-slate-300">Data Version</span>
+                        <Database className="w-4 h-4 text-content-secondary" />
+                        <span className="text-sm font-medium text-content-secondary">Data Version</span>
                     </div>
-                    <div className="text-2xl font-bold text-slate-100 truncate">
-                        {dataVersion ?? <span className="text-slate-500 text-base">Unavailable</span>}
+                    <div className="text-2xl font-bold text-content-primary truncate">
+                        {dataVersion ?? <span className="text-content-muted text-base">Unavailable</span>}
                     </div>
-                    <p className="text-xs text-slate-500 mt-1">Latest external sync version</p>
+                    <p className="text-xs text-content-muted mt-1">Latest external sync version</p>
                 </div>
             </div>
 
             {/* Creatures */}
             <div>
-                <h2 className="text-xs uppercase tracking-widest text-slate-500 mb-3 flex items-center gap-2">
+                <h2 className="text-xs uppercase tracking-widest text-content-muted mb-3 flex items-center gap-2">
                     <Bug className="w-3.5 h-3.5" /> Bestiary
                 </h2>
                 <div className="grid grid-cols-2 md:grid-cols-3 gap-4">
                     <StatCard label="Total Creatures" value={stats?.creatures.total ?? '—'} />
-                    <StatCard label="Visible" value={stats?.creatures.visible ?? '—'} color="text-green-400" sub="Public in cyclopedia" />
-                    <StatCard label="Hidden" value={stats?.creatures.hidden ?? '—'} color="text-red-400" sub="Admin-only" />
+                    <StatCard label="Visible" value={stats?.creatures.visible ?? '—'} color="text-success" sub="Public in cyclopedia" />
+                    <StatCard label="Hidden" value={stats?.creatures.hidden ?? '—'} color="text-danger" sub="Admin-only" />
                 </div>
             </div>
 
             {/* Content */}
             <div>
-                <h2 className="text-xs uppercase tracking-widest text-slate-500 mb-3 flex items-center gap-2">
+                <h2 className="text-xs uppercase tracking-widest text-content-muted mb-3 flex items-center gap-2">
                     <ScrollText className="w-3.5 h-3.5" /> Content
                 </h2>
                 <div className="grid grid-cols-2 md:grid-cols-3 gap-4">
                     <StatCard label="Quests" value={stats?.quests.total ?? '—'} />
                     <StatCard label="Hunt Zones" value={stats?.hunt_zones.total ?? '—'} />
-                    <div className="admin-panel-muted rounded-xl p-5 flex items-center justify-center text-[color:var(--color-text-muted)] text-xs italic">
+                    <div className="admin-panel-muted rounded-xl p-5 flex items-center justify-center text-content-muted text-xs italic">
                         No additional metrics available
                     </div>
                 </div>
@@ -153,14 +153,14 @@ export default function Overview() {
 
             {/* Users */}
             <div>
-                <h2 className="text-xs uppercase tracking-widest text-slate-500 mb-3 flex items-center gap-2">
+                <h2 className="text-xs uppercase tracking-widest text-content-muted mb-3 flex items-center gap-2">
                     <Users className="w-3.5 h-3.5" /> Users
                 </h2>
                 <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
                     <StatCard label="Total Users" value={stats?.users.total ?? '—'} />
-                    <StatCard label="Active" value={stats?.users.active ?? '—'} color="text-green-400" />
-                    <StatCard label="Inactive" value={stats?.users.inactive ?? '—'} color="text-slate-500" />
-                    <StatCard label="Admins" value={stats?.users.admin ?? '—'} color="text-amber-400" />
+                    <StatCard label="Active" value={stats?.users.active ?? '—'} color="text-success" />
+                    <StatCard label="Inactive" value={stats?.users.inactive ?? '—'} color="text-content-muted" />
+                    <StatCard label="Admins" value={stats?.users.admin ?? '—'} color="text-primary" />
                 </div>
             </div>
         </div>

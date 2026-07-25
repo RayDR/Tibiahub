@@ -178,91 +178,91 @@ const HomePage: React.FC = () => {
 
   return (
     <div className="min-h-screen pb-16 pt-10">
-      <section className="mb-10 rounded-2xl border border-slate-700 bg-slate-900/70 p-6">
-        <h1 className="text-3xl font-bold text-amber-200 md:text-4xl">
+      <section className="mb-10 rounded-2xl border border-line bg-surface-base/70 p-6">
+        <h1 className="text-3xl font-bold text-primary md:text-4xl">
           {isAuthenticated ? t('home.welcomeBack', { username: user?.username || '' }) : t('home.guestTitle')}
         </h1>
-        <p className="mt-3 max-w-3xl text-slate-300">Explora la Cyclopedia, planea tu proxima hunt y completa tus weekly tasks.</p>
+        <p className="mt-3 max-w-3xl text-content-secondary">Explora la Cyclopedia, planea tu proxima hunt y completa tus weekly tasks.</p>
         <div className="mt-6 flex flex-wrap gap-3">
           <select
             value={cyclopediaSection}
             onChange={(event) => setCyclopediaSection(event.target.value as 'creatures' | 'bosses' | 'quests')}
-            className="rounded-lg border border-slate-700 bg-slate-900 px-4 py-2 text-sm text-slate-100"
+            className="rounded-lg border border-line bg-surface-base px-4 py-2 text-sm text-content-primary"
           >
             <option value="creatures">{t('nav.creatures')}</option>
             <option value="bosses">{t('nav.bosses')}</option>
             <option value="quests">{t('nav.quests')}</option>
           </select>
-          <Link to={`/cyclopedia?tab=${cyclopediaSection === 'quests' ? 'quests' : cyclopediaSection}`} className="rounded-lg bg-amber-500 px-4 py-2 text-sm font-semibold text-slate-950 hover:bg-amber-400">
+          <Link to={`/cyclopedia?tab=${cyclopediaSection === 'quests' ? 'quests' : cyclopediaSection}`} className="rounded-lg bg-primary px-4 py-2 text-sm font-semibold text-content-inverse hover:bg-primary-hover">
             {t('home.openCyclopedia')}
           </Link>
-          <Link to="/planner" className="rounded-lg border border-slate-600 bg-slate-800 px-4 py-2 text-sm font-semibold text-slate-100 hover:border-amber-500/40">
+          <Link to="/planner" className="rounded-lg border border-line bg-surface px-4 py-2 text-sm font-semibold text-content-primary hover:border-primary/40">
             {t('home.openPlanner')}
           </Link>
           {isAuthenticated && (
-            <Link to="/guild/dashboard" className="rounded-lg border border-slate-600 bg-slate-800 px-4 py-2 text-sm font-semibold text-slate-100 hover:border-amber-500/40">
+            <Link to="/guild/dashboard" className="rounded-lg border border-line bg-surface px-4 py-2 text-sm font-semibold text-content-primary hover:border-primary/40">
               Open Guild
             </Link>
           )}
         </div>
 
         <div className="mt-6 grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
-          <Link to="/cyclopedia?tab=creatures" className="rounded-xl border border-slate-700 bg-slate-950/50 p-4 text-sm text-slate-200 hover:border-amber-500/40">
-            <div className="font-semibold text-amber-200">Cyclopedia</div>
-            <div className="mt-1 text-xs text-slate-400">Creatures, bosses, loot, quests y zones.</div>
+          <Link to="/cyclopedia?tab=creatures" className="rounded-xl border border-line bg-surface-base/50 p-4 text-sm text-content-primary hover:border-primary/40">
+            <div className="font-semibold text-primary">Cyclopedia</div>
+            <div className="mt-1 text-xs text-content-secondary">Creatures, bosses, loot, quests y zones.</div>
           </Link>
-          <Link to="/planner" className="rounded-xl border border-slate-700 bg-slate-950/50 p-4 text-sm text-slate-200 hover:border-amber-500/40">
-            <div className="font-semibold text-amber-200">Hunt Planner</div>
-            <div className="mt-1 text-xs text-slate-400">Recomendaciones por vocacion, nivel y objetivo.</div>
+          <Link to="/planner" className="rounded-xl border border-line bg-surface-base/50 p-4 text-sm text-content-primary hover:border-primary/40">
+            <div className="font-semibold text-primary">Hunt Planner</div>
+            <div className="mt-1 text-xs text-content-secondary">Recomendaciones por vocacion, nivel y objetivo.</div>
           </Link>
-          <Link to="/cyclopedia?tab=quests" className="rounded-xl border border-slate-700 bg-slate-950/50 p-4 text-sm text-slate-200 hover:border-amber-500/40">
-            <div className="font-semibold text-amber-200">Quests</div>
-            <div className="mt-1 text-xs text-slate-400">Busca quests reales y revisa requisitos.</div>
+          <Link to="/cyclopedia?tab=quests" className="rounded-xl border border-line bg-surface-base/50 p-4 text-sm text-content-primary hover:border-primary/40">
+            <div className="font-semibold text-primary">Quests</div>
+            <div className="mt-1 text-xs text-content-secondary">Busca quests reales y revisa requisitos.</div>
           </Link>
           {isAuthenticated ? (
-            <Link to="/guild/dashboard" className="rounded-xl border border-slate-700 bg-slate-950/50 p-4 text-sm text-slate-200 hover:border-amber-500/40">
-              <div className="font-semibold text-amber-200">Guild</div>
-              <div className="mt-1 text-xs text-slate-400">Gestion, eventos y actividad de equipo.</div>
+            <Link to="/guild/dashboard" className="rounded-xl border border-line bg-surface-base/50 p-4 text-sm text-content-primary hover:border-primary/40">
+              <div className="font-semibold text-primary">Guild</div>
+              <div className="mt-1 text-xs text-content-secondary">Gestion, eventos y actividad de equipo.</div>
             </Link>
           ) : (
-            <Link to="/login" className="rounded-xl border border-slate-700 bg-slate-950/50 p-4 text-sm text-slate-200 hover:border-amber-500/40">
-              <div className="font-semibold text-amber-200">Inicia sesion</div>
-              <div className="mt-1 text-xs text-slate-400">Activa historial y atajos personalizados.</div>
+            <Link to="/login" className="rounded-xl border border-line bg-surface-base/50 p-4 text-sm text-content-primary hover:border-primary/40">
+              <div className="font-semibold text-primary">Inicia sesion</div>
+              <div className="mt-1 text-xs text-content-secondary">Activa historial y atajos personalizados.</div>
             </Link>
           )}
         </div>
       </section>
 
       {isAuthenticated && (
-        <section className="mb-10 rounded-2xl border border-slate-700 bg-slate-900/60 p-6">
+        <section className="mb-10 rounded-2xl border border-line bg-surface-base/60 p-6">
           <div className="flex flex-wrap items-center justify-between gap-3">
             <div className="flex items-center gap-3">
-              <UserCircle2 className="text-amber-300" size={24} />
+              <UserCircle2 className="text-primary" size={24} />
               <div>
-                <h2 className="text-xl font-semibold text-slate-100">{t('home.profileCard.title')}</h2>
-                <p className="text-sm text-slate-400">{t('home.profileCard.subtitle')}</p>
+                <h2 className="text-xl font-semibold text-content-primary">{t('home.profileCard.title')}</h2>
+                <p className="text-sm text-content-secondary">{t('home.profileCard.subtitle')}</p>
               </div>
             </div>
-            <Link to="/profile" className="rounded-lg border border-slate-600 px-3 py-2 text-sm text-slate-200 hover:border-amber-500/40">
+            <Link to="/profile" className="rounded-lg border border-line px-3 py-2 text-sm text-content-primary hover:border-primary/40">
               {t('home.profileCard.manage')}
             </Link>
           </div>
           <div className="mt-4 grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
-            <div className="rounded-xl border border-slate-800 bg-slate-950/50 p-3 text-sm text-slate-300">
-              <div className="text-xs uppercase tracking-wide text-slate-500">{t('home.profileCard.character')}</div>
-              <div className="mt-1 font-semibold text-slate-100">{user?.tibia_character_name || t('home.profileCard.notSet')}</div>
+            <div className="rounded-xl border border-line bg-surface-base/50 p-3 text-sm text-content-secondary">
+              <div className="text-xs uppercase tracking-wide text-content-muted">{t('home.profileCard.character')}</div>
+              <div className="mt-1 font-semibold text-content-primary">{user?.tibia_character_name || t('home.profileCard.notSet')}</div>
             </div>
-            <div className="rounded-xl border border-slate-800 bg-slate-950/50 p-3 text-sm text-slate-300">
-              <div className="text-xs uppercase tracking-wide text-slate-500">{t('home.profileCard.world')}</div>
-              <div className="mt-1 font-semibold text-slate-100">{user?.world_name || t('home.profileCard.notSet')}</div>
+            <div className="rounded-xl border border-line bg-surface-base/50 p-3 text-sm text-content-secondary">
+              <div className="text-xs uppercase tracking-wide text-content-muted">{t('home.profileCard.world')}</div>
+              <div className="mt-1 font-semibold text-content-primary">{user?.world_name || t('home.profileCard.notSet')}</div>
             </div>
-            <div className="rounded-xl border border-slate-800 bg-slate-950/50 p-3 text-sm text-slate-300">
-              <div className="text-xs uppercase tracking-wide text-slate-500">{t('home.profileCard.guild')}</div>
-              <div className="mt-1 font-semibold text-slate-100">{user?.guild_name || t('home.profileCard.notSet')}</div>
+            <div className="rounded-xl border border-line bg-surface-base/50 p-3 text-sm text-content-secondary">
+              <div className="text-xs uppercase tracking-wide text-content-muted">{t('home.profileCard.guild')}</div>
+              <div className="mt-1 font-semibold text-content-primary">{user?.guild_name || t('home.profileCard.notSet')}</div>
             </div>
-            <div className="rounded-xl border border-slate-800 bg-slate-950/50 p-3 text-sm text-slate-300">
-              <div className="text-xs uppercase tracking-wide text-slate-500">{t('home.profileCard.vocation')}</div>
-              <div className="mt-1 font-semibold text-slate-100">{user?.vocation || t('home.profileCard.notSet')}</div>
+            <div className="rounded-xl border border-line bg-surface-base/50 p-3 text-sm text-content-secondary">
+              <div className="text-xs uppercase tracking-wide text-content-muted">{t('home.profileCard.vocation')}</div>
+              <div className="mt-1 font-semibold text-content-primary">{user?.vocation || t('home.profileCard.notSet')}</div>
             </div>
           </div>
         </section>
@@ -270,40 +270,40 @@ const HomePage: React.FC = () => {
 
       <section className="mb-10">
         <div className="mb-4 flex items-center justify-between gap-3">
-          <div className="flex items-center gap-2 text-amber-300">
+          <div className="flex items-center gap-2 text-primary">
             <Clock3 size={18} />
             <h2 className="text-xl font-semibold">{t('home.continueTitle')}</h2>
           </div>
           {isAuthenticated && continueEntries.length > 0 && (
-            <button onClick={onClearActivity} className="rounded-lg border border-slate-700 px-3 py-1.5 text-xs text-slate-300 hover:border-red-500/40 hover:text-red-200">
+            <button onClick={onClearActivity} className="rounded-lg border border-line px-3 py-1.5 text-xs text-content-secondary hover:border-danger/40 hover:text-danger">
               {t('home.clearHistory')}
             </button>
           )}
         </div>
         {activityLoading ? (
-          <div className="rounded-xl border border-slate-700 bg-slate-900/60 p-4 text-sm text-slate-400">{t('home.loadingHistory')}</div>
+          <div className="rounded-xl border border-line bg-surface-base/60 p-4 text-sm text-content-secondary">{t('home.loadingHistory')}</div>
         ) : isAuthenticated ? (
           continueEntries.length === 0 ? (
-            <div className="rounded-xl border border-slate-700 bg-slate-900/60 p-4 text-sm text-slate-400">{t('home.emptyHistory')}</div>
+            <div className="rounded-xl border border-line bg-surface-base/60 p-4 text-sm text-content-secondary">{t('home.emptyHistory')}</div>
           ) : (
             <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
               {continueEntries.map((entry) => (
-                <Link key={entry.id} to={entry.to} className="rounded-xl border border-slate-700 bg-slate-900/60 p-4 transition hover:border-amber-500/40">
-                  <div className="text-sm font-semibold text-slate-100">{entry.title}</div>
-                  <div className="mt-1 text-xs text-slate-400">{entry.subtitle}</div>
-                  <div className="mt-2 text-xs text-slate-500">{new Date(entry.createdAt).toLocaleString()}</div>
+                <Link key={entry.id} to={entry.to} className="rounded-xl border border-line bg-surface-base/60 p-4 transition hover:border-primary/40">
+                  <div className="text-sm font-semibold text-content-primary">{entry.title}</div>
+                  <div className="mt-1 text-xs text-content-secondary">{entry.subtitle}</div>
+                  <div className="mt-2 text-xs text-content-muted">{new Date(entry.createdAt).toLocaleString()}</div>
                 </Link>
               ))}
             </div>
           )
         ) : recentCreatures.length === 0 ? (
-          <div className="rounded-xl border border-slate-700 bg-slate-900/60 p-4 text-sm text-slate-400">{t('home.emptyRecentGuest')}</div>
+          <div className="rounded-xl border border-line bg-surface-base/60 p-4 text-sm text-content-secondary">{t('home.emptyRecentGuest')}</div>
         ) : (
           <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
             {recentCreatures.map((creature) => (
-              <Link key={`recent-${creature.id}`} to={`/creatures/${creature.slug || creature.id}`} className="rounded-xl border border-slate-700 bg-slate-900/60 p-4 transition hover:border-amber-500/40">
-                <div className="text-sm font-semibold text-slate-100">{creature.name}</div>
-                <div className="mt-1 text-xs text-slate-500">{new Date(creature.viewed_at).toLocaleString()}</div>
+              <Link key={`recent-${creature.id}`} to={`/creatures/${creature.slug || creature.id}`} className="rounded-xl border border-line bg-surface-base/60 p-4 transition hover:border-primary/40">
+                <div className="text-sm font-semibold text-content-primary">{creature.name}</div>
+                <div className="mt-1 text-xs text-content-muted">{new Date(creature.viewed_at).toLocaleString()}</div>
               </Link>
             ))}
           </div>
@@ -311,22 +311,22 @@ const HomePage: React.FC = () => {
       </section>
 
       <section className="mb-10">
-        <div className="mb-4 flex items-center gap-2 text-amber-300">
+        <div className="mb-4 flex items-center gap-2 text-primary">
           <TrendingUp size={18} />
           <h2 className="text-xl font-semibold">{t('home.featured')}</h2>
         </div>
         {featuredCreatures.length === 0 ? (
-          <div className="rounded-xl border border-slate-700 bg-slate-900/60 p-4 text-sm text-slate-400">{t('home.emptyFeatured')}</div>
+          <div className="rounded-xl border border-line bg-surface-base/60 p-4 text-sm text-content-secondary">{t('home.emptyFeatured')}</div>
         ) : (
           <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
             {featuredCreatures.map((creature) => (
               <Link
                 key={creature.id}
                 to={`/creatures/${creature.slug || creature.id}`}
-                className="rounded-xl border border-slate-700 bg-slate-900/60 p-4 transition hover:border-amber-500/40"
+                className="rounded-xl border border-line bg-surface-base/60 p-4 transition hover:border-primary/40"
               >
-                <div className="mb-2 text-lg font-semibold text-slate-100">{creature.name}</div>
-                <div className="text-xs text-slate-400">HP {creature.hitpoints.toLocaleString()} · EXP {creature.experience.toLocaleString()}</div>
+                <div className="mb-2 text-lg font-semibold text-content-primary">{creature.name}</div>
+                <div className="text-xs text-content-secondary">HP {creature.hitpoints.toLocaleString()} · EXP {creature.experience.toLocaleString()}</div>
               </Link>
             ))}
           </div>
@@ -334,26 +334,26 @@ const HomePage: React.FC = () => {
       </section>
 
       <section className="mb-10">
-        <div className="mb-4 flex items-center gap-2 text-amber-300">
+        <div className="mb-4 flex items-center gap-2 text-primary">
           <Gem size={18} />
           <h2 className="text-xl font-semibold">{t('home.topSearched')}</h2>
         </div>
         {topItems.length === 0 && topZones.length === 0 ? (
-          <div className="rounded-xl border border-slate-700 bg-slate-900/60 p-4 text-sm text-slate-400">{t('home.emptyTop')}</div>
+          <div className="rounded-xl border border-line bg-surface-base/60 p-4 text-sm text-content-secondary">{t('home.emptyTop')}</div>
         ) : (
           <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
             {topItems.map((item) => (
-              <div key={item.normalized_name} className="rounded-xl border border-slate-700 bg-slate-900/60 p-4">
-                <div className="text-sm font-semibold text-slate-100">{item.item_name}</div>
-                <div className="mt-1 text-xs text-slate-400">{item.drops.length} {t('home.creatureCount')}</div>
+              <div key={item.normalized_name} className="rounded-xl border border-line bg-surface-base/60 p-4">
+                <div className="text-sm font-semibold text-content-primary">{item.item_name}</div>
+                <div className="mt-1 text-xs text-content-secondary">{item.drops.length} {t('home.creatureCount')}</div>
               </div>
             ))}
             {topZones.map((zone) => (
-              <div key={`zone-${zone.id}`} className="rounded-xl border border-slate-700 bg-slate-900/60 p-4">
-                <div className="flex items-center gap-2 text-sm font-semibold text-slate-100">
+              <div key={`zone-${zone.id}`} className="rounded-xl border border-line bg-surface-base/60 p-4">
+                <div className="flex items-center gap-2 text-sm font-semibold text-content-primary">
                   <MapPin size={14} /> {zone.name}
                 </div>
-                <div className="mt-1 text-xs text-slate-400">{t('home.minLevel')}: {zone.min_level ?? 'N/A'}</div>
+                <div className="mt-1 text-xs text-content-secondary">{t('home.minLevel')}: {zone.min_level ?? 'N/A'}</div>
               </div>
             ))}
           </div>

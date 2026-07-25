@@ -91,18 +91,18 @@ const Navigation: React.FC = () => {
       className="fixed top-0 left-0 right-0 z-50 px-2 sm:px-4 py-2 sm:py-4"
     >
       <div className="max-w-7xl mx-auto">
-        <div className="app-nav-shell backdrop-blur-md rounded-xl sm:rounded-2xl px-3 sm:px-6 py-2 sm:py-3 flex items-center justify-between shadow-2xl shadow-black/20">
+        <div className="app-nav-shell backdrop-blur-md rounded-xl sm:rounded-2xl px-3 sm:px-6 py-2 sm:py-3 flex items-center justify-between shadow-2xl shadow-surface-base/20">
 
           <Link to="/" className="flex items-center gap-2 sm:gap-3 group">
-            <img 
-              src="/assets/logo/tibiahub.png" 
-              alt="Tibia Hub" 
-              className="w-8 h-8 sm:w-10 sm:h-10 rounded-lg shadow-lg group-hover:shadow-amber-500/20 transition-all duration-300 group-hover:scale-110"
+            <img
+              src="/assets/logo/tibiahub.png"
+              alt="Tibia Hub"
+              className="w-8 h-8 sm:w-10 sm:h-10 rounded-lg shadow-lg group-hover:shadow-primary/20 transition-all duration-300 group-hover:scale-110"
             />
             <div className="hidden xs:flex flex-col leading-tight">
-              <span className="font-serif font-bold text-sm tracking-tight text-[color:var(--color-text)]">
-                <span className="text-[color:var(--color-primary)]">Tibia</span> Hub
-              </span> 
+              <span className="font-serif font-bold text-sm tracking-tight text-content-primary">
+                <span className="text-primary">Tibia</span> Hub
+              </span>
             </div>
           </Link>
 
@@ -139,7 +139,7 @@ const Navigation: React.FC = () => {
               </div>
 
               {cyclopediaMenuOpen && (
-                <div className="absolute left-0 top-full mt-2 w-56 rounded-xl border border-[color:var(--color-border)] bg-[color:var(--color-surface)] p-1.5 shadow-2xl">
+                <div className="absolute left-0 top-full mt-2 w-56 rounded-xl border border-line bg-surface p-1.5 shadow-2xl">
                   {cyclopediaSections.map((entry) => (
                     <button
                       key={entry.key}
@@ -149,7 +149,7 @@ const Navigation: React.FC = () => {
                         setCyclopediaMenuOpen(false);
                         navigate(`/cyclopedia?tab=${entry.key}`);
                       }}
-                      className="flex w-full items-center gap-2 rounded-lg px-3 py-2 text-left text-sm text-[color:var(--color-text-muted)] hover:bg-white/5 hover:text-[color:var(--color-text)]"
+                      className="flex w-full items-center gap-2 rounded-lg px-3 py-2 text-left text-sm text-content-muted hover:bg-surface-inverse/5 hover:text-content-primary"
                     >
                       <FontAwesomeIcon icon={entry.icon} className="w-4" />
                       <span>{t(entry.i18nLabel)}</span>
@@ -175,7 +175,7 @@ const Navigation: React.FC = () => {
                   {active && (
                     <motion.div
                       layoutId="nav-glow"
-                      className="absolute inset-0 rounded-xl bg-gradient-to-r from-[color:var(--color-primary)]/15 to-[color:var(--color-primary-alt)]/15"
+                      className="absolute inset-0 rounded-xl bg-gradient-to-r from-primary/15 to-primary-hover/15"
                       initial={false}
                       transition={{ type: "spring", stiffness: 300, damping: 30 }}
                     />
@@ -185,13 +185,13 @@ const Navigation: React.FC = () => {
             })}
 
             {/* Language Selector Divider */}
-            <div className="hidden sm:block w-px h-6 bg-slate-700 mx-1 sm:mx-2" />
+            <div className="hidden sm:block w-px h-6 bg-surface-raised mx-1 sm:mx-2" />
 
             <LanguageSwitcher />
             {isAuthenticated && <NotificationIndicator />}
-            
-            <div className="hidden sm:block w-px h-6 bg-slate-700 mx-1" />
-            
+
+            <div className="hidden sm:block w-px h-6 bg-surface-raised mx-1" />
+
             <ThemeSwitcher />
 
           </div>

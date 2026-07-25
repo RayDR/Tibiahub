@@ -23,7 +23,7 @@ export default function GuildLayout() {
         { name: t('guild.huntCatalog'), path: '/guild/hunts', icon: Compass },
         { name: t('notifications.title'), path: '/guild/notifications', icon: Bell },
     ], [t]);
-    if (loading) return <div className="mt-20 text-center text-[color:var(--color-text-muted)]">{t('workspace.common.loading')}</div>;
+    if (loading) return <div className="mt-20 text-center text-content-muted">{t('workspace.common.loading')}</div>;
     if (!isAuthenticated) return <Navigate to="/login" replace />;
     if (!guildName) return <div className="mt-8"><EmptyState title={t('workspace.noGuild.title')} description={t('workspace.noGuild.help')} action={<Link to="/profile" className="admin-primary inline-flex min-h-11 items-center gap-2 rounded-lg px-4 py-2 font-semibold"><UserRound className="h-4 w-4" />{t('workspace.noGuild.profile')}</Link>} /></div>;
     return <div className="mt-4 space-y-4 sm:mt-8">

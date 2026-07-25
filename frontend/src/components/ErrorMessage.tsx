@@ -7,13 +7,13 @@ interface ErrorMessageProps {
 
 const ErrorMessage: React.FC<ErrorMessageProps> = ({ message, onRetry }) => {
   return (
-    <div className="tibia-panel p-8 text-center">
+    <div className="ds-panel p-8 text-center">
       <div className="space-y-4">
         <div className="text-6xl">⚠️</div>
-        <h2 className="text-tibia-gold text-xl font-bold">Error</h2>
-        <p className="text-red-400">{message}</p>
+        <h2 className="text-primary text-xl font-bold">Error</h2>
+        <p className="text-danger">{message}</p>
         {onRetry && (
-          <button onClick={onRetry} className="tibia-button mt-4">
+          <button onClick={onRetry} className="app-button-secondary mt-4">
             Try Again
           </button>
         )}

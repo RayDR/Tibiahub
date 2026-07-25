@@ -1,15 +1,5 @@
-@import './styles/base.css';
-@import './styles/background.css';
-@import './styles/typography.css';
-@import './styles/buttons.css';
-@import './styles/components.css';
-@import './styles/elements.css';
-@import './styles/creature-card.css';
-@import './styles/creature-detail.css';
-@import './styles/creatures-page.css';
-@import './styles/navigation.css';
 @import './styles/design-system.css';
-@import './styles/utilities.css';
+@import './styles/background.css';
 @import './styles/scrollbar.css';
 
 @tailwind base;

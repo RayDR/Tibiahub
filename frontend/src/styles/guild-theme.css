@@ -1,8 +1,8 @@
 /* Guild Theme - Red Colors */
 :root {
-  --guild-primary: #ef4444; /* red-500 */
-  --guild-primary-dark: #dc2626; /* red-600 */
-  --guild-primary-light: #f87171; /* red-400 */
+  --guild-primary: var(--danger);
+  --guild-primary-dark: rgb(var(--ds-danger) / 0.86);
+  --guild-primary-light: rgb(var(--ds-danger) / 0.72);
 }
 
 .text-primary {
@@ -12,12 +12,12 @@
 /* Pulse Glow Animation for Special Items */
 @keyframes pulse-glow {
   0%, 100% {
-    box-shadow: 0 0 5px rgba(234, 179, 8, 0.3);
-    border-color: rgba(234, 179, 8, 0.3);
+    box-shadow: 0 0 5px rgb(var(--ds-primary) / 0.3);
+    border-color: rgb(var(--ds-primary) / 0.3);
   }
   50% {
-    box-shadow: 0 0 20px rgba(234, 179, 8, 0.6), 0 0 30px rgba(234, 179, 8, 0.4);
-    border-color: rgba(234, 179, 8, 0.6);
+    box-shadow: 0 0 20px rgb(var(--ds-primary) / 0.6), 0 0 30px rgb(var(--ds-primary) / 0.4);
+    border-color: rgb(var(--ds-primary) / 0.6);
   }
 }
 
@@ -28,12 +28,12 @@
 /* Border Glow Animation */
 @keyframes border-glow {
   0%, 100% {
-    border-color: rgba(234, 179, 8, 0.3);
-    box-shadow: 0 0 10px rgba(234, 179, 8, 0.2);
+    border-color: rgb(var(--ds-primary) / 0.3);
+    box-shadow: 0 0 10px rgb(var(--ds-primary) / 0.2);
   }
   50% {
-    border-color: rgba(234, 179, 8, 0.6);
-    box-shadow: 0 0 20px rgba(234, 179, 8, 0.4), 0 0 30px rgba(234, 179, 8, 0.2);
+    border-color: rgb(var(--ds-primary) / 0.6);
+    box-shadow: 0 0 20px rgb(var(--ds-primary) / 0.4), 0 0 30px rgb(var(--ds-primary) / 0.2);
   }
 }
 

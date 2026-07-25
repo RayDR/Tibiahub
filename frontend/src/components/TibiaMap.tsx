@@ -15,7 +15,7 @@ L.Icon.Default.mergeOptions({
 
 // Coordinate conversion helper (Simple linear mapping for demo)
 // Tibia coordinates (approx): X: 31000-34000, Y: 31000-33000
-// We map this to Leaflet Lat/Lng 
+// We map this to Leaflet Lat/Lng
 const tibiaToLatLng = (x: number, y: number): [number, number] => {
     // This is a naive projection. Real Tibia maps need CoordinateReferenceSystem (CRS).Simple
     // For now, we center around Thais (32369, 32241) -> (0, 0)
@@ -43,7 +43,7 @@ const TibiaMap: React.FC<TibiaMapProps> = ({ markers = [], center = { x: 32369, 
     const [initialLat, initialLng] = tibiaToLatLng(center.x, center.y);
 
     return (
-        <div className="w-full h-[400px] rounded-xl overflow-hidden border border-slate-700 shadow-lg relative z-0">
+        <div className="w-full h-[400px] rounded-xl overflow-hidden border border-line shadow-lg relative z-0">
             <MapContainer
                 center={[initialLat, initialLng]}
                 zoom={zoom}
@@ -53,8 +53,8 @@ const TibiaMap: React.FC<TibiaMapProps> = ({ markers = [], center = { x: 32369, 
             >
                 <RecenterMap center={center} />
 
-                {/* 
-            Using a dark background or specific tile server. 
+                {/*
+            Using a dark background or specific tile server.
             Since we don't have a reliable Tibia Tile Server API key in this context,
             we use a placeholder grid or open street map with significant zoom (not accurate for Tibia but demonstrates functionality)
             Ideally: url="https://tibiamaps.io/tiles/{z}/{x}/{y}.png"
@@ -77,7 +77,7 @@ const TibiaMap: React.FC<TibiaMapProps> = ({ markers = [], center = { x: 32369, 
                 })}
             </MapContainer>
 
-            <div className="absolute bottom-2 right-2 bg-slate-900/80 p-2 rounded text-xs text-slate-400 z-[1000]">
+            <div className="absolute bottom-2 right-2 bg-surface-base/80 p-2 rounded text-xs text-content-secondary z-[1000]">
                 Center: {center.x}, {center.y}
             </div>
         </div>

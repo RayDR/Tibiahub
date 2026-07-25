@@ -32,18 +32,18 @@ import { Raffle, RaffleAccessMode, RaffleSimulation, RaffleStatus, raffleApi } f
 type Tab = 'overview' | 'participants' | 'prizes' | 'winners' | 'admin';
 
 const STATUS_COLORS: Record<string, string> = {
-  draft: 'bg-slate-500/15 text-slate-300 border-slate-500/30',
-  open: 'bg-emerald-500/15 text-emerald-300 border-emerald-500/30',
-  closed: 'bg-amber-500/15 text-amber-300 border-amber-500/30',
-  completed: 'bg-amber-500/15 text-amber-300 border-amber-500/30',
-  cancelled: 'bg-red-500/15 text-red-300 border-red-500/30',
-  deleted: 'bg-red-600/15 text-red-400 border-red-600/30',
+  draft: 'bg-surface-hover/15 text-content-secondary border-line/30',
+  open: 'bg-success/15 text-success border-success/30',
+  closed: 'bg-primary/15 text-primary border-primary/30',
+  completed: 'bg-primary/15 text-primary border-primary/30',
+  cancelled: 'bg-danger/15 text-danger border-danger/30',
+  deleted: 'bg-danger/15 text-danger border-danger/30',
 };
 
 const ACCESS_MODE_COLORS: Record<string, string> = {
-  guild_only: 'bg-rose-500/15 text-rose-300 border-rose-500/30',
-  world_only: 'bg-blue-500/15 text-blue-300 border-blue-500/30',
-  public: 'bg-violet-500/15 text-violet-300 border-violet-500/30',
+  guild_only: 'bg-danger/15 text-danger border-danger/30',
+  world_only: 'bg-info/15 text-info border-info/30',
+  public: 'bg-accent/15 text-accent border-accent/30',
 };
 
 interface TooltipButtonProps {
@@ -60,10 +60,10 @@ interface TooltipButtonProps {
 function IconBtn({ onClick, tooltip, disabled, danger, primary, children, type = 'button', 'aria-label': ariaLabel }: TooltipButtonProps) {
   const base = 'group relative inline-flex items-center justify-center rounded-xl border p-2 transition disabled:opacity-40';
   const variant = danger
-    ? 'border-red-500/40 text-red-300 hover:bg-red-500/10'
+    ? 'border-danger/40 text-danger hover:bg-danger/10'
     : primary
-    ? 'border-amber-500 bg-amber-500 text-slate-950 hover:bg-amber-400'
-    : 'border-slate-700 text-slate-300 hover:border-slate-500 hover:text-slate-100';
+    ? 'border-primary bg-primary text-content-inverse hover:bg-primary-hover'
+    : 'border-line text-content-secondary hover:border-line hover:text-content-primary';
 
   return (
     <button
@@ -74,7 +74,7 @@ function IconBtn({ onClick, tooltip, disabled, danger, primary, children, type =
       className={`${base} ${variant}`}
     >
       {children}
-      <span className="pointer-events-none absolute -top-9 left-1/2 -translate-x-1/2 whitespace-nowrap rounded-lg bg-slate-800 px-2 py-1 text-xs text-slate-200 opacity-0 shadow-lg transition-opacity group-hover:opacity-100">
+      <span className="pointer-events-none absolute -top-9 left-1/2 -translate-x-1/2 whitespace-nowrap rounded-lg bg-surface px-2 py-1 text-xs text-content-primary opacity-0 shadow-lg transition-opacity group-hover:opacity-100">
         {tooltip}
       </span>
     </button>
@@ -389,19 +389,19 @@ export default function RafflePage() {
 
   if (!canManage) {
     return (
-      <div className="rounded-2xl border border-red-500/20 bg-red-950/20 p-6 text-red-100">
+      <div className="rounded-2xl border border-danger/20 bg-danger/20 p-6 text-danger">
         <div className="mb-3 flex items-center gap-3 text-lg font-semibold">
           <FontAwesomeIcon icon={faTriangleExclamation} className="h-5 w-5" />
           {t('raffle.console.noAccess')}
         </div>
-        <p className="text-sm text-red-200/80">{t('raffle.console.noAccessDesc')}</p>
+        <p className="text-sm text-danger/80">{t('raffle.console.noAccessDesc')}</p>
       </div>
     );
   }
 
   if (!rafflesEnabled) {
     return (
-      <div className="rounded-2xl border border-amber-500/20 bg-amber-950/20 p-6 text-amber-100">
+      <div className="rounded-2xl border border-primary/20 bg-primary/20 p-6 text-primary">
         {t('raffle.console.disabled')}
       </div>
     );
@@ -417,19 +417,19 @@ export default function RafflePage() {
 
   return (
     <div className="space-y-6">
-      <div className="rounded-2xl border border-slate-800 bg-gradient-to-br from-slate-900/80 to-slate-950 p-6">
-        <div className="mb-3 inline-flex rounded-full border border-slate-600 px-3 py-1 text-xs text-slate-300">{t('raffle.legacyLabel')}</div>
+      <div className="rounded-2xl border border-line bg-gradient-to-br from-surface-base/80 to-surface-base p-6">
+        <div className="mb-3 inline-flex rounded-full border border-line px-3 py-1 text-xs text-content-secondary">{t('raffle.legacyLabel')}</div>
         <div className="flex items-center gap-3">
-          <FontAwesomeIcon icon={faTrophy} className="h-6 w-6 text-amber-400" />
-          <h1 className="text-2xl font-bold text-slate-100">{t('raffle.console.title')}</h1>
+          <FontAwesomeIcon icon={faTrophy} className="h-6 w-6 text-primary" />
+          <h1 className="text-2xl font-bold text-content-primary">{t('raffle.console.title')}</h1>
         </div>
-        <p className="mt-2 max-w-3xl text-sm text-slate-400">{t('raffle.console.subtitle')}</p>
+        <p className="mt-2 max-w-3xl text-sm text-content-secondary">{t('raffle.console.subtitle')}</p>
       </div>
 
       <div className="grid gap-6 xl:grid-cols-[380px_minmax(0,1fr)]">
-        <form onSubmit={handleCreateRaffle} className="space-y-4 rounded-2xl border border-slate-800 bg-slate-900/70 p-5">
-          <h2 className="flex items-center gap-2 text-lg font-semibold text-slate-100">
-            <FontAwesomeIcon icon={faGift} className="h-4 w-4 text-amber-400" />
+        <form onSubmit={handleCreateRaffle} className="space-y-4 rounded-2xl border border-line bg-surface-base/70 p-5">
+          <h2 className="flex items-center gap-2 text-lg font-semibold text-content-primary">
+            <FontAwesomeIcon icon={faGift} className="h-4 w-4 text-primary" />
             {t('raffle.create.title')}
           </h2>
 
@@ -437,31 +437,31 @@ export default function RafflePage() {
             value={createForm.title}
             onChange={(e) => setCreateForm((c) => ({ ...c, title: e.target.value }))}
             placeholder={t('raffle.create.titlePlaceholder')}
-            className="w-full rounded-xl border border-slate-700 bg-slate-950 px-4 py-2.5 text-slate-100 outline-none focus:border-amber-500"
+            className="w-full rounded-xl border border-line bg-surface-base px-4 py-2.5 text-content-primary outline-none focus:border-primary"
             required
           />
 
-          <input value={createForm.guild_name} readOnly aria-readonly="true" className="w-full rounded-xl border border-slate-800 bg-slate-950/60 px-4 py-2.5 text-slate-400" required />
+          <input value={createForm.guild_name} readOnly aria-readonly="true" className="w-full rounded-xl border border-line bg-surface-base/60 px-4 py-2.5 text-content-secondary" required />
 
           <div className="grid gap-3 sm:grid-cols-2">
             <div>
-              <label className="mb-1 block text-xs text-slate-400">{t('raffle.create.accessModeLabel')}</label>
+              <label className="mb-1 block text-xs text-content-secondary">{t('raffle.create.accessModeLabel')}</label>
               <select
                 value={createForm.access_mode}
                 onChange={(e) => setCreateForm((c) => ({ ...c, access_mode: e.target.value as 'guild_only' | 'world_only' | 'public' }))}
-                className="w-full rounded-xl border border-slate-700 bg-slate-950 px-4 py-2.5 text-slate-100 outline-none focus:border-amber-500"
+                className="w-full rounded-xl border border-line bg-surface-base px-4 py-2.5 text-content-primary outline-none focus:border-primary"
               >
                 <option value="guild_only">{t('raffle.accessModes.guild_only')}</option>
                 <option value="world_only">{t('raffle.accessModes.world_only')}</option>
                 <option value="public">{t('raffle.accessModes.public')}</option>
               </select>
             </div>
-            <label className="flex items-center gap-3 rounded-xl border border-slate-800 bg-slate-950/60 px-4 py-3 text-sm text-slate-300">
+            <label className="flex items-center gap-3 rounded-xl border border-line bg-surface-base/60 px-4 py-3 text-sm text-content-secondary">
               <input
                 type="checkbox"
                 checked={createForm.show_participants}
                 onChange={(e) => setCreateForm((c) => ({ ...c, show_participants: e.target.checked }))}
-                className="accent-amber-500"
+                className="accent-primary"
               />
               {t('raffle.create.showParticipantsLabel')}
             </label>
@@ -471,7 +471,7 @@ export default function RafflePage() {
             value={createForm.description}
             onChange={(e) => setCreateForm((c) => ({ ...c, description: e.target.value }))}
             placeholder={t('raffle.create.descriptionPlaceholder')}
-            className="min-h-20 w-full rounded-xl border border-slate-700 bg-slate-950 px-4 py-2.5 text-slate-100 outline-none focus:border-amber-500"
+            className="min-h-20 w-full rounded-xl border border-line bg-surface-base px-4 py-2.5 text-content-primary outline-none focus:border-primary"
           />
 
           <div className="space-y-2">
@@ -484,7 +484,7 @@ export default function RafflePage() {
                     prizes: c.prizes.map((p, i) => (i === idx ? { ...p, name: e.target.value } : p)),
                   }))}
                   placeholder={`${t('raffle.create.prizeName')} ${idx + 1}`}
-                  className="rounded-xl border border-slate-700 bg-slate-950 px-3 py-2 text-slate-100 outline-none focus:border-amber-500"
+                  className="rounded-xl border border-line bg-surface-base px-3 py-2 text-content-primary outline-none focus:border-primary"
                 />
                 <input
                   value={prize.reward}
@@ -493,7 +493,7 @@ export default function RafflePage() {
                     prizes: c.prizes.map((p, i) => (i === idx ? { ...p, reward: e.target.value } : p)),
                   }))}
                   placeholder={t('raffle.create.prizeReward')}
-                  className="rounded-xl border border-slate-700 bg-slate-950 px-3 py-2 text-slate-100 outline-none focus:border-amber-500"
+                  className="rounded-xl border border-line bg-surface-base px-3 py-2 text-content-primary outline-none focus:border-primary"
                 />
               </div>
             ))}
@@ -502,7 +502,7 @@ export default function RafflePage() {
           <button
             type="submit"
             disabled={busyAction === 'create'}
-            className="inline-flex w-full items-center justify-center gap-2 rounded-xl bg-amber-500 px-4 py-2.5 font-semibold text-slate-950 transition hover:bg-amber-400 disabled:opacity-50"
+            className="inline-flex w-full items-center justify-center gap-2 rounded-xl bg-primary px-4 py-2.5 font-semibold text-content-inverse transition hover:bg-primary-hover disabled:opacity-50"
           >
             {busyAction === 'create' ? (
               <><FontAwesomeIcon icon={faSpinner} spin className="h-4 w-4" /> {t('raffle.create.submitting')}</>
@@ -513,20 +513,20 @@ export default function RafflePage() {
         </form>
 
         <div className="space-y-5">
-          <div className="rounded-2xl border border-slate-800 bg-slate-900/70 p-5">
+          <div className="rounded-2xl border border-line bg-surface-base/70 p-5">
             <div className="mb-3 flex items-center justify-between">
-              <h2 className="text-lg font-semibold text-slate-100">{t('raffle.list.title')}</h2>
+              <h2 className="text-lg font-semibold text-content-primary">{t('raffle.list.title')}</h2>
               <IconBtn onClick={() => void loadRaffles()} tooltip={t('raffle.list.refresh')} disabled={loading}>
                 <FontAwesomeIcon icon={faRotate} className="h-4 w-4" />
               </IconBtn>
             </div>
 
             {loading ? (
-              <div className="flex items-center gap-3 text-slate-400">
+              <div className="flex items-center gap-3 text-content-secondary">
                 <FontAwesomeIcon icon={faSpinner} spin className="h-4 w-4" /> {t('raffle.list.refresh')}...
               </div>
             ) : raffles.length === 0 ? (
-              <div className="rounded-xl border border-dashed border-slate-700 py-8 text-center text-sm text-slate-500">
+              <div className="rounded-xl border border-dashed border-line py-8 text-center text-sm text-content-muted">
                 {t('raffle.list.empty')}
               </div>
             ) : (
@@ -537,16 +537,16 @@ export default function RafflePage() {
                     onClick={() => { setSelectedRaffleId(raffle.id); setActiveTab('overview'); setSimulation(null); }}
                     className={`rounded-xl border p-4 text-left transition ${
                       selectedRaffleId === raffle.id
-                        ? 'border-amber-500 bg-amber-500/10'
-                        : 'border-slate-800 bg-slate-950/60 hover:border-slate-600'
+                        ? 'border-primary bg-primary/10'
+                        : 'border-line bg-surface-base/60 hover:border-line'
                     }`}
                   >
                     <div className="mb-1.5 flex items-start justify-between gap-2">
-                      <div className="truncate text-base font-semibold text-slate-100">{raffle.title}</div>
+                      <div className="truncate text-base font-semibold text-content-primary">{raffle.title}</div>
                       <StatusBadge status={raffle.status} />
                     </div>
-                    <div className="text-xs uppercase tracking-wide text-slate-500">{raffle.guild_name}</div>
-                    <div className="mt-2.5 flex flex-wrap gap-3 text-xs text-slate-400">
+                    <div className="text-xs uppercase tracking-wide text-content-muted">{raffle.guild_name}</div>
+                    <div className="mt-2.5 flex flex-wrap gap-3 text-xs text-content-secondary">
                       <span className="flex items-center gap-1"><FontAwesomeIcon icon={faUsers} className="h-3 w-3" />{raffle.participant_count} {t('raffle.list.participants')}</span>
                       <span className="flex items-center gap-1"><FontAwesomeIcon icon={faGift} className="h-3 w-3" />{raffle.prizes.length} {t('raffle.list.prizes')}</span>
                       <span>{t('raffle.list.run')} {raffle.current_run_number}</span>
@@ -558,18 +558,18 @@ export default function RafflePage() {
           </div>
 
           {selectedRaffle && (
-            <div className="rounded-2xl border border-slate-800 bg-slate-900/70">
-              <div className="flex flex-col gap-3 border-b border-slate-800 p-5 sm:flex-row sm:items-start sm:justify-between">
+            <div className="rounded-2xl border border-line bg-surface-base/70">
+              <div className="flex flex-col gap-3 border-b border-line p-5 sm:flex-row sm:items-start sm:justify-between">
                 <div className="min-w-0">
                   <div className="flex flex-wrap items-center gap-2">
-                    <h2 className="truncate text-xl font-bold text-slate-100">{selectedRaffle.title}</h2>
+                    <h2 className="truncate text-xl font-bold text-content-primary">{selectedRaffle.title}</h2>
                     <StatusBadge status={selectedRaffle.status} />
                     <AccessModeBadge accessMode={selectedRaffle.access_mode} />
                   </div>
-                  <p className="mt-1 text-sm text-slate-400">
+                  <p className="mt-1 text-sm text-content-secondary">
                     {selectedRaffle.description || t('raffle.detail.noDescription')}
                   </p>
-                  <p className="mt-1 text-xs text-slate-500">
+                  <p className="mt-1 text-xs text-content-muted">
                     {t('raffle.detail.guild')}: {selectedRaffle.guild_name}
                     <> &middot; {t('raffle.detail.accessMode')}: {t(`raffle.accessModes.${selectedRaffle.access_mode}`)}</>
                     {selectedRaffle.rerun_count > 0 && (
@@ -601,39 +601,39 @@ export default function RafflePage() {
               </div>
 
               {editMode && (
-                <div className="border-b border-slate-800 bg-slate-950/40 p-5">
+                <div className="border-b border-line bg-surface-base/40 p-5">
                   <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
                     <div>
-                      <label className="mb-1 block text-xs text-slate-400">{t('raffle.edit.titleLabel')}</label>
+                      <label className="mb-1 block text-xs text-content-secondary">{t('raffle.edit.titleLabel')}</label>
                       <input
                         value={selectedRaffle.title}
                         onChange={(e) => setRaffles((curr) => curr.map((r) => r.id === selectedRaffle.id ? { ...r, title: e.target.value } : r))}
-                        className="w-full rounded-xl border border-slate-700 bg-slate-900 px-3 py-2 text-slate-100"
+                        className="w-full rounded-xl border border-line bg-surface-base px-3 py-2 text-content-primary"
                       />
                     </div>
                     <div>
-                      <label className="mb-1 block text-xs text-slate-400">{t('raffle.edit.accessMode')}</label>
+                      <label className="mb-1 block text-xs text-content-secondary">{t('raffle.edit.accessMode')}</label>
                       <select
                         value={selectedRaffle.access_mode}
                         onChange={(e) => setRaffles((curr) => curr.map((r) => r.id === selectedRaffle.id ? { ...r, access_mode: e.target.value as 'guild_only' | 'world_only' | 'public' } : r))}
-                        className="w-full rounded-xl border border-slate-700 bg-slate-900 px-3 py-2 text-slate-100"
+                        className="w-full rounded-xl border border-line bg-surface-base px-3 py-2 text-content-primary"
                       >
                         <option value="guild_only">{t('raffle.accessModes.guild_only')}</option>
                         <option value="world_only">{t('raffle.accessModes.world_only')}</option>
                         <option value="public">{t('raffle.accessModes.public')}</option>
                       </select>
-                      <p className="mt-1 text-xs text-slate-500">
+                      <p className="mt-1 text-xs text-content-muted">
                         {selectedRaffle.access_mode === 'guild_only' && t('raffle.edit.accessModeHelpGuild')}
                         {selectedRaffle.access_mode === 'world_only' && t('raffle.edit.accessModeHelpWorld')}
                         {selectedRaffle.access_mode === 'public' && t('raffle.edit.accessModeHelpPublic')}
                       </p>
                     </div>
                     <div>
-                      <label className="mb-1 block text-xs text-slate-400">{t('raffle.edit.statusLabel')}</label>
+                      <label className="mb-1 block text-xs text-content-secondary">{t('raffle.edit.statusLabel')}</label>
                       <select
                         value={selectedRaffle.status}
                         onChange={(e) => setRaffles((curr) => curr.map((r) => r.id === selectedRaffle.id ? { ...r, status: e.target.value as RaffleStatus } : r))}
-                        className="w-full rounded-xl border border-slate-700 bg-slate-900 px-3 py-2 text-slate-100"
+                        className="w-full rounded-xl border border-line bg-surface-base px-3 py-2 text-content-primary"
                       >
                         <option value="draft">{t('raffle.edit.statusDraft')}</option>
                         <option value="open">{t('raffle.edit.statusOpen')}</option>
@@ -642,10 +642,10 @@ export default function RafflePage() {
                         <option value="cancelled">{t('raffle.edit.statusCancelled')}</option>
                       </select>
                     </div>
-                    <label className="flex items-center gap-2 text-sm text-slate-300 sm:col-span-2 lg:col-span-3">
+                    <label className="flex items-center gap-2 text-sm text-content-secondary sm:col-span-2 lg:col-span-3">
                       <input type="checkbox" checked={selectedRaffle.show_participants}
                         onChange={(e) => setRaffles((curr) => curr.map((r) => r.id === selectedRaffle.id ? { ...r, show_participants: e.target.checked } : r))}
-                        className="accent-amber-500"
+                        className="accent-primary"
                       />
                       {selectedRaffle.show_participants ? t('raffle.edit.showParticipantsEnabled') : t('raffle.edit.showParticipantsDisabled')}
                     </label>
@@ -653,7 +653,7 @@ export default function RafflePage() {
                   <button
                     onClick={() => void handleSaveRaffleSettings()}
                     disabled={busyAction === 'save'}
-                    className="mt-3 inline-flex items-center gap-2 rounded-xl bg-amber-500 px-4 py-2 text-sm font-semibold text-slate-950 disabled:opacity-50"
+                    className="mt-3 inline-flex items-center gap-2 rounded-xl bg-primary px-4 py-2 text-sm font-semibold text-content-inverse disabled:opacity-50"
                   >
                     {busyAction === 'save' ? <FontAwesomeIcon icon={faSpinner} spin className="h-4 w-4" /> : <FontAwesomeIcon icon={faFloppyDisk} className="h-4 w-4" />}
                     {busyAction === 'save' ? t('raffle.actionLabels.saving') : t('raffle.actions.save')}
@@ -661,23 +661,23 @@ export default function RafflePage() {
                 </div>
               )}
 
-              <div className="flex overflow-x-auto border-b border-slate-800">
+              <div className="flex overflow-x-auto border-b border-line">
                 {TABS.map((tab) => (
                   <button
                     key={tab.id}
                     onClick={() => setActiveTab(tab.id)}
                     className={`shrink-0 border-b-2 px-4 py-3 text-sm font-medium transition ${
                       activeTab === tab.id
-                        ? 'border-amber-500 text-amber-400'
-                        : 'border-transparent text-slate-400 hover:text-slate-200'
+                        ? 'border-primary text-primary'
+                        : 'border-transparent text-content-secondary hover:text-content-primary'
                     }`}
                   >
                     {tab.label}
                     {tab.id === 'participants' && selectedRaffle.participants.length > 0 && (
-                      <span className="ml-1.5 rounded-full bg-slate-700 px-1.5 py-0.5 text-xs">{selectedRaffle.participants.length}</span>
+                      <span className="ml-1.5 rounded-full bg-surface-raised px-1.5 py-0.5 text-xs">{selectedRaffle.participants.length}</span>
                     )}
                     {tab.id === 'prizes' && selectedRaffle.prizes.length > 0 && (
-                      <span className="ml-1.5 rounded-full bg-slate-700 px-1.5 py-0.5 text-xs">{selectedRaffle.prizes.length}</span>
+                      <span className="ml-1.5 rounded-full bg-surface-raised px-1.5 py-0.5 text-xs">{selectedRaffle.prizes.length}</span>
                     )}
                   </button>
                 ))}
@@ -686,27 +686,27 @@ export default function RafflePage() {
               <div className="p-5">
                 {activeTab === 'overview' && (
                   <div className="grid gap-4 sm:grid-cols-3">
-                    <div className="rounded-xl border border-slate-800 bg-slate-950/60 p-4 text-center">
-                      <div className="text-2xl font-bold text-amber-300">{selectedRaffle.participant_count}</div>
-                      <div className="mt-1 text-xs text-slate-400">{t('raffle.detail.tabs.participants')}</div>
+                    <div className="rounded-xl border border-line bg-surface-base/60 p-4 text-center">
+                      <div className="text-2xl font-bold text-primary">{selectedRaffle.participant_count}</div>
+                      <div className="mt-1 text-xs text-content-secondary">{t('raffle.detail.tabs.participants')}</div>
                     </div>
-                    <div className="rounded-xl border border-slate-800 bg-slate-950/60 p-4 text-center">
-                      <div className="text-2xl font-bold text-amber-300">{selectedRaffle.prizes.length}</div>
-                      <div className="mt-1 text-xs text-slate-400">{t('raffle.detail.tabs.prizes')}</div>
+                    <div className="rounded-xl border border-line bg-surface-base/60 p-4 text-center">
+                      <div className="text-2xl font-bold text-primary">{selectedRaffle.prizes.length}</div>
+                      <div className="mt-1 text-xs text-content-secondary">{t('raffle.detail.tabs.prizes')}</div>
                     </div>
-                    <div className="rounded-xl border border-slate-800 bg-slate-950/60 p-4 text-center">
-                      <div className="text-2xl font-bold text-amber-300">{selectedRaffle.current_run_number}</div>
-                      <div className="mt-1 text-xs text-slate-400">{t('raffle.list.run')}</div>
+                    <div className="rounded-xl border border-line bg-surface-base/60 p-4 text-center">
+                      <div className="text-2xl font-bold text-primary">{selectedRaffle.current_run_number}</div>
+                      <div className="mt-1 text-xs text-content-secondary">{t('raffle.list.run')}</div>
                     </div>
                     {selectedRaffle.prizes.length > 0 && (
                       <div className="sm:col-span-3">
-                        <div className="mb-2 text-sm font-medium text-slate-300">{t('raffle.detail.tabs.prizes')}</div>
+                        <div className="mb-2 text-sm font-medium text-content-secondary">{t('raffle.detail.tabs.prizes')}</div>
                         <div className="flex flex-wrap gap-2">
                           {selectedRaffle.prizes.map((prize) => (
-                            <span key={prize.id} className="inline-flex items-center gap-1.5 rounded-full border border-amber-500/30 bg-amber-500/10 px-3 py-1 text-sm text-amber-300">
+                            <span key={prize.id} className="inline-flex items-center gap-1.5 rounded-full border border-primary/30 bg-primary/10 px-3 py-1 text-sm text-primary">
                               <FontAwesomeIcon icon={faTrophy} className="h-3 w-3" />
                               <span className="font-medium">{prize.name}</span>
-                              <span className="text-amber-400/70">&middot;</span>
+                              <span className="text-primary/70">&middot;</span>
                               <span>{prize.reward}</span>
                             </span>
                           ))}
@@ -723,7 +723,7 @@ export default function RafflePage() {
                         value={manualCharacter}
                         onChange={(e) => setManualCharacter(e.target.value)}
                         placeholder={t('raffle.participants.characterPlaceholder')}
-                        className="flex-1 rounded-xl border border-slate-700 bg-slate-950 px-3 py-2 text-slate-100 outline-none focus:border-amber-500"
+                        className="flex-1 rounded-xl border border-line bg-surface-base px-3 py-2 text-content-primary outline-none focus:border-primary"
                         onKeyDown={(e) => { if (e.key === 'Enter') { e.preventDefault(); void handleManualParticipant(); } }}
                       />
                       <IconBtn onClick={() => void handleManualParticipant()} tooltip={t('raffle.actions.addParticipant')} disabled={busyAction === 'manual' || !manualCharacter.trim()}>
@@ -732,19 +732,19 @@ export default function RafflePage() {
                     </div>
                     <div className="max-h-80 space-y-2 overflow-y-auto pr-1">
                       {selectedRaffle.participants.length === 0 ? (
-                        <div className="rounded-xl border border-dashed border-slate-700 py-8 text-center text-sm text-slate-500">
+                        <div className="rounded-xl border border-dashed border-line py-8 text-center text-sm text-content-muted">
                           {t('raffle.participants.empty')}
                         </div>
                       ) : (
                         selectedRaffle.participants.map((participant) => (
-                          <div key={participant.id} className="flex items-center justify-between rounded-xl border border-slate-800 bg-slate-950/50 px-3 py-2.5">
+                          <div key={participant.id} className="flex items-center justify-between rounded-xl border border-line bg-surface-base/50 px-3 py-2.5">
                             <div className="min-w-0">
-                              <div className="truncate font-medium text-slate-100">{participant.character_name}</div>
-                              <div className="text-xs text-slate-500">{participant.username} &middot; {participant.guild_rank || t('guild.member')}</div>
+                              <div className="truncate font-medium text-content-primary">{participant.character_name}</div>
+                              <div className="text-xs text-content-muted">{participant.username} &middot; {participant.guild_rank || t('guild.member')}</div>
                             </div>
                             <div className="ml-3 flex shrink-0 items-center gap-2">
-                              <div className="text-right text-xs text-slate-400">
-                                <div className={participant.is_eligible ? 'text-emerald-400' : 'text-slate-500'}>
+                              <div className="text-right text-xs text-content-secondary">
+                                <div className={participant.is_eligible ? 'text-success' : 'text-content-muted'}>
                                   {participant.is_eligible ? t('raffle.participants.eligible') : t('raffle.participants.ineligible')}
                                 </div>
                                 <div>{t('raffle.participants.weight')} {Number.isFinite(Number(participant.weight)) ? Number(participant.weight).toFixed(1) : '1.0'}</div>
@@ -752,7 +752,7 @@ export default function RafflePage() {
                               <div className="flex gap-0.5">
                                 {[1, 2, 3, 4, 5].map((w) => (
                                   <button key={w} onClick={() => void handleWeightChange(participant.id, w)} disabled={busyAction === `weight-${participant.id}`}
-                                    className={`h-6 w-5 rounded text-xs transition ${Math.round(participant.weight_multiplier || 1) === w ? 'bg-amber-500 text-slate-950' : 'border border-slate-700 text-slate-400 hover:border-amber-500/50'}`}
+                                    className={`h-6 w-5 rounded text-xs transition ${Math.round(participant.weight_multiplier || 1) === w ? 'bg-primary text-content-inverse' : 'border border-line text-content-secondary hover:border-primary/50'}`}
                                   >{w}</button>
                                 ))}
                               </div>
@@ -771,16 +771,16 @@ export default function RafflePage() {
                   <div className="space-y-4">
                     <div className="flex flex-wrap gap-2">
                       {selectedRaffle.prizes.length === 0 ? (
-                        <div className="w-full rounded-xl border border-dashed border-slate-700 py-6 text-center text-sm text-slate-500">
+                        <div className="w-full rounded-xl border border-dashed border-line py-6 text-center text-sm text-content-muted">
                           {t('raffle.prizes.empty')}
                         </div>
                       ) : (
                         selectedRaffle.prizes.map((prize) => (
-                          <div key={prize.id} className="flex items-center gap-2 rounded-xl border border-amber-500/20 bg-amber-500/8 px-4 py-2.5">
-                            <FontAwesomeIcon icon={faGift} className="h-4 w-4 text-amber-400" />
+                          <div key={prize.id} className="flex items-center gap-2 rounded-xl border border-primary/20 bg-primary/8 px-4 py-2.5">
+                            <FontAwesomeIcon icon={faGift} className="h-4 w-4 text-primary" />
                             <div>
-                              <div className="text-sm font-medium text-amber-200">{prize.name}</div>
-                              <div className="text-xs text-amber-400/70">{prize.reward}</div>
+                              <div className="text-sm font-medium text-primary">{prize.name}</div>
+                              <div className="text-xs text-primary/70">{prize.reward}</div>
                             </div>
                           </div>
                         ))
@@ -788,9 +788,9 @@ export default function RafflePage() {
                     </div>
                     <form onSubmit={handleAddPrize} className="flex gap-2">
                       <input value={newPrize.name} onChange={(e) => setNewPrize((p) => ({ ...p, name: e.target.value }))} placeholder={t('raffle.prizes.namePlaceholder')}
-                        className="flex-1 rounded-xl border border-slate-700 bg-slate-950 px-3 py-2 text-slate-100 outline-none focus:border-amber-500" required />
+                        className="flex-1 rounded-xl border border-line bg-surface-base px-3 py-2 text-content-primary outline-none focus:border-primary" required />
                       <input value={newPrize.reward} onChange={(e) => setNewPrize((p) => ({ ...p, reward: e.target.value }))} placeholder={t('raffle.prizes.rewardPlaceholder')}
-                        className="w-24 rounded-xl border border-slate-700 bg-slate-950 px-3 py-2 text-slate-100 outline-none focus:border-amber-500" required />
+                        className="w-24 rounded-xl border border-line bg-surface-base px-3 py-2 text-content-primary outline-none focus:border-primary" required />
                       <IconBtn type="submit" tooltip={t('raffle.actions.addPrize')} disabled={busyAction === 'prize'}>
                         {busyAction === 'prize' ? <FontAwesomeIcon icon={faSpinner} spin className="h-4 w-4" /> : <FontAwesomeIcon icon={faGift} className="h-4 w-4" />}
                       </IconBtn>
@@ -801,22 +801,22 @@ export default function RafflePage() {
                 {activeTab === 'winners' && (
                   <div className="space-y-5">
                     {simulation && (
-                      <div className="rounded-xl border border-blue-500/30 bg-blue-950/20 p-4">
-                        <div className="mb-3 flex items-center gap-2 text-sm font-medium text-blue-300">
+                      <div className="rounded-xl border border-info/30 bg-info/20 p-4">
+                        <div className="mb-3 flex items-center gap-2 text-sm font-medium text-info">
                           <FontAwesomeIcon icon={faFlask} className="h-4 w-4" />
                           {t('raffle.simulation.title')}
-                          <span className="ml-auto rounded-full bg-blue-500/20 px-2 py-0.5 text-xs">
+                          <span className="ml-auto rounded-full bg-info/20 px-2 py-0.5 text-xs">
                             {t('raffle.simulation.eligible')}: {simulation.eligible_count} &middot; {t('raffle.simulation.ineligible')}: {simulation.ineligible_count}
                           </span>
                         </div>
-                        <div className="mb-3 flex flex-wrap gap-2 text-xs text-blue-200">
+                        <div className="mb-3 flex flex-wrap gap-2 text-xs text-info">
                           {simulation.prizes.map((prize) => (
-                            <span key={prize.id} className="rounded-full border border-blue-400/20 px-2 py-1">
+                            <span key={prize.id} className="rounded-full border border-info/20 px-2 py-1">
                               {prize.name}: {prize.reward}
                             </span>
                           ))}
                         </div>
-                        <div className="mb-3 rounded-lg border border-blue-400/20 bg-slate-950/20 p-3 text-xs text-blue-100">
+                        <div className="mb-3 rounded-lg border border-info/20 bg-surface-base/20 p-3 text-xs text-info">
                           <div className="mb-1 font-semibold">{t('raffle.simulation.warnings')}</div>
                           {simulation.warnings.length > 0 ? simulation.warnings.map((warning) => (
                             <div key={warning}>{warning}</div>
@@ -824,14 +824,14 @@ export default function RafflePage() {
                         </div>
                         <div className="space-y-2">
                           {simulation.winners.map((w) => (
-                            <div key={w.id} className="flex items-center justify-between rounded-lg border border-blue-500/20 px-3 py-2 text-sm">
+                            <div key={w.id} className="flex items-center justify-between rounded-lg border border-info/20 px-3 py-2 text-sm">
                               <div>
-                                <span className="font-medium text-blue-200">{w.character_name}</span>
-                                <span className="ml-1 text-blue-400/60">&middot; {w.username}</span>
+                                <span className="font-medium text-info">{w.character_name}</span>
+                                <span className="ml-1 text-info/60">&middot; {w.username}</span>
                               </div>
-                              <div className="text-right text-blue-300">
+                              <div className="text-right text-info">
                                 <div className="font-medium">{w.prize_name}</div>
-                                <div className="text-xs text-blue-400/60">{w.reward}</div>
+                                <div className="text-xs text-info/60">{w.reward}</div>
                               </div>
                             </div>
                           ))}
@@ -840,24 +840,24 @@ export default function RafflePage() {
                     )}
 
                     <div>
-                      <div className="mb-3 flex items-center gap-2 text-sm font-medium text-slate-200">
-                        <FontAwesomeIcon icon={faTrophy} className="h-4 w-4 text-amber-400" />
+                      <div className="mb-3 flex items-center gap-2 text-sm font-medium text-content-primary">
+                        <FontAwesomeIcon icon={faTrophy} className="h-4 w-4 text-primary" />
                         {t('raffle.winners.title')}
                       </div>
                       <div className="space-y-2">
                         {selectedRaffle.current_winners.length === 0 ? (
-                          <div className="text-sm text-slate-500">{t('raffle.winners.empty')}</div>
+                          <div className="text-sm text-content-muted">{t('raffle.winners.empty')}</div>
                         ) : (
                           selectedRaffle.current_winners.map((winner) => (
-                            <div key={winner.id} className="flex items-center justify-between rounded-xl border border-slate-800 bg-slate-950/60 px-4 py-3">
+                            <div key={winner.id} className="flex items-center justify-between rounded-xl border border-line bg-surface-base/60 px-4 py-3">
                               <div>
-                                <div className="font-medium text-slate-100">{winner.character_name}</div>
-                                <div className="text-xs text-slate-500">{winner.username}</div>
+                                <div className="font-medium text-content-primary">{winner.character_name}</div>
+                                <div className="text-xs text-content-muted">{winner.username}</div>
                               </div>
                               <div className="text-right">
-                                <div className="text-sm font-medium text-amber-300">{winner.prize_name}</div>
-                                <div className="text-xs text-amber-400/70">{winner.reward}</div>
-                                <div className="text-xs text-slate-500">{t('raffle.winners.run')} {winner.run_number}</div>
+                                <div className="text-sm font-medium text-primary">{winner.prize_name}</div>
+                                <div className="text-xs text-primary/70">{winner.reward}</div>
+                                <div className="text-xs text-content-muted">{t('raffle.winners.run')} {winner.run_number}</div>
                               </div>
                             </div>
                           ))
@@ -867,13 +867,13 @@ export default function RafflePage() {
 
                     {selectedRaffle.history.length > 0 && (
                       <details>
-                        <summary className="cursor-pointer text-sm text-slate-400 hover:text-slate-200">
+                        <summary className="cursor-pointer text-sm text-content-secondary hover:text-content-primary">
                           {t('raffle.winners.history')} ({selectedRaffle.history.length})
                         </summary>
                         <div className="mt-3 max-h-60 space-y-2 overflow-y-auto">
                           {selectedRaffle.history.map((winner) => (
-                            <div key={winner.id} className="rounded-lg border border-slate-800/60 px-3 py-2 text-sm text-slate-400">
-                              <span className="font-medium text-slate-300">{winner.prize_name}</span>
+                            <div key={winner.id} className="rounded-lg border border-line/60 px-3 py-2 text-sm text-content-secondary">
+                              <span className="font-medium text-content-secondary">{winner.prize_name}</span>
                               {' \u2192 '}{winner.character_name}
                               <span className="ml-2 text-xs">
                                 {t('raffle.winners.run')} {winner.run_number}
@@ -889,8 +889,8 @@ export default function RafflePage() {
 
                 {activeTab === 'admin' && (
                   <div className="space-y-5">
-                    <div className="rounded-xl border border-red-500/20 bg-red-950/10 p-4">
-                      <div className="mb-3 flex items-center gap-2 text-sm font-medium text-red-300">
+                    <div className="rounded-xl border border-danger/20 bg-danger/10 p-4">
+                      <div className="mb-3 flex items-center gap-2 text-sm font-medium text-danger">
                         <FontAwesomeIcon icon={faRotateLeft} className="h-4 w-4" />
                         {t('raffle.rerun.title')}
                       </div>
@@ -898,12 +898,12 @@ export default function RafflePage() {
                         value={rerunReason}
                         onChange={(e) => setRerunReason(e.target.value)}
                         placeholder={t('raffle.rerun.reasonPlaceholder')}
-                        className="min-h-20 w-full rounded-xl border border-slate-700 bg-slate-900 px-3 py-2 text-slate-100 outline-none focus:border-red-500"
+                        className="min-h-20 w-full rounded-xl border border-line bg-surface-base px-3 py-2 text-content-primary outline-none focus:border-danger"
                       />
                       <button
                         onClick={() => void handleRerun()}
                         disabled={!rerunReason.trim() || busyAction === 'rerun'}
-                        className="mt-3 inline-flex items-center gap-2 rounded-xl bg-red-500 px-4 py-2 text-sm font-semibold text-white disabled:opacity-50"
+                        className="mt-3 inline-flex items-center gap-2 rounded-xl bg-danger px-4 py-2 text-sm font-semibold text-content-on-primary disabled:opacity-50"
                       >
                         {busyAction === 'rerun' ? <FontAwesomeIcon icon={faSpinner} spin className="h-4 w-4" /> : <FontAwesomeIcon icon={faRotateLeft} className="h-4 w-4" />}
                         {busyAction === 'rerun' ? t('raffle.actionLabels.rerunning') : t('raffle.actions.rerun')}
