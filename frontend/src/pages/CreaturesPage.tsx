@@ -1,6 +1,5 @@
 import React, { useEffect, useRef, useState } from 'react';
 import { Link, useSearchParams } from 'react-router-dom';
-import { motion } from 'framer-motion';
 import { AlertTriangle, ArrowDownAZ, ArrowUpAZ, Crown, Loader2, ScrollText, Sparkles } from 'lucide-react';
 import { useTranslation } from 'react-i18next';
 import axios from 'axios';
@@ -97,7 +96,7 @@ const CreaturesPage: React.FC = () => {
   // Tracks whether mode was just set from a URL navigation (Effect 1) so
   // Effect 2 doesn't immediately push a redundant URL update.
   const urlSyncedRef = useRef(true);
-  const [searchTerm, setSearchTerm] = useState('');
+  const [searchTerm, setSearchTerm] = useState(() => new URLSearchParams(window.location.search).get('q') || '');
   const [creatureSort, setCreatureSort] = useState<CreatureSort>('name');
   const [sortOrder, setSortOrder] = useState<SortOrder>('asc');
   const [creatureCategory, setCreatureCategory] = useState<CreatureCategory>('');
@@ -193,7 +192,7 @@ const CreaturesPage: React.FC = () => {
               cards.push({
                 id: String(preview.id),
                 name: String(preview.name),
-                subtitle: String(preview.subtitle || (entry.query ? `Search: ${entry.query}` : 'Recent search')),
+                subtitle: String(preview.subtitle || (entry.query ? t('cyclopedia.cards.searchWithQuery', { query: entry.query }) : t('cyclopedia.cards.recentSearch'))),
                 to: String(preview.to),
                 imageUrl: preview.imageUrl ? String(preview.imageUrl) : undefined,
                 createdAt: entry.created_at,
@@ -221,19 +220,19 @@ const CreaturesPage: React.FC = () => {
         let top: CyclopediaPreviewCard[] = [];
         if (mode === 'creatures') {
           const data = (await creaturesApi.getHighlights(5, controller.signal)).filter((x) => !x.is_boss);
-          top = data.map((c) => ({ id: `creature:${c.id}`, name: c.name, subtitle: `EXP ${c.experience.toLocaleString()}`, to: `/creatures/${c.slug || c.id}`, imageUrl: `/api/v1/creatures/${c.id}/image` }));
+          top = data.map((c) => ({ id: `creature:${c.id}`, name: c.name, subtitle: t('cyclopedia.cards.experience', { value: c.experience.toLocaleString() }), to: `/creatures/${c.slug || c.id}`, imageUrl: `/api/v1/creatures/${c.id}/image` }));
         } else if (mode === 'bosses') {
           const data = await creaturesApi.getBosses({ skip: 0, limit: 5 }, controller.signal);
-          top = data.map((c) => ({ id: `boss:${c.id}`, name: c.name, subtitle: c.difficulty || 'Boss', to: `/creatures/${c.slug || c.id}`, imageUrl: `/api/v1/creatures/${c.id}/image` }));
+          top = data.map((c) => ({ id: `boss:${c.id}`, name: c.name, subtitle: c.difficulty || t('cyclopedia.cards.boss'), to: `/creatures/${c.slug || c.id}`, imageUrl: `/api/v1/creatures/${c.id}/image` }));
         } else if (mode === 'items') {
           const data = await itemsApi.getHighlights(5, controller.signal);
-          top = data.map((i) => ({ id: `item:${i.normalized_name}`, name: i.item_name, subtitle: `${i.drops.length} drops`, to: '/cyclopedia?tab=items', imageUrl: i.image_item_id ? `/api/v1/items/${i.image_item_id}/image` : undefined }));
+          top = data.map((i) => ({ id: `item:${i.normalized_name}`, name: i.item_name, subtitle: t('cyclopedia.cards.drops', { count: i.drops.length }), to: '/cyclopedia?tab=items', imageUrl: i.image_item_id ? `/api/v1/items/${i.image_item_id}/image` : undefined }));
         } else if (mode === 'quests') {
           const data = await questsApi.getHighlights(5, controller.signal);
-          top = data.map((q) => ({ id: `quest:${q.id || q.name}`, name: q.name, subtitle: q.group_name || 'Quest', to: q.id ? `/quests/${q.id}` : '/cyclopedia?tab=quests' }));
+          top = data.map((q) => ({ id: `quest:${q.id || q.name}`, name: q.name, subtitle: q.group_name || t('cyclopedia.cards.quest'), to: q.id ? `/quests/${q.id}` : '/cyclopedia?tab=quests' }));
         } else {
           const data = await huntZonesApi.getHighlights(5, controller.signal);
-          top = data.map((z) => ({ id: `zone:${z.id}`, name: z.name, subtitle: z.region || z.city || 'Hunt zone', to: '/cyclopedia?tab=zones', imageUrl: `/api/v1/hunt-zones/${z.id}/map-image` }));
+          top = data.map((z) => ({ id: `zone:${z.id}`, name: z.name, subtitle: z.region || z.city || t('cyclopedia.cards.huntZone'), to: '/cyclopedia?tab=zones', imageUrl: `/api/v1/hunt-zones/${z.id}/map-image` }));
         }
         if (mounted) setTopPreviewCards(top);
       } catch {
@@ -434,7 +433,7 @@ const CreaturesPage: React.FC = () => {
         searchPreviewCards = data.slice(0, 5).map((c) => ({
           id: `creature:${c.id}`,
           name: c.name,
-          subtitle: c.difficulty || 'Creature',
+          subtitle: c.difficulty || t('cyclopedia.cards.creature'),
           to: `/creatures/${c.slug || c.id}`,
           imageUrl: `/api/v1/creatures/${c.id}/image`,
         }));
@@ -460,7 +459,7 @@ const CreaturesPage: React.FC = () => {
         searchPreviewCards = data.slice(0, 5).map((c) => ({
           id: `boss:${c.id}`,
           name: c.name,
-          subtitle: c.difficulty || 'Boss',
+          subtitle: c.difficulty || t('cyclopedia.cards.boss'),
           to: `/creatures/${c.slug || c.id}`,
           imageUrl: `/api/v1/creatures/${c.id}/image`,
         }));
@@ -482,7 +481,7 @@ const CreaturesPage: React.FC = () => {
         searchPreviewCards = data.slice(0, 5).map((i) => ({
           id: `item:${i.normalized_name}`,
           name: i.item_name,
-          subtitle: `${i.drops.length} drops`,
+          subtitle: t('cyclopedia.cards.drops', { count: i.drops.length }),
           to: '/cyclopedia?tab=items',
           imageUrl: i.image_item_id ? `/api/v1/items/${i.image_item_id}/image` : undefined,
         }));
@@ -502,7 +501,7 @@ const CreaturesPage: React.FC = () => {
         searchPreviewCards = data.slice(0, 5).map((q) => ({
           id: `quest:${q.id || q.name}`,
           name: q.name,
-          subtitle: q.group_name || 'Quest',
+          subtitle: q.group_name || t('cyclopedia.cards.quest'),
           to: q.id ? `/quests/${q.id}` : '/cyclopedia?tab=quests',
         }));
         if (reset) _cacheResult = { creatures: [], items: [], quests: data, zones: [], hasMore: false, usedHighlightsSource: false };
@@ -518,7 +517,7 @@ const CreaturesPage: React.FC = () => {
         searchPreviewCards = data.slice(0, 5).map((z) => ({
           id: `zone:${z.id}`,
           name: z.name,
-          subtitle: z.region || z.city || 'Hunt zone',
+          subtitle: z.region || z.city || t('cyclopedia.cards.huntZone'),
           to: '/cyclopedia?tab=zones',
           imageUrl: `/api/v1/hunt-zones/${z.id}/map-image`,
         }));
@@ -686,25 +685,17 @@ const CreaturesPage: React.FC = () => {
   }, [initialLoaded]); // eslint-disable-line react-hooks/exhaustive-deps
 
   return (
-    <div className="min-h-screen">
-      <div className="relative space-y-6 py-12 text-center md:py-20">
-        <motion.div
-          initial={{ opacity: 0, y: 20 }}
-          animate={{ opacity: 1, y: 0 }}
-        >
+    <div className="py-6 sm:py-8">
+      <div className="relative space-y-5">
+        <div className="ds-enter">
           <PageHeader
             title={t('hero.title')}
             subtitle={t('hero.subtitle')}
             icon={faBook}
           />
-        </motion.div>
+        </div>
 
-        <motion.div
-          initial={{ opacity: 0, y: 20 }}
-          animate={{ opacity: 1, y: 0 }}
-          transition={{ delay: 0.1 }}
-          className="relative z-20 mx-auto max-w-6xl px-4"
-        >
+        <div className="relative z-20 mx-auto max-w-6xl">
           <AppCard className="flex flex-col gap-2 p-2 shadow-2xl">
             <div className="flex min-w-0 flex-col gap-2 lg:flex-row lg:items-center">
               <AppTabs
@@ -778,7 +769,7 @@ const CreaturesPage: React.FC = () => {
                         >
                           <div className="mb-1 flex items-center gap-1.5">
                             {categoryImageUrl ? (
-                              <img src={categoryImageUrl} alt={category || 'All'} className="h-5 w-5 rounded object-cover" loading="lazy" />
+                              <img src={categoryImageUrl} alt={category || t('cyclopedia.categories.all')} className="h-5 w-5 rounded object-cover" loading="lazy" />
                             ) : (
                               <CategoryIcon className="text-primary" />
                             )}
@@ -820,10 +811,10 @@ const CreaturesPage: React.FC = () => {
               </div>
             )}
           </AppCard>
-        </motion.div>
+        </div>
       </div>
 
-      <div className="container mx-auto px-4 pb-20">
+      <div className="pb-12 pt-6">
         {loading && (
           <div className="flex justify-center py-20">
             <Loader2 className="animate-spin text-primary" size={48} />
@@ -840,7 +831,7 @@ const CreaturesPage: React.FC = () => {
               onClick={() => void performSearch(true)}
               className="mt-3 rounded-lg border border-danger/30 bg-danger/20 px-3 py-1.5 text-sm text-danger hover:bg-danger/30"
             >
-              Retry
+              {t('common.retry')}
             </button>
           </div>
         )}
@@ -914,14 +905,14 @@ const CreaturesPage: React.FC = () => {
             ))}
 
             {mode === 'items' && items.map((item, index) => (
-              <motion.div initial={{ opacity: 0, scale: 0.95 }} animate={{ opacity: 1, scale: 1 }} key={`${item.normalized_name}-${index}`} className="rounded-xl border border-line/50 bg-surface-base/50 p-6">
+              <AppCard key={`${item.normalized_name}-${index}`} className="ds-enter p-5">
                 <div className="mb-4 flex items-start gap-3">
                   <ImageWithFallback
                     src={item.image_item_id ? `/api/v1/items/${item.image_item_id}/image` : item.item_image_url || null}
                     alt={item.item_name}
                     className="h-12 w-12 rounded-lg bg-surface-base/60 object-contain p-1"
                     containerClassName="h-12 w-12"
-                    fallbackLabel="Item"
+                    fallbackLabel={item.item_name}
                   />
                   <div>
                     <div className="text-xl font-bold text-primary">{item.item_name}</div>
@@ -944,11 +935,11 @@ const CreaturesPage: React.FC = () => {
                     {t('cyclopedia.items.sourcePage')}
                   </a>
                 )}
-              </motion.div>
+              </AppCard>
             ))}
 
             {mode === 'quests' && quests.map((quest, index) => (
-              <motion.div initial={{ opacity: 0, scale: 0.95 }} animate={{ opacity: 1, scale: 1 }} key={`${quest.id || quest.name}-${index}`} className="rounded-xl border border-line/50 bg-surface-base/50 p-6">
+              <AppCard key={`${quest.id || quest.name}-${index}`} className="ds-enter p-5">
                 <div className="mb-3 flex items-start gap-3">
                   <div className="flex h-12 w-12 items-center justify-center rounded-lg bg-surface-base/60 text-primary">
                     <ScrollText size={22} />
@@ -960,7 +951,7 @@ const CreaturesPage: React.FC = () => {
                         {t('cyclopedia.quests.group')}: {quest.group_name}
                       </div>
                     ) : null}
-                    <div className="text-xs text-content-muted">{t('cyclopedia.quests.levelRange', { min: quest.min_level ?? 'N/A', max: quest.max_level ?? 'N/A' })}</div>
+                    <div className="text-xs text-content-muted">{t('cyclopedia.quests.levelRange', { min: quest.min_level ?? t('common.notAvailable'), max: quest.max_level ?? t('common.notAvailable') })}</div>
                   </div>
                 </div>
                 <p className="mb-3 text-sm text-content-secondary">{quest.description || t('cyclopedia.quests.noDetails')}</p>
@@ -973,11 +964,11 @@ const CreaturesPage: React.FC = () => {
                     <a href={quest.source_url} target="_blank" rel="noreferrer" className="text-xs text-primary hover:text-primary">{t('cyclopedia.items.sourcePage')}</a>
                   )}
                 </div>
-              </motion.div>
+              </AppCard>
             ))}
 
             {mode === 'zones' && zones.map((zone) => (
-              <motion.div initial={{ opacity: 0, scale: 0.95 }} animate={{ opacity: 1, scale: 1 }} key={zone.id} className="overflow-hidden rounded-xl border border-line/50 bg-surface-base/50">
+              <AppCard key={zone.id} className="ds-enter overflow-hidden">
                 <div className="relative h-40 bg-surface-base">
                   {(zone.map_image_url || zone.map_asset_id) && !mapPreviewFailed[zone.id] ? (
                     <img
@@ -1001,12 +992,12 @@ const CreaturesPage: React.FC = () => {
                   <h3 className="mb-2 text-xl font-bold text-primary">{zone.name}</h3>
                   <div className="mb-3 flex gap-2 text-xs text-content-secondary">
                     <span className="rounded bg-surface px-2 py-1">{zone.region || zone.city || t('cyclopedia.states.unknownRegion')}</span>
-                    <span className="rounded bg-surface px-2 py-1">Lvl {zone.recommended_level ?? zone.min_level ?? 'N/A'}+</span>
+                    <span className="rounded bg-surface px-2 py-1">{t('cyclopedia.zones.level', { level: zone.recommended_level ?? zone.min_level ?? t('common.notAvailable') })}</span>
                   </div>
                   <div className="text-sm text-content-secondary">{zone.difficulty || 'Not available'} difficulty</div>
                   <div className="mt-2 text-xs text-content-muted">Source: {zone.source_provider || zone.source_name || 'local'}</div>
                 </div>
-              </motion.div>
+              </AppCard>
             ))}
             </div>
           </>

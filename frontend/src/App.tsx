@@ -1,5 +1,4 @@
 import { Routes, Route, useLocation, useNavigate, Navigate } from 'react-router-dom';
-import Navigation from './components/Navigation';
 import HomePage from './pages/HomePage';
 import CreaturesPage from './pages/CreaturesPage';
 import CreatureDetailPage from './pages/CreatureDetailPage';
@@ -43,8 +42,10 @@ import RafflePublicPage from './pages/RafflePublicPage';
 import PublicRafflePage from './pages/PublicRafflePage';
 import NotFound from './pages/NotFound';
 import { systemApi } from './services/api';
-import { Container } from './components/ui';
 import ThemePlayground from './pages/Admin/ThemePlayground';
+import AppShell from './components/shell/AppShell';
+import AssistanceHub from './pages/Admin/AssistanceHub';
+import AuditHub from './pages/Admin/AuditHub';
 
 const Leadership = lazy(() => import('./pages/guild/Leadership'));
 const LeadershipRecruitment = lazy(() => import('./pages/guild/LeadershipRecruitment'));
@@ -94,10 +95,7 @@ function App() {
     <AuthProvider>
       <WorkspaceProvider>
       <ToastProvider>
-        <div className="min-h-screen bg-surface-base text-content-primary font-sans pt-20">
-          <Navigation />
-
-          <Container className="container px-4">
+        <AppShell dataVersion={latestDataVersion}>
             <Routes location={location} key={location.pathname}>
               <Route path="/" element={<HomePage />} />
               <Route path="/cyclopedia" element={<CreaturesPage />} />
@@ -149,6 +147,7 @@ function App() {
                 <Route index element={<AdminRedirect />} />
                 <Route path="overview" element={<Overview />} />
                 <Route path="guilds" element={<GuildDirectory />} />
+                <Route path="assistance" element={<AssistanceHub />} />
                 <Route path="users" element={<AdminUsers />} />
                 <Route path="guilds/:guildKey" element={<AdminGuildWorkspace />} />
                 <Route path="guilds/:guildKey/raffles" element={<AdminGuildRaffles />} />
@@ -160,32 +159,20 @@ function App() {
                 <Route path="guild-view" element={<GuildView />} />
                 <Route path="bestiary" element={<BestiaryManagement />} />
                 <Route path="data-tools" element={<DataTools />} />
+                <Route path="knowledge" element={<DataTools initialTab="knowledge" />} />
+                <Route path="audits" element={<AuditHub />} />
                 <Route path="theme-playground" element={<ThemePlayground />} />
                 <Route path="settings" element={<AdminSettings />} />
                 {/* Legacy redirects */}
                 <Route path="api-monitor" element={<Navigate to="/admin/data-tools" replace />} />
                 <Route path="database-sync" element={<Navigate to="/admin/data-tools" replace />} />
-                <Route path="sync" element={<Navigate to="/admin/data-tools" replace />} />
+                <Route path="sync" element={<DataTools initialTab="db-sync" />} />
               </Route>
 
               {/* Catch-All */}
               <Route path="*" element={<NotFound />} />
             </Routes>
-          </Container>
-
-          {/* Footer */}
-          <footer className="mt-24 text-center border-t border-line pt-8 pb-8">
-            <div className="inline-block">
-              <p className="text-content-secondary text-sm">{t('footer.project', { version: latestDataVersion || t('footer.unavailable') })}</p>
-              <p className="mt-2 text-content-muted text-xs">
-                {t('footer.trademark')}
-              </p>
-              <p className="mt-2 text-content-muted text-xs">
-                {t('footer.dataSource')} <a href="https://tibia.fandom.com" target="_blank" rel="noopener noreferrer" className="text-primary hover:text-primary transition-colors">TibiaWiki</a>
-              </p>
-            </div>
-          </footer>
-        </div>
+        </AppShell>
       </ToastProvider>
       </WorkspaceProvider>
     </AuthProvider>

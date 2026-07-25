@@ -1,20 +1,47 @@
 import { ReactNode } from 'react';
-import { AlertCircle, ArrowLeft, ShieldCheck } from 'lucide-react';
-import { Link } from 'react-router-dom';
+import { AlertCircle, ArrowLeft, LockKeyhole, ShieldCheck } from 'lucide-react';
+import { Link, NavLink } from 'react-router-dom';
 import { useTranslation } from 'react-i18next';
-import { Badge, EmptyState as DesignEmptyState, Panel } from '../ui';
+import { Badge, EmptyState as DesignEmptyState, PageHeader } from '../ui';
 
-export function WorkspaceHeader({ title, subtitle, badge, action }: { title: string; subtitle?: string; badge?: string; action?: ReactNode }) {
-  return <Panel className="flex flex-col gap-3 rounded-2xl bg-surface-raised p-4 sm:flex-row sm:items-center sm:justify-between sm:p-5"><div><div className="flex flex-wrap items-center gap-2"><h1 className="text-xl font-semibold sm:text-2xl">{title}</h1>{badge && <Badge tone="primary">{badge}</Badge>}</div>{subtitle && <p className="mt-1 text-sm text-content-muted">{subtitle}</p>}</div>{action}</Panel>;
+export interface WorkspaceNavigationItem {
+  key: string;
+  label: string;
+  path: string;
+  icon: React.ComponentType<{ className?: string }>;
+  active?: (pathname: string) => boolean;
 }
 
-export function AssistanceBanner({ guildName }: { guildName: string }) {
+export function WorkspaceHeader({ title, subtitle, badge, action, icon, breadcrumbs }: { title: string; subtitle?: string; badge?: string; action?: ReactNode; icon?: ReactNode; breadcrumbs?: Array<{ label: string; to?: string }> }) {
+  return <PageHeader contained size="md" title={title} subtitle={subtitle} eyebrow={badge} iconElement={icon} breadcrumbs={breadcrumbs} primaryAction={action} />;
+}
+
+export function WorkspaceShell({ navigation, pathname, header, children, variant }: { navigation: WorkspaceNavigationItem[]; pathname: string; header: ReactNode; children: ReactNode; variant: 'guild' | 'admin' }) {
   const { t } = useTranslation();
-  return <section className="admin-panel-muted rounded-xl p-4 text-sm"><div className="flex items-start gap-3"><ShieldCheck className="mt-0.5 h-5 w-5 shrink-0 text-primary" /><div><strong>{t('workspace.assistance.title')}</strong><p className="mt-1 text-content-muted">{t('workspace.assistance.message', { guild: guildName })}</p><p className="mt-1 text-xs text-content-muted">{t('workspace.assistance.auditNotice')}</p></div></div><Link to="/admin/guilds" className="admin-secondary mt-3 inline-flex min-h-11 items-center gap-2 rounded-lg px-3 py-2"><ArrowLeft className="h-4 w-4" />{t('workspace.assistance.return')}</Link></section>;
+  return <div className="workspace-shell py-4 sm:py-6" data-workspace={variant}>
+    {header}
+    <div className="mt-4 grid min-w-0 gap-4 lg:grid-cols-[15rem_minmax(0,1fr)]">
+      <aside className="workspace-sidebar" aria-label={t(`workspace.${variant}.navigation`)}>
+        <nav className="workspace-nav">
+          {navigation.map(item => { const Icon = item.icon; const active = item.active ? item.active(pathname) : pathname === item.path; return <NavLink key={item.key} to={item.path} className="workspace-nav-link" data-active={active}><Icon className="size-4 shrink-0" /><span>{item.label}</span></NavLink>; })}
+        </nav>
+      </aside>
+      <main className="workspace-content min-w-0">{children}</main>
+    </div>
+  </div>;
+}
+
+export function AssistanceBanner({ guildName }: { guildName?: string }) {
+  const { t } = useTranslation();
+  return <section className="admin-panel-muted rounded-xl border-l-4 border-l-warning p-4 text-sm"><div className="flex items-start gap-3"><ShieldCheck className="mt-0.5 h-5 w-5 shrink-0 text-warning" /><div><strong>{t('workspace.assistance.title')}</strong><p className="mt-1 text-content-muted">{guildName ? t('workspace.assistance.message', { guild: guildName }) : t('workspace.assistance.active')}</p><p className="mt-1 text-xs text-content-muted">{t('workspace.assistance.auditNotice')}</p></div></div><Link to="/admin/assistance" className="admin-secondary mt-3 inline-flex min-h-11 items-center gap-2 rounded-lg px-3 py-2"><ArrowLeft className="h-4 w-4" />{t('workspace.assistance.return')}</Link></section>;
 }
 
 export function EmptyState({ title, description, action }: { title: string; description: string; action?: ReactNode }) {
   return <DesignEmptyState className="mx-auto max-w-xl rounded-2xl border border-dashed border-line" icon={<AlertCircle />} title={title} description={description} action={action && <div className="mt-2">{action}</div>} />;
+}
+
+export function PermissionDeniedState({ title, description, action }: { title: string; description: string; action?: ReactNode }) {
+  return <DesignEmptyState className="mx-auto max-w-xl rounded-2xl border border-warning/40 bg-warning-subtle" icon={<LockKeyhole />} title={title} description={description} action={action} />;
 }
 
 export function RoleBadge({ role }: { role: string }) { const { t } = useTranslation(); return <Badge tone="primary">{t(`workspace.roles.${role}`)}</Badge>; }

@@ -22,6 +22,14 @@ i18n
                         "admin": "Admin",
                         "management": "Management"
                     },
+                    "shell": {
+                        "homeLabel": "Open TibiaHub home",
+                        "primaryNavigation": "Primary navigation",
+                        "mobileNavigation": "Mobile navigation",
+                        "profile": "Profile",
+                        "breadcrumbs": "Page context",
+                        "context": { "admin": "Administration workspace", "guild": "Guild workspace", "creature": "Creature detail", "quest": "Quest detail", "npc": "NPC detail", "location": "Location detail", "account": "Account" }
+                    },
                     "leadership": {
                         "title": "Guild leadership",
                         "navigation": "Leadership",
@@ -57,6 +65,7 @@ i18n
                         "subtitle": "Complete your weekly tasks, find your next hunt, and plan your next set."
                     },
                     "home": {
+                        "eyebrow": "Local knowledge and guild operations",
                         "welcomeBack": "Welcome back, {{username}}",
                         "guestTitle": "TibiaHub Home",
                         "subtitle": "Pick up where you left off, jump into the Cyclopedia, or build your next hunt route.",
@@ -73,6 +82,14 @@ i18n
                         "loadingHistory": "Loading your activity...",
                         "emptyHistory": "No activity yet. Start by opening a creature, quest, or running a search.",
                         "emptyRecentGuest": "No recent creatures yet.",
+                        "continueHelp": "Recent local activity and saved browsing context.",
+                        "emptyActivityHelp": "Your next local search or detail view will appear here.",
+                        "activityUnavailable": "Recent activity is temporarily unavailable; the rest of TibiaHub is still ready.",
+                        "partialHighlights": "Some discovery sections could not be refreshed. Available local results are shown.",
+                        "loadingHighlights": "Loading local highlights…",
+                        "discovery": { "section": "Search section", "label": "Search the Cyclopedia", "placeholder": "Search creatures, bosses, or quests", "search": "Discover", "localOnly": "Searches use TibiaHub's local PostgreSQL knowledge; no provider is contacted during this read." },
+                        "shortcuts": { "title": "Choose your next action", "cyclopedia": "Cyclopedia", "cyclopediaHelp": "Browse creatures, bosses, items, quests, and locations.", "planner": "Team Planner", "plannerHelp": "Build a hunt recommendation from your party and goal.", "quests": "Quest knowledge", "questsHelp": "Review requirements, missions, NPCs, and locations.", "guild": "Guild command center", "guildHelp": "Open member, event, leadership, and hunt operations.", "account": "Sign in", "accountHelp": "Enable recent activity and your guild workspace." },
+                        "discoveryData": { "title": "Popular and recent knowledge", "help": "Real locally available entities from the current data version.", "emptyHelp": "Highlights will appear after local data has been synchronized.", "creature": "Creature", "item": "Item", "zone": "Hunt zone", "creatureStats": "{{hp}} HP · {{exp}} EXP", "dropSources": "{{count}} known creature sources", "minimumLevel": "Minimum level: {{level}}" },
                         "profileCard": {
                             "title": "Quick Profile",
                             "subtitle": "Your account snapshot and quick access to profile settings.",
@@ -89,6 +106,7 @@ i18n
                             "openCreature": "Open creature",
                             "openQuest": "Open quest",
                             "search": "Search",
+                            "searchWithQuery": "Search: {{query}}",
                             "searchNoQuery": "Search in Cyclopedia",
                             "repeatSearch": "Repeat search",
                             "huntPlan": "Hunt plan",
@@ -164,7 +182,7 @@ i18n
                         "cards": {
                             "recent": "Recent searches",
                             "yourRecent": "Your recent searches",
-                            "topGlobal": "Top 5 most searched (global)"
+                            "topGlobal": "Top 5 most searched (global)", "recentSearch": "Recent search", "searchWithQuery": "Search: {{query}}", "experience": "{{value}} EXP", "creature": "Creature", "boss": "Boss", "quest": "Quest", "huntZone": "Hunt zone", "drops": "{{count}} drops"
                         },
                         "items": {
                             "creaturesMatched": "{{count}} creatures matched",
@@ -184,7 +202,7 @@ i18n
                         },
                         "zones": {
                             "mapPreviewUnavailable": "Map preview unavailable",
-                            "usingPlaceholder": "Using local placeholder"
+                            "usingPlaceholder": "Using local placeholder", "level": "Level {{level}}+"
                         },
                         "states": {
                             "errorTitle": "Something went wrong",
@@ -371,7 +389,10 @@ i18n
                         "success": "Success",
                         "error": "Error",
                         "warning": "Warning",
-                        "info": "Info"
+                        "info": "Info",
+                        "retry": "Try again",
+                        "unknown": "Unknown",
+                        "notAvailable": "Not available"
                     },
                     "admin": {
                         "adminPanel": "Admin Panel",
@@ -406,11 +427,14 @@ i18n
                         "review": { "title": "Relationship review", "subtitle": "Resolve, verify, or reject imported references without creating new entities.", "refresh": "Refresh references", "empty": "No references need review.", "loadError": "Relationship review is unavailable.", "source": "{{provider}} · {{confidence}} confidence", "local": "Local", "candidates": "Existing candidates", "reasonPrompt": "Enter the required audit reason", "confirmResolve": "Resolve {{name}} to this existing entity?", "confirmReject": "Reject the reference to {{name}}?", "confirmVerify": "Verify the relationship to {{name}}?", "resolved": "Reference resolved.", "rejected": "Reference rejected.", "verified": "Relationship verified.", "actionError": "The relationship could not be updated safely.", "provenance": "View provenance", "provenanceError": "Provenance is unavailable.", "provenanceSummary": "Provider: {{provider}} · {{count}} safe context fields", "reject": "Reject", "verify": "Verify", "close": "Close" }
                     },
                     "workspace": {
-                        "admin": { "title": "TibiaHub Administration", "badge": "Global admin", "navigation": "Administration sections", "loading": "Loading administration..." },
-                        "adminNav": { "overview": "Overview", "guilds": "Guilds", "users": "Users", "activities": "Global Activities", "cyclopedia": "Cyclopedia Data", "operations": "System Operations", "appearance": "Theme Playground", "settings": "Settings" },
-                        "guild": { "badge": "My guild", "navigation": "Guild sections" },
+                        "admin": { "title": "TibiaHub Administration", "badge": "Global admin", "navigation": "Administration sections", "loading": "Loading administration...", "context": "Signed in as {{username}}", "controlCenter": "Operational control center" },
+                        "adminNav": { "overview": "Overview", "guilds": "Guilds", "users": "Users", "assistance": "Assistance", "knowledge": "Knowledge", "sync": "Sync", "audits": "Audits", "activities": "Global Activities", "cyclopedia": "Cyclopedia Data", "operations": "System Operations", "appearance": "Theme Playground", "settings": "Settings" },
+                        "guild": { "badge": "My guild", "navigation": "Guild sections", "context": "{{character}} · guild operations", "commandCenter": "Guild command center" },
+                        "permission": { "title": "Permission required", "admin": "This operational workspace is available only to global administrators.", "return": "Return to guild workspace" },
                         "noGuild": { "title": "No guild is linked", "help": "Link your Tibia character and guild membership from your profile to open your guild workspace.", "profile": "Open profile" },
-                        "assistance": { "title": "Admin assistance mode", "message": "You are managing {{guild}} as a global administrator.", "auditNotice": "Actions are audited and do not change your own guild membership.", "return": "Return to Guild Directory", "badge": "Admin assistance", "manage": "Manage this guild", "publicView": "Open my guild workspace" },
+                        "assistance": { "title": "Admin assistance mode", "message": "You are managing {{guild}} as a global administrator.", "active": "You are inside an explicit guild-assistance workspace.", "auditNotice": "Actions are audited and do not change your own guild membership.", "return": "Return to Assistance", "badge": "Admin assistance", "manage": "Manage this guild", "publicView": "Open my guild workspace" },
+                        "assistanceHub": { "title": "Assistance queue", "subtitle": "Prioritize registered guilds with incomplete setup or open operational alerts.", "allGuilds": "View all guilds", "clear": "No guild needs attention", "clearHelp": "Registered guilds have complete setup and no open operational alerts.", "alerts": "{{count}} alerts", "review": "Review the guild context before making audited changes.", "open": "Open assistance workspace" },
+                        "audits": { "title": "Assistance audits", "subtitle": "Choose a registered guild to inspect its existing audited assistance history.", "error": "Audit scopes unavailable", "empty": "No audit scopes", "emptyHelp": "Registered guilds will appear here when available.", "guildHelp": "View the most recent audited assistance actions for this guild.", "open": "Open audit history", "recent": "Recent assistance actions", "noEntries": "No assisted actions are recorded for this guild yet." },
                         "adminGuilds": { "title": "Registered guilds", "subtitle": "Open an explicit, audited assistance workspace.", "empty": "No registered guilds", "emptyHelp": "Guilds appear here after a member or synchronized roster identifies them.", "open": "Open workspace" },
                         "errors": { "guildDirectory": "Guild directory unavailable", "tryAgain": "Try again in a moment.", "assistance": "Assistance workspace unavailable" },
                         "common": { "unknownServer": "Unknown server", "leader": "Leader", "members": "Members", "setup": "Setup", "alerts": "Open alerts", "loading": "Loading workspace..." },
@@ -419,9 +443,30 @@ i18n
                         "recruitment": { "title": "Recruitment", "subtitle": "Grow your guild with a focused recruitment workflow.", "empty": "Recruitment tools are being prepared", "help": "Use the member roster while applications and invitations are added here.", "members": "Open members" },
                         "raffles": { "title": "Raffles", "subtitle": "Manage scheduled draws and review historical raffles in one place.", "tabs": { "upcoming": "Upcoming", "participants": "Participants", "eligibility": "Eligibility", "draw": "Draw", "results": "Results", "history": "History" } }
                     },
+                    "profile": {
+                        "title": "Profile", "subtitle": "Manage your account identity and review linked Tibia context.",
+                        "actions": { "edit": "Edit profile", "save": "Save changes", "cancel": "Cancel" },
+                        "states": { "loading": "Loading profile…", "error": "Profile unavailable", "errorHelp": "Your profile could not be loaded safely." },
+                        "messages": { "loadError": "Failed to load profile.", "passwordMismatch": "New password and confirmation do not match.", "currentRequired": "Current password is required to set a new password.", "saved": "Profile updated successfully.", "saveError": "Failed to update profile." },
+                        "account": { "title": "Account information", "editing": "Update editable account fields.", "readOnly": "Review account fields or choose Edit profile." },
+                        "fields": { "avatarAlt": "Profile avatar", "displayName": "Display name", "title": "Title or bio line", "email": "Email", "avatar": "Avatar URL", "username": "Username", "usernameHelp": "The username cannot be changed.", "character": "Tibia character", "characterHelp": "Contact an administrator to change the linked character.", "vocation": "Vocation", "guild": "Guild", "rank": "Guild rank", "world": "World", "residence": "Residence", "status": "Tibia status", "achievementPoints": "Achievement points", "memberSince": "Member since" },
+                        "placeholders": { "displayName": "How other members see you", "title": "Guild role or short bio", "email": "you@example.com", "avatar": "https://…/avatar.png" },
+                        "values": { "notSet": "Not set", "noTitle": "No profile title", "unknown": "Unknown", "vocationLevel": "{{vocation}} · level {{level}}" },
+                        "tibia": { "title": "Linked Tibia context" },
+                        "password": { "title": "Change password", "help": "Leave these fields empty to keep the current password.", "current": "Current password", "new": "New password", "confirm": "Confirm new password" }
+                    },
+                    "guildMembers": {
+                        "title": "Guild members", "subtitle": "{{guild}} roster and current member context.", "loading": "Loading guild members…", "refresh": "Refresh roster", "search": "Search members", "searchPlaceholder": "Search character, vocation, or rank", "error": "Guild roster unavailable", "errorHelp": "The saved roster could not be loaded.", "empty": "No members available", "emptyHelp": "Members will appear after the guild roster is synchronized.", "noMatches": "No members match", "noMatchesHelp": "Change the search terms or sorting.", "sources": { "live": "Live roster", "snapshot": "Saved snapshot" }, "sort": { "level": "Highest level", "name": "Character name" }, "fields": { "character": "Character", "level": "Level", "vocation": "Vocation", "rank": "Rank", "lastLogin": "Last login" }, "values": { "member": "Member" }, "levelValue": "Level {{level}}"
+                    },
+                    "guildDashboard": {
+                        "eyebrow": "Current guild operations", "title": "Command center", "subtitle": "Compact member context, leadership health, announcements, and operational shortcuts.", "loading": "Loading guild command center…", "partialError": "Some guild summaries are temporarily unavailable.", "characterSummary": "Character summary", "fields": { "role": "Role", "level": "Level", "vocation": "Vocation", "world": "World" }, "values": { "unranked": "Unranked" }, "leadershipSummary": "{{active}} active viceleaders · {{openings}} open positions", "announcementsHelp": "Latest real guild announcements.", "noAnnouncementsHelp": "New guild announcements will appear here.", "published": "{{author}} · {{date}}", "announcementDetail": "Announcement detail", "actions": { "events": "Open events", "members": "View members" }, "quickActions": { "title": "Operational shortcuts", "help": "Move directly to focused guild work.", "hunts": "Hunt catalog", "leadership": "Leadership", "notifications": "Notifications" }
+                    },
+                    "adminOverview": {
+                        "title": "System overview", "subtitle": "Local platform status, attention signals, and operational totals.", "loading": "Loading system overview…", "error": "System overview unavailable", "errorHelp": "No operational summary could be loaded.", "partialError": "Some operational summaries are unavailable; available local results are shown.", "status": { "api": "Tibia API", "latency": "{{value}} ms", "noMessage": "No status message", "dataVersion": "Data version", "dataVersionHelp": "Latest completed external synchronization version." }, "values": { "online": "Online", "offline": "Offline", "degraded": "Degraded" }, "attention": { "title": "Attention status", "required": "Review required", "clear": "No immediate alerts", "help": "Open the related operational workspace for details." }, "sections": { "cyclopedia": "Cyclopedia", "content": "Content", "users": "Users" }, "metrics": { "totalCreatures": "Total creatures", "visible": "Visible", "hidden": "Hidden", "quests": "Quests", "zones": "Hunt zones", "totalUsers": "Total users", "active": "Active", "inactive": "Inactive", "admins": "Administrators" }
+                    },
                     "footer": { "project": "TibiaHub · {{version}}", "unavailable": "data version unavailable", "trademark": "Tibia is a trademark of CipSoft GmbH.", "dataSource": "Game data source:" },
                     "notifications": {
-                        "title": "Notifications", "empty": "No notifications yet.", "markAll": "Mark all as read", "indicator": "{{count}} unread notifications",
+                        "title": "Notifications", "subtitle": "{{count}} unread in your current workspace.", "empty": "No notifications yet.", "emptyHelp": "Guild and raffle updates will appear here when available.", "loading": "Loading notifications…", "error": "Notifications unavailable", "errorHelp": "Notifications could not be loaded or updated.", "unread": "Unread", "markAll": "Mark all as read", "indicator": "{{count}} unread notifications",
                         "types": {
                             "raffle_scheduled": { "title": "Raffle scheduled", "message": "{{raffle}} has been scheduled." },
                             "raffle_completed": { "title": "Raffle completed", "message": "{{raffle}} is ready for private review." },
@@ -714,6 +759,14 @@ i18n
                         "admin": "Admin",
                         "management": "Administración"
                     },
+                    "shell": {
+                        "homeLabel": "Abrir inicio de TibiaHub",
+                        "primaryNavigation": "Navegación principal",
+                        "mobileNavigation": "Navegación móvil",
+                        "profile": "Perfil",
+                        "breadcrumbs": "Contexto de la página",
+                        "context": { "admin": "Espacio de administración", "guild": "Espacio de la guild", "creature": "Detalle de criatura", "quest": "Detalle de quest", "npc": "Detalle de NPC", "location": "Detalle de ubicación", "account": "Cuenta" }
+                    },
                     "leadership": {
                         "title": "Liderazgo de la guild",
                         "navigation": "Liderazgo",
@@ -749,6 +802,7 @@ i18n
                         "subtitle": "Completa tus weekly tasks, encuentra tu próxima hunt y consigue tu próximo set."
                     },
                     "home": {
+                        "eyebrow": "Conocimiento local y operaciones de guild",
                         "welcomeBack": "Bienvenido de vuelta, {{username}}",
                         "guestTitle": "Inicio de TibiaHub",
                         "subtitle": "Retoma tu progreso, entra a la Cyclopedia o arma tu siguiente ruta de caza.",
@@ -765,6 +819,14 @@ i18n
                         "loadingHistory": "Cargando tu actividad...",
                         "emptyHistory": "Aún no hay actividad. Abre una criatura, quest o realiza una búsqueda.",
                         "emptyRecentGuest": "Aún no hay criaturas recientes.",
+                        "continueHelp": "Actividad local reciente y contexto de navegación guardado.",
+                        "emptyActivityHelp": "Tu próxima búsqueda o vista de detalle local aparecerá aquí.",
+                        "activityUnavailable": "La actividad reciente no está disponible temporalmente; el resto de TibiaHub sigue listo.",
+                        "partialHighlights": "Algunas secciones no pudieron actualizarse. Se muestran los resultados locales disponibles.",
+                        "loadingHighlights": "Cargando destacados locales…",
+                        "discovery": { "section": "Sección de búsqueda", "label": "Buscar en la Cyclopedia", "placeholder": "Buscar criaturas, bosses o quests", "search": "Descubrir", "localOnly": "Las búsquedas usan el conocimiento PostgreSQL local de TibiaHub; no se contacta a proveedores durante esta lectura." },
+                        "shortcuts": { "title": "Elige tu siguiente acción", "cyclopedia": "Cyclopedia", "cyclopediaHelp": "Explora criaturas, bosses, objetos, quests y ubicaciones.", "planner": "Planner de equipo", "plannerHelp": "Genera una recomendación de caza según tu equipo y objetivo.", "quests": "Conocimiento de quests", "questsHelp": "Revisa requisitos, etapas, NPC y ubicaciones.", "guild": "Centro de comando de guild", "guildHelp": "Abre operaciones de miembros, eventos, liderazgo y cacerías.", "account": "Iniciar sesión", "accountHelp": "Activa la actividad reciente y el espacio de tu guild." },
+                        "discoveryData": { "title": "Conocimiento popular y reciente", "help": "Entidades reales disponibles localmente en la versión actual de datos.", "emptyHelp": "Los destacados aparecerán después de sincronizar los datos locales.", "creature": "Criatura", "item": "Objeto", "zone": "Zona de caza", "creatureStats": "{{hp}} HP · {{exp}} EXP", "dropSources": "{{count}} fuentes conocidas de criaturas", "minimumLevel": "Nivel mínimo: {{level}}" },
                         "profileCard": {
                             "title": "Perfil rápido",
                             "subtitle": "Resumen de tu cuenta y acceso rápido a tu perfil.",
@@ -781,6 +843,7 @@ i18n
                             "openCreature": "Abrir criatura",
                             "openQuest": "Abrir quest",
                             "search": "Búsqueda",
+                            "searchWithQuery": "Búsqueda: {{query}}",
                             "searchNoQuery": "Buscar en Cyclopedia",
                             "repeatSearch": "Repetir búsqueda",
                             "huntPlan": "Plan de caza",
@@ -856,7 +919,7 @@ i18n
                         "cards": {
                             "recent": "Búsquedas recientes",
                             "yourRecent": "Tus búsquedas recientes",
-                            "topGlobal": "Top 5 más buscados (global)"
+                            "topGlobal": "Top 5 más buscados (global)", "recentSearch": "Búsqueda reciente", "searchWithQuery": "Búsqueda: {{query}}", "experience": "{{value}} EXP", "creature": "Criatura", "boss": "Boss", "quest": "Quest", "huntZone": "Zona de caza", "drops": "{{count}} drops"
                         },
                         "items": {
                             "creaturesMatched": "{{count}} criaturas encontradas",
@@ -876,7 +939,7 @@ i18n
                         },
                         "zones": {
                             "mapPreviewUnavailable": "Vista previa del mapa no disponible",
-                            "usingPlaceholder": "Usando placeholder local"
+                            "usingPlaceholder": "Usando placeholder local", "level": "Nivel {{level}}+"
                         },
                         "states": {
                             "errorTitle": "Algo salió mal",
@@ -1063,7 +1126,10 @@ i18n
                         "success": "Éxito",
                         "error": "Error",
                         "warning": "Advertencia",
-                        "info": "Información"
+                        "info": "Información",
+                        "retry": "Intentar de nuevo",
+                        "unknown": "Desconocido",
+                        "notAvailable": "No disponible"
                     },
                     "admin": {
                         "adminPanel": "Panel de Admin",
@@ -1097,11 +1163,14 @@ i18n
                         "review": { "title": "Revisión de relaciones", "subtitle": "Resuelve, verifica o rechaza referencias importadas sin crear entidades nuevas.", "refresh": "Actualizar referencias", "empty": "No hay referencias pendientes de revisión.", "loadError": "La revisión de relaciones no está disponible.", "source": "{{provider}} · confianza {{confidence}}", "local": "Local", "candidates": "Candidatos existentes", "reasonPrompt": "Ingresa la razón obligatoria para la auditoría", "confirmResolve": "¿Resolver {{name}} con esta entidad existente?", "confirmReject": "¿Rechazar la referencia a {{name}}?", "confirmVerify": "¿Verificar la relación con {{name}}?", "resolved": "Referencia resuelta.", "rejected": "Referencia rechazada.", "verified": "Relación verificada.", "actionError": "La relación no pudo actualizarse de forma segura.", "provenance": "Ver procedencia", "provenanceError": "La procedencia no está disponible.", "provenanceSummary": "Proveedor: {{provider}} · {{count}} campos de contexto seguros", "reject": "Rechazar", "verify": "Verificar", "close": "Cerrar" }
                     },
                     "workspace": {
-                        "admin": { "title": "Administración de TibiaHub", "badge": "Admin global", "navigation": "Secciones de administración", "loading": "Cargando administración..." },
-                        "adminNav": { "overview": "Resumen", "guilds": "Guilds", "users": "Usuarios", "activities": "Actividades globales", "cyclopedia": "Datos de Cyclopedia", "operations": "Operaciones del sistema", "appearance": "Laboratorio de Temas", "settings": "Configuración" },
-                        "guild": { "badge": "Mi guild", "navigation": "Secciones de la guild" },
+                        "admin": { "title": "Administración de TibiaHub", "badge": "Admin global", "navigation": "Secciones de administración", "loading": "Cargando administración...", "context": "Sesión iniciada como {{username}}", "controlCenter": "Centro de control operativo" },
+                        "adminNav": { "overview": "Resumen", "guilds": "Guilds", "users": "Usuarios", "assistance": "Asistencia", "knowledge": "Conocimiento", "sync": "Sincronización", "audits": "Auditorías", "activities": "Actividades globales", "cyclopedia": "Datos de Cyclopedia", "operations": "Operaciones del sistema", "appearance": "Laboratorio de Temas", "settings": "Configuración" },
+                        "guild": { "badge": "Mi guild", "navigation": "Secciones de la guild", "context": "{{character}} · operaciones de guild", "commandCenter": "Centro de comando de guild" },
+                        "permission": { "title": "Se requiere permiso", "admin": "Este espacio operativo está disponible solo para administradores globales.", "return": "Volver al espacio de la guild" },
                         "noGuild": { "title": "No hay una guild vinculada", "help": "Vincula tu personaje de Tibia y tu membresía desde el perfil para abrir el espacio de tu guild.", "profile": "Abrir perfil" },
-                        "assistance": { "title": "Modo de asistencia administrativa", "message": "Estás administrando {{guild}} como administrador global.", "auditNotice": "Las acciones se auditan y no cambian tu membresía personal.", "return": "Volver al directorio de guilds", "badge": "Asistencia administrativa", "manage": "Administrar esta guild", "publicView": "Abrir el espacio de mi guild" },
+                        "assistance": { "title": "Modo de asistencia administrativa", "message": "Estás administrando {{guild}} como administrador global.", "active": "Estás dentro de un espacio explícito de asistencia a una guild.", "auditNotice": "Las acciones se auditan y no cambian tu membresía personal.", "return": "Volver a Asistencia", "badge": "Asistencia administrativa", "manage": "Administrar esta guild", "publicView": "Abrir el espacio de mi guild" },
+                        "assistanceHub": { "title": "Cola de asistencia", "subtitle": "Prioriza guilds registradas con configuración incompleta o alertas operativas abiertas.", "allGuilds": "Ver todas las guilds", "clear": "Ninguna guild requiere atención", "clearHelp": "Las guilds registradas tienen configuración completa y no tienen alertas abiertas.", "alerts": "{{count}} alertas", "review": "Revisa el contexto de la guild antes de realizar cambios auditados.", "open": "Abrir espacio de asistencia" },
+                        "audits": { "title": "Auditorías de asistencia", "subtitle": "Elige una guild registrada para revisar su historial existente de asistencia auditada.", "error": "Ámbitos de auditoría no disponibles", "empty": "No hay ámbitos de auditoría", "emptyHelp": "Las guilds registradas aparecerán aquí cuando estén disponibles.", "guildHelp": "Consulta las acciones de asistencia auditadas más recientes de esta guild.", "open": "Abrir historial de auditoría", "recent": "Acciones recientes de asistencia", "noEntries": "Aún no hay acciones asistidas registradas para esta guild." },
                         "adminGuilds": { "title": "Guilds registradas", "subtitle": "Abre un espacio de asistencia explícito y auditado.", "empty": "No hay guilds registradas", "emptyHelp": "Las guilds aparecen después de identificar un miembro o sincronizar su lista.", "open": "Abrir espacio" },
                         "errors": { "guildDirectory": "Directorio de guilds no disponible", "tryAgain": "Inténtalo de nuevo en un momento.", "assistance": "Espacio de asistencia no disponible" },
                         "common": { "unknownServer": "Servidor desconocido", "leader": "Líder", "members": "Miembros", "setup": "Configuración", "alerts": "Alertas abiertas", "loading": "Cargando espacio..." },
@@ -1110,9 +1179,30 @@ i18n
                         "recruitment": { "title": "Reclutamiento", "subtitle": "Haz crecer tu guild con un flujo de reclutamiento enfocado.", "empty": "Las herramientas de reclutamiento están en preparación", "help": "Usa la lista de miembros mientras se agregan solicitudes e invitaciones.", "members": "Abrir miembros" },
                         "raffles": { "title": "Rifas", "subtitle": "Administra sorteos programados y revisa el historial en un solo lugar.", "tabs": { "upcoming": "Próximas", "participants": "Participantes", "eligibility": "Elegibilidad", "draw": "Sorteo", "results": "Resultados", "history": "Historial" } }
                     },
+                    "profile": {
+                        "title": "Perfil", "subtitle": "Administra la identidad de tu cuenta y revisa el contexto de Tibia vinculado.",
+                        "actions": { "edit": "Editar perfil", "save": "Guardar cambios", "cancel": "Cancelar" },
+                        "states": { "loading": "Cargando perfil…", "error": "Perfil no disponible", "errorHelp": "Tu perfil no pudo cargarse de forma segura." },
+                        "messages": { "loadError": "No se pudo cargar el perfil.", "passwordMismatch": "La nueva contraseña y su confirmación no coinciden.", "currentRequired": "La contraseña actual es obligatoria para establecer una nueva.", "saved": "Perfil actualizado correctamente.", "saveError": "No se pudo actualizar el perfil." },
+                        "account": { "title": "Información de la cuenta", "editing": "Actualiza los campos editables de la cuenta.", "readOnly": "Revisa los campos o elige Editar perfil." },
+                        "fields": { "avatarAlt": "Avatar del perfil", "displayName": "Nombre visible", "title": "Título o biografía breve", "email": "Correo electrónico", "avatar": "URL del avatar", "username": "Usuario", "usernameHelp": "El nombre de usuario no se puede cambiar.", "character": "Personaje de Tibia", "characterHelp": "Contacta a un administrador para cambiar el personaje vinculado.", "vocation": "Vocación", "guild": "Guild", "rank": "Rango de guild", "world": "Mundo", "residence": "Residencia", "status": "Estado de Tibia", "achievementPoints": "Puntos de logros", "memberSince": "Miembro desde" },
+                        "placeholders": { "displayName": "Cómo te ven otros miembros", "title": "Rol de guild o biografía breve", "email": "tu@ejemplo.com", "avatar": "https://…/avatar.png" },
+                        "values": { "notSet": "Sin configurar", "noTitle": "Sin título de perfil", "unknown": "Desconocido", "vocationLevel": "{{vocation}} · nivel {{level}}" },
+                        "tibia": { "title": "Contexto de Tibia vinculado" },
+                        "password": { "title": "Cambiar contraseña", "help": "Deja estos campos vacíos para conservar la contraseña actual.", "current": "Contraseña actual", "new": "Nueva contraseña", "confirm": "Confirmar nueva contraseña" }
+                    },
+                    "guildMembers": {
+                        "title": "Miembros de la guild", "subtitle": "Lista y contexto actual de {{guild}}.", "loading": "Cargando miembros de la guild…", "refresh": "Actualizar lista", "search": "Buscar miembros", "searchPlaceholder": "Buscar personaje, vocación o rango", "error": "Lista de la guild no disponible", "errorHelp": "No se pudo cargar la lista guardada.", "empty": "No hay miembros disponibles", "emptyHelp": "Los miembros aparecerán después de sincronizar la lista.", "noMatches": "Ningún miembro coincide", "noMatchesHelp": "Cambia los términos de búsqueda o el orden.", "sources": { "live": "Lista en vivo", "snapshot": "Snapshot guardado" }, "sort": { "level": "Mayor nivel", "name": "Nombre del personaje" }, "fields": { "character": "Personaje", "level": "Nivel", "vocation": "Vocación", "rank": "Rango", "lastLogin": "Último acceso" }, "values": { "member": "Miembro" }, "levelValue": "Nivel {{level}}"
+                    },
+                    "guildDashboard": {
+                        "eyebrow": "Operaciones actuales de la guild", "title": "Centro de comando", "subtitle": "Contexto compacto del miembro, salud del liderazgo, anuncios y atajos operativos.", "loading": "Cargando centro de comando…", "partialError": "Algunos resúmenes de la guild no están disponibles temporalmente.", "characterSummary": "Resumen del personaje", "fields": { "role": "Rol", "level": "Nivel", "vocation": "Vocación", "world": "Mundo" }, "values": { "unranked": "Sin rango" }, "leadershipSummary": "{{active}} viceleaders activos · {{openings}} posiciones abiertas", "announcementsHelp": "Anuncios reales más recientes de la guild.", "noAnnouncementsHelp": "Los nuevos anuncios aparecerán aquí.", "published": "{{author}} · {{date}}", "announcementDetail": "Detalle del anuncio", "actions": { "events": "Abrir eventos", "members": "Ver miembros" }, "quickActions": { "title": "Atajos operativos", "help": "Ve directamente al trabajo enfocado de la guild.", "hunts": "Catálogo de cacerías", "leadership": "Liderazgo", "notifications": "Notificaciones" }
+                    },
+                    "adminOverview": {
+                        "title": "Resumen del sistema", "subtitle": "Estado local de la plataforma, señales de atención y totales operativos.", "loading": "Cargando resumen del sistema…", "error": "Resumen no disponible", "errorHelp": "No se pudo cargar ningún resumen operativo.", "partialError": "Algunos resúmenes operativos no están disponibles; se muestran los resultados locales disponibles.", "status": { "api": "API de Tibia", "latency": "{{value}} ms", "noMessage": "Sin mensaje de estado", "dataVersion": "Versión de datos", "dataVersionHelp": "Última versión de sincronización externa completada." }, "values": { "online": "En línea", "offline": "Desconectada", "degraded": "Degradada" }, "attention": { "title": "Estado de atención", "required": "Revisión necesaria", "clear": "Sin alertas inmediatas", "help": "Abre el espacio operativo relacionado para ver detalles." }, "sections": { "cyclopedia": "Cyclopedia", "content": "Contenido", "users": "Usuarios" }, "metrics": { "totalCreatures": "Criaturas totales", "visible": "Visibles", "hidden": "Ocultas", "quests": "Quests", "zones": "Zonas de caza", "totalUsers": "Usuarios totales", "active": "Activos", "inactive": "Inactivos", "admins": "Administradores" }
+                    },
                     "footer": { "project": "TibiaHub · {{version}}", "unavailable": "versión de datos no disponible", "trademark": "Tibia es una marca registrada de CipSoft GmbH.", "dataSource": "Fuente de datos del juego:" },
                     "notifications": {
-                        "title": "Notificaciones", "empty": "Aún no hay notificaciones.", "markAll": "Marcar todas como leídas", "indicator": "{{count}} notificaciones sin leer",
+                        "title": "Notificaciones", "subtitle": "{{count}} sin leer en tu espacio actual.", "empty": "Aún no hay notificaciones.", "emptyHelp": "Las novedades de guild y rifas aparecerán aquí cuando estén disponibles.", "loading": "Cargando notificaciones…", "error": "Notificaciones no disponibles", "errorHelp": "No se pudieron cargar o actualizar las notificaciones.", "unread": "Sin leer", "markAll": "Marcar todas como leídas", "indicator": "{{count}} notificaciones sin leer",
                         "types": {
                             "raffle_scheduled": { "title": "Rifa programada", "message": "{{raffle}} ha sido programada." },
                             "raffle_completed": { "title": "Rifa completada", "message": "{{raffle}} está lista para revisión privada." },

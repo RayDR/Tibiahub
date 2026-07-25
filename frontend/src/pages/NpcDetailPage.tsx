@@ -24,11 +24,11 @@ export default function NpcDetailPage() {
     return () => controller.abort();
   }, [identifier]);
 
-  if (loading) return <div role="status" className="flex min-h-screen items-center justify-center text-primary"><Loader2 className="animate-spin" size={42} /><span className="sr-only">{t('namedKnowledge.loading')}</span></div>;
+  if (loading) return <div role="status" className="flex min-h-[24rem] items-center justify-center text-primary"><Loader2 className="animate-spin" size={42} /><span className="sr-only">{t('namedKnowledge.loading')}</span></div>;
   if (!npc) return <div className="mx-auto mt-28 max-w-3xl rounded-2xl border border-danger/20 bg-danger/20 p-6"><h1 className="text-lg font-semibold text-danger">{t('namedKnowledge.npcUnavailable')}</h1><p className="mt-2 text-sm text-danger/80">{t('namedKnowledge.notFound')}</p></div>;
 
   const place = npc.relationships.find(relationship => relationship.relationship_type === 'located_at');
-  return <main className="min-h-screen pb-20 pt-28"><div className="container mx-auto max-w-5xl px-4">
+  return <main className="mx-auto max-w-5xl pb-12 pt-6"><div>
     <button onClick={() => navigate(-1)} className="mb-6 flex min-h-11 items-center gap-2 text-content-secondary hover:text-content-primary"><ArrowLeft size={18} />{t('namedKnowledge.back')}</button>
     <article className="rounded-2xl border border-line bg-surface-base/70 p-4 sm:p-6">
       <header className="flex items-start gap-3"><UserRound className="mt-1 shrink-0 text-primary" /><div><p className="text-xs font-semibold uppercase tracking-wide text-content-muted">{t('namedKnowledge.types.npc')}</p><h1 className="text-2xl font-bold text-content-primary sm:text-3xl">{npc.name}</h1>{npc.title && <p className="mt-1 text-primary">{npc.title}</p>}</div></header>

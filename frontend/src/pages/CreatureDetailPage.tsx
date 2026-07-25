@@ -97,7 +97,7 @@ const CreatureDetailPage: React.FC = () => {
 
   if (loading) {
     return (
-      <div className="flex min-h-screen items-center justify-center text-primary">
+      <div className="flex min-h-[24rem] items-center justify-center text-primary">
         <div className="flex flex-col items-center gap-4">
           <Loader2 className="animate-spin" size={48} />
           <p className="text-lg font-serif">Summoning creature details...</p>
@@ -126,10 +126,10 @@ const CreatureDetailPage: React.FC = () => {
   const backTarget = (location.state as { from?: string } | null)?.from;
 
   return (
-    <div className="min-h-screen pb-20 pt-28">
+    <div className="pb-12 pt-6">
       <div className="relative mb-8">
         <div className="pointer-events-none absolute inset-0 bg-gradient-to-b from-primary/10 to-transparent" />
-        <div className="container relative z-10 mx-auto px-4">
+        <div className="relative z-10">
           <button
             onClick={() => {
               if (backTarget) {
@@ -203,7 +203,7 @@ const CreatureDetailPage: React.FC = () => {
         </div>
       </div>
 
-      <div className="container mx-auto grid gap-8 px-4 lg:grid-cols-12">
+      <div className="grid gap-8 lg:grid-cols-12">
         <div className="space-y-8 lg:col-span-8">
           <div className="rounded-2xl border border-line bg-surface-base/80 p-6 backdrop-blur">
             <h2 className="mb-4 flex items-center gap-2 text-xl font-serif font-bold text-primary">
