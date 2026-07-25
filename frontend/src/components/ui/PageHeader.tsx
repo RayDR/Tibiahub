@@ -23,7 +23,7 @@ const PageHeader: React.FC<PageHeaderProps> = ({
   return (
     <div className={`app-page-header ${alignClass}`}>
       <h1 className={`app-page-title ${titleSizeClass} inline-flex items-center gap-3`}>
-        {icon ? <FontAwesomeIcon icon={icon} className="text-[color:var(--primary)]" /> : null}
+        {icon ? <FontAwesomeIcon icon={icon} className="text-primary" /> : null}
         <span>{title}</span>
       </h1>
       {subtitle ? <p className="app-page-subtitle">{subtitle}</p> : null}
