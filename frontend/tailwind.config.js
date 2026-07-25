@@ -38,6 +38,12 @@ export default {
           strong: tokenColor('border-strong'),
           focus: tokenColor('focus'),
         },
+        selected: { DEFAULT: 'var(--selected)', strong: 'var(--selected-strong)' },
+        disabled: 'var(--disabled-surface)',
+        chart: {
+          1: tokenColor('chart-1'), 2: tokenColor('chart-2'), 3: tokenColor('chart-3'),
+          4: tokenColor('chart-4'), 5: tokenColor('chart-5'), 6: tokenColor('chart-6'),
+        },
       },
       fontFamily: {
         sans: ['var(--font-body)'],
@@ -68,7 +74,7 @@ export default {
         in: 'fade-in var(--duration-slow) var(--ease-emphasized) both',
       },
       zIndex: {
-        dropdown: 'var(--z-dropdown)', sticky: 'var(--z-sticky)', overlay: 'var(--z-overlay)', modal: 'var(--z-modal)', toast: 'var(--z-toast)', tooltip: 'var(--z-tooltip)',
+        base: 'var(--z-base)', dropdown: 'var(--z-dropdown)', sticky: 'var(--z-sticky)', overlay: 'var(--z-overlay)', modal: 'var(--z-modal)', toast: 'var(--z-toast)', tooltip: 'var(--z-tooltip)',
       },
     },
   },

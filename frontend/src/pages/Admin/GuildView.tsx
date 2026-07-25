@@ -165,7 +165,7 @@ export default function GuildView() {
                         <div>
                             <div className="flex items-center gap-2">
                                 <h1 className="text-xl font-semibold text-content-primary">{selectedGuild}</h1>
-                                <span className="text-xs bg-primary/40 text-primary px-2 py-0.5 rounded border border-primary/40">
+                                <span className="text-xs bg-primary/15 text-primary px-2 py-0.5 rounded border border-primary/40">
                                     Read-only preview
                                 </span>
                             </div>

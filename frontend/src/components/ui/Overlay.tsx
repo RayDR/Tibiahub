@@ -1,4 +1,5 @@
-import React from 'react';
+import React, { useEffect } from 'react';
+import { createPortal } from 'react-dom';
 import { cn } from './cn';
 
 interface DialogProps extends React.HTMLAttributes<HTMLDivElement> {
@@ -8,8 +9,17 @@ interface DialogProps extends React.HTMLAttributes<HTMLDivElement> {
 }
 
 export const Dialog: React.FC<DialogProps> = ({ open, onClose, label, className, children, ...props }) => {
+  useEffect(() => {
+    if (!open) return undefined;
+    const closeOnEscape = (event: KeyboardEvent) => {
+      if (event.key === 'Escape') onClose();
+    };
+    document.addEventListener('keydown', closeOnEscape);
+    return () => document.removeEventListener('keydown', closeOnEscape);
+  }, [open, onClose]);
+
   if (!open) return null;
-  return (
+  return createPortal(
     <div className="ds-dialog-backdrop" onMouseDown={onClose}>
       <div
         role="dialog"
@@ -21,7 +31,8 @@ export const Dialog: React.FC<DialogProps> = ({ open, onClose, label, className,
       >
         {children}
       </div>
-    </div>
+    </div>,
+    document.body,
   );
 };
 

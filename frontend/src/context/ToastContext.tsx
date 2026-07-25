@@ -1,5 +1,6 @@
 import React, { createContext, useContext, useState, useCallback } from 'react';
 import { CheckCircle, XCircle, AlertCircle, Info, X } from 'lucide-react';
+import { useTranslation } from 'react-i18next';
 
 type ToastType = 'success' | 'error' | 'warning' | 'info';
 
@@ -29,6 +30,7 @@ export const useToast = () => {
 };
 
 export const ToastProvider: React.FC<{ children: React.ReactNode }> = ({ children }) => {
+    const { t } = useTranslation();
     const [toasts, setToasts] = useState<Toast[]>([]);
 
     const removeToast = useCallback((id: string) => {
@@ -67,13 +69,13 @@ export const ToastProvider: React.FC<{ children: React.ReactNode }> = ({ childre
 
         switch (type) {
             case 'success':
-                return `${baseStyles} bg-success/90 border-success/50 text-success`;
+                return `${baseStyles} bg-surface-overlay border-success/60 text-content-primary`;
             case 'error':
-                return `${baseStyles} bg-danger/90 border-danger/50 text-danger`;
+                return `${baseStyles} bg-surface-overlay border-danger/60 text-content-primary`;
             case 'warning':
-                return `${baseStyles} bg-primary/90 border-primary/50 text-primary`;
+                return `${baseStyles} bg-surface-overlay border-warning/60 text-content-primary`;
             case 'info':
-                return `${baseStyles} bg-info/90 border-info/50 text-info`;
+                return `${baseStyles} bg-surface-overlay border-info/60 text-content-primary`;
         }
     };
 
@@ -85,7 +87,7 @@ export const ToastProvider: React.FC<{ children: React.ReactNode }> = ({ childre
             case 'error':
                 return <XCircle className={`${iconClass} text-danger`} />;
             case 'warning':
-                return <AlertCircle className={`${iconClass} text-primary`} />;
+                return <AlertCircle className={`${iconClass} text-warning`} />;
             case 'info':
                 return <Info className={`${iconClass} text-info`} />;
         }
@@ -96,11 +98,11 @@ export const ToastProvider: React.FC<{ children: React.ReactNode }> = ({ childre
             {children}
 
             {/* Toast Container */}
-            <div className="fixed top-4 right-4 z-[9999] space-y-2 pointer-events-none">
+            <div className="fixed top-4 right-4 z-toast space-y-2 pointer-events-none">
                 {toasts.map((toast) => (
                     <div
                         key={toast.id}
-                        className="pointer-events-auto animate-in slide-in-from-right duration-300"
+                        className="ds-toast pointer-events-auto"
                     >
                         <div className={getToastStyles(toast.type)}>
                             {getIcon(toast.type)}
@@ -110,7 +112,7 @@ export const ToastProvider: React.FC<{ children: React.ReactNode }> = ({ childre
                             <button
                                 onClick={() => removeToast(toast.id)}
                                 className="text-content-primary/70 hover:text-content-primary transition-colors flex-shrink-0"
-                                aria-label="Close notification"
+                                aria-label={t('common.close')}
                             >
                                 <X className="w-4 h-4" />
                             </button>

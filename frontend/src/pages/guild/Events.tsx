@@ -185,14 +185,14 @@ export const Events: React.FC = () => {
   const getTypeMeta = (type: string) => {
     switch (type) {
       case 'raffle':
-        return { label: 'Raffle', badge: 'bg-primary/30 text-primary border-primary/50' };
+        return { label: 'Raffle', badge: 'bg-primary/15 text-primary border-primary/50' };
       case 'contest':
-        return { label: 'Contest', badge: 'bg-danger/30 text-danger border-danger/50' };
+        return { label: 'Contest', badge: 'bg-danger/15 text-danger border-danger/50' };
       case 'hunt':
       case 'hunt_event':
-        return { label: 'Hunt', badge: 'bg-success/30 text-success border-success/50' };
+        return { label: 'Hunt', badge: 'bg-success/15 text-success border-success/50' };
       case 'quest':
-        return { label: 'Quest', badge: 'bg-accent/30 text-accent border-accent/50' };
+        return { label: 'Quest', badge: 'bg-accent/15 text-accent border-accent/50' };
       default:
         return { label: 'Custom', badge: 'bg-surface text-content-secondary border-line' };
     }
@@ -330,7 +330,7 @@ export const Events: React.FC = () => {
                   </button>
                 )}
                 {hasUserJoined(event) && !event.is_drawn && (
-                  <span className="flex-1 px-4 py-2 bg-success/30 text-success rounded-md text-center font-medium text-sm border border-success/50">
+                  <span className="flex-1 px-4 py-2 bg-success/15 text-success rounded-md text-center font-medium text-sm border border-success/50">
                     Joined ✓
                   </span>
                 )}
@@ -416,7 +416,7 @@ const CreateEventModal: React.FC<CreateEventModalProps> = ({ contestsEnabled, ra
   };
 
   return (
-    <div className="fixed inset-0 bg-surface-base/80 backdrop-blur-sm flex items-center justify-center z-50 p-4" onClick={onClose}>
+    <div className="fixed inset-0 bg-surface-base/80 backdrop-blur-sm flex items-center justify-center z-modal p-4" onClick={onClose}>
       <div className="bg-surface-base border border-line rounded-lg w-full max-w-2xl max-h-[90vh] overflow-y-auto" onClick={e => e.stopPropagation()}>
         <div className="p-6 border-b border-line sticky top-0 bg-surface-base z-10">
           <h2 className="text-2xl font-bold text-content-primary">Create New Event</h2>
@@ -813,14 +813,14 @@ const EventDetailModal: React.FC<EventDetailModalProps> = ({
   };
 
   return (
-    <div className="fixed inset-0 bg-surface-base/80 backdrop-blur-sm flex items-center justify-center z-50 p-4" onClick={onClose}>
+    <div className="fixed inset-0 bg-surface-base/80 backdrop-blur-sm flex items-center justify-center z-modal p-4" onClick={onClose}>
       <div className="bg-surface-base border border-line rounded-lg w-full max-w-3xl max-h-[90vh] overflow-y-auto" onClick={e => e.stopPropagation()}>
         <div className="p-6 border-b border-line flex justify-between items-start sticky top-0 bg-surface-base z-10">
           <h2 className="text-2xl font-bold text-content-primary">{event.title}</h2>
           {canManageEvent && (
             <button
               onClick={() => onDelete(event.id)}
-              className="p-2 bg-danger/30 hover:bg-danger/50 text-danger border border-danger/50 rounded-md transition-colors"
+              className="p-2 bg-danger/15 hover:bg-danger/20 text-danger border border-danger/50 rounded-md transition-colors"
             >
               <Trash2 size={18} />
             </button>
@@ -1066,7 +1066,7 @@ const EventDetailModal: React.FC<EventDetailModalProps> = ({
                       <div className="flex gap-2">
                         <button
                           onClick={() => handleExcludeParticipant(p.id, p.username || 'Unknown participant')}
-                          className="px-2 py-1 bg-danger/30 hover:bg-danger/50 text-danger rounded text-xs border border-danger/50 transition-colors"
+                          className="px-2 py-1 bg-danger/15 hover:bg-danger/20 text-danger rounded text-xs border border-danger/50 transition-colors"
                           title="Excluir permanentemente (no volverá en actualizaciones automáticas)"
                         >
                           🚫

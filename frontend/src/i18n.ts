@@ -104,12 +104,42 @@ i18n
                         "zonesPlaceholder": "Search zones..."
                     },
                     "themes": {
-                        "default": "Default",
-                        "defaultDescription": "Modern blue dark theme",
-                        "medieval": "Medieval",
-                        "medievalDescription": "Gold accents with deep blue",
-                        "tibiaStone": "Tibia Stone",
-                        "tibiaStoneDescription": "Stone and metal inspired"
+                        "default": { "name": "Default", "description": "Clear blue accents over deep slate surfaces." },
+                        "medieval": { "name": "Medieval", "description": "Warm gold, parchment text, and deep blue steel." },
+                        "tibia-stone": { "name": "Tibia Stone", "description": "Weathered stone and metal with restrained gold." },
+                        "midnight-arcana": { "name": "Midnight Arcana", "description": "Arcane violet and cyan over a midnight sky." },
+                        "blood-moon": { "name": "Blood Moon", "description": "Crimson moonlight with ember accents." },
+                        "high-contrast": { "name": "High Contrast", "description": "Maximum separation, bright focus, and strong borders." }
+                    },
+                    "appearance": {
+                        "title": "Appearance",
+                        "open": "Open appearance preferences",
+                        "close": "Close appearance preferences",
+                        "persisted": "Saved on this device",
+                        "theme": "Theme",
+                        "motion": "Motion",
+                        "density": "Density",
+                        "motionOptions": { "system": "System", "reduced": "Reduced", "enhanced": "Enhanced" },
+                        "densityOptions": { "comfortable": "Comfortable", "compact": "Compact" }
+                    },
+                    "themePlayground": {
+                        "title": "Theme Playground",
+                        "subtitle": "Review semantic components, contrast, motion, density, and overlay layering across every supported theme.",
+                        "reset": "Reset appearance",
+                        "gallery": "Theme gallery",
+                        "galleryHelp": "Each preview is isolated to its own complete theme token set.",
+                        "selected": "Selected theme",
+                        "tabs": { "components": "Components", "states": "States", "data": "Data display" },
+                        "components": { "actions": "Buttons and badges", "forms": "Forms", "overlays": "Dropdowns and dialogs", "motion": "Motion preview" },
+                        "actions": { "primary": "Primary", "secondary": "Secondary", "ghost": "Ghost", "danger": "Danger", "disabled": "Disabled" },
+                        "tones": { "neutral": "Neutral", "primary": "Primary", "success": "Success", "warning": "Warning", "danger": "Danger", "info": "Info" },
+                        "forms": { "name": "Name", "help": "Focus, placeholder, and disabled states use semantic tokens.", "placeholder": "Enter a name", "category": "Category", "creature": "Creature", "quest": "Quest", "notes": "Notes", "notesPlaceholder": "Add an optional note" },
+                        "dropdown": { "open": "Toggle dropdown", "closed": "Open the dropdown to inspect its elevation and stacking.", "profile": "Profile", "settings": "Settings", "signOut": "Sign out" },
+                        "dialog": { "open": "Open dialog", "title": "Theme-aware dialog", "description": "This dialog is rendered in a portal above navigation and dropdown layers.", "close": "Close dialog" },
+                        "motion": { "play": "Replay preview", "description": "Current motion preference: {{mode}}. Operating-system reduced-motion remains authoritative." },
+                        "alerts": { "success": "The operation completed successfully.", "warning": "Review this warning before continuing.", "danger": "The operation could not be completed.", "info": "Additional information is available." },
+                        "states": { "empty": "Nothing here yet", "emptyHelp": "Empty states remain readable and actionable in every theme.", "loading": "Loading local data" },
+                        "table": { "component": "Component", "state": "State", "token": "Primary token", "button": "Button", "dialog": "Dialog", "disabled": "Disabled control", "ready": "Ready", "layered": "Layered", "visible": "Visible" }
                     },
                     "cyclopedia": {
                         "categories": {
@@ -377,7 +407,7 @@ i18n
                     },
                     "workspace": {
                         "admin": { "title": "TibiaHub Administration", "badge": "Global admin", "navigation": "Administration sections", "loading": "Loading administration..." },
-                        "adminNav": { "overview": "Overview", "guilds": "Guilds", "users": "Users", "activities": "Global Activities", "cyclopedia": "Cyclopedia Data", "operations": "System Operations", "settings": "Settings" },
+                        "adminNav": { "overview": "Overview", "guilds": "Guilds", "users": "Users", "activities": "Global Activities", "cyclopedia": "Cyclopedia Data", "operations": "System Operations", "appearance": "Theme Playground", "settings": "Settings" },
                         "guild": { "badge": "My guild", "navigation": "Guild sections" },
                         "noGuild": { "title": "No guild is linked", "help": "Link your Tibia character and guild membership from your profile to open your guild workspace.", "profile": "Open profile" },
                         "assistance": { "title": "Admin assistance mode", "message": "You are managing {{guild}} as a global administrator.", "auditNotice": "Actions are audited and do not change your own guild membership.", "return": "Return to Guild Directory", "badge": "Admin assistance", "manage": "Manage this guild", "publicView": "Open my guild workspace" },
@@ -766,12 +796,42 @@ i18n
                         "zonesPlaceholder": "Buscar zonas..."
                     },
                     "themes": {
-                        "default": "Default",
-                        "defaultDescription": "Tema oscuro azul moderno",
-                        "medieval": "Medieval",
-                        "medievalDescription": "Acentos dorados con azul profundo",
-                        "tibiaStone": "Tibia Stone",
-                        "tibiaStoneDescription": "Inspirado en piedra y metal"
+                        "default": { "name": "Predeterminado", "description": "Acentos azules claros sobre superficies de pizarra profunda." },
+                        "medieval": { "name": "Medieval", "description": "Oro cálido, texto pergamino y acero azul profundo." },
+                        "tibia-stone": { "name": "Piedra de Tibia", "description": "Piedra y metal desgastados con oro discreto." },
+                        "midnight-arcana": { "name": "Arcano Nocturno", "description": "Violeta arcano y cian sobre un cielo de medianoche." },
+                        "blood-moon": { "name": "Luna de Sangre", "description": "Luz lunar carmesí con acentos de brasa." },
+                        "high-contrast": { "name": "Alto Contraste", "description": "Máxima separación, foco brillante y bordes definidos." }
+                    },
+                    "appearance": {
+                        "title": "Apariencia",
+                        "open": "Abrir preferencias de apariencia",
+                        "close": "Cerrar preferencias de apariencia",
+                        "persisted": "Guardado en este dispositivo",
+                        "theme": "Tema",
+                        "motion": "Movimiento",
+                        "density": "Densidad",
+                        "motionOptions": { "system": "Sistema", "reduced": "Reducido", "enhanced": "Mejorado" },
+                        "densityOptions": { "comfortable": "Cómoda", "compact": "Compacta" }
+                    },
+                    "themePlayground": {
+                        "title": "Laboratorio de Temas",
+                        "subtitle": "Revisa componentes semánticos, contraste, movimiento, densidad y capas de superposición en todos los temas compatibles.",
+                        "reset": "Restablecer apariencia",
+                        "gallery": "Galería de temas",
+                        "galleryHelp": "Cada vista previa está aislada con su propio conjunto completo de tokens.",
+                        "selected": "Tema seleccionado",
+                        "tabs": { "components": "Componentes", "states": "Estados", "data": "Datos" },
+                        "components": { "actions": "Botones e insignias", "forms": "Formularios", "overlays": "Menús y diálogos", "motion": "Vista previa de movimiento" },
+                        "actions": { "primary": "Primario", "secondary": "Secundario", "ghost": "Sutil", "danger": "Peligro", "disabled": "Deshabilitado" },
+                        "tones": { "neutral": "Neutral", "primary": "Primario", "success": "Éxito", "warning": "Advertencia", "danger": "Peligro", "info": "Información" },
+                        "forms": { "name": "Nombre", "help": "El foco, placeholder y estados deshabilitados usan tokens semánticos.", "placeholder": "Ingresa un nombre", "category": "Categoría", "creature": "Criatura", "quest": "Misión", "notes": "Notas", "notesPlaceholder": "Agrega una nota opcional" },
+                        "dropdown": { "open": "Alternar menú", "closed": "Abre el menú para revisar su elevación y nivel de capa.", "profile": "Perfil", "settings": "Configuración", "signOut": "Cerrar sesión" },
+                        "dialog": { "open": "Abrir diálogo", "title": "Diálogo adaptable al tema", "description": "Este diálogo se muestra en un portal por encima de la navegación y los menús.", "close": "Cerrar diálogo" },
+                        "motion": { "play": "Repetir vista previa", "description": "Preferencia actual de movimiento: {{mode}}. La reducción de movimiento del sistema operativo siempre tiene prioridad." },
+                        "alerts": { "success": "La operación se completó correctamente.", "warning": "Revisa esta advertencia antes de continuar.", "danger": "La operación no pudo completarse.", "info": "Hay información adicional disponible." },
+                        "states": { "empty": "Aún no hay contenido", "emptyHelp": "Los estados vacíos permanecen legibles y útiles en todos los temas.", "loading": "Cargando datos locales" },
+                        "table": { "component": "Componente", "state": "Estado", "token": "Token principal", "button": "Botón", "dialog": "Diálogo", "disabled": "Control deshabilitado", "ready": "Listo", "layered": "En capas", "visible": "Visible" }
                     },
                     "cyclopedia": {
                         "categories": {
@@ -1038,7 +1098,7 @@ i18n
                     },
                     "workspace": {
                         "admin": { "title": "Administración de TibiaHub", "badge": "Admin global", "navigation": "Secciones de administración", "loading": "Cargando administración..." },
-                        "adminNav": { "overview": "Resumen", "guilds": "Guilds", "users": "Usuarios", "activities": "Actividades globales", "cyclopedia": "Datos de Cyclopedia", "operations": "Operaciones del sistema", "settings": "Configuración" },
+                        "adminNav": { "overview": "Resumen", "guilds": "Guilds", "users": "Usuarios", "activities": "Actividades globales", "cyclopedia": "Datos de Cyclopedia", "operations": "Operaciones del sistema", "appearance": "Laboratorio de Temas", "settings": "Configuración" },
                         "guild": { "badge": "Mi guild", "navigation": "Secciones de la guild" },
                         "noGuild": { "title": "No hay una guild vinculada", "help": "Vincula tu personaje de Tibia y tu membresía desde el perfil para abrir el espacio de tu guild.", "profile": "Abrir perfil" },
                         "assistance": { "title": "Modo de asistencia administrativa", "message": "Estás administrando {{guild}} como administrador global.", "auditNotice": "Las acciones se auditan y no cambian tu membresía personal.", "return": "Volver al directorio de guilds", "badge": "Asistencia administrativa", "manage": "Administrar esta guild", "publicView": "Abrir el espacio de mi guild" },

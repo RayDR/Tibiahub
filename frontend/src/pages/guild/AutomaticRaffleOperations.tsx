@@ -308,7 +308,7 @@ export default function AutomaticRaffleOperations({
       {error && (
         <div
           role="alert"
-          className="rounded-xl border border-danger/40 bg-danger/30 p-3 text-danger"
+          className="rounded-xl border border-danger/40 bg-danger/15 p-3 text-danger"
         >
           {error}
         </div>

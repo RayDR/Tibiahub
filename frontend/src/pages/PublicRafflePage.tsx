@@ -235,7 +235,7 @@ export default function PublicRafflePage() {
                                                 }`}
                                             >
                                                 <span className={`w-6 h-6 flex items-center justify-center rounded-full font-mono ${
-                                                    isEliminated ? 'bg-danger/50 text-danger' : 'bg-surface text-content-muted'
+                                                    isEliminated ? 'bg-danger/15 text-danger' : 'bg-surface text-content-muted'
                                                 }`}>
                                                     {isEliminated ? '✗' : i + 1}
                                                 </span>

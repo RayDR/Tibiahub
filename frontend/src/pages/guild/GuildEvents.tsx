@@ -110,8 +110,8 @@ export default function Events() {
                         <div className="flex-1">
                             <div className="flex items-start justify-between">
                                 <div>
-                                    <span className={`inline-block px-2 py-0.5 rounded text-[10px] font-bold uppercase tracking-wider mb-2 ${event.type === 'quest' ? 'bg-accent/50 text-accent' :
-                                        event.type === 'hunt' ? 'bg-danger/50 text-danger' :
+                                    <span className={`inline-block px-2 py-0.5 rounded text-[10px] font-bold uppercase tracking-wider mb-2 ${event.type === 'quest' ? 'bg-accent/15 text-accent' :
+                                        event.type === 'hunt' ? 'bg-danger/15 text-danger' :
                                             'bg-surface text-content-secondary'
                                         }`}>
                                         {event.type}
@@ -150,7 +150,7 @@ export default function Events() {
 
             {/* Create Modal */}
             {showModal && (
-                <div className="fixed inset-0 bg-surface-base/80 backdrop-blur-sm z-50 flex items-center justify-center p-4">
+                <div className="fixed inset-0 bg-surface-base/80 backdrop-blur-sm z-modal flex items-center justify-center p-4">
                     <div className="bg-surface-base border border-line rounded-lg w-full max-w-lg shadow-2xl">
                         <div className="p-6 border-b border-line">
                             <h3 className="text-xl font-bold text-content-primary">Schedule Event</h3>
