@@ -1,4 +1,4 @@
-import React, { useEffect } from 'react';
+import React, { useEffect, useRef } from 'react';
 import { createPortal } from 'react-dom';
 import { cn } from './cn';
 
@@ -9,22 +9,35 @@ interface DialogProps extends React.HTMLAttributes<HTMLDivElement> {
 }
 
 export const Dialog: React.FC<DialogProps> = ({ open, onClose, label, className, children, ...props }) => {
+  const dialogRef = useRef<HTMLDivElement | null>(null);
   useEffect(() => {
     if (!open) return undefined;
+    const previousFocus = document.activeElement instanceof HTMLElement ? document.activeElement : null;
+    const focusable = () => Array.from(dialogRef.current?.querySelectorAll<HTMLElement>('button:not([disabled]), a[href], input:not([disabled]), select:not([disabled]), textarea:not([disabled]), [tabindex]:not([tabindex="-1"])') || []);
     const closeOnEscape = (event: KeyboardEvent) => {
       if (event.key === 'Escape') onClose();
+      if (event.key === 'Tab') {
+        const items = focusable();
+        if (!items.length) { event.preventDefault(); dialogRef.current?.focus(); return; }
+        const first = items[0]; const last = items[items.length - 1];
+        if (event.shiftKey && document.activeElement === first) { event.preventDefault(); last.focus(); }
+        else if (!event.shiftKey && document.activeElement === last) { event.preventDefault(); first.focus(); }
+      }
     };
     document.addEventListener('keydown', closeOnEscape);
-    return () => document.removeEventListener('keydown', closeOnEscape);
+    requestAnimationFrame(() => { const items = focusable(); (items[0] || dialogRef.current)?.focus(); });
+    return () => { document.removeEventListener('keydown', closeOnEscape); previousFocus?.focus(); };
   }, [open, onClose]);
 
   if (!open) return null;
   return createPortal(
     <div className="ds-dialog-backdrop" onMouseDown={onClose}>
       <div
+        ref={dialogRef}
         role="dialog"
         aria-modal="true"
         aria-label={label}
+        tabIndex={-1}
         className={cn('ds-dialog', className)}
         onMouseDown={(event) => event.stopPropagation()}
         {...props}

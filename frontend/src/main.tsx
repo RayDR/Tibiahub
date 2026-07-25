@@ -6,18 +6,26 @@ import './i18n';
 import ErrorBoundary from './components/ErrorBoundary';
 
 import { BrowserRouter } from 'react-router-dom';
-import { AppearanceProvider, initializeAppearance } from './context/AppearanceContext';
+import { MotionConfig } from 'framer-motion';
+import { AppearanceProvider, initializeAppearance, useAppearance } from './context/AppearanceContext';
 
 const initialAppearance = initializeAppearance();
+
+function MotionBoundary({ children }: { children: React.ReactNode }) {
+  const { motion } = useAppearance();
+  return <MotionConfig reducedMotion={motion === 'reduced' ? 'always' : 'user'}>{children}</MotionConfig>;
+}
 
 ReactDOM.createRoot(document.getElementById('root')!).render(
   <StrictMode>
     <AppearanceProvider initialPreferences={initialAppearance}>
-      <ErrorBoundary>
-        <BrowserRouter>
-          <App />
-        </BrowserRouter>
-      </ErrorBoundary>
+      <MotionBoundary>
+        <ErrorBoundary>
+          <BrowserRouter>
+            <App />
+          </BrowserRouter>
+        </ErrorBoundary>
+      </MotionBoundary>
     </AppearanceProvider>
   </StrictMode>,
 )

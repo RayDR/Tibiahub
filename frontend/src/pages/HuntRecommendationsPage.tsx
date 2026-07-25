@@ -160,10 +160,10 @@ const HuntRecommendationsPage: React.FC = () => {
   };
 
   return (
-    <div className="min-h-screen pb-20 pt-24">
+    <div className="pb-12 pt-6">
 
       {/* Hero Section */}
-      <div className="container mx-auto px-4 mb-12 text-center">
+      <div className="mb-8 text-center">
         <PageHeader
           title="Hunt Finder"
           subtitle="Advanced recommendations based on vocation synergy, levels and loot efficiency."
@@ -171,7 +171,7 @@ const HuntRecommendationsPage: React.FC = () => {
         />
       </div>
 
-      <div className="container mx-auto px-4 grid lg:grid-cols-12 gap-8">
+      <div className="grid gap-8 lg:grid-cols-12">
 
         {/* Configuration Panel */}
         <div className="lg:col-span-4 space-y-6">

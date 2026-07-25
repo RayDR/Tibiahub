@@ -425,9 +425,9 @@ function AdminSyncTab() {
 }
 
 // ── Main DataTools component ───────────────────────────────────────────────────
-export default function DataTools() {
+export default function DataTools({ initialTab = 'api-monitor' }: { initialTab?: Tab }) {
     const { t } = useTranslation();
-    const [activeTab, setActiveTab] = useState<Tab>('api-monitor');
+    const [activeTab, setActiveTab] = useState<Tab>(initialTab);
 
     const tabs: { id: Tab; label: string; icon: any; description: string }[] = [
         { id: 'api-monitor', label: 'API Monitor', icon: Globe, description: 'External API health checks' },

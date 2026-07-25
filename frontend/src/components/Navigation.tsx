@@ -1,204 +1,100 @@
-import React, { useEffect, useRef, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { Link, useLocation, useNavigate } from 'react-router-dom';
-import { BookOpen, ChevronDown, Map, Shield, Settings } from 'lucide-react';
-import { motion } from 'framer-motion';
-import { useTranslation } from 'react-i18next';
+import { BookOpen, ChevronDown, Home, Map, Settings, Shield, UserRound } from 'lucide-react';
 import { FontAwesomeIcon } from '@fortawesome/react-fontawesome';
-import { useAuth } from '../context/AuthContext';
-import LanguageSwitcher from './LanguageSwitcher';
-import ThemeSwitcher from './ThemeSwitcher';
-import { cyclopediaSections } from '../config/cyclopediaSections';
-import NotificationIndicator from './NotificationIndicator';
+import { useTranslation } from 'react-i18next';
 
-const Navigation: React.FC = () => {
+import { useAuth } from '../context/AuthContext';
+import { cyclopediaSections } from '../config/cyclopediaSections';
+import LanguageSwitcher from './LanguageSwitcher';
+import NotificationIndicator from './NotificationIndicator';
+import ThemeSwitcher from './ThemeSwitcher';
+
+interface NavigationItem {
+  path: string;
+  label: string;
+  icon: typeof Home;
+}
+
+export default function Navigation() {
   const location = useLocation();
   const navigate = useNavigate();
   const { t } = useTranslation();
   const { isAuthenticated, user } = useAuth();
   const [cyclopediaMenuOpen, setCyclopediaMenuOpen] = useState(false);
-  const closeTimerRef = useRef<number | null>(null);
-  const cyclopediaWrapperRef = useRef<HTMLDivElement | null>(null);
-
-  const clearCloseTimer = () => {
-    if (closeTimerRef.current !== null) {
-      window.clearTimeout(closeTimerRef.current);
-      closeTimerRef.current = null;
-    }
-  };
-
-  const openCyclopediaMenu = () => {
-    clearCloseTimer();
-    setCyclopediaMenuOpen(true);
-  };
-
-  const scheduleCloseCyclopediaMenu = () => {
-    clearCloseTimer();
-    closeTimerRef.current = window.setTimeout(() => {
-      setCyclopediaMenuOpen(false);
-      closeTimerRef.current = null;
-    }, 300);
-  };
-
-  useEffect(() => {
-    return () => {
-      clearCloseTimer();
-    };
-  }, []);
-
-  useEffect(() => {
-    if (!cyclopediaMenuOpen) return;
-    const onPointerDown = (event: MouseEvent | TouchEvent) => {
-      const target = event.target as Node;
-      if (cyclopediaWrapperRef.current && !cyclopediaWrapperRef.current.contains(target)) {
-        setCyclopediaMenuOpen(false);
-      }
-    };
-    const onKeyDown = (event: KeyboardEvent) => {
-      if (event.key === 'Escape') {
-        setCyclopediaMenuOpen(false);
-      }
-    };
-    window.addEventListener('mousedown', onPointerDown);
-    window.addEventListener('touchstart', onPointerDown);
-    window.addEventListener('keydown', onKeyDown);
-    return () => {
-      window.removeEventListener('mousedown', onPointerDown);
-      window.removeEventListener('touchstart', onPointerDown);
-      window.removeEventListener('keydown', onKeyDown);
-    };
-  }, [cyclopediaMenuOpen]);
+  const menuRef = useRef<HTMLDivElement | null>(null);
 
   const isActive = (path: string) => {
-    if (path === '/cyclopedia') {
-      return location.pathname === '/cyclopedia' || location.pathname.startsWith('/creatures/') || location.pathname.startsWith('/quests/');
-    }
-    return location.pathname === path;
+    if (path === '/') return location.pathname === '/';
+    if (path === '/cyclopedia') return location.pathname === '/cyclopedia' || /^\/(creatures|quests|npcs|locations)\//.test(location.pathname);
+    return location.pathname === path || location.pathname.startsWith(`${path}/`);
   };
 
-  const navItems = [
+  const primaryItems: NavigationItem[] = [
+    { path: '/', label: t('nav.home'), icon: Home },
     { path: '/cyclopedia', label: t('nav.search'), icon: BookOpen },
     { path: '/planner', label: t('nav.planner'), icon: Map },
-    ...(isAuthenticated
-        ? [{ path: '/guild', label: t('nav.guild'), icon: Shield }]
-        : []),
+    ...(isAuthenticated ? [{ path: '/guild', label: t('nav.guild'), icon: Shield }] : []),
     ...(user?.is_superuser ? [{ path: '/admin', label: t('nav.admin'), icon: Settings }] : []),
   ];
 
-  return (
-    <motion.nav
-      initial={{ y: -100 }}
-      animate={{ y: 0 }}
-      className="fixed top-0 left-0 right-0 z-sticky px-2 sm:px-4 py-2 sm:py-4"
-    >
-      <div className="max-w-7xl mx-auto">
-        <div className="app-nav-shell backdrop-blur-md rounded-xl sm:rounded-2xl px-3 sm:px-6 py-2 sm:py-3 flex items-center justify-between shadow-2xl shadow-surface-base/20">
+  useEffect(() => {
+    if (!cyclopediaMenuOpen) return undefined;
+    const closeOutside = (event: MouseEvent | TouchEvent) => {
+      if (menuRef.current && !menuRef.current.contains(event.target as Node)) setCyclopediaMenuOpen(false);
+    };
+    const closeOnEscape = (event: KeyboardEvent) => {
+      if (event.key === 'Escape') setCyclopediaMenuOpen(false);
+    };
+    document.addEventListener('mousedown', closeOutside);
+    document.addEventListener('touchstart', closeOutside);
+    document.addEventListener('keydown', closeOnEscape);
+    return () => {
+      document.removeEventListener('mousedown', closeOutside);
+      document.removeEventListener('touchstart', closeOutside);
+      document.removeEventListener('keydown', closeOnEscape);
+    };
+  }, [cyclopediaMenuOpen]);
 
-          <Link to="/" className="flex items-center gap-2 sm:gap-3 group">
-            <img
-              src="/assets/logo/tibiahub.png"
-              alt="Tibia Hub"
-              className="w-8 h-8 sm:w-10 sm:h-10 rounded-lg shadow-lg group-hover:shadow-primary/20 transition-all duration-300 group-hover:scale-110"
-            />
-            <div className="hidden xs:flex flex-col leading-tight">
-              <span className="font-serif font-bold text-sm tracking-tight text-content-primary">
-                <span className="text-primary">Tibia</span> Hub
-              </span>
-            </div>
+  return (
+    <>
+      <header className="fixed inset-x-0 top-0 z-sticky px-2 pt-2 sm:px-4 sm:pt-3">
+        <div className="app-nav-shell mx-auto flex max-w-[90rem] items-center justify-between rounded-xl px-2 py-1.5 shadow-lg backdrop-blur-md sm:px-3">
+          <Link to="/" className="flex min-h-11 min-w-0 items-center gap-2 rounded-lg px-1.5" aria-label={t('shell.homeLabel')}>
+            <img src="/assets/logo/tibiahub.png" alt="" className="size-8 shrink-0 rounded-lg sm:size-9" />
+            <span className="hidden font-serif text-sm font-bold text-content-primary sm:inline"><span className="text-primary">Tibia</span>Hub</span>
           </Link>
 
-          <div className="flex items-center gap-0.5 sm:gap-1 min-w-0">
-            <div
-              ref={cyclopediaWrapperRef}
-              className="relative"
-              onMouseEnter={openCyclopediaMenu}
-              onMouseLeave={scheduleCloseCyclopediaMenu}
-              onFocusCapture={openCyclopediaMenu}
-              onBlurCapture={(event) => {
-                if (!event.currentTarget.contains(event.relatedTarget as Node)) {
-                  scheduleCloseCyclopediaMenu();
-                }
-              }}
-            >
-              <div className="flex items-center">
-                <Link
-                  to="/cyclopedia"
-                  className={`app-nav-link relative px-4 py-2 rounded-l-xl flex items-center gap-2 transition-all duration-300 ${isActive('/cyclopedia') ? 'app-nav-link' : ''}`}
-                  data-active={isActive('/cyclopedia')}
-                >
-                  <BookOpen size={18} />
-                  <span className="hidden md:block font-medium text-sm">{t('nav.search')}</span>
-                </Link>
-                <button
-                  type="button"
-                  aria-label={t('a11y.openCyclopediaMenu')}
-                  onClick={() => setCyclopediaMenuOpen((current) => !current)}
-                  className="app-nav-link rounded-r-xl px-2 py-2"
-                >
-                  <ChevronDown size={16} className={`transition-transform ${cyclopediaMenuOpen ? 'rotate-180' : ''}`} />
-                </button>
-              </div>
-
-              {cyclopediaMenuOpen && (
-                <div className="absolute left-0 top-full mt-2 w-56 rounded-xl border border-line bg-surface p-1.5 shadow-2xl">
-                  {cyclopediaSections.map((entry) => (
-                    <button
-                      key={entry.key}
-                      type="button"
-                      onClick={() => {
-                        clearCloseTimer();
-                        setCyclopediaMenuOpen(false);
-                        navigate(`/cyclopedia?tab=${entry.key}`);
-                      }}
-                      className="flex w-full items-center gap-2 rounded-lg px-3 py-2 text-left text-sm text-content-muted hover:bg-surface-inverse/5 hover:text-content-primary"
-                    >
-                      <FontAwesomeIcon icon={entry.icon} className="w-4" />
-                      <span>{t(entry.i18nLabel)}</span>
-                    </button>
-                  ))}
-                </div>
-              )}
-            </div>
-
-            {navItems.filter((item) => item.path !== '/cyclopedia').map((item) => {
-              const active = isActive(item.path);
+          <nav className="hidden min-w-0 items-center gap-1 md:flex" aria-label={t('shell.primaryNavigation')}>
+            {primaryItems.map(item => {
               const Icon = item.icon;
-
-              return (
-                <Link
-                  key={item.path}
-                  to={item.path}
-                  className="app-nav-link relative px-4 py-2 rounded-xl flex items-center gap-2 transition-all duration-300"
-                  data-active={active}
-                >
-                  <Icon size={18} />
-                  <span className="hidden md:block font-medium text-sm">{item.label}</span>
-                  {active && (
-                    <motion.div
-                      layoutId="nav-glow"
-                      className="absolute inset-0 rounded-xl bg-gradient-to-r from-primary/15 to-primary-hover/15"
-                      initial={false}
-                      transition={{ type: "spring", stiffness: 300, damping: 30 }}
-                    />
-                  )}
-                </Link>
-              );
+              if (item.path === '/cyclopedia') {
+                return <div ref={menuRef} key={item.path} className="relative flex">
+                  <Link to={item.path} className="app-nav-link flex min-h-11 items-center gap-2 rounded-l-lg px-3" data-active={isActive(item.path)}><Icon className="size-4" /><span>{item.label}</span></Link>
+                  <button type="button" className="app-nav-link min-h-11 rounded-r-lg px-2" aria-label={t('a11y.openCyclopediaMenu')} aria-expanded={cyclopediaMenuOpen} onClick={() => setCyclopediaMenuOpen(value => !value)}><ChevronDown className={`size-4 transition-transform ${cyclopediaMenuOpen ? 'rotate-180' : ''}`} /></button>
+                  {cyclopediaMenuOpen ? <div className="ds-dropdown absolute left-0 top-full mt-2 w-56">
+                    {cyclopediaSections.map(entry => <button key={entry.key} type="button" onClick={() => { setCyclopediaMenuOpen(false); navigate(`/cyclopedia?tab=${entry.key}`); }} className="flex min-h-11 w-full items-center gap-2 rounded-sm px-3 text-left text-sm text-content-secondary hover:bg-surface-hover hover:text-content-primary"><FontAwesomeIcon icon={entry.icon} className="w-4" /><span>{t(entry.i18nLabel)}</span></button>)}
+                  </div> : null}
+                </div>;
+              }
+              return <Link key={item.path} to={item.path} className="app-nav-link flex min-h-11 items-center gap-2 rounded-lg px-3" data-active={isActive(item.path)}><Icon className="size-4" /><span>{item.label}</span></Link>;
             })}
+          </nav>
 
-            {/* Language Selector Divider */}
-            <div className="hidden sm:block w-px h-6 bg-surface-raised mx-1 sm:mx-2" />
-
+          <div className="flex shrink-0 items-center gap-0.5">
             <LanguageSwitcher />
-            {isAuthenticated && <NotificationIndicator />}
-
-            <div className="hidden sm:block w-px h-6 bg-surface-raised mx-1" />
-
+            {isAuthenticated ? <NotificationIndicator /> : null}
             <ThemeSwitcher />
-
+            {isAuthenticated ? <Link to="/profile" aria-label={t('shell.profile')} className="app-nav-link grid min-h-11 min-w-11 place-items-center rounded-lg" data-active={isActive('/profile')}><UserRound className="size-4" /></Link> : <Link to="/login" className="app-button-primary app-button-sm ml-1">{t('auth.login')}</Link>}
           </div>
         </div>
-      </div>
-    </motion.nav>
-  );
-};
+      </header>
 
-export default Navigation;
+      <nav className="app-mobile-nav fixed inset-x-0 bottom-0 z-sticky border-t border-line bg-surface-overlay px-1 pt-1 backdrop-blur-md md:hidden" aria-label={t('shell.mobileNavigation')}>
+        <div className="app-mobile-nav-grid mx-auto max-w-xl" style={{ '--mobile-nav-count': primaryItems.length } as React.CSSProperties}>
+          {primaryItems.map(item => { const Icon = item.icon; return <Link key={item.path} to={item.path} className="app-mobile-nav-link" data-active={isActive(item.path)} aria-current={isActive(item.path) ? 'page' : undefined}><Icon className="size-5" /><span className="max-w-full truncate px-1">{item.label}</span></Link>; })}
+        </div>
+      </nav>
+    </>
+  );
+}
