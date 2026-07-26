@@ -4,6 +4,7 @@ from app.knowledge.registry import EntityTypeRegistry, ProviderRegistry
 from app.knowledge.services.bootstrap import (
     KnowledgeBootstrapService,
     TIBIAWIKI_BOOTSTRAP_CONFIRMATION,
+    TIBIAWIKI_ROOT_CATALOG_PRIORITY,
 )
 from app.models.workspace_audit import WorkspaceAudit
 from tests.conftest import make_user
@@ -56,5 +57,6 @@ def test_tibiawiki_bootstrap_enables_provider_and_queues_idempotent_catalog_root
     assert second.created_count == 0
     assert {job.entity_type_id for job in first.jobs} == {"creature", "item", "quest", "npc", "location", "route"}
     assert all(job.trigger == "bootstrap" and job.scope == {"batch_limit": 50} for job in first.jobs)
+    assert all(job.priority == TIBIAWIKI_ROOT_CATALOG_PRIORITY for job in first.jobs)
     assert db.query(KnowledgeJob).count() == 6
     assert db.query(WorkspaceAudit).filter_by(action="knowledge_tibiawiki_bootstrap_started").count() == 2

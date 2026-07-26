@@ -13,6 +13,7 @@ from app.models.workspace_audit import WorkspaceAudit
 
 
 TIBIAWIKI_BOOTSTRAP_CONFIRMATION = "ENABLE TIBIAWIKI FULL SYNC"
+TIBIAWIKI_ROOT_CATALOG_PRIORITY = 200
 TIBIAWIKI_CATALOGS = (
     ("creature_catalog", "creature"),
     ("item_catalog", "item"),
@@ -71,7 +72,10 @@ class KnowledgeBootstrapService:
                     entity_type=entity_type,
                     scope={"batch_limit": batch_limit},
                     payload={},
-                    priority=80,
+                    # Seed every entity family before detail expansion. Detail
+                    # jobs use priority 100, so a lower root priority lets the
+                    # first large catalog starve all other catalog roots.
+                    priority=TIBIAWIKI_ROOT_CATALOG_PRIORITY,
                     max_attempts=5,
                     created_by_id=actor_id,
                     trigger="bootstrap",
@@ -79,6 +83,9 @@ class KnowledgeBootstrapService:
                 ),
             )
             jobs.append(result.job)
+            # Existing active idempotent roots keep their original priority;
+            # promote them as part of a repeated bootstrap as well.
+            result.job.priority = max(result.job.priority, TIBIAWIKI_ROOT_CATALOG_PRIORITY)
             created_count += int(result.created)
 
         db.add(WorkspaceAudit(
