@@ -1,233 +1,63 @@
-// Password Reset Page
-import { useState } from 'react';
-import { useNavigate, useSearchParams } from 'react-router-dom';
-import { useToast } from '../context/ToastContext';
-import { Shield, Loader2, CheckCircle, Mail } from 'lucide-react';
+import { FormEvent, useState } from 'react';
+import { Link, useNavigate, useSearchParams } from 'react-router-dom';
+import { CheckCircle, Loader2, Mail, Shield } from 'lucide-react';
+import { useTranslation } from 'react-i18next';
+
+import { AppButton, Card, FormField, Input, Page } from '../components/ui';
 import api from '../services/api';
 
 export default function PasswordReset() {
-    const [searchParams] = useSearchParams();
-    const navigate = useNavigate();
-    const toast = useToast();
+  const { t, i18n } = useTranslation();
+  const [params] = useSearchParams();
+  const navigate = useNavigate();
+  const token = params.get('token');
+  const [step, setStep] = useState<'request'|'reset'|'success'>(token ? 'reset' : 'request');
+  const [identifierType, setIdentifierType] = useState<'email'|'character'>('email');
+  const [identifier, setIdentifier] = useState('');
+  const [password, setPassword] = useState('');
+  const [confirm, setConfirm] = useState('');
+  const [busy, setBusy] = useState(false);
+  const [error, setError] = useState('');
 
-    const token = searchParams.get('token');
+  const requestReset = async (event: FormEvent) => {
+    event.preventDefault(); setBusy(true); setError('');
+    try {
+      await api.post('/password/request-reset', {
+        [identifierType === 'email' ? 'email' : 'character_name']: identifier.trim(),
+        locale: i18n.language.startsWith('es') ? 'es' : 'en',
+      });
+      setStep('success');
+    } catch { setError(t('passwordRecovery.errors.request')); }
+    finally { setBusy(false); }
+  };
+  const reset = async (event: FormEvent) => {
+    event.preventDefault(); setError('');
+    if (password !== confirm) { setError(t('passwordRecovery.errors.match')); return; }
+    if (password.length < 12) { setError(t('passwordRecovery.errors.length')); return; }
+    setBusy(true);
+    try {
+      await api.post('/password/reset-password', { token, new_password: password });
+      setStep('success'); window.setTimeout(() => navigate('/login'), 1500);
+    } catch { setError(t('passwordRecovery.errors.invalid')); }
+    finally { setBusy(false); }
+  };
 
-    const [loading, setLoading] = useState(false);
-    const [step, setStep] = useState<'request' | 'reset' | 'success'>(token ? 'reset' : 'request');
-    const [formData, setFormData] = useState({
-        email: '',
-        character_name: '',
-        new_password: '',
-        confirm_password: '',
-    });
-
-    const handleRequestReset = async (e: React.FormEvent) => {
-        e.preventDefault();
-
-        if (!formData.email && !formData.character_name) {
-            toast.error('Please provide email or character name');
-            return;
-        }
-
-        setLoading(true);
-        try {
-            await api.post('/password/request-reset', {
-                email: formData.email || undefined,
-                character_name: formData.character_name || undefined,
-            });
-
-            setStep('success');
-            toast.success('If an account exists, a reset email has been sent');
-        } catch (error: any) {
-            console.error('Failed to request reset:', error);
-            toast.error(error.response?.data?.detail || 'Failed to request password reset');
-        } finally {
-            setLoading(false);
-        }
-    };
-
-    const handleResetPassword = async (e: React.FormEvent) => {
-        e.preventDefault();
-
-        if (formData.new_password !== formData.confirm_password) {
-            toast.error('Passwords do not match');
-            return;
-        }
-
-        if (formData.new_password.length < 6) {
-            toast.error('Password must be at least 6 characters');
-            return;
-        }
-
-        setLoading(true);
-        try {
-            await api.post('/password/reset-password', {
-                token,
-                new_password: formData.new_password,
-            });
-
-            toast.success('Password reset successfully!');
-            setTimeout(() => navigate('/login'), 2000);
-        } catch (error: any) {
-            console.error('Failed to reset password:', error);
-            toast.error(error.response?.data?.detail || 'Failed to reset password');
-        } finally {
-            setLoading(false);
-        }
-    };
-
-    return (
-        <div className="min-h-screen bg-surface-base flex items-center justify-center p-4">
-            <div className="w-full max-w-md">
-                {/* Logo/Header */}
-                <div className="text-center mb-8">
-                    <div className="flex items-center justify-center gap-3 mb-4">
-                        <Shield className="w-10 h-10 md:w-12 md:h-12 text-primary" />
-                        <h1 className="text-3xl md:text-4xl font-serif text-content-primary">TibiaHub</h1>
-                    </div>
-                    <p className="text-content-secondary text-sm md:text-base">
-                        {step === 'request' && 'Reset Your Password'}
-                        {step === 'reset' && 'Create New Password'}
-                        {step === 'success' && 'Check Your Email'}
-                    </p>
-                </div>
-
-                {/* Request Reset Form */}
-                {step === 'request' && (
-                    <div className="bg-surface-base/50 border border-line rounded-lg p-6 md:p-8">
-                        <form onSubmit={handleRequestReset} className="space-y-6">
-                            <div>
-                                <label className="block text-sm font-medium text-content-secondary mb-2">
-                                    <Mail className="w-4 h-4 inline mr-1" />
-                                    Email Address
-                                </label>
-                                <input
-                                    type="email"
-                                    value={formData.email}
-                                    onChange={(e) => setFormData({ ...formData, email: e.target.value })}
-                                    className="w-full bg-surface-base border border-line rounded px-3 py-2 text-content-primary focus:outline-none focus:border-primary"
-                                    placeholder="your.email@example.com"
-                                />
-                            </div>
-
-                            <div className="flex items-center gap-4">
-                                <div className="flex-1 border-t border-line"></div>
-                                <span className="text-content-muted text-sm">OR</span>
-                                <div className="flex-1 border-t border-line"></div>
-                            </div>
-
-                            <div>
-                                <label className="block text-sm font-medium text-content-secondary mb-2">
-                                    <Shield className="w-4 h-4 inline mr-1" />
-                                    Tibia Character Name
-                                </label>
-                                <input
-                                    type="text"
-                                    value={formData.character_name}
-                                    onChange={(e) => setFormData({ ...formData, character_name: e.target.value })}
-                                    className="w-full bg-surface-base border border-line rounded px-3 py-2 text-content-primary focus:outline-none focus:border-primary"
-                                    placeholder="Character Name"
-                                />
-                            </div>
-
-                            <button
-                                type="submit"
-                                disabled={loading}
-                                className="w-full bg-primary hover:bg-primary-hover disabled:bg-surface-raised disabled:text-content-muted text-content-on-primary font-semibold py-3 rounded-md transition-colors flex items-center justify-center gap-2"
-                            >
-                                {loading ? (
-                                    <>
-                                        <Loader2 className="w-5 h-5 animate-spin" />
-                                        Sending...
-                                    </>
-                                ) : (
-                                    'Send Reset Link'
-                                )}
-                            </button>
-
-                            <div className="text-center">
-                                <button
-                                    type="button"
-                                    onClick={() => navigate('/login')}
-                                    className="text-sm text-primary hover:text-primary transition-colors"
-                                >
-                                    Back to Login
-                                </button>
-                            </div>
-                        </form>
-                    </div>
-                )}
-
-                {/* Reset Password Form */}
-                {step === 'reset' && (
-                    <div className="bg-surface-base/50 border border-line rounded-lg p-6 md:p-8">
-                        <form onSubmit={handleResetPassword} className="space-y-6">
-                            <div>
-                                <label className="block text-sm font-medium text-content-secondary mb-2">
-                                    New Password
-                                </label>
-                                <input
-                                    type="password"
-                                    value={formData.new_password}
-                                    onChange={(e) => setFormData({ ...formData, new_password: e.target.value })}
-                                    className="w-full bg-surface-base border border-line rounded px-3 py-2 text-content-primary focus:outline-none focus:border-primary"
-                                    placeholder="At least 6 characters"
-                                    required
-                                />
-                            </div>
-
-                            <div>
-                                <label className="block text-sm font-medium text-content-secondary mb-2">
-                                    Confirm Password
-                                </label>
-                                <input
-                                    type="password"
-                                    value={formData.confirm_password}
-                                    onChange={(e) => setFormData({ ...formData, confirm_password: e.target.value })}
-                                    className="w-full bg-surface-base border border-line rounded px-3 py-2 text-content-primary focus:outline-none focus:border-primary"
-                                    placeholder="Repeat password"
-                                    required
-                                />
-                            </div>
-
-                            <button
-                                type="submit"
-                                disabled={loading}
-                                className="w-full bg-primary hover:bg-primary-hover disabled:bg-surface-raised disabled:text-content-muted text-content-on-primary font-semibold py-3 rounded-md transition-colors flex items-center justify-center gap-2"
-                            >
-                                {loading ? (
-                                    <>
-                                        <Loader2 className="w-5 h-5 animate-spin" />
-                                        Resetting...
-                                    </>
-                                ) : (
-                                    'Reset Password'
-                                )}
-                            </button>
-                        </form>
-                    </div>
-                )}
-
-                {/* Success Message */}
-                {step === 'success' && (
-                    <div className="bg-surface-base/50 border border-success/50 rounded-lg p-6 md:p-8 text-center">
-                        <CheckCircle className="w-16 h-16 text-success mx-auto mb-4" />
-                        <h2 className="text-2xl font-semibold text-content-primary mb-2">Email Sent!</h2>
-                        <p className="text-content-secondary mb-6">
-                            If an account with that information exists, we've sent a password reset link to your email.
-                        </p>
-                        <p className="text-sm text-content-muted mb-6">
-                            Please check your inbox and spam folder.
-                        </p>
-                        <button
-                            onClick={() => navigate('/login')}
-                            className="text-primary hover:text-primary transition-colors"
-                        >
-                            Return to Login
-                        </button>
-                    </div>
-                )}
-            </div>
-        </div>
-    );
+  return <Page className="grid min-h-[70vh] place-items-center py-8"><Card className="w-full max-w-md p-5 sm:p-7">
+    <header className="text-center"><Shield className="mx-auto size-10 text-primary"/><h1 className="mt-3 text-2xl font-semibold">{t(`passwordRecovery.${step}.title`)}</h1><p className="mt-1 text-sm text-content-muted">{t(`passwordRecovery.${step}.help`)}</p></header>
+    {error ? <p role="alert" className="mt-4 rounded-lg border border-danger/30 p-3 text-sm text-danger">{error}</p> : null}
+    {step === 'request' ? <form onSubmit={requestReset} className="mt-6 space-y-4">
+      <div className="grid grid-cols-2 gap-2" role="group" aria-label={t('passwordRecovery.identifier')}>
+        {(['email','character'] as const).map(value=><button type="button" key={value} onClick={()=>setIdentifierType(value)} className={`min-h-11 rounded-lg border px-3 ${identifierType===value?'border-primary bg-primary-subtle':'border-line'}`}>{t(`passwordRecovery.${value}`)}</button>)}
+      </div>
+      <FormField label={t(`passwordRecovery.${identifierType}`)}><Input type={identifierType==='email'?'email':'text'} value={identifier} onChange={event=>setIdentifier(event.target.value)} required minLength={2} autoComplete={identifierType==='email'?'email':'off'} /></FormField>
+      <AppButton className="w-full" type="submit" disabled={busy}>{busy?<Loader2 className="size-4 animate-spin"/>:<Mail className="size-4"/>}{t('passwordRecovery.request.action')}</AppButton>
+    </form> : null}
+    {step === 'reset' ? <form onSubmit={reset} className="mt-6 space-y-4">
+      <FormField label={t('passwordRecovery.newPassword')} helpText={t('passwordRecovery.passwordHelp')}><Input type="password" minLength={12} maxLength={128} autoComplete="new-password" value={password} onChange={event=>setPassword(event.target.value)} required /></FormField>
+      <FormField label={t('passwordRecovery.confirmPassword')}><Input type="password" minLength={12} maxLength={128} autoComplete="new-password" value={confirm} onChange={event=>setConfirm(event.target.value)} required /></FormField>
+      <AppButton className="w-full" type="submit" disabled={busy}>{busy?<Loader2 className="size-4 animate-spin"/>:null}{t('passwordRecovery.reset.action')}</AppButton>
+    </form> : null}
+    {step === 'success' ? <div className="mt-6 text-center"><CheckCircle className="mx-auto size-12 text-success"/><p className="mt-3 text-content-secondary">{t(token?'passwordRecovery.success.reset':'passwordRecovery.success.request')}</p></div> : null}
+    <Link to="/login" className="mt-6 block min-h-11 text-center text-sm text-primary">{t('passwordRecovery.back')}</Link>
+  </Card></Page>;
 }

@@ -8,28 +8,28 @@ from pydantic import BaseModel, Field, field_validator
 
 
 class RafflePrizeCreate(BaseModel):
-    name: str
-    reward: str
+    name: str = Field(..., min_length=1, max_length=200)
+    reward: str = Field(..., min_length=1, max_length=500)
     order_index: Optional[int] = None
     position: Optional[Literal["second", "first"]] = None
-    amount: Optional[Decimal] = None
-    currency: Optional[str] = None
+    amount: Optional[Decimal] = Field(None, gt=0)
+    currency: Optional[str] = Field(None, min_length=1, max_length=20)
 
 
 class RaffleCreate(BaseModel):
-    title: str
+    title: str = Field(..., min_length=3, max_length=200)
     description: Optional[str] = None
     guild_name: str = Field(..., min_length=1)
     scope_type: Literal["guild", "server", "global"] = "guild"
     world_name: Optional[str] = None
-    access_mode: str = "guild_only"
+    access_mode: Literal["guild_only", "world_only", "public"] = "guild_only"
     show_participants: bool = True
-    visibility: str = "public"
+    visibility: Literal["public", "private"] = "public"
     registration_enabled: bool = True
-    run_mode: str = "manual"
+    run_mode: Literal["manual", "automatic"] = "manual"
     scheduled_run_at: Optional[datetime] = None
     archive_after_days: int = 7
-    prizes: List[RafflePrizeCreate] = []
+    prizes: List[RafflePrizeCreate] = Field(default_factory=list, max_length=50)
     purpose: Literal["test", "real", "legacy"] = "legacy"
     timezone_name: str = "America/Chicago"
     eligibility_days: int = Field(5, ge=1, le=30)
@@ -44,7 +44,7 @@ class RaffleCreate(BaseModel):
 
 
 class RaffleUpdate(BaseModel):
-    title: Optional[str] = None
+    title: Optional[str] = Field(None, min_length=3, max_length=200)
     description: Optional[str] = None
     guild_name: Optional[str] = None
     access_mode: Optional[str] = None
@@ -134,10 +134,10 @@ class RaffleResponse(BaseModel):
     rerun_count: int
     created_at: datetime
     updated_at: datetime
-    participants: List[RaffleParticipantResponse] = []
-    prizes: List[RafflePrizeResponse] = []
-    current_winners: List[RaffleWinnerResponse] = []
-    history: List[RaffleWinnerResponse] = []
+    participants: List[RaffleParticipantResponse] = Field(default_factory=list)
+    prizes: List[RafflePrizeResponse] = Field(default_factory=list)
+    current_winners: List[RaffleWinnerResponse] = Field(default_factory=list)
+    history: List[RaffleWinnerResponse] = Field(default_factory=list)
     purpose: str = "legacy"
     timezone_name: str = "America/Chicago"
     eligibility_days: int = 5
@@ -228,7 +228,7 @@ class AutomaticResultResponse(BaseModel):
     delivered_at: Optional[datetime] = None
     delivered_by_name: Optional[str] = None
     delivery_note: Optional[str] = None
-    delivery_history: List[dict] = []
+    delivery_history: List[dict] = Field(default_factory=list)
 
 
 class AutomaticRunResponse(BaseModel):
@@ -245,7 +245,7 @@ class AutomaticRunResponse(BaseModel):
     failure_summary: Optional[str] = None
     algorithm_version: str
     entropy_commitment: Optional[str] = None
-    results: List[AutomaticResultResponse] = []
+    results: List[AutomaticResultResponse] = Field(default_factory=list)
 
 
 class AutomaticRerunRequest(BaseModel):
@@ -340,6 +340,6 @@ class PublicRaffleResponse(BaseModel):
     publication_status: str
     show_participants: bool
     participant_count: int
-    participants: List[PublicRaffleParticipantResponse] = []
-    prizes: List[RafflePrizeResponse] = []
-    winners: List[PublicRaffleWinnerResponse] = []
+    participants: List[PublicRaffleParticipantResponse] = Field(default_factory=list)
+    prizes: List[RafflePrizeResponse] = Field(default_factory=list)
+    winners: List[PublicRaffleWinnerResponse] = Field(default_factory=list)

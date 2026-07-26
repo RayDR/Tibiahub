@@ -80,8 +80,11 @@ class RaffleEligibilityService:
         if raffle.run_mode != "automatic" or raffle.access_mode != "guild_only":
             raise RaffleEligibilityError("invalid_raffle_mode", "Automatic eligibility requires a guild-only automatic raffle")
 
+        # Manual-trigger automatic draws use the trigger-time preview as their
+        # effective draw time; scheduled draws retain their configured instant.
+        effective_draw_at = raffle.scheduled_run_at or utc_now()
         cutoff_at = raffle.eligibility_cutoff_at or compute_eligibility_cutoff(
-            raffle.scheduled_run_at, raffle.timezone_name, raffle.eligibility_days,
+            effective_draw_at, raffle.timezone_name, raffle.eligibility_days,
         )
         try:
             guild_info = await get_guild_info(raffle.guild_name)
@@ -121,10 +124,10 @@ class RaffleEligibilityService:
             elif user.username.casefold().startswith("guest_"):
                 exclusion_code = "guest_account"
             else:
-                names: list[str] = []
-                if user.tibia_character_name:
-                    names.append(user.tibia_character_name)
-                names.extend(character.character_name for character in user.characters if character.character_name)
+                names = [
+                    character.character_name for character in user.characters
+                    if character.character_name and character.ownership_status == "verified"
+                ]
                 for name in names:
                     current = member_lookup.get(name.strip().casefold())
                     if current:

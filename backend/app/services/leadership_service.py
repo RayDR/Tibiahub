@@ -27,6 +27,10 @@ TRANSITIONS = {
 }
 
 
+def _as_utc(value: datetime) -> datetime:
+    return value.replace(tzinfo=UTC) if value.tzinfo is None else value.astimezone(UTC)
+
+
 class LeadershipService:
     @staticmethod
     def valid_actions(application: GuildLeadershipApplication, viewer: User) -> list[str]:
@@ -67,12 +71,57 @@ class LeadershipService:
         return [user for user in db.query(User).filter(User.guild_name.ilike(guild_name), User.is_active.is_(True)).all() if is_guild_leader(user, guild_name)]
 
     @staticmethod
+    def reviewers(db: Session, opening: GuildLeadershipOpening) -> list[User]:
+        return [
+            user for user in db.query(User).filter(
+                User.guild_name.ilike(opening.guild_name), User.is_active.is_(True),
+            ).all()
+            if LeadershipService.reviewer(user, opening)
+        ]
+
+    @staticmethod
     def reviewer(user: User, opening: GuildLeadershipOpening) -> bool:
         return bool(is_global_admin(user) or is_guild_leader(user, opening.guild_name) or (opening.allow_viceleader_review and is_guild_viceleader(user, opening.guild_name)))
 
     @staticmethod
     def manager(user: User, guild_name: str) -> bool:
         return bool(is_global_admin(user) or is_guild_leader(user, guild_name))
+
+    @staticmethod
+    def eligible_opening(opening: GuildLeadershipOpening, user: User) -> bool:
+        now = datetime.now(UTC)
+        accepted = sum(1 for application in opening.applications if application.status == "accepted")
+        active_for_user = any(
+            application.applicant_user_id == user.id and application.status in ACTIVE_APPLICATION_STATUSES
+            for application in opening.applications
+        )
+        assigned_to_user = any(
+            application.applicant_user_id == user.id
+            and application.accepted_assignment is not None
+            and application.accepted_assignment.is_active
+            for application in opening.applications
+        )
+        return bool(
+            user.is_active
+            and (user.guild_name or "").casefold() == opening.guild_name.casefold()
+            and not is_guild_leader(user, opening.guild_name)
+            and not is_guild_viceleader(user, opening.guild_name)
+            and opening.status == "open"
+            and opening.role.is_active
+            and opening.role.recruitment_enabled
+            and (opening.application_deadline is None or _as_utc(opening.application_deadline) >= now)
+            and accepted < opening.openings_count
+            and not active_for_user
+            and not assigned_to_user
+        )
+
+    @staticmethod
+    def can_view_opening(opening: GuildLeadershipOpening, user: User) -> bool:
+        if LeadershipService.manager(user, opening.guild_name):
+            return True
+        if opening.status != "draft" and LeadershipService.reviewer(user, opening):
+            return True
+        return LeadershipService.eligible_opening(opening, user)
 
     @staticmethod
     def actor_context(user: User, guild_name: str) -> str:
@@ -89,13 +138,15 @@ class LeadershipService:
 
     @staticmethod
     def apply(db: Session, opening: GuildLeadershipOpening, user: User, payload) -> GuildLeadershipApplication:
-        if not user.is_active or opening.status != "open" or (opening.application_deadline and opening.application_deadline < datetime.now(UTC)):
+        if not LeadershipService.eligible_opening(opening, user):
             raise HTTPException(409, "Opening is not accepting applications")
         if (user.guild_name or "").casefold() != opening.guild_name.casefold() or is_guild_leader(user, opening.guild_name) or is_guild_viceleader(user, opening.guild_name):
             raise HTTPException(403, "Applicant is not an eligible guild member")
-        character = next((entry for entry in user.characters if entry.character_name.casefold() == payload.character_name.casefold()), None)
-        if not character and user.tibia_character_name and user.tibia_character_name.casefold() == payload.character_name.casefold():
-            character = type("CharacterSnapshot", (), {"character_name": user.tibia_character_name, "level": user.level, "vocation": user.vocation, "guild_name": user.guild_name, "guild_rank": user.guild_rank, "last_seen": None, "last_login_at": user.last_login_at, "world_name": user.world_name})()
+        character = next((
+            entry for entry in user.characters
+            if entry.ownership_status == "verified"
+            and entry.character_name.casefold() == payload.character_name.casefold()
+        ), None)
         if not character or (character.guild_name and character.guild_name.casefold() != opening.guild_name.casefold()):
             raise HTTPException(400, "Selected character is not linked to this guild")
         duplicate = db.query(GuildLeadershipApplication).filter(GuildLeadershipApplication.opening_id == opening.id, GuildLeadershipApplication.applicant_user_id == user.id, GuildLeadershipApplication.status.in_(ACTIVE_APPLICATION_STATUSES)).first()
@@ -107,7 +158,7 @@ class LeadershipService:
         db.add(application); db.flush()
         db.add(GuildLeadershipApplicationHistory(application_id=application.id, from_status=None, to_status="applied", actor_id=user.id, actor_context="applicant", safe_metadata={"conduct_version": CONDUCT_VERSION}))
         LeadershipService.audit(db, user, opening.guild_name, "leadership_application_submitted", "leadership_application", application.id)
-        NotificationService.emit_users(db, LeadershipService.leaders(db, opening.guild_name), "leadership_application_received", f"leadership:application:{application.id}:received", guild_name=opening.guild_name, deep_link=f"/guild/leadership/recruitment/applications/{application.id}", payload={"character": application.character_name})
+        NotificationService.emit_users(db, LeadershipService.reviewers(db, opening), "leadership_application_received", f"leadership:application:{application.id}:received", guild_name=opening.guild_name, deep_link=f"/guild/leadership/recruitment/applications/{application.id}", payload={"character": application.character_name})
         return application
 
     @staticmethod
@@ -132,6 +183,12 @@ class LeadershipService:
 
     @staticmethod
     def accept(db: Session, application: GuildLeadershipApplication, actor: User, reason: str | None) -> GuildLeadershipAssignment:
+        if application.opening.voting_enabled:
+            if application.status != "voting":
+                raise HTTPException(409, "The application must enter voting before a decision")
+            participation = db.query(GuildLeadershipVote).filter_by(application_id=application.id).count()
+            if participation < application.opening.votes_required:
+                raise HTTPException(409, "The required reviewer participation has not been reached")
         existing = db.query(GuildLeadershipAssignment).filter(GuildLeadershipAssignment.guild_name.ilike(application.opening.guild_name), GuildLeadershipAssignment.role_id == application.opening.role_id, GuildLeadershipAssignment.user_id == application.applicant_user_id, GuildLeadershipAssignment.is_active.is_(True)).first()
         if existing: raise HTTPException(409, "An active assignment already exists")
         LeadershipService.transition(db, application, actor, "accepted", reason)

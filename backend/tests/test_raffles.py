@@ -6,10 +6,23 @@ No data is written to the production database.
 """
 from __future__ import annotations
 
+from datetime import UTC, datetime
 import pytest
 from sqlalchemy.orm import Session
 
+from app.models.user_character import UserCharacter
 from tests.conftest import make_user, make_raffle, make_prize, make_participant
+
+
+def verified_character(db: Session, user, name: str, *, guild: str | None = None, world: str | None = None):
+    character = UserCharacter(
+        user_id=user.id, character_name=name, normalized_name=name.casefold(),
+        ownership_status="verified", ownership_verified_at=datetime.now(UTC),
+        guild_name=guild, guild_rank="Member", world_name=world,
+    )
+    db.add(character)
+    db.flush()
+    return character
 
 
 # ---------------------------------------------------------------------------
@@ -323,74 +336,72 @@ async def test_register_closed_raffle_fails(db: Session):
     db.commit()
 
     with pytest.raises(Exception) as exc_info:
-        await _register_participant_for_raffle(db, raffle, "Mecho")
+        await _register_participant_for_raffle(db, raffle, "Mecho", actor=admin)
     assert "not accepting participants" in str(exc_info.value)
 
 
 @pytest.mark.asyncio
-async def test_register_guild_only_blocks_outsider(db: Session, monkeypatch):
+async def test_register_guild_only_blocks_outsider_without_network(db: Session, monkeypatch):
     from fastapi import HTTPException
     from app.api.v1.endpoints.raffles import _register_participant_for_raffle
 
-    async def fake_guild_info(_: str):
-        return {"name": "Bloodborne Warhowl", "world": "Yovera", "members": [{"name": "Mecho", "rank": "Member"}]}
-
-    async def fake_character_info(name: str):
-        return {"name": name, "world": "Yovera", "guild": {"name": "Other Guild", "rank": "Member"}}
-
-    monkeypatch.setattr("app.api.v1.endpoints.raffles.get_guild_info", fake_guild_info)
-    monkeypatch.setattr("app.api.v1.endpoints.raffles.get_character_info", fake_character_info)
-
     admin = make_user(db, username="admin_guild_only", is_superuser=True, guild_name="Bloodborne Warhowl")
+    verified_character(db, admin, "Outsider", guild="Other Guild", world="Yovera")
     raffle = make_raffle(db, creator_id=admin.id, guild_name="Bloodborne Warhowl", access_mode="guild_only", status="open")
     db.commit()
 
     with pytest.raises(HTTPException) as exc_info:
-        await _register_participant_for_raffle(db, raffle, "Outsider")
+        await _register_participant_for_raffle(db, raffle, "Outsider", actor=admin)
     assert exc_info.value.status_code == 400
     assert "Only members of this guild can join" in exc_info.value.detail
 
 
 @pytest.mark.asyncio
-async def test_register_world_only_accepts_same_world(db: Session, monkeypatch):
+async def test_register_world_only_accepts_same_verified_world_without_network(db: Session, monkeypatch):
     from app.api.v1.endpoints.raffles import _register_participant_for_raffle
-
-    async def fake_guild_info(_: str):
-        return {"name": "Bloodborne Warhowl", "world": "Yovera", "members": [{"name": "Mecho", "rank": "Member"}]}
-
-    async def fake_character_info(name: str):
-        return {"name": name, "world": "Yovera", "guild": None}
-
-    monkeypatch.setattr("app.api.v1.endpoints.raffles.get_guild_info", fake_guild_info)
-    monkeypatch.setattr("app.api.v1.endpoints.raffles.get_character_info", fake_character_info)
 
     admin = make_user(db, username="admin_world_only", is_superuser=True, guild_name="Bloodborne Warhowl")
     raffle = make_raffle(db, creator_id=admin.id, guild_name="Bloodborne Warhowl", access_mode="world_only", status="open")
+    raffle.world_name = "Yovera"
+    verified_character(db, admin, "WorldFriend", world="Yovera")
     db.commit()
 
-    updated = await _register_participant_for_raffle(db, raffle, "WorldFriend")
+    updated = await _register_participant_for_raffle(db, raffle, "WorldFriend", actor=admin)
     assert updated["participant_count"] == 1
 
 
 @pytest.mark.asyncio
-async def test_register_public_accepts_any_world(db: Session, monkeypatch):
+async def test_register_public_accepts_verified_character_from_any_world(db: Session, monkeypatch):
     from app.api.v1.endpoints.raffles import _register_participant_for_raffle
-
-    async def fake_guild_info(_: str):
-        return {"name": "Bloodborne Warhowl", "world": "Yovera", "members": []}
-
-    async def fake_character_info(name: str):
-        return {"name": name, "world": "Antica", "guild": None}
-
-    monkeypatch.setattr("app.api.v1.endpoints.raffles.get_guild_info", fake_guild_info)
-    monkeypatch.setattr("app.api.v1.endpoints.raffles.get_character_info", fake_character_info)
 
     admin = make_user(db, username="admin_public", is_superuser=True, guild_name="Bloodborne Warhowl")
     raffle = make_raffle(db, creator_id=admin.id, guild_name="Bloodborne Warhowl", access_mode="public", status="open")
+    verified_character(db, admin, "AnyWorld", world="Antica")
     db.commit()
 
-    updated = await _register_participant_for_raffle(db, raffle, "AnyWorld")
+    updated = await _register_participant_for_raffle(db, raffle, "AnyWorld", actor=admin)
     assert updated["participant_count"] == 1
+
+
+def test_public_registration_route_requires_the_verified_owner_and_returns_public_contract(db: Session, client):
+    from app.core.security import create_access_token
+
+    manager = make_user(db, username="public-route-manager", is_superuser=True)
+    owner = make_user(db, username="public-route-owner")
+    other = make_user(db, username="public-route-other")
+    verified_character(db, owner, "Public Route Knight", world="Antica")
+    raffle = make_raffle(db, creator_id=manager.id, access_mode="public", status="open")
+    db.commit()
+    endpoint = f"/api/v1/raffles/public/code/{raffle.public_code}/register"
+    assert client.post(endpoint, json={"character_name": "Public Route Knight"}).status_code == 401
+    other_headers = {"Authorization": f"Bearer {create_access_token(other.username)}"}
+    assert client.post(endpoint, json={"character_name": "Public Route Knight"}, headers=other_headers).status_code == 400
+    owner_headers = {"Authorization": f"Bearer {create_access_token(owner.username)}"}
+    response = client.post(endpoint, json={"character_name": "Public Route Knight"}, headers=owner_headers)
+    assert response.status_code == 200
+    assert response.json()["public_code"] == raffle.public_code
+    assert response.json()["participants"] == [{"character_name": "Public Route Knight", "guild_rank": "Member"}]
+    assert "user_id" not in response.json()
 
 
 def test_public_hidden_participants(db: Session):

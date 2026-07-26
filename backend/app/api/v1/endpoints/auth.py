@@ -4,6 +4,7 @@ from datetime import UTC, datetime, timedelta
 from typing import Any
 from fastapi import APIRouter, BackgroundTasks, Depends, HTTPException, status
 from fastapi.security import OAuth2PasswordRequestForm, OAuth2PasswordBearer
+from sqlalchemy import func
 from sqlalchemy.orm import Session
 from sqlalchemy.exc import OperationalError, SQLAlchemyError, TimeoutError as SATimeoutError
 from jose import jwt, JWTError
@@ -13,9 +14,8 @@ from app.db.database import get_db
 from app.models.user import User
 from app.models.user_character import UserCharacter
 from app.schemas.auth import UserCreate, UserResponse, Token, TokenData
-from app.services.tibia_validation_service import TibiaValidationService
-from app.services.tibia_sync_service import try_sync_user_character_snapshot
 from app.core.permissions import is_global_admin, is_guild_leader
+from app.services.character_ownership_service import normalize_character_name
 
 router = APIRouter()
 oauth2_scheme = OAuth2PasswordBearer(tokenUrl="api/v1/auth/login")
@@ -70,26 +70,30 @@ def login_access_token(
 ) -> Any:
     start = time.perf_counter()
     login_input = (form_data.username or "").strip()
-    logger.warning("login_request_started login=%s", login_input)
+    normalized_login = login_input.casefold()
+    logger.info("login_request_started")
 
     try:
         lookup_start = time.perf_counter()
 
         # Try username first (case-insensitive for resilience).
-        user = db.query(User).filter(User.username.ilike(login_input)).first()
+        user = db.query(User).filter(func.lower(User.username) == normalized_login).first()
 
         # If still not found by username, try email.
         if not user and "@" in login_input:
-            user = db.query(User).filter(User.email.ilike(login_input)).first()
+            user = db.query(User).filter(func.lower(User.email) == normalized_login).first()
 
         # If not found by username/email, try linked character name.
         if not user:
-            user_char = db.query(UserCharacter).filter(UserCharacter.character_name.ilike(login_input)).first()
+            user_char = db.query(UserCharacter).filter(
+                UserCharacter.normalized_name == normalize_character_name(login_input),
+                UserCharacter.ownership_status == "verified",
+            ).first()
             if user_char:
                 user = user_char.user
 
         lookup_ms = int((time.perf_counter() - lookup_start) * 1000)
-        logger.warning("login_user_lookup_done login=%s found=%s duration_ms=%s", login_input, bool(user), lookup_ms)
+        logger.info("login_user_lookup_done found=%s duration_ms=%s", bool(user), lookup_ms)
 
         if not user:
             total_ms = int((time.perf_counter() - start) * 1000)
@@ -99,16 +103,16 @@ def login_access_token(
         verify_start = time.perf_counter()
         password_valid = security.verify_password(form_data.password, user.hashed_password)
         verify_ms = int((time.perf_counter() - verify_start) * 1000)
-        logger.warning("login_password_verify_done username=%s valid=%s duration_ms=%s", user.username, password_valid, verify_ms)
+        logger.info("login_password_verify_done valid=%s duration_ms=%s", password_valid, verify_ms)
 
         if not password_valid:
             total_ms = int((time.perf_counter() - start) * 1000)
-            logger.warning("login_failed category=invalid_credentials status=401 username=%s total_ms=%s", user.username, total_ms)
+            logger.warning("login_failed category=invalid_credentials status=401 total_ms=%s", total_ms)
             raise HTTPException(status_code=401, detail="Invalid username or password.")
 
         if not user.is_active:
             total_ms = int((time.perf_counter() - start) * 1000)
-            logger.warning("login_failed category=inactive_user status=403 username=%s total_ms=%s", user.username, total_ms)
+            logger.warning("login_failed category=inactive_user status=403 total_ms=%s", total_ms)
             raise HTTPException(status_code=403, detail="Your account is inactive. Please contact an administrator.")
 
         # Application authentication is tracked separately from Tibia character
@@ -123,8 +127,7 @@ def login_access_token(
 
         total_ms = int((time.perf_counter() - start) * 1000)
         logger.warning(
-            "login_success username=%s lookup_ms=%s verify_ms=%s token_ms=%s total_ms=%s",
-            user.username,
+            "login_success lookup_ms=%s verify_ms=%s token_ms=%s total_ms=%s",
             lookup_ms,
             verify_ms,
             token_ms,
@@ -169,88 +172,46 @@ def register_user(
     background_tasks: BackgroundTasks,
 ) -> Any:
     # Check if username already exists
-    user = db.query(User).filter(User.username == user_in.username).first()
+    normalized_username = user_in.username.casefold()
+    user = db.query(User).filter(func.lower(User.username) == normalized_username).first()
     if user:
         raise HTTPException(status_code=400, detail="The user with this username already exists in the system.")
     
     # Check if email already exists (if provided)
     if user_in.email:
-        existing_email = db.query(User).filter(User.email == user_in.email).first()
+        normalized_email = str(user_in.email).casefold()
+        existing_email = db.query(User).filter(func.lower(User.email) == normalized_email).first()
         if existing_email:
             raise HTTPException(status_code=400, detail="The email is already registered.")
     
-    # Tibia character validation
-    tibia_character_data = None
-    if user_in.tibia_character_name and config.settings.TIBIA_VALIDATION_ENABLED:
-        # Check if character already linked
-        existing_char = db.query(UserCharacter).filter(
-            UserCharacter.character_name == user_in.tibia_character_name
-        ).first()
-        if existing_char:
-            raise HTTPException(
-                status_code=400, 
-                detail="This Tibia character is already linked to another account."
-            )
-        
-        # Validate character using the validation service
-        is_valid, char_data, error_msg = TibiaValidationService.validate_character(
-            user_in.tibia_character_name,
-            strict=config.settings.TIBIA_VALIDATION_STRICT
-        )
-        
-        if not is_valid:
-            raise HTTPException(status_code=400, detail=error_msg or "Could not validate Tibia character")
-        
-        # Store character data if available
-        if char_data:
-            tibia_character_data = char_data
-
-    # Create user
+    # Existence is not ownership. Character names supplied during registration
+    # are never linked; the authenticated public-comment challenge owns that job.
     user = User(
         username=user_in.username,
-        email=user_in.email,
+        email=str(user_in.email).casefold() if user_in.email else None,
         hashed_password=security.get_password_hash(user_in.password),
-        guild_rank=tibia_character_data.get("guild_rank") if tibia_character_data else "Unranked",
-        tibia_character_name=tibia_character_data.get("name") if tibia_character_data else user_in.tibia_character_name,
-        level=tibia_character_data.get("level") if tibia_character_data else None,
-        vocation=tibia_character_data.get("vocation") if tibia_character_data else None,
-        world_name=tibia_character_data.get("world") if tibia_character_data else None,
-        guild_name=tibia_character_data.get("guild_name") if tibia_character_data else None,
-        residence=tibia_character_data.get("residence") if tibia_character_data else None,
-        tibia_status="validated" if tibia_character_data else None,
+        guild_rank="Unranked",
+        tibia_character_name=None,
+        tibia_status="ownership_unverified" if user_in.tibia_character_name else None,
         join_date=datetime.now(UTC),
         is_active=True,
         is_superuser=False
     )
     db.add(user)
+    db.flush()
+    raw_token = None
+    if user.email:
+        from datetime import timedelta
+        from app.api.v1.endpoints.email_verification import queue_verification_email
+        from app.services.auth_token_service import AuthTokenService, EMAIL_VERIFICATION
+        raw_token = AuthTokenService.issue(
+            db, user=user, purpose=EMAIL_VERIFICATION,
+            ttl=timedelta(hours=config.settings.EMAIL_VERIFICATION_TTL_HOURS),
+        )
     db.commit()
     db.refresh(user)
-    
-    # Create UserCharacter link if character name provided
-    if user_in.tibia_character_name:
-        user_char = UserCharacter(
-            user_id=user.id,
-            character_name=tibia_character_data["name"] if tibia_character_data else user_in.tibia_character_name,
-            level=tibia_character_data.get("level") if tibia_character_data else None,
-            vocation=tibia_character_data.get("vocation") if tibia_character_data else None,
-            world_name=tibia_character_data.get("world") if tibia_character_data else None,
-            guild_name=tibia_character_data.get("guild_name") if tibia_character_data else None,
-            guild_rank=tibia_character_data.get("guild_rank") if tibia_character_data else None,
-            residence=tibia_character_data.get("residence") if tibia_character_data else None,
-        )
-        db.add(user_char)
-        db.commit()
-        db.refresh(user_char)
-
-    if user.tibia_character_name:
-        def _sync_character():
-            try:
-                import asyncio
-                asyncio.run(try_sync_user_character_snapshot(db, user))
-            except Exception as exc:
-                logger.warning("register_character_sync_skipped username=%s error=%s", user.username, exc)
-        
-        background_tasks.add_task(_sync_character)
+    if raw_token:
+        queue_verification_email(background_tasks, user=user, raw_token=raw_token, locale=user_in.locale)
     
     return user
 

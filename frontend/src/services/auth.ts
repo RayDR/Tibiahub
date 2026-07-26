@@ -37,7 +37,7 @@ export const authApi = {
         return response.data;
     },
 
-    register: async (data: { username: string; password: string; email?: string; tibia_character_name?: string }): Promise<User> => {
+    register: async (data: { username: string; password: string; email?: string; locale?: 'en'|'es' }): Promise<User> => {
         const response = await api.post('/auth/register', data);
         return response.data;
     },

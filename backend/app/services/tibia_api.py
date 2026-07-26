@@ -80,6 +80,7 @@ async def get_character_info(character_name: str) -> Optional[Dict[str, Any]]:
         "residence": character.get("residence"),
         "sex": character.get("sex"),
         "achievement_points": character.get("achievement_points") or account_information.get("achievement_points"),
+        "comment": character.get("comment") or "",
         "account_information": account_information,
     }
 

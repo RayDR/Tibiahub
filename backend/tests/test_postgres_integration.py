@@ -37,6 +37,8 @@ from app.models.leadership import GuildLeadershipApplication, GuildLeadershipOpe
 from app.models.raffle import InternalNotification, Raffle
 from app.models.user import User
 from app.models.user_character import UserCharacter
+from app.models.auth_security import AuthOneTimeToken, AuthRequestEvent
+from app.models.character_ownership import CharacterOwnershipClaim, CharacterOwnershipHistory
 from app.models.workspace_audit import WorkspaceAudit
 from app.knowledge.adapters import (
     KnowledgeDocumentDTO, KnowledgeNormalizationContext, TibiaWikiItemAdapter,
@@ -52,6 +54,7 @@ from app.knowledge.services.item_relationships import upsert_drop_relationship
 from app.knowledge.services.normalization import KnowledgeNormalizationService
 from app.knowledge.services.spatial import entities_inside_region, link_entity_to_location, nearby_entities, persist_map_point, persist_map_region, persist_route
 from app.services.raffle_scheduler_service import RaffleSchedulerService
+from app.services.auth_token_service import AuthTokenService, PASSWORD_RESET
 
 
 BACKEND_ROOT = Path(__file__).resolve().parents[1]
@@ -194,6 +197,8 @@ def test_empty_database_upgrades_to_complete_postgresql_schema(pg_engine):
         "users", "user_characters", "announcements", "events", "event_participants",
         "raffles", "raffle_scheduler_attempts", "internal_notifications", "sync_jobs",
         "workspace_audits", "guild_leadership_openings", "media_assets", "creatures",
+        "auth_one_time_tokens", "auth_request_events", "character_ownership_claims",
+        "character_ownership_history",
         "knowledge_external_mappings",
         "knowledge_creature_item_drops", "tibiawiki_items",
         "quest_missions", "knowledge_accesses", "knowledge_quest_relations",
@@ -216,6 +221,11 @@ def test_empty_database_upgrades_to_complete_postgresql_schema(pg_engine):
         )).scalars())
         assert {"uq_event_participant_user", "uq_raffle_participant_user", "fk_leadership_application_assignment"}.issubset(constraints)
         assert {
+            "ck_auth_token_purpose", "ck_auth_token_hash_length", "ck_auth_request_purpose",
+            "ck_character_claim_status", "ck_character_claim_hash_length",
+            "ck_user_character_ownership_status",
+        }.issubset(constraints)
+        assert {
             "uq_knowledge_external_mapping_identifier",
             "uq_knowledge_external_mapping_entity",
             "fk_creatures_knowledge_entity",
@@ -229,6 +239,8 @@ def test_empty_database_upgrades_to_complete_postgresql_schema(pg_engine):
         assert "ix_spatial_map_points_geom" in index_definitions and "USING gist" in index_definitions
         assert "ix_spatial_map_regions_geom" in index_definitions
         assert "ix_spatial_routes_geom" in index_definitions
+        assert "uq_user_characters_verified_normalized_name" in index_definitions
+        assert "uq_character_active_claim_user_name" in index_definitions
         user_columns = {column["name"]: column for column in inspect(pg_engine).get_columns("users")}
         assert {"is_superuser", "is_moderator", "is_writer"}.issubset(user_columns)
         assert all(user_columns[name]["nullable"] is False for name in ("is_superuser", "is_moderator", "is_writer"))
@@ -241,6 +253,75 @@ def test_empty_database_upgrades_to_complete_postgresql_schema(pg_engine):
         ).one()
         assert provider_enabled is False and provider_health == "disabled"
         assert supported_entities == ["creature", "item", "quest", "npc", "location", "area", "town"]
+
+
+def test_auth_token_consumption_and_request_cooldown_are_atomic_on_postgresql(pg_engine, pg_session):
+    user = _user(pg_session, "atomic_auth_user")
+    raw = AuthTokenService.issue(pg_session, user=user, purpose=PASSWORD_RESET, ttl=timedelta(minutes=10))
+    pg_session.commit()
+    factory = sessionmaker(bind=pg_engine, expire_on_commit=False)
+
+    def consume_once() -> bool:
+        with factory.begin() as session:
+            return AuthTokenService.consume(session, purpose=PASSWORD_RESET, raw_token=raw) is not None
+
+    with ThreadPoolExecutor(max_workers=2) as executor:
+        consumed = list(executor.map(lambda _index: consume_once(), range(2)))
+    assert sorted(consumed) == [False, True]
+    with factory() as session:
+        token = session.query(AuthOneTimeToken).filter_by(user_id=user.id).one()
+        assert token.consumed_at is not None and token.token_hash != raw
+
+    def request_once() -> bool:
+        with factory.begin() as session:
+            return AuthTokenService.allow_request(
+                session, purpose=PASSWORD_RESET,
+                subject="atomic-auth@example.test", requester="127.0.0.1",
+            )
+
+    with ThreadPoolExecutor(max_workers=2) as executor:
+        allowed = list(executor.map(lambda _index: request_once(), range(2)))
+    assert sorted(allowed) == [False, True]
+    with factory() as session:
+        assert session.query(AuthRequestEvent).filter_by(purpose=PASSWORD_RESET).count() == 1
+
+
+def test_verified_owner_uniqueness_and_ownership_history_immutability_on_postgresql(pg_session):
+    first = _user(pg_session, "unique_owner_first")
+    second = _user(pg_session, "unique_owner_second")
+    now = datetime.now(UTC)
+    pg_session.add(UserCharacter(
+        user_id=first.id, character_name="Unique Knight", normalized_name="unique knight",
+        ownership_status="verified", ownership_verified_at=now,
+    ))
+    pg_session.flush()
+    pg_session.add(UserCharacter(
+        user_id=second.id, character_name="UNIQUE KNIGHT", normalized_name="unique knight",
+        ownership_status="verified", ownership_verified_at=now,
+    ))
+    with pytest.raises(IntegrityError):
+        pg_session.flush()
+    pg_session.rollback()
+
+    owner = _user(pg_session, "history_owner")
+    claim = CharacterOwnershipClaim(
+        user_id=owner.id, character_name="History Knight", normalized_name="history knight",
+        challenge_hash="c" * 64, status="verified", expires_at=now + timedelta(minutes=10),
+        verified_at=now, consumed_at=now,
+    )
+    pg_session.add(claim)
+    pg_session.flush()
+    history = CharacterOwnershipHistory(
+        normalized_name=claim.normalized_name, character_name=claim.character_name,
+        claim_id=claim.id, action="ownership_verified", to_user_id=owner.id,
+        safe_metadata={},
+    )
+    pg_session.add(history)
+    pg_session.commit()
+    history.action = "rewritten"
+    with pytest.raises(Exception, match="immutable"):
+        pg_session.commit()
+    pg_session.rollback()
 
 
 def test_postgis_point_region_route_nearby_and_inside_region(pg_session):
@@ -679,19 +760,12 @@ def test_knowledge_platform_persists_nested_jsonb_and_provider_neutral_ids(pg_en
     assert jsonb_columns == {"raw_json", "metadata"}
 
 
-def test_auth_profile_guild_membership_event_and_join_flow(pg_client, pg_session, monkeypatch):
-    from app.api.v1.endpoints import auth as auth_endpoint
-
-    async def skip_provider_sync(*_args, **_kwargs):
-        return None
-
-    monkeypatch.setattr(config.settings, "TIBIA_VALIDATION_ENABLED", False)
-    monkeypatch.setattr(auth_endpoint, "try_sync_user_character_snapshot", skip_provider_sync)
+def test_auth_profile_guild_membership_event_and_join_flow(pg_client, pg_session):
     registered = pg_client.post(
         "/api/v1/auth/register",
         json={
             "username": "postgres-auth",
-            "email": "postgres-auth@example.test",
+            "email": "postgres-auth@example.com",
             "password": "postgres-password",
             "tibia_character_name": "Postgres Knight",
         },
@@ -704,10 +778,17 @@ def test_auth_profile_guild_membership_event_and_join_flow(pg_client, pg_session
     assert login.status_code == 200
     headers = {"Authorization": f"Bearer {login.json()['access_token']}"}
     profile = pg_client.get("/api/v1/profile/me", headers=headers)
-    assert profile.status_code == 200 and profile.json()["tibia_character_name"] == "Postgres Knight"
+    assert profile.status_code == 200 and profile.json()["tibia_character_name"] is None
 
     member = pg_session.query(User).filter_by(username="postgres-auth").one()
     member.guild_name = "Postgres Guild"
+    member.tibia_character_name = "Postgres Knight"
+    member.tibia_status = "ownership_verified"
+    pg_session.add(UserCharacter(
+        user_id=member.id, character_name="Postgres Knight", normalized_name="postgres knight",
+        ownership_status="verified", ownership_verified_at=datetime.now(UTC),
+        guild_name="Postgres Guild", guild_rank="Member",
+    ))
     manager = _user(pg_session, "postgres-leader", rank="Leader")
     pg_session.add(GuildMemberSnapshot(guild_name="Postgres Guild", character_name="Postgres Knight"))
     event = Event(

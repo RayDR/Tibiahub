@@ -7,6 +7,8 @@ from app.models.spawn_location import SpawnLocation
 from app.models.hunt_zone import HuntZone
 from app.models.user import User
 from app.models.user_character import UserCharacter
+from app.models.auth_security import AuthOneTimeToken, AuthRequestEvent
+from app.models.character_ownership import CharacterOwnershipClaim, CharacterOwnershipHistory
 from app.models.quest import Quest
 from app.models.settings import SystemSettings
 from app.models.user_activity import UserActivity
@@ -53,6 +55,10 @@ __all__ = [
     "HuntZone",
     "User",
     "UserCharacter",
+    "AuthOneTimeToken",
+    "AuthRequestEvent",
+    "CharacterOwnershipClaim",
+    "CharacterOwnershipHistory",
     "Quest",
     "SystemSettings",
     "UserActivity",

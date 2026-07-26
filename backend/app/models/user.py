@@ -12,6 +12,7 @@ class User(Base):
     display_name = Column(String(100), nullable=True)
     title = Column(String(100), nullable=True)
     email = Column(String(100), unique=True, index=True, nullable=True)
+    email_verified_at = Column(DateTime(timezone=True), nullable=True)
     avatar_url = Column(String(255), nullable=True)
     hashed_password = Column(String(255), nullable=False)
     guild_rank = Column(String(50), nullable=True, default="Unranked")
@@ -39,7 +40,7 @@ class User(Base):
     tibia_last_error = Column(String(255), nullable=True)
     last_updated = Column(DateTime(timezone=True), nullable=True)
     
-    # Password reset fields
+    # Legacy compatibility only; new reset tokens live in auth_one_time_tokens.
     reset_token = Column(String(255), nullable=True)
     reset_token_expires = Column(DateTime(timezone=True), nullable=True)
     

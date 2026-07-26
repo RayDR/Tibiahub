@@ -295,6 +295,18 @@ i18n
                         "alreadyMember": "Already a guild member?",
                         "loginHere": "Login here"
                     },
+                    "passwordRecovery": {
+                        "identifier": "Account identifier", "email": "Email", "character": "Verified Tibia character", "newPassword": "New password", "confirmPassword": "Confirm password", "passwordHelp": "Use at least 12 characters.", "back": "Back to login",
+                        "request": { "title": "Recover your password", "help": "Enter one account identifier. The response is the same whether an account exists or not.", "action": "Send recovery link" },
+                        "reset": { "title": "Choose a new password", "help": "Recovery links expire and can be used only once.", "action": "Reset password" },
+                        "success": { "title": "Request received", "help": "Continue with the next step.", "request": "If an eligible account exists, recovery instructions will be sent.", "reset": "Your password was reset. Returning to login…" },
+                        "errors": { "request": "The request could not be completed.", "match": "Passwords do not match.", "length": "The password must contain at least 12 characters.", "invalid": "The recovery link is invalid or expired." }
+                    },
+                    "emailVerification": {
+                        "loading": { "title": "Verifying email", "help": "Checking the single-use verification link…" },
+                        "success": { "title": "Email verified", "help": "Your email address is now verified." },
+                        "error": { "title": "Link unavailable", "help": "This verification link is invalid, expired, or already used." }
+                    },
                     "guild": {
                         "dashboard": "Dashboard",
                         "announcements": "Announcements",
@@ -453,6 +465,8 @@ i18n
                         "placeholders": { "displayName": "How other members see you", "title": "Guild role or short bio", "email": "you@example.com", "avatar": "https://…/avatar.png" },
                         "values": { "notSet": "Not set", "noTitle": "No profile title", "unknown": "Unknown", "vocationLevel": "{{vocation}} · level {{level}}" },
                         "tibia": { "title": "Linked Tibia context" },
+                        "emailVerification": { "verified": "Verified", "pending": "Verification pending", "send": "Send verification", "queued": "If verification is needed, instructions will be sent.", "error": "Verification instructions could not be requested." },
+                        "ownership": { "title": "Character ownership", "help": "Create a one-time challenge, publish it in the character's public Tibia comment, then request verification.", "commentInstruction": "Copy this exact challenge into the public character comment before requesting verification:", "characterPlaceholder": "Exact Tibia character name", "create": "Create challenge", "verify": "Check public comment", "approve": "Approve transfer", "dispute": "Dispute", "disputeReason": "The current owner disputes this transfer request.", "updated": "Ownership request updated.", "error": "The ownership request could not be updated.", "status": { "pending": "Awaiting comment", "queued": "Queued", "processing": "Checking", "verified": "Verified", "transfer_pending": "Transfer approval pending", "disputed": "Disputed", "failed": "Failed", "expired": "Expired", "rejected": "Rejected" }, "failure": { "challenge_not_visible": "The current public comment does not contain the challenge.", "character_not_found": "The character could not be found.", "provider_unavailable": "TibiaData is temporarily unavailable.", "challenge_expired": "The challenge expired.", "worker_interrupted": "Verification could not finish after the retry limit." } },
                         "password": { "title": "Change password", "help": "Leave these fields empty to keep the current password.", "current": "Current password", "new": "New password", "confirm": "Confirm new password" }
                     },
                     "guildMembers": {
@@ -496,15 +510,16 @@ i18n
                             "empty": { "upcoming": "No upcoming raffles", "participants": "No participant lists yet", "eligibility": "No eligibility reviews yet", "draw": "No draw is ready", "results": "No results yet", "history": "No historical raffles", "help": "New and historical raffles will appear here when available." },
                             "timeline": { "label": "Raffle progress", "draft": "Draft", "registration": "Registration", "eligibility": "Eligibility review", "frozen": "Snapshot frozen", "scheduled": "Scheduled", "running": "Running", "private": "Private review", "published": "Published", "delivery": "Delivery", "completed": "Completed" },
                             "scopes": { "guild": { "title": "Guild raffle", "help": "Only the fixed guild and its eligible members." }, "server": { "title": "Server contest", "help": "Public contest limited to one Tibia server." }, "global": { "title": "Global contest", "help": "Cross-server contest managed by global admins." } },
-                            "fields": { "guild": "Guild", "server": "Server", "title": "Name", "purpose": "Purpose", "timezone": "Timezone", "schedule": "Date and time", "showParticipants": "Show participant names publicly" },
-                            "wizard": { "title": "Create an activity", "step1": "Step 1 of 2 · Choose an allowed scope", "step2": "Step 2 of 2 · Configure the activity", "continue": "Continue", "back": "Back", "create": "Create activity", "creating": "Creating...", "confirm": "I confirm the scope, schedule, private initial results, and 24-hour delivery deadline.", "confirmRequired": "Confirm the activity rules before creating it.", "invalidSchedule": "Choose a valid date, time, and timezone.", "createError": "The activity could not be created safely.", "guildRules": "Eligibility uses five days of activity. Results remain private until publication; prizes are due within 24 hours." }
+                            "fields": { "guild": "Guild", "server": "Server", "title": "Name", "purpose": "Purpose", "execution": "Execution", "currency": "Currency", "timezone": "Timezone", "schedule": "Date and time", "showParticipants": "Show participant names publicly" },
+                            "execution": { "manual": "Manual weighted draw", "automatic": "Automatic eligibility, manual trigger", "scheduled": "Automatic scheduled draw" },
+                            "wizard": { "title": "Create an activity", "step1": "Step 1 of 2 · Choose an allowed scope", "step2": "Step 2 of 2 · Configure the activity", "continue": "Continue", "back": "Back", "create": "Create activity", "creating": "Creating...", "confirm": "I confirm the scope, execution settings, private initial results, and 24-hour delivery deadline.", "confirmRequired": "Confirm the activity rules before creating it.", "invalidSchedule": "Choose a valid date, time, and timezone.", "invalidPrizes": "Enter positive prize amounts and a currency.", "createError": "The activity could not be created safely.", "guildRules": "Eligibility uses five days of activity. Results remain private until publication; prizes are due within 24 hours." }
                         },
                         "legacyLabel": "Legacy raffle history — not used by the automatic scheduler",
                         "operations": {
                             "navigation": "Automatic Raffles", "title": "Automatic Guild Raffles", "subtitle": "Schedule, review, publish, and deliver authoritative guild draws.",
                             "prepare": "Prepare raffle", "purpose": "Purpose", "test": "Test", "real": "Real", "testLabel": "TEST", "guild": "Guild", "name": "Raffle name", "timezone": "IANA timezone",
                             "localSchedule": "Scheduled date and time", "localEquivalent": "Local: {{value}}", "utcEquivalent": "UTC: {{value}}", "save": "Save scheduled raffle",
-                            "rules": "Only current guild members with qualifying activity during the five days before the draw may participate. Winners are selected automatically. Second place receives 100 Tibia Coins and first place receives 250 Tibia Coins. Prizes will be delivered within 24 hours after the draw.",
+                            "rules": "Only current guild members with qualifying activity during the configured eligibility window may participate. Winners are selected automatically with one prize per account. Configured prizes are due within 24 hours after the draw.",
                             "confirmReal": "I confirm this is a separate real raffle and the schedule is correct.", "fridayExample": "Preparation example: Friday, July 24, 2026 at 8:00 PM America/Chicago equals July 25, 2026 at 01:00 UTC. Do not use a past date.",
                             "secondPlace": "Second Place", "firstPlace": "First Place", "scheduledLocal": "Scheduled local time", "scheduledUtc": "Scheduled UTC time", "retryState": "Retry count", "lastFailure": "Last failure",
                             "preview": "Preview eligibility", "freeze": "Freeze snapshot", "testCharacter": "Existing local character", "addTestParticipant": "Add test participant", "eligibleCount": "{{count}} eligible", "excludedCount": "{{count}} excluded", "snapshotAt": "Cutoff: {{value}}", "staleWarning": "Membership or activity information may be stale. Refresh guild data before freezing.",
@@ -720,7 +735,8 @@ i18n
                             "guildLabel": "Guild",
                             "worldLabel": "World",
                             "joinTitle": "Register character",
-                            "joinSubtitle": "One character per account. One winner per account.",
+                            "joinSubtitle": "Use a verified character owned by your signed-in account. One winner per account.",
+                            "signInRequired": "Sign in and verify your character before registering.",
                             "joinInputPlaceholder": "Character name",
                             "joinButton": "Register",
                             "joining": "Registering...",
@@ -1032,6 +1048,18 @@ i18n
                         "alreadyMember": "¿Ya eres miembro del gremio?",
                         "loginHere": "Inicia sesión aquí"
                     },
+                    "passwordRecovery": {
+                        "identifier": "Identificador de cuenta", "email": "Correo", "character": "Personaje de Tibia verificado", "newPassword": "Nueva contraseña", "confirmPassword": "Confirmar contraseña", "passwordHelp": "Usa al menos 12 caracteres.", "back": "Volver al inicio de sesión",
+                        "request": { "title": "Recupera tu contraseña", "help": "Ingresa un solo identificador. La respuesta es igual exista o no la cuenta.", "action": "Enviar enlace de recuperación" },
+                        "reset": { "title": "Elige una nueva contraseña", "help": "Los enlaces vencen y solo pueden usarse una vez.", "action": "Restablecer contraseña" },
+                        "success": { "title": "Solicitud recibida", "help": "Continúa con el siguiente paso.", "request": "Si existe una cuenta elegible, se enviarán instrucciones de recuperación.", "reset": "Tu contraseña fue restablecida. Volviendo al inicio de sesión…" },
+                        "errors": { "request": "No se pudo completar la solicitud.", "match": "Las contraseñas no coinciden.", "length": "La contraseña debe tener al menos 12 caracteres.", "invalid": "El enlace es inválido, venció o ya fue usado." }
+                    },
+                    "emailVerification": {
+                        "loading": { "title": "Verificando correo", "help": "Comprobando el enlace de un solo uso…" },
+                        "success": { "title": "Correo verificado", "help": "Tu dirección de correo ya está verificada." },
+                        "error": { "title": "Enlace no disponible", "help": "Este enlace es inválido, venció o ya fue usado." }
+                    },
                     "guild": {
                         "dashboard": "Panel",
                         "announcements": "Anuncios",
@@ -1189,6 +1217,8 @@ i18n
                         "placeholders": { "displayName": "Cómo te ven otros miembros", "title": "Rol de guild o biografía breve", "email": "tu@ejemplo.com", "avatar": "https://…/avatar.png" },
                         "values": { "notSet": "Sin configurar", "noTitle": "Sin título de perfil", "unknown": "Desconocido", "vocationLevel": "{{vocation}} · nivel {{level}}" },
                         "tibia": { "title": "Contexto de Tibia vinculado" },
+                        "emailVerification": { "verified": "Verificado", "pending": "Verificación pendiente", "send": "Enviar verificación", "queued": "Si se necesita verificación, se enviarán instrucciones.", "error": "No se pudieron solicitar las instrucciones." },
+                        "ownership": { "title": "Propiedad del personaje", "help": "Crea un desafío de un solo uso, publícalo en el comentario público del personaje y solicita la verificación.", "commentInstruction": "Copia este desafío exacto en el comentario público antes de verificar:", "characterPlaceholder": "Nombre exacto del personaje", "create": "Crear desafío", "verify": "Comprobar comentario", "approve": "Aprobar transferencia", "dispute": "Disputar", "disputeReason": "El propietario actual disputa esta transferencia.", "updated": "Solicitud de propiedad actualizada.", "error": "No se pudo actualizar la solicitud.", "status": { "pending": "Esperando comentario", "queued": "En cola", "processing": "Comprobando", "verified": "Verificado", "transfer_pending": "Aprobación de transferencia pendiente", "disputed": "En disputa", "failed": "Fallida", "expired": "Vencida", "rejected": "Rechazada" }, "failure": { "challenge_not_visible": "El comentario público actual no contiene el desafío.", "character_not_found": "No se encontró el personaje.", "provider_unavailable": "TibiaData no está disponible temporalmente.", "challenge_expired": "El desafío venció.", "worker_interrupted": "La verificación no pudo finalizar después del límite de reintentos." } },
                         "password": { "title": "Cambiar contraseña", "help": "Deja estos campos vacíos para conservar la contraseña actual.", "current": "Contraseña actual", "new": "Nueva contraseña", "confirm": "Confirmar nueva contraseña" }
                     },
                     "guildMembers": {
@@ -1232,15 +1262,16 @@ i18n
                             "empty": { "upcoming": "No hay rifas próximas", "participants": "Aún no hay listas de participantes", "eligibility": "Aún no hay revisiones de elegibilidad", "draw": "Ningún sorteo está listo", "results": "Aún no hay resultados", "history": "No hay rifas históricas", "help": "Las rifas nuevas e históricas aparecerán aquí cuando estén disponibles." },
                             "timeline": { "label": "Progreso de la rifa", "draft": "Borrador", "registration": "Registro", "eligibility": "Revisión de elegibilidad", "frozen": "Snapshot congelado", "scheduled": "Programada", "running": "En ejecución", "private": "Revisión privada", "published": "Publicada", "delivery": "Entrega", "completed": "Completada" },
                             "scopes": { "guild": { "title": "Rifa de guild", "help": "Solo la guild fija y sus miembros elegibles." }, "server": { "title": "Concurso de servidor", "help": "Concurso público limitado a un servidor de Tibia." }, "global": { "title": "Concurso global", "help": "Concurso entre servidores administrado por admins globales." } },
-                            "fields": { "guild": "Guild", "server": "Servidor", "title": "Nombre", "purpose": "Propósito", "timezone": "Zona horaria", "schedule": "Fecha y hora", "showParticipants": "Mostrar públicamente los nombres de participantes" },
-                            "wizard": { "title": "Crear una actividad", "step1": "Paso 1 de 2 · Elige un alcance permitido", "step2": "Paso 2 de 2 · Configura la actividad", "continue": "Continuar", "back": "Atrás", "create": "Crear actividad", "creating": "Creando...", "confirm": "Confirmo el alcance, horario, resultados privados iniciales y plazo de entrega de 24 horas.", "confirmRequired": "Confirma las reglas antes de crear la actividad.", "invalidSchedule": "Elige una fecha, hora y zona horaria válidas.", "createError": "La actividad no pudo crearse de forma segura.", "guildRules": "La elegibilidad usa cinco días de actividad. Los resultados permanecen privados hasta publicarse; los premios deben entregarse en 24 horas." }
+                            "fields": { "guild": "Guild", "server": "Servidor", "title": "Nombre", "purpose": "Propósito", "execution": "Ejecución", "currency": "Moneda", "timezone": "Zona horaria", "schedule": "Fecha y hora", "showParticipants": "Mostrar públicamente los nombres de participantes" },
+                            "execution": { "manual": "Sorteo ponderado manual", "automatic": "Elegibilidad automática, ejecución manual", "scheduled": "Sorteo automático programado" },
+                            "wizard": { "title": "Crear una actividad", "step1": "Paso 1 de 2 · Elige un alcance permitido", "step2": "Paso 2 de 2 · Configura la actividad", "continue": "Continuar", "back": "Atrás", "create": "Crear actividad", "creating": "Creando...", "confirm": "Confirmo el alcance, la ejecución, los resultados privados iniciales y el plazo de entrega de 24 horas.", "confirmRequired": "Confirma las reglas antes de crear la actividad.", "invalidSchedule": "Elige una fecha, hora y zona horaria válidas.", "invalidPrizes": "Ingresa premios positivos y una moneda.", "createError": "La actividad no pudo crearse de forma segura.", "guildRules": "La elegibilidad usa cinco días de actividad. Los resultados permanecen privados hasta publicarse; los premios deben entregarse en 24 horas." }
                         },
                         "legacyLabel": "Historial de rifas legacy — no lo utiliza el scheduler automático",
                         "operations": {
                             "navigation": "Rifas Automáticas", "title": "Rifas Automáticas del Gremio", "subtitle": "Programa, revisa, publica y entrega sorteos autoritativos del gremio.",
                             "prepare": "Preparar rifa", "purpose": "Propósito", "test": "Prueba", "real": "Real", "testLabel": "PRUEBA", "guild": "Gremio", "name": "Nombre de la rifa", "timezone": "Zona horaria IANA",
                             "localSchedule": "Fecha y hora programada", "localEquivalent": "Local: {{value}}", "utcEquivalent": "UTC: {{value}}", "save": "Guardar rifa programada",
-                            "rules": "Solo pueden participar miembros actuales del gremio con actividad válida durante los cinco días anteriores al sorteo. Los ganadores se seleccionan automáticamente. El segundo lugar recibe 100 Tibia Coins y el primer lugar recibe 250 Tibia Coins. Los premios se entregarán dentro de las 24 horas posteriores al sorteo.",
+                            "rules": "Solo pueden participar miembros actuales de la guild con actividad válida durante el período configurado. Los ganadores se seleccionan automáticamente con un premio por cuenta. Los premios configurados deben entregarse en 24 horas.",
                             "confirmReal": "Confirmo que esta es una rifa real independiente y que el horario es correcto.", "fridayExample": "Ejemplo de preparación: viernes 24 de julio de 2026 a las 8:00 PM America/Chicago equivale al 25 de julio de 2026 a la 01:00 UTC. No uses una fecha pasada.",
                             "secondPlace": "Segundo Lugar", "firstPlace": "Primer Lugar", "scheduledLocal": "Hora local programada", "scheduledUtc": "Hora UTC programada", "retryState": "Número de reintentos", "lastFailure": "Último fallo",
                             "preview": "Previsualizar elegibilidad", "freeze": "Congelar snapshot", "testCharacter": "Personaje local existente", "addTestParticipant": "Agregar participante de prueba", "eligibleCount": "{{count}} elegibles", "excludedCount": "{{count}} excluidos", "snapshotAt": "Corte: {{value}}", "staleWarning": "La información de membresía o actividad puede estar desactualizada. Actualiza los datos antes de congelar.",
@@ -1456,7 +1487,8 @@ i18n
                             "guildLabel": "Guild",
                             "worldLabel": "Mundo",
                             "joinTitle": "Registrar personaje",
-                            "joinSubtitle": "Un personaje por cuenta. Un ganador por cuenta.",
+                            "joinSubtitle": "Usa un personaje verificado que pertenezca a tu cuenta. Un ganador por cuenta.",
+                            "signInRequired": "Inicia sesión y verifica tu personaje antes de registrarte.",
                             "joinInputPlaceholder": "Nombre del personaje",
                             "joinButton": "Registrar",
                             "joining": "Registrando...",

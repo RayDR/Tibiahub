@@ -50,7 +50,12 @@ def add_candidate(db, username, *, guild_name="TEST GUILD", active=True, guest=F
     user = make_user(db, username=actual, guild_name=guild_name)
     user.is_active = active
     user.last_login_at = last_login_at
-    character = UserCharacter(user_id=user.id, character_name=f"{username} Character", guild_name=guild_name, guild_rank="Member")
+    character_name = f"{username} Character"
+    character = UserCharacter(
+        user_id=user.id, character_name=character_name,
+        normalized_name=character_name.casefold(), ownership_status="verified",
+        ownership_verified_at=datetime.now(UTC), guild_name=guild_name, guild_rank="Member",
+    )
     db.add(character)
     db.flush()
     return user, character
@@ -78,8 +83,14 @@ def test_exact_two_prizes_and_formal_order(db):
     raffle = make_automatic_raffle(db, admin)
     prizes = validate_automatic_prizes(raffle)
     assert list(POSITIONS) == ["second", "first"]
-    assert prizes["second"].amount == Decimal("100.00")
-    assert prizes["first"].amount == Decimal("250.00")
+    prizes["second"].amount = Decimal("75.50")
+    prizes["second"].currency = "KK"
+    prizes["first"].amount = Decimal("999.00")
+    prizes["first"].currency = "TC"
+    validated = validate_automatic_prizes(raffle)
+    assert validated["second"].amount == Decimal("75.50")
+    assert validated["second"].currency == "KK"
+    assert validated["first"].amount == Decimal("999.00")
     raffle.prizes.append(RafflePrize(raffle_id=raffle.id, name="extra", reward="1 TC", order_index=3))
     db.flush()
     with pytest.raises(AutomaticRaffleError, match="exactly"):
@@ -88,6 +99,25 @@ def test_exact_two_prizes_and_formal_order(db):
 
 def test_chicago_five_calendar_day_cutoff():
     assert compute_eligibility_cutoff(DRAW_AT, "America/Chicago", 5) == CUTOFF_AT
+
+
+@pytest.mark.asyncio
+async def test_manual_trigger_automatic_raffle_uses_trigger_time_cutoff(db, monkeypatch):
+    admin = make_user(db, username="manual_trigger_admin", is_superuser=True)
+    raffle = make_automatic_raffle(db, admin, purpose="real")
+    raffle.scheduled_run_at = None
+    member, character = add_candidate(db, "manual_trigger_member", last_login_at=datetime.now(UTC))
+
+    async def fake_guild(_guild):
+        return guild_source(character.character_name)
+
+    monkeypatch.setattr("app.services.raffle_eligibility_service.get_guild_info", fake_guild)
+    before = datetime.now(UTC) - timedelta(days=raffle.eligibility_days, seconds=2)
+    preview = await RaffleEligibilityService.preview(db, raffle)
+    after = datetime.now(UTC) - timedelta(days=raffle.eligibility_days) + timedelta(seconds=2)
+    assert before <= preview["cutoff_at"] <= after
+    member_entry = next(entry for entry in preview["entries"] if entry["user_id"] == member.id)
+    assert member_entry["is_eligible"] is True
 
 
 @pytest.mark.asyncio
