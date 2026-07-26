@@ -1,9 +1,10 @@
 """Creature model - Represents monsters in Tibia."""
-from sqlalchemy import Boolean, Column, DateTime, Float, ForeignKey, Integer, JSON, String, Table, Text
+from sqlalchemy import Boolean, Column, DateTime, Float, ForeignKey, Index, Integer, String, Table, Text, Uuid
 from sqlalchemy.orm import relationship
 from sqlalchemy.sql import func
 
 from app.db.database import Base
+from app.db.types import JSONBType
 
 
 # Association table for creature weaknesses (many-to-many)
@@ -28,6 +29,7 @@ creature_resistances = Table(
 class Creature(Base):
     """Creature/Monster model"""
     __tablename__ = "creatures"
+    __table_args__ = (Index("uq_creatures_knowledge_entity_id", "knowledge_entity_id", unique=True),)
     
     id = Column(Integer, primary_key=True, index=True)
     name = Column(String(100), index=True, nullable=False)
@@ -36,6 +38,13 @@ class Creature(Base):
     external_id = Column(String(100), nullable=True, index=True)
     source_name = Column(String(50), nullable=True, index=True)
     source_url = Column(String(255), nullable=True)
+    knowledge_entity_id = Column(
+        Uuid(as_uuid=True),
+        ForeignKey("knowledge_entities.uuid", ondelete="SET NULL"),
+        nullable=True,
+    )
+    data_version = Column(Integer, nullable=False, default=1)
+    protected_fields = Column(JSONBType, nullable=False, default=list)
     article = Column(String(10))  # "a" or "an"
     plural = Column(String(100))
     
@@ -76,11 +85,11 @@ class Creature(Base):
     image_source_name = Column(String(255), nullable=True)  # e.g. "tibiawiki"
     image_locked = Column(Boolean, default=False)           # if True, sync must not overwrite image fields
     image_asset_id = Column(Integer, ForeignKey("media_assets.id"), nullable=True)
-    data_sources = Column(JSON, nullable=True)
-    missing_fields = Column(JSON, nullable=True)
-    related_tasks = Column(JSON, nullable=True)
-    locations = Column(JSON, nullable=True)
-    raw_data = Column(JSON, nullable=True)
+    data_sources = Column(JSONBType, nullable=True)
+    missing_fields = Column(JSONBType, nullable=True)
+    related_tasks = Column(JSONBType, nullable=True)
+    locations = Column(JSONBType, nullable=True)
+    raw_data = Column(JSONBType, nullable=True)
     last_synced_at = Column(DateTime(timezone=True), nullable=True)
     created_at = Column(DateTime(timezone=True), server_default=func.now())
     updated_at = Column(DateTime(timezone=True), server_default=func.now(), onupdate=func.now())
@@ -98,6 +107,7 @@ class Creature(Base):
     )
     loot_items = relationship("Loot", back_populates="creature", cascade="all, delete-orphan")
     spawn_locations = relationship("SpawnLocation", back_populates="creature", cascade="all, delete-orphan")
+    knowledge_entity = relationship("KnowledgeEntity")
     
     def __repr__(self):
         return f"<Creature {self.name}>"

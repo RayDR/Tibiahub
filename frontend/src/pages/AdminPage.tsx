@@ -79,11 +79,11 @@ const AdminPage: React.FC = () => {
     <div className="min-h-screen py-6 sm:py-12 px-3 sm:px-4">
       <div className="container mx-auto max-w-4xl">
         {/* Header */}
-        <div className="text-center mb-8 sm:mb-12 fade-in">
-          <h1 className="text-3xl sm:text-5xl font-bold mb-3 sm:mb-4 bg-gradient-to-r from-purple-400 via-purple-500 to-purple-600 bg-clip-text text-transparent">
+        <div className="text-center mb-8 sm:mb-12 ds-enter">
+          <h1 className="text-3xl sm:text-5xl font-bold mb-3 sm:mb-4 bg-gradient-to-r from-accent via-accent to-accent bg-clip-text text-transparent">
             ⚙️ Admin Panel
           </h1>
-          <p className="text-gray-300 text-base sm:text-lg">Gestiona criaturas y zonas de hunt</p>
+          <p className="text-content-secondary text-base sm:text-lg">Gestiona criaturas y zonas de hunt</p>
         </div>
 
         {/* Tabs */}
@@ -91,8 +91,8 @@ const AdminPage: React.FC = () => {
           <button
             onClick={() => setActiveTab('creatures')}
             className={`px-4 sm:px-8 py-2 sm:py-3 rounded-xl font-semibold transition-all duration-300 text-sm sm:text-base ${activeTab === 'creatures'
-                ? 'bg-gradient-to-r from-gold-400 to-gold-600 text-brown-900 shadow-glow'
-                : 'bg-glass-bg border-2 border-glass-border text-white hover:border-gold-500'
+                ? 'bg-gradient-to-r from-primary-hover to-primary-active text-content-on-primary shadow-lg'
+                : 'bg-surface/80 border-2 border-line text-content-primary hover:border-primary'
               }`}
           >
             <span className="hidden xs:inline">🐉 Criaturas</span>
@@ -101,8 +101,8 @@ const AdminPage: React.FC = () => {
           <button
             onClick={() => setActiveTab('zones')}
             className={`px-4 sm:px-8 py-2 sm:py-3 rounded-xl font-semibold transition-all duration-300 text-sm sm:text-base ${activeTab === 'zones'
-                ? 'bg-gradient-to-r from-gold-400 to-gold-600 text-brown-900 shadow-glow'
-                : 'bg-glass-bg border-2 border-glass-border text-white hover:border-gold-500'
+                ? 'bg-gradient-to-r from-primary-hover to-primary-active text-content-on-primary shadow-lg'
+                : 'bg-surface/80 border-2 border-line text-content-primary hover:border-primary'
               }`}
           >
             <span className="hidden xs:inline">🗺️ Zonas</span>
@@ -111,8 +111,8 @@ const AdminPage: React.FC = () => {
           <button
             onClick={() => setActiveTab('sync')}
             className={`px-4 sm:px-8 py-2 sm:py-3 rounded-xl font-semibold transition-all duration-300 text-sm sm:text-base ${activeTab === 'sync'
-                ? 'bg-gradient-to-r from-gold-400 to-gold-600 text-brown-900 shadow-glow'
-                : 'bg-glass-bg border-2 border-glass-border text-white hover:border-blue-500'
+                ? 'bg-gradient-to-r from-primary-hover to-primary-active text-content-on-primary shadow-lg'
+                : 'bg-surface/80 border-2 border-line text-content-primary hover:border-info'
               }`}
           >
             <span className="hidden xs:inline">🔄 Sincronización</span>
@@ -122,14 +122,14 @@ const AdminPage: React.FC = () => {
 
         {/* Form Card */}
         {activeTab === 'creatures' && (
-          <div className="card fade-in">
-            <h2 className="text-2xl sm:text-3xl font-bold mb-4 sm:mb-6 text-gold-500">Crear Nueva Criatura</h2>
+          <div className="card ds-enter">
+            <h2 className="text-2xl sm:text-3xl font-bold mb-4 sm:mb-6 text-primary">Crear Nueva Criatura</h2>
 
             <form onSubmit={handleSubmit} className="space-y-4 sm:space-y-6">
               {/* Información Básica */}
               <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 sm:gap-6">
                 <div>
-                  <label className="block text-sm font-semibold text-gray-300 mb-2">
+                  <label className="block text-sm font-semibold text-content-secondary mb-2">
                     Nombre *
                   </label>
                   <input
@@ -144,7 +144,7 @@ const AdminPage: React.FC = () => {
                 </div>
 
                 <div>
-                  <label className="block text-sm font-semibold text-gray-300 mb-2">
+                  <label className="block text-sm font-semibold text-content-secondary mb-2">
                     URL de Imagen (Sprite)
                   </label>
                   <input
@@ -161,7 +161,7 @@ const AdminPage: React.FC = () => {
               {/* Stats */}
               <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
                 <div>
-                  <label className="block text-sm font-semibold text-gray-300 mb-2">
+                  <label className="block text-sm font-semibold text-content-secondary mb-2">
                     HP *
                   </label>
                   <input
@@ -176,7 +176,7 @@ const AdminPage: React.FC = () => {
                 </div>
 
                 <div>
-                  <label className="block text-sm font-semibold text-gray-300 mb-2">
+                  <label className="block text-sm font-semibold text-content-secondary mb-2">
                     EXP *
                   </label>
                   <input
@@ -191,7 +191,7 @@ const AdminPage: React.FC = () => {
                 </div>
 
                 <div>
-                  <label className="block text-sm font-semibold text-gray-300 mb-2">
+                  <label className="block text-sm font-semibold text-content-secondary mb-2">
                     Armor
                   </label>
                   <input
@@ -205,7 +205,7 @@ const AdminPage: React.FC = () => {
                 </div>
 
                 <div>
-                  <label className="block text-sm font-semibold text-gray-300 mb-2">
+                  <label className="block text-sm font-semibold text-content-secondary mb-2">
                     Speed
                   </label>
                   <input
@@ -222,7 +222,7 @@ const AdminPage: React.FC = () => {
               {/* Level & Difficulty */}
               <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
                 <div>
-                  <label className="block text-sm font-semibold text-gray-300 mb-2">
+                  <label className="block text-sm font-semibold text-content-secondary mb-2">
                     Nivel Mínimo *
                   </label>
                   <input
@@ -237,7 +237,7 @@ const AdminPage: React.FC = () => {
                 </div>
 
                 <div>
-                  <label className="block text-sm font-semibold text-gray-300 mb-2">
+                  <label className="block text-sm font-semibold text-content-secondary mb-2">
                     Nivel Máximo
                   </label>
                   <input
@@ -251,7 +251,7 @@ const AdminPage: React.FC = () => {
                 </div>
 
                 <div>
-                  <label className="block text-sm font-semibold text-gray-300 mb-2">
+                  <label className="block text-sm font-semibold text-content-secondary mb-2">
                     Dificultad *
                   </label>
                   <select
@@ -272,7 +272,7 @@ const AdminPage: React.FC = () => {
 
               {/* Description */}
               <div>
-                <label className="block text-sm font-semibold text-gray-300 mb-2">
+                <label className="block text-sm font-semibold text-content-secondary mb-2">
                   Descripción
                 </label>
                 <textarea
@@ -289,14 +289,14 @@ const AdminPage: React.FC = () => {
               <div className="flex gap-4 pt-4">
                 <button
                   type="submit"
-                  className="btn btn-primary flex-1"
+                  className="app-button-primary flex-1"
                 >
                   ✨ Crear Criatura
                 </button>
                 <button
                   type="button"
                   onClick={() => navigate('/')}
-                  className="px-8 py-3 bg-gray-700 hover:bg-gray-600 rounded-xl font-semibold transition-all"
+                  className="px-8 py-3 bg-surface-raised hover:bg-surface-hover rounded-xl font-semibold transition-all"
                 >
                   Cancelar
                 </button>
@@ -306,12 +306,12 @@ const AdminPage: React.FC = () => {
         )}
 
         {activeTab === 'zones' && (
-          <div className="card text-center py-20 fade-in">
+          <div className="card text-center py-20 ds-enter">
             <div className="text-6xl mb-4">🗺️</div>
-            <h3 className="text-2xl font-bold text-gray-300 mb-2">
+            <h3 className="text-2xl font-bold text-content-secondary mb-2">
               Gestión de Zonas de Hunt
             </h3>
-            <p className="text-gray-400">
+            <p className="text-content-secondary">
               Próximamente: formulario para crear y editar zonas de hunt
             </p>
           </div>
@@ -322,13 +322,13 @@ const AdminPage: React.FC = () => {
         )}
 
         {/* Info Card */}
-        <div className="mt-8 card bg-gradient-to-r from-purple-900/30 to-blue-900/30 border-purple-500/30">
-          <h3 className="text-xl font-bold text-purple-400 mb-4">💡 Datos Reales de Tibia</h3>
-          <ul className="space-y-2 text-gray-300">
-            <li>✅ Usa sprites oficiales de TibiaWiki: <code className="text-gold-500">https://tibiawiki.dev/images/[Name].gif</code></li>
-            <li>✅ Consulta <a href="https://tibiawiki.dev" target="_blank" rel="noopener noreferrer" className="text-blue-400 hover:underline">TibiaWiki.dev</a> para stats reales</li>
+        <div className="mt-8 card bg-gradient-to-r from-accent/30 to-info/30 border-accent/30">
+          <h3 className="text-xl font-bold text-accent mb-4">💡 Datos Reales de Tibia</h3>
+          <ul className="space-y-2 text-content-secondary">
+            <li>✅ Usa sprites oficiales de TibiaWiki: <code className="text-primary">https://tibiawiki.dev/images/[Name].gif</code></li>
+            <li>✅ Consulta <a href="https://tibiawiki.dev" target="_blank" rel="noopener noreferrer" className="text-info hover:underline">TibiaWiki.dev</a> para stats reales</li>
             <li>✅ Winter Update 2025: Soporte completo para vocación Monk 🧘</li>
-            <li>✅ Script de importación: <code className="text-gold-500">python import_tibiawiki.py --manual</code></li>
+            <li>✅ Script de importación: <code className="text-primary">python import_tibiawiki.py --manual</code></li>
           </ul>
         </div>
       </div>

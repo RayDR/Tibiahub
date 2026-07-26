@@ -1,7 +1,7 @@
 """Persist and query locally cached creature details without losing local metadata."""
 from __future__ import annotations
 
-from datetime import datetime
+from datetime import UTC, datetime
 from typing import Any, Iterable, Optional
 
 from sqlalchemy.orm import Session, selectinload
@@ -42,7 +42,7 @@ def _ensure_hunt_zone(db: Session, location_name: str) -> HuntZone:
             source_name="tibiawiki",
             source_url=None,
             description=None,
-            last_synced_at=datetime.utcnow(),
+            last_synced_at=datetime.now(UTC),
         )
         db.add(zone)
         db.flush()
@@ -108,7 +108,7 @@ def upsert_creature_payload(db: Session, payload: dict[str, Any]) -> Creature:
     creature.related_tasks = _merge_list(creature.related_tasks, payload.get("related_tasks"))
     creature.locations = _merge_list(creature.locations, payload.get("locations"))
     creature.raw_data = payload
-    creature.last_synced_at = datetime.utcnow()
+    creature.last_synced_at = datetime.now(UTC)
 
     existing_loot = {loot.normalized_name: loot for loot in creature.loot_items}
     for loot_payload in payload.get("loot_items") or []:

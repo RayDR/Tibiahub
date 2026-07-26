@@ -2,7 +2,7 @@
 from __future__ import annotations
 
 import logging
-from datetime import datetime
+from datetime import UTC, datetime
 from typing import Any, Dict, List, Optional
 
 from sqlalchemy import desc
@@ -36,7 +36,7 @@ class ExternalSyncService:
         sync_log.status = status
         sync_log.message = message
         sync_log.error_details = error
-        sync_log.completed_at = datetime.utcnow()
+        sync_log.completed_at = datetime.now(UTC)
 
     @staticmethod
     async def sync_creatures(db: Session, mode: str = "auto") -> Dict[str, Any]:
@@ -120,7 +120,7 @@ class ExternalSyncService:
                 existing.tradeable = item_data.get("tradeable", existing.tradeable)
                 existing.stackable = item_data.get("stackable", existing.stackable)
                 existing.raw_data = item_data
-                existing.updated_at = datetime.utcnow()
+                existing.updated_at = datetime.now(UTC)
                 EntityMetadataService.update_sync_timestamp(db, entity_type="item", entity_key=name, display_name=name)
                 sync_log.processed_items = index
             db.commit()
@@ -177,7 +177,7 @@ class ExternalSyncService:
                 zone.source_name = response.source.value
                 zone.source_url = place.get("source_url") or zone.source_url
                 zone.raw_data = place
-                zone.last_synced_at = datetime.utcnow()
+                zone.last_synced_at = datetime.now(UTC)
                 EntityMetadataService.update_sync_timestamp(db, entity_type="hunt_zone", entity_key=name, display_name=name, entity_id=zone.id)
                 sync_log.processed_items = index
 

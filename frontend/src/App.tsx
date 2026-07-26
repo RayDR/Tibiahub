@@ -1,9 +1,10 @@
 import { Routes, Route, useLocation, useNavigate, Navigate } from 'react-router-dom';
-import Navigation from './components/Navigation';
 import HomePage from './pages/HomePage';
 import CreaturesPage from './pages/CreaturesPage';
 import CreatureDetailPage from './pages/CreatureDetailPage';
 import QuestDetailPage from './pages/QuestDetailPage';
+import NpcDetailPage from './pages/NpcDetailPage';
+import LocationDetailPage from './pages/LocationDetailPage';
 import HuntRecommendationsPage from './pages/HuntRecommendationsPage';
 import QuestViewerPage from './pages/QuestViewerPage';
 import GuildManagementDashboard from './pages/Admin/GuildManagementDashboard';
@@ -41,6 +42,10 @@ import RafflePublicPage from './pages/RafflePublicPage';
 import PublicRafflePage from './pages/PublicRafflePage';
 import NotFound from './pages/NotFound';
 import { systemApi } from './services/api';
+import ThemePlayground from './pages/Admin/ThemePlayground';
+import AppShell from './components/shell/AppShell';
+import AssistanceHub from './pages/Admin/AssistanceHub';
+import AuditHub from './pages/Admin/AuditHub';
 
 const Leadership = lazy(() => import('./pages/guild/Leadership'));
 const LeadershipRecruitment = lazy(() => import('./pages/guild/LeadershipRecruitment'));
@@ -52,7 +57,7 @@ function App() {
   const navigate = useNavigate();
   const [latestDataVersion, setLatestDataVersion] = useState<string>('');
   const { t } = useTranslation();
-  const leadershipFallback = <div role="status" className="p-8 text-center text-slate-400">{t('leadership.loading')}</div>;
+  const leadershipFallback = <div role="status" className="p-8 text-center text-content-secondary">{t('leadership.loading')}</div>;
 
   // Keyboard shortcut listener for Ctrl+Alt+G (Guild) and Ctrl+Alt+A (Admin)
   useEffect(() => {
@@ -90,10 +95,7 @@ function App() {
     <AuthProvider>
       <WorkspaceProvider>
       <ToastProvider>
-        <div className="min-h-screen text-[color:var(--color-text)] font-sans pt-20" style={{ backgroundColor: 'var(--color-bg)' }}>
-          <Navigation />
-
-          <div className="container mx-auto px-4">
+        <AppShell dataVersion={latestDataVersion}>
             <Routes location={location} key={location.pathname}>
               <Route path="/" element={<HomePage />} />
               <Route path="/cyclopedia" element={<CreaturesPage />} />
@@ -102,6 +104,8 @@ function App() {
               <Route path="/missions" element={<Navigate to="/cyclopedia?tab=quests" replace />} />
               <Route path="/creatures/:slug" element={<CreatureDetailPage />} />
               <Route path="/quests/:questId" element={<QuestDetailPage />} />
+              <Route path="/npcs/:identifier" element={<NpcDetailPage />} />
+              <Route path="/locations/:identifier" element={<LocationDetailPage />} />
               <Route path="/planner" element={<HuntRecommendationsPage />} />
               <Route path="/recommendations" element={<Navigate to="/planner" replace />} />
               <Route path="/hunt" element={<Navigate to="/planner" replace />} />
@@ -143,6 +147,7 @@ function App() {
                 <Route index element={<AdminRedirect />} />
                 <Route path="overview" element={<Overview />} />
                 <Route path="guilds" element={<GuildDirectory />} />
+                <Route path="assistance" element={<AssistanceHub />} />
                 <Route path="users" element={<AdminUsers />} />
                 <Route path="guilds/:guildKey" element={<AdminGuildWorkspace />} />
                 <Route path="guilds/:guildKey/raffles" element={<AdminGuildRaffles />} />
@@ -154,31 +159,20 @@ function App() {
                 <Route path="guild-view" element={<GuildView />} />
                 <Route path="bestiary" element={<BestiaryManagement />} />
                 <Route path="data-tools" element={<DataTools />} />
+                <Route path="knowledge" element={<DataTools initialTab="knowledge" />} />
+                <Route path="audits" element={<AuditHub />} />
+                <Route path="theme-playground" element={<ThemePlayground />} />
                 <Route path="settings" element={<AdminSettings />} />
                 {/* Legacy redirects */}
                 <Route path="api-monitor" element={<Navigate to="/admin/data-tools" replace />} />
                 <Route path="database-sync" element={<Navigate to="/admin/data-tools" replace />} />
-                <Route path="sync" element={<Navigate to="/admin/data-tools" replace />} />
+                <Route path="sync" element={<DataTools initialTab="db-sync" />} />
               </Route>
 
               {/* Catch-All */}
               <Route path="*" element={<NotFound />} />
             </Routes>
-          </div>
-
-          {/* Footer */}
-          <footer className="mt-24 text-center border-t border-slate-800 pt-8 pb-8">
-            <div className="inline-block">
-              <p className="text-slate-400 text-sm">{t('footer.project', { version: latestDataVersion || t('footer.unavailable') })}</p>
-              <p className="mt-2 text-slate-600 text-xs">
-                {t('footer.trademark')}
-              </p>
-              <p className="mt-2 text-slate-500 text-xs">
-                {t('footer.dataSource')} <a href="https://tibia.fandom.com" target="_blank" rel="noopener noreferrer" className="text-amber-500 hover:text-amber-400 transition-colors">TibiaWiki</a>
-              </p>
-            </div>
-          </footer>
-        </div>
+        </AppShell>
       </ToastProvider>
       </WorkspaceProvider>
     </AuthProvider>

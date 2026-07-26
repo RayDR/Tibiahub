@@ -1,112 +1,49 @@
 import { useEffect, useMemo, useState } from 'react';
-import { Loader2, RefreshCcw, Users } from 'lucide-react';
+import { ArrowDownAZ, Loader2, RefreshCcw, Search, Users } from 'lucide-react';
+import { useTranslation } from 'react-i18next';
 
+import { AppButton, Badge, Card, EmptyState, Input, LoadingState, PageHeader, Table, TableContainer } from '../../components/ui';
 import { useAuth } from '../../context/AuthContext';
 import { GuildMember, guildApi } from '../../services/guild';
 import { useGuildContext } from '../../utils/guildContext';
 
 export default function GuildMembersPage() {
+  const { t } = useTranslation();
   const { user } = useAuth();
   const guildName = useGuildContext(user);
-
   const [members, setMembers] = useState<GuildMember[]>([]);
   const [source, setSource] = useState<'live' | 'snapshot'>('snapshot');
   const [loading, setLoading] = useState(true);
   const [busySync, setBusySync] = useState(false);
-  const [error, setError] = useState<string | null>(null);
-
+  const [error, setError] = useState(false);
+  const [query, setQuery] = useState('');
+  const [sort, setSort] = useState<'level' | 'name'>('level');
   const canSync = user?.is_superuser || ['leader', 'vice leader'].includes((user?.guild_rank || '').toLowerCase());
 
-  const sortedMembers = useMemo(() => {
-    return [...members].sort((a, b) => (b.level || 0) - (a.level || 0));
-  }, [members]);
-
-  useEffect(() => {
-    const load = async () => {
-      try {
-        setLoading(true);
-        setError(null);
-        if (!guildName) throw new Error('Missing guild context');
-        const payload = await guildApi.getGuildMembers(guildName);
-        setMembers(payload.members);
-        setSource(payload.source);
-      } catch (loadError: any) {
-        setError(loadError?.response?.data?.detail || loadError?.message || 'Failed to load guild members');
-      } finally {
-        setLoading(false);
-      }
-    };
-    void load();
-  }, [guildName]);
-
-  const forceSync = async () => {
-    try {
-      setBusySync(true);
-      setError(null);
-      if (!guildName) throw new Error('Missing guild context');
-      const payload = await guildApi.syncGuildMembers(guildName);
-      setMembers(payload.members);
-      setSource(payload.source);
-    } catch (syncError: any) {
-      setError(syncError?.response?.data?.detail || syncError?.message || 'Guild sync failed');
-    } finally {
-      setBusySync(false);
-    }
+  const load = async (force = false) => {
+    if (!guildName) return;
+    force ? setBusySync(true) : setLoading(true); setError(false);
+    try { const payload = force ? await guildApi.syncGuildMembers(guildName) : await guildApi.getGuildMembers(guildName); setMembers(payload.members); setSource(payload.source); }
+    catch { setError(true); }
+    finally { setLoading(false); setBusySync(false); }
   };
+  useEffect(() => { void load(); }, [guildName]);
+  const visible = useMemo(() => members.filter(member => `${member.character_name} ${member.vocation || ''} ${member.rank || member.role || ''}`.toLocaleLowerCase().includes(query.trim().toLocaleLowerCase())).sort((a, b) => sort === 'level' ? (b.level || 0) - (a.level || 0) : a.character_name.localeCompare(b.character_name)), [members, query, sort]);
 
-  if (loading) {
-    return (
-      <div className="flex items-center gap-2 text-slate-400">
-        <Loader2 className="h-4 w-4 animate-spin" /> Loading guild members...
-      </div>
-    );
-  }
+  if (loading) return <LoadingState title={t('guildMembers.loading')} />;
+  return <div className="space-y-5">
+    <PageHeader size="md" title={t('guildMembers.title')} subtitle={t('guildMembers.subtitle', { guild: guildName })} iconElement={<Users className="size-6" />} primaryAction={canSync ? <AppButton onClick={() => void load(true)} disabled={busySync}>{busySync ? <Loader2 className="size-4 animate-spin" /> : <RefreshCcw className="size-4" />}{t('guildMembers.refresh')}</AppButton> : undefined} secondaryActions={<Badge tone={source === 'live' ? 'success' : 'neutral'}>{t(`guildMembers.sources.${source}`)}</Badge>} />
+    {error ? <EmptyState title={t('guildMembers.error')} description={t('guildMembers.errorHelp')} action={<AppButton onClick={() => void load()}>{t('common.retry')}</AppButton>} /> : <>
+      <div className="grid gap-2 sm:grid-cols-[minmax(0,1fr)_auto]"><label className="relative"><span className="sr-only">{t('guildMembers.search')}</span><Search className="pointer-events-none absolute left-3 top-1/2 size-4 -translate-y-1/2 text-content-muted" /><Input className="pl-9" value={query} onChange={event => setQuery(event.target.value)} placeholder={t('guildMembers.searchPlaceholder')} /></label><AppButton variant="secondary" onClick={() => setSort(value => value === 'level' ? 'name' : 'level')}><ArrowDownAZ className="size-4" />{t(`guildMembers.sort.${sort}`)}</AppButton></div>
+      {visible.length === 0 ? <EmptyState title={query ? t('guildMembers.noMatches') : t('guildMembers.empty')} description={query ? t('guildMembers.noMatchesHelp') : t('guildMembers.emptyHelp')} /> : <>
+        <div className="responsive-card-list">{visible.map(member => <MemberCard key={`${member.character_name}-${member.snapshot_at}`} member={member} />)}</div>
+        <TableContainer className="responsive-data-table"><Table><thead><tr><th>{t('guildMembers.fields.character')}</th><th>{t('guildMembers.fields.level')}</th><th>{t('guildMembers.fields.vocation')}</th><th>{t('guildMembers.fields.rank')}</th><th>{t('guildMembers.fields.lastLogin')}</th></tr></thead><tbody>{visible.map(member => <tr key={`${member.character_name}-${member.snapshot_at}`}><td className="font-medium text-content-primary">{member.character_name}</td><td>{member.level ?? t('common.notAvailable')}</td><td>{member.vocation || t('common.unknown')}</td><td>{member.rank || member.role || t('guildMembers.values.member')}</td><td className="text-sm text-content-muted">{member.last_login || t('common.unknown')}</td></tr>)}</tbody></Table></TableContainer>
+      </>}
+    </>}
+  </div>;
+}
 
-  return (
-    <div className="space-y-5">
-      <div className="rounded-xl border border-slate-800 bg-slate-900/60 p-5">
-        <div className="mb-2 flex items-center justify-between">
-          <h1 className="flex items-center gap-2 text-2xl font-semibold text-slate-100">
-            <Users className="h-5 w-5 text-amber-400" /> Guild Members
-          </h1>
-          {canSync && (
-            <button
-              onClick={() => void forceSync()}
-              disabled={busySync}
-              className="inline-flex items-center gap-2 rounded-lg border border-slate-700 px-3 py-2 text-sm text-slate-300 hover:border-slate-500 disabled:opacity-50"
-            >
-              <RefreshCcw className={`h-4 w-4 ${busySync ? 'animate-spin' : ''}`} /> Refresh now
-            </button>
-          )}
-        </div>
-        <p className="text-sm text-slate-400">Guild: {guildName}</p>
-        <p className="mt-1 text-xs text-slate-500">Source: {source === 'live' ? 'Live guild roster' : 'Saved guild snapshot'}</p>
-        {error && <p className="mt-2 text-sm text-red-300">{error}</p>}
-      </div>
-
-      <div className="overflow-hidden rounded-xl border border-slate-800 bg-slate-900/60">
-        <div className="grid grid-cols-[2fr_1fr_1.5fr_1.5fr_2fr] gap-2 border-b border-slate-800 bg-slate-950/60 px-4 py-3 text-xs font-semibold uppercase tracking-wider text-slate-400">
-          <div>Character</div>
-          <div>Level</div>
-          <div>Vocation</div>
-          <div>Rank</div>
-          <div>Last Login</div>
-        </div>
-        <div className="max-h-[60vh] overflow-y-auto">
-          {sortedMembers.map((member) => (
-            <div key={`${member.character_name}-${member.snapshot_at}`} className="grid grid-cols-[2fr_1fr_1.5fr_1.5fr_2fr] gap-2 border-b border-slate-800/60 px-4 py-3 text-sm text-slate-300">
-              <div className="font-medium text-slate-100">{member.character_name}</div>
-              <div>{member.level ?? 'N/A'}</div>
-              <div>{member.vocation || 'Unknown'}</div>
-              <div>{member.rank || member.role || 'Member'}</div>
-              <div className="text-xs text-slate-500">{member.last_login || 'Unknown'}</div>
-            </div>
-          ))}
-          {sortedMembers.length === 0 && (
-            <div className="px-4 py-6 text-sm text-slate-500">No members available.</div>
-          )}
-        </div>
-      </div>
-    </div>
-  );
+function MemberCard({ member }: { member: GuildMember }) {
+  const { t } = useTranslation();
+  return <Card className="p-4"><div className="flex items-start justify-between gap-3"><div><h2 className="font-semibold">{member.character_name}</h2><p className="text-sm text-content-muted">{member.vocation || t('common.unknown')}</p></div><Badge tone="primary">{t('guildMembers.levelValue', { level: member.level ?? t('common.notAvailable') })}</Badge></div><dl className="mt-4 grid grid-cols-2 gap-3 text-sm"><div><dt className="text-xs text-content-muted">{t('guildMembers.fields.rank')}</dt><dd>{member.rank || member.role || t('guildMembers.values.member')}</dd></div><div><dt className="text-xs text-content-muted">{t('guildMembers.fields.lastLogin')}</dt><dd>{member.last_login || t('common.unknown')}</dd></div></dl></Card>;
 }

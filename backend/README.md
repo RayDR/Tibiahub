@@ -3,12 +3,12 @@
 Automatic raffle scheduling, recovery, and operational runbooks are documented
 in [`../docs/automatic-raffle-operations.md`](../docs/automatic-raffle-operations.md).
 
-Backend API para el sistema de bestiario de Tibia construido con FastAPI y SQLite.
+Backend API para el sistema de bestiario de Tibia construido con FastAPI y PostgreSQL 16+.
 
 ## 🚀 Características
 
 - ✅ API RESTful con FastAPI
-- ✅ Base de datos SQLite normalizada
+- ✅ PostgreSQL con baseline Alembic reproducible
 - ✅ Integración real con TibiaData y TibiaWiki Fandom
 - ✅ Bestiary live con cache TTL y sin fallback falso en producción
 - ✅ Sistema de rifas de guild con reglas por cuenta local y reruns auditables
@@ -37,9 +37,9 @@ pip install -r requirements.txt
 cp .env.example .env
 ```
 
-4. Inicializar base de datos:
+4. Aplicar el esquema a una base PostgreSQL vacía:
 ```bash
-python seed_db.py
+venv/bin/alembic -c alembic.ini upgrade head
 ```
 
 5. Asegurar modo real en producción:

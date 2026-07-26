@@ -216,10 +216,10 @@ export default function GuildManagementDashboard() {
             <div className="admin-panel rounded-xl p-4">
                 <div className="flex items-center justify-between gap-4 flex-wrap">
                     <div className="flex items-center gap-3">
-                        <Shield className="w-5 h-5 text-[color:var(--color-primary)]" />
+                        <Shield className="w-5 h-5 text-primary" />
                         <div>
-                            <h1 className="text-xl font-semibold text-slate-100">{selectedGuild}</h1>
-                            <p className="text-sm text-slate-400">Guild management — members, events, announcements</p>
+                            <h1 className="text-xl font-semibold text-content-primary">{selectedGuild}</h1>
+                            <p className="text-sm text-content-secondary">Guild management — members, events, announcements</p>
                         </div>
                     </div>
                     <div className="flex items-center gap-2">
@@ -240,10 +240,11 @@ export default function GuildManagementDashboard() {
                     </div>
                 </div>
                 {syncResult && (
-                    <div className="mt-3 rounded-lg border border-[color:var(--color-success)]/40 bg-[color:var(--color-success)]/10 px-4 py-2 text-sm text-[color:var(--color-success)] flex flex-wrap gap-4">
+                    <div className="mt-3 rounded-lg border border-success/40 bg-success/10 px-4 py-2 text-sm text-success flex flex-wrap gap-4">
                         <span>Synced: <strong>{syncResult.synced_users}</strong></span>
                         <span>Updated chars: <strong>{syncResult.updated_characters}</strong></span>
                         <span>Total members: <strong>{syncResult.total_members}</strong></span>
+                        <span>Unlinked accounts: <strong>{syncResult.unlinked_users}</strong></span>
                     </div>
                 )}
             </div>
@@ -261,7 +262,7 @@ export default function GuildManagementDashboard() {
                         className={`flex items-center gap-2 px-4 py-2.5 border-b-2 text-sm font-medium transition-colors ${
                             activeTab === id
                                 ? 'admin-tab-active'
-                                : 'admin-tab-inactive hover:text-[color:var(--color-text)]'
+                                : 'admin-tab-inactive hover:text-content-primary'
                         }`}
                     >
                         <Icon className="w-4 h-4" />
@@ -273,49 +274,49 @@ export default function GuildManagementDashboard() {
             {/* Tab content */}
             {loadingContent ? (
                 <div className="flex items-center justify-center py-16">
-                    <Loader2 className="w-6 h-6 animate-spin text-amber-500" />
+                    <Loader2 className="w-6 h-6 animate-spin text-primary" />
                 </div>
             ) : activeTab === 'members' ? (
-                <div className="bg-slate-900/50 border border-slate-700 rounded-lg overflow-hidden">
-                    <div className="flex items-center justify-between px-4 py-3 border-b border-slate-800">
-                        <span className="text-sm text-slate-400">{members.length} members</span>
+                <div className="bg-surface-base/50 border border-line rounded-lg overflow-hidden">
+                    <div className="flex items-center justify-between px-4 py-3 border-b border-line">
+                        <span className="text-sm text-content-secondary">{members.length} members</span>
                         <button
                             onClick={() => void loadMembers(selectedGuild)}
-                            className="flex items-center gap-1 text-xs text-slate-400 hover:text-slate-200 border border-slate-700 rounded px-2 py-1"
+                            className="flex items-center gap-1 text-xs text-content-secondary hover:text-content-primary border border-line rounded px-2 py-1"
                         >
                             <RefreshCw className="w-3 h-3" /> Refresh
                         </button>
                     </div>
                     <div className="overflow-x-auto">
                         <table className="w-full">
-                            <thead className="bg-slate-950/50">
+                            <thead className="bg-surface-base/50">
                                 <tr>
-                                    <th className="text-left p-3 text-xs font-semibold uppercase tracking-wide text-slate-400">User</th>
-                                    <th className="text-left p-3 text-xs font-semibold uppercase tracking-wide text-slate-400">Rank</th>
-                                    <th className="text-left p-3 text-xs font-semibold uppercase tracking-wide text-slate-400">Characters</th>
-                                    <th className="text-left p-3 text-xs font-semibold uppercase tracking-wide text-slate-400">Status</th>
-                                    <th className="text-right p-3 text-xs font-semibold uppercase tracking-wide text-slate-400">Actions</th>
+                                    <th className="text-left p-3 text-xs font-semibold uppercase tracking-wide text-content-secondary">User</th>
+                                    <th className="text-left p-3 text-xs font-semibold uppercase tracking-wide text-content-secondary">Rank</th>
+                                    <th className="text-left p-3 text-xs font-semibold uppercase tracking-wide text-content-secondary">Characters</th>
+                                    <th className="text-left p-3 text-xs font-semibold uppercase tracking-wide text-content-secondary">Status</th>
+                                    <th className="text-right p-3 text-xs font-semibold uppercase tracking-wide text-content-secondary">Actions</th>
                                 </tr>
                             </thead>
                             <tbody>
                                 {members.length === 0 ? (
-                                    <tr><td colSpan={5} className="p-8 text-center text-slate-500">No members found.</td></tr>
+                                    <tr><td colSpan={5} className="p-8 text-center text-content-muted">No members found.</td></tr>
                                 ) : members.map((member) => (
-                                    <tr key={member.id} className="border-t border-slate-800 hover:bg-slate-950/30 group">
+                                    <tr key={member.id} className="border-t border-line hover:bg-surface-base/30 group">
                                         <td className="p-3">
                                             {editingUser === member.id ? (
                                                 <input
                                                     type="text"
                                                     value={editForm.username || member.username}
                                                     onChange={(e) => setEditForm({ ...editForm, username: e.target.value })}
-                                                    className="bg-slate-950 border border-slate-700 rounded px-2 py-1 text-sm text-slate-200 w-full"
+                                                    className="bg-surface-base border border-line rounded px-2 py-1 text-sm text-content-primary w-full"
                                                 />
                                             ) : (
                                                 <div>
-                                                    <div className="font-medium text-slate-200 text-sm">{member.username}</div>
-                                                    <div className="text-xs text-slate-500">{member.email || 'No email'}</div>
+                                                    <div className="font-medium text-content-primary text-sm">{member.username}</div>
+                                                    <div className="text-xs text-content-muted">{member.email || 'No email'}</div>
                                                     {member.is_superuser && (
-                                                        <span className="text-xs bg-red-900/50 text-red-300 px-1.5 py-0.5 rounded">Admin</span>
+                                                        <span className="text-xs bg-danger/15 text-danger px-1.5 py-0.5 rounded">Admin</span>
                                                     )}
                                                 </div>
                                             )}
@@ -326,10 +327,10 @@ export default function GuildManagementDashboard() {
                                                     type="text"
                                                     value={editForm.guild_rank || member.guild_rank || ''}
                                                     onChange={(e) => setEditForm({ ...editForm, guild_rank: e.target.value })}
-                                                    className="bg-slate-950 border border-slate-700 rounded px-2 py-1 text-sm text-slate-200 w-full"
+                                                    className="bg-surface-base border border-line rounded px-2 py-1 text-sm text-content-primary w-full"
                                                 />
                                             ) : (
-                                                <span className="text-xs bg-slate-800 text-slate-300 px-2 py-1 rounded">
+                                                <span className="text-xs bg-surface text-content-secondary px-2 py-1 rounded">
                                                     {member.guild_rank || 'No Rank'}
                                                 </span>
                                             )}
@@ -342,26 +343,26 @@ export default function GuildManagementDashboard() {
                                                         value={newCharacterName}
                                                         onChange={(e) => setNewCharacterName(e.target.value)}
                                                         placeholder="Character name"
-                                                        className="bg-slate-950 border border-slate-700 rounded px-2 py-1 text-sm text-slate-200 flex-1"
+                                                        className="bg-surface-base border border-line rounded px-2 py-1 text-sm text-content-primary flex-1"
                                                     />
-                                                    <button onClick={() => void handleUpdateCharacter(member.id)} className="p-1.5 text-green-400 hover:bg-green-900/20 rounded">
+                                                    <button onClick={() => void handleUpdateCharacter(member.id)} className="p-1.5 text-success hover:bg-success/20 rounded">
                                                         <Save className="w-3.5 h-3.5" />
                                                     </button>
-                                                    <button onClick={() => { setEditingCharacter(null); setNewCharacterName(''); }} className="p-1.5 text-slate-400 hover:bg-slate-800 rounded">
+                                                    <button onClick={() => { setEditingCharacter(null); setNewCharacterName(''); }} className="p-1.5 text-content-secondary hover:bg-surface rounded">
                                                         <X className="w-3.5 h-3.5" />
                                                     </button>
                                                 </div>
                                             ) : (
                                                 <div className="flex items-center gap-2 group">
-                                                    <div className="flex-1 text-sm text-slate-300">
+                                                    <div className="flex-1 text-sm text-content-secondary">
                                                         {member.characters.length > 0
                                                             ? member.characters.map((c) => `${c.character_name}${c.level ? ` (${c.level})` : ''}`).join(', ')
-                                                            : <span className="text-slate-500 italic">None</span>
+                                                            : <span className="text-content-muted italic">None</span>
                                                         }
                                                     </div>
                                                     <button
                                                         onClick={() => { setEditingCharacter(member.id); setNewCharacterName(member.characters[0]?.character_name || ''); }}
-                                                        className="p-1 text-blue-400 hover:bg-blue-900/20 rounded opacity-0 group-hover:opacity-100 transition-opacity"
+                                                        className="p-1 text-info hover:bg-info/20 rounded opacity-0 group-hover:opacity-100 transition-opacity"
                                                     >
                                                         <Edit2 className="w-3 h-3" />
                                                     </button>
@@ -369,7 +370,7 @@ export default function GuildManagementDashboard() {
                                             )}
                                         </td>
                                         <td className="p-3">
-                                            <span className={`text-xs px-2 py-1 rounded ${member.is_active ? 'bg-green-900/40 text-green-300' : 'bg-slate-800 text-slate-500'}`}>
+                                            <span className={`text-xs px-2 py-1 rounded ${member.is_active ? 'bg-success/15 text-success' : 'bg-surface text-content-muted'}`}>
                                                 {member.is_active ? 'Active' : 'Inactive'}
                                             </span>
                                         </td>
@@ -377,22 +378,22 @@ export default function GuildManagementDashboard() {
                                             <div className="flex items-center justify-end gap-1">
                                                 {editingUser === member.id ? (
                                                     <>
-                                                        <button onClick={() => void handleUpdateUser(member.id)} className="p-1.5 text-green-400 hover:bg-green-900/20 rounded">
+                                                        <button onClick={() => void handleUpdateUser(member.id)} className="p-1.5 text-success hover:bg-success/20 rounded">
                                                             <Save className="w-3.5 h-3.5" />
                                                         </button>
-                                                        <button onClick={() => { setEditingUser(null); setEditForm({}); }} className="p-1.5 text-slate-400 hover:bg-slate-800 rounded">
+                                                        <button onClick={() => { setEditingUser(null); setEditForm({}); }} className="p-1.5 text-content-secondary hover:bg-surface rounded">
                                                             <X className="w-3.5 h-3.5" />
                                                         </button>
                                                     </>
                                                 ) : (
                                                     <>
-                                                        <button onClick={() => { setEditingUser(member.id); setEditForm(member); }} className="p-1.5 text-blue-400 hover:bg-blue-900/20 rounded" title="Edit">
+                                                        <button onClick={() => { setEditingUser(member.id); setEditForm(member); }} className="p-1.5 text-info hover:bg-info/20 rounded" title="Edit">
                                                             <Edit2 className="w-3.5 h-3.5" />
                                                         </button>
                                                         <button
                                                             onClick={() => void handleDeleteUser(member.id, member.username)}
                                                             disabled={member.id === user?.id}
-                                                            className="p-1.5 text-red-400 hover:bg-red-900/20 rounded disabled:opacity-30" title="Delete"
+                                                            className="p-1.5 text-danger hover:bg-danger/20 rounded disabled:opacity-30" title="Delete"
                                                         >
                                                             <Trash2 className="w-3.5 h-3.5" />
                                                         </button>
@@ -409,17 +410,17 @@ export default function GuildManagementDashboard() {
             ) : activeTab === 'events' ? (
                 <div className="space-y-2">
                     {events.length === 0 ? (
-                        <div className="text-center py-12 text-slate-500 bg-slate-900/50 border border-slate-700 rounded-lg">No events found.</div>
+                        <div className="text-center py-12 text-content-muted bg-surface-base/50 border border-line rounded-lg">No events found.</div>
                     ) : events.map((event) => (
-                        <div key={event.id} className="bg-slate-900/50 border border-slate-700 rounded-lg p-4 flex items-start justify-between gap-4">
+                        <div key={event.id} className="bg-surface-base/50 border border-line rounded-lg p-4 flex items-start justify-between gap-4">
                             <div>
-                                <div className="font-medium text-slate-100 text-sm">{event.title}</div>
-                                {event.description && <div className="text-xs text-slate-400 mt-1 line-clamp-2">{event.description}</div>}
-                                <div className="text-xs text-slate-500 mt-1">{new Date(event.start_time).toLocaleString()}</div>
+                                <div className="font-medium text-content-primary text-sm">{event.title}</div>
+                                {event.description && <div className="text-xs text-content-secondary mt-1 line-clamp-2">{event.description}</div>}
+                                <div className="text-xs text-content-muted mt-1">{new Date(event.start_time).toLocaleString()}</div>
                             </div>
                             <button
                                 onClick={() => void handleDeleteEvent(event.id)}
-                                className="flex-shrink-0 p-1.5 text-red-400 hover:bg-red-900/20 rounded"
+                                className="flex-shrink-0 p-1.5 text-danger hover:bg-danger/20 rounded"
                                 title="Delete event"
                             >
                                 <Trash2 className="w-4 h-4" />
@@ -430,17 +431,17 @@ export default function GuildManagementDashboard() {
             ) : (
                 <div className="space-y-2">
                     {announcements.length === 0 ? (
-                        <div className="text-center py-12 text-slate-500 bg-slate-900/50 border border-slate-700 rounded-lg">No announcements found.</div>
+                        <div className="text-center py-12 text-content-muted bg-surface-base/50 border border-line rounded-lg">No announcements found.</div>
                     ) : announcements.map((a) => (
-                        <div key={a.id} className="bg-slate-900/50 border border-slate-700 rounded-lg p-4 flex items-start justify-between gap-4">
+                        <div key={a.id} className="bg-surface-base/50 border border-line rounded-lg p-4 flex items-start justify-between gap-4">
                             <div>
-                                <div className="font-medium text-slate-100 text-sm">{a.title}</div>
-                                <div className="text-xs text-slate-400 mt-1 line-clamp-2">{a.content}</div>
-                                <div className="text-xs text-slate-500 mt-1">{new Date(a.created_at).toLocaleString()}</div>
+                                <div className="font-medium text-content-primary text-sm">{a.title}</div>
+                                <div className="text-xs text-content-secondary mt-1 line-clamp-2">{a.content}</div>
+                                <div className="text-xs text-content-muted mt-1">{new Date(a.created_at).toLocaleString()}</div>
                             </div>
                             <button
                                 onClick={() => void handleDeleteAnnouncement(a.id)}
-                                className="flex-shrink-0 p-1.5 text-red-400 hover:bg-red-900/20 rounded"
+                                className="flex-shrink-0 p-1.5 text-danger hover:bg-danger/20 rounded"
                                 title="Delete announcement"
                             >
                                 <Trash2 className="w-4 h-4" />

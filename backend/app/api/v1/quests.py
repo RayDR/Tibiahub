@@ -1,247 +1,150 @@
-"""Quest search endpoints (local-first with controlled external fallback)."""
-import asyncio
-from difflib import SequenceMatcher
+"""PostgreSQL-only Quest search and detail endpoints."""
+
+from __future__ import annotations
+
 from typing import List
 
 from fastapi import APIRouter, Depends, HTTPException, Query
+from sqlalchemy import or_
 from sqlalchemy.orm import Session
 
 from app.db.database import get_db
+from app.knowledge.services import KnowledgeGraphService
 from app.models.creature import Creature
 from app.models.external_data import TibiaWikiQuest
-from app.models.settings import SystemSettings as SettingsModel
 from app.schemas import QuestDetail, QuestRelatedCreature, QuestSearchResult
 from app.services.entity_metadata_service import EntityMetadataService
-from app.services.external_apis import get_quests
 from app.services.text_utils import normalize_search_text
 
+
 router = APIRouter(prefix="/quests", tags=["quests"])
-DETAIL_FALLBACK_TIMEOUT_SECONDS = 15.0
 
 
-def _get_setting(db: Session, key: str, default: str = "") -> str:
-    value = db.query(SettingsModel).filter(SettingsModel.key == key).first()
-    return value.value if value and value.value is not None else default
-
-
-def _is_external_detail_fallback_enabled(db: Session) -> bool:
-    return (
-        _get_setting(db, "external_auto_fallback_enabled", "0") == "1"
-        or _get_setting(db, "bestiary_allow_external_detail_fallback", "0") == "1"
+def _summary(row: TibiaWikiQuest) -> QuestSearchResult:
+    return QuestSearchResult(
+        id=row.id, name=row.name, slug=row.slug, description=row.summary or row.description,
+        group_name=row.group_name, parent_page=row.parent_page, is_group=bool(row.is_group),
+        min_level=row.min_level, max_level=row.max_level, experience_reward=row.experience_reward,
+        location=row.location, npc=row.npc, source_url=row.source_url, category=row.category,
+        quest_type=row.quest_type, premium_required=row.premium_required,
+        repeatable=row.repeatable, last_synced_at=row.last_synced_at,
     )
 
 
-def _rank_quest(query: str, quest_name: str) -> tuple[int, float, str]:
-    normalized_query = normalize_search_text(query)
-    normalized_name = normalize_search_text(quest_name)
-    if normalized_name == normalized_query:
-        return (0, -1.0, normalized_name)
-    if normalized_name.startswith(normalized_query):
-        return (1, -1.0, normalized_name)
-    if normalized_query in normalized_name:
-        return (2, -1.0, normalized_name)
-    return (3, -SequenceMatcher(a=normalized_query, b=normalized_name).ratio(), normalized_name)
-
-
 @router.get("/highlights", response_model=List[QuestSearchResult])
-async def get_quest_highlights(
-    limit: int = Query(12, ge=1, le=50),
-    db: Session = Depends(get_db),
-):
-    """Return top local quest records ranked by metadata search/highlight signals."""
+def get_quest_highlights(limit: int = Query(12, ge=1, le=50), db: Session = Depends(get_db)):
     metadata = EntityMetadataService.get_highlights(db, entity_type="quest", limit=limit)
-    quest_ids = [record.entity_id for record in metadata if record.entity_id is not None]
+    ids = [record.entity_id for record in metadata if record.entity_id is not None]
     rows: list[TibiaWikiQuest] = []
-    if quest_ids:
-        raw = db.query(TibiaWikiQuest).filter(TibiaWikiQuest.id.in_(quest_ids)).all()
-        by_id = {row.id: row for row in raw}
-        rows = [by_id[qid] for qid in quest_ids if qid in by_id and not bool(getattr(by_id[qid], "is_group", False))]
+    if ids:
+        found = db.query(TibiaWikiQuest).filter(TibiaWikiQuest.id.in_(ids)).all()
+        by_id = {row.id: row for row in found}
+        rows = [by_id[value] for value in ids if value in by_id and not by_id[value].is_group]
     if not rows:
-        rows = (
-            db.query(TibiaWikiQuest)
-            .filter((TibiaWikiQuest.is_group.is_(False)) | (TibiaWikiQuest.is_group.is_(None)))
-            .order_by(TibiaWikiQuest.updated_at.desc().nullslast(), TibiaWikiQuest.id.desc())
-            .limit(limit)
-            .all()
-        )
-
-    return [
-        QuestSearchResult(
-            id=row.id,
-            name=row.name,
-            slug=row.slug,
-            description=row.description,
-            group_name=row.group_name,
-            parent_page=row.parent_page,
-            is_group=bool(row.is_group),
-            min_level=row.min_level,
-            max_level=row.max_level,
-            experience_reward=row.experience_reward,
-            location=row.location,
-            npc=row.npc,
-            source_url=row.source_url or ((row.raw_data or {}).get("source_url") if row.raw_data else None),
-        )
-        for row in rows
-    ]
+        rows = db.query(TibiaWikiQuest).filter(TibiaWikiQuest.is_group.is_(False)).order_by(
+            TibiaWikiQuest.updated_at.desc().nullslast(), TibiaWikiQuest.id.desc()
+        ).limit(limit).all()
+    return [_summary(row) for row in rows]
 
 
 @router.get("/", response_model=List[QuestSearchResult])
-async def search_quests(
-    search: str | None = Query(None, min_length=2, description="Search term for quest name"),
-    include_groups: bool = Query(False, description="Include group/hub pages in results"),
+def search_quests(
+    search: str | None = Query(None, min_length=2),
+    category: str | None = None,
+    level: int | None = Query(None, ge=0),
+    premium: bool | None = None,
+    repeatable: bool | None = None,
+    include_groups: bool = False,
     skip: int = Query(0, ge=0),
     limit: int = Query(50, ge=1, le=100),
     db: Session = Depends(get_db),
 ):
-    base_query = db.query(TibiaWikiQuest)
+    query = db.query(TibiaWikiQuest)
     if not include_groups:
-        base_query = base_query.filter((TibiaWikiQuest.is_group.is_(False)) | (TibiaWikiQuest.is_group.is_(None)))
-
+        query = query.filter(TibiaWikiQuest.is_group.is_(False))
     if search:
-        rows = (
-            base_query
-            .filter(TibiaWikiQuest.name.ilike(f"%{search}%"))
-            .offset(skip)
-            .limit(limit)
-            .all()
-        )
-    else:
-        rows = (
-            base_query
-            .order_by(TibiaWikiQuest.updated_at.desc().nullslast(), TibiaWikiQuest.id.desc())
-            .offset(skip)
-            .limit(limit)
-            .all()
-        )
-
-    if not rows and search:
-        rows = (
-            db.query(TibiaWikiQuest)
-            .filter(TibiaWikiQuest.raw_data.isnot(None))
-            .limit(300)
-            .all()
-        )
-        rows = sorted(rows, key=lambda item: _rank_quest(search, item.name))[skip: skip + limit]
-
+        query = query.filter(TibiaWikiQuest.name.ilike(f"%{search}%"))
+    if category:
+        query = query.filter(TibiaWikiQuest.category == category)
+    if level is not None:
+        query = query.filter(or_(TibiaWikiQuest.min_level.is_(None), TibiaWikiQuest.min_level <= level))
+        query = query.filter(or_(TibiaWikiQuest.max_level.is_(None), TibiaWikiQuest.max_level >= level))
+    if premium is not None:
+        query = query.filter(TibiaWikiQuest.premium_required == premium)
+    if repeatable is not None:
+        query = query.filter(TibiaWikiQuest.repeatable == repeatable)
+    rows = query.order_by(TibiaWikiQuest.name.asc()).offset(skip).limit(limit).all()
     if rows:
-        EntityMetadataService.record_searches(
-            db,
-            entity_type="quest",
-            matches=[(normalize_search_text(row.name), row.name, row.id) for row in rows[: min(len(rows), 5)]],
-        )
+        EntityMetadataService.record_searches(db, entity_type="quest", matches=[
+            (normalize_search_text(row.name), row.name, row.id) for row in rows[:5]
+        ])
         db.commit()
-
-    return [
-        QuestSearchResult(
-            id=row.id,
-            name=row.name,
-            slug=row.slug,
-            description=row.description,
-            group_name=row.group_name,
-            parent_page=row.parent_page,
-            is_group=bool(row.is_group),
-            min_level=row.min_level,
-            max_level=row.max_level,
-            experience_reward=row.experience_reward,
-            location=row.location,
-            npc=row.npc,
-            source_url=row.source_url or ((row.raw_data or {}).get("source_url") if row.raw_data else None),
-        )
-        for row in rows
-    ]
+    return [_summary(row) for row in rows]
 
 
-@router.get("/{quest_id}", response_model=QuestDetail)
-async def get_quest_detail(quest_id: int, db: Session = Depends(get_db)):
-    quest = db.query(TibiaWikiQuest).filter(TibiaWikiQuest.id == quest_id).first()
+def _safe_named(values) -> list[dict]:
+    return [value for value in (values or []) if isinstance(value, dict) and isinstance(value.get("name"), str)]
 
-    if not quest and _is_external_detail_fallback_enabled(db):
-        external_response = await asyncio.wait_for(get_quests(expand=True), timeout=DETAIL_FALLBACK_TIMEOUT_SECONDS)
-        if external_response.success() and isinstance(external_response.data, list):
-            best = next(
-                (
-                    entry for entry in external_response.data
-                    if entry.get("id") == quest_id or str(entry.get("id") or "") == str(quest_id)
-                ),
-                None,
-            )
-            if best and best.get("name"):
-                existing = db.query(TibiaWikiQuest).filter(TibiaWikiQuest.name == best["name"]).first()
-                if not existing:
-                    existing = TibiaWikiQuest(name=best["name"])
-                    db.add(existing)
-                existing.description = best.get("description")
-                existing.min_level = best.get("min_level")
-                existing.max_level = best.get("max_level")
-                existing.experience_reward = best.get("experience_reward")
-                existing.location = best.get("location")
-                existing.npc = best.get("npc")
-                existing.raw_data = best
-                db.commit()
-                db.refresh(existing)
-                quest = existing
 
-    if not quest:
+@router.get("/{identifier}", response_model=QuestDetail)
+def get_quest_detail(identifier: str, db: Session = Depends(get_db)):
+    query = db.query(TibiaWikiQuest)
+    if identifier.isdigit():
+        quest = query.filter(or_(TibiaWikiQuest.id == int(identifier), TibiaWikiQuest.external_id == identifier)).first()
+    else:
+        quest = query.filter(or_(TibiaWikiQuest.slug == identifier, TibiaWikiQuest.normalized_name == normalize_search_text(identifier))).first()
+    if quest is None:
         raise HTTPException(status_code=404, detail="Quest not found")
 
-    normalized_name = normalize_search_text(quest.name)
-    related_creatures_rows = (
-        db.query(Creature)
-        .filter(Creature.related_tasks.isnot(None))
-        .all()
-    )
-    related_creatures: list[QuestRelatedCreature] = []
-    for creature in related_creatures_rows:
-        tasks = [task for task in (creature.related_tasks or []) if isinstance(task, str)]
-        if any(normalized_name in normalize_search_text(task) for task in tasks):
-            related_creatures.append(
-                QuestRelatedCreature(
-                    creature_id=creature.id,
-                    creature_name=creature.name,
-                    creature_slug=creature.slug,
-                    is_boss=bool(creature.is_boss),
-                    classification=creature.classification,
-                    image_url=creature.image_url,
-                )
-            )
-
-    raw_data = quest.raw_data or {}
-    requirements = [
-        item
-        for item in (
-            quest.requirements
-            or raw_data.get("requirements")
-            or raw_data.get("related_tasks")
-            or raw_data.get("missions")
-            or []
-        )
-        if isinstance(item, str)
-    ]
-
-    if not requirements:
-        requirements = [
-            task
-            for creature in related_creatures_rows
-            for task in (creature.related_tasks or [])
-            if isinstance(task, str) and normalized_name in normalize_search_text(task)
-        ]
-
+    relations = []
+    related_creatures = []
+    if quest.knowledge_entity_id:
+        relation_rows = KnowledgeGraphService.outgoing(db, quest.knowledge_entity_id)
+        for relation in relation_rows:
+            relation_type = {
+                "prerequisite_for": "unlocks_quest",
+                "references_npc": "involves_npc",
+                "mission_references_npc": "involves_npc",
+            }.get(relation.relationship_type, relation.relationship_type.removeprefix("mission_"))
+            mission_id = relation.source_scope.removeprefix("mission:") if relation.source_scope.startswith("mission:") else None
+            relations.append({
+                "relation_type": relation_type,
+                "target_entity_type": relation.target_type,
+                "target_name": relation.target_name,
+                "resolution_status": relation.resolution_state,
+                "target_slug": relation.target_slug,
+                "mission_id": mission_id,
+            })
+            if relation.target_entity_id and relation.target_type in {"creature", "boss"}:
+                creature = db.query(Creature).filter_by(knowledge_entity_id=relation.target_entity_id).first()
+                if creature and all(item.creature_id != creature.id for item in related_creatures):
+                    related_creatures.append(QuestRelatedCreature(
+                        creature_id=creature.id, creature_name=creature.name, creature_slug=creature.slug,
+                        is_boss=bool(creature.is_boss), classification=creature.classification,
+                        image_url=creature.image_url,
+                    ))
+    missions = [{
+        "id": mission.id, "external_id": mission.external_id, "title": mission.title,
+        "sequence": mission.sequence, "description": mission.description,
+        "objectives": list(mission.objectives or []), "required_items": _safe_named(mission.required_items),
+        "rewarded_items": _safe_named(mission.rewarded_items), "related_npcs": _safe_named(mission.related_npcs),
+        "related_creatures": _safe_named(mission.related_creatures), "locations": _safe_named(mission.locations),
+    } for mission in sorted(quest.missions, key=lambda row: row.sequence)]
+    required_items = _safe_named(quest.required_items)
+    rewarded_items = _safe_named(quest.rewarded_items)
+    required_quests = _safe_named(quest.required_quests)
     return QuestDetail(
-        id=quest.id,
-        name=quest.name,
-        slug=quest.slug,
-        description=quest.description,
-        group_name=quest.group_name,
-        parent_page=quest.parent_page,
-        is_group=bool(quest.is_group),
-        min_level=quest.min_level,
-        max_level=quest.max_level,
-        experience_reward=quest.experience_reward,
-        location=quest.location,
-        npc=quest.npc,
-        source_url=quest.source_url or ((quest.raw_data or {}).get("source_url") if quest.raw_data else None),
-        rewards=[item for item in (quest.rewards or []) if isinstance(item, str)],
-        requirements=requirements,
-        related_quest_names=[item for item in (raw_data.get("related_quests") or []) if isinstance(item, str)],
-        related_creatures=related_creatures,
+        **_summary(quest).model_dump(), knowledge_entity_id=quest.knowledge_entity_id,
+        summary=quest.summary, image_url=quest.image_url,
+        difficulty=quest.difficulty, duration=quest.duration, solo_possible=quest.solo_possible,
+        data_version=quest.data_version, starting_npcs=_safe_named(quest.starting_npcs),
+        related_npcs=_safe_named(quest.related_npcs), required_items=required_items,
+        rewarded_items=rewarded_items, required_quests=required_quests,
+        unlocked_quests=_safe_named(quest.unlocked_quests), required_creatures=_safe_named(quest.required_creatures),
+        bosses=_safe_named(quest.bosses), locations=_safe_named(quest.locations),
+        access_unlocks=[value for value in (quest.access_unlocks or []) if isinstance(value, dict)],
+        missions=missions, relationships=relations, related_creatures=related_creatures,
+        requirements=[value["name"] for value in required_items + required_quests],
+        rewards=[value["name"] for value in rewarded_items],
+        related_quest_names=[value["name"] for value in required_quests + _safe_named(quest.unlocked_quests)],
     )

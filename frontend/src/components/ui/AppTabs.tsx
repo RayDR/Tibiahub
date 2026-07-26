@@ -1,4 +1,5 @@
 import React from 'react';
+import { cn } from './cn';
 
 export interface AppTabItem {
   key: string;
@@ -13,15 +14,17 @@ interface AppTabsProps {
   className?: string;
 }
 
-const AppTabs: React.FC<AppTabsProps> = ({ items, activeKey, onChange, className = '' }) => {
+const AppTabs: React.FC<AppTabsProps> = ({ items, activeKey, onChange, className }) => {
   return (
-    <div className={`app-tablist ${className}`.trim()}>
+    <div className={cn('app-tablist', className)} role="tablist">
       {items.map((item) => (
         <button
           key={item.key}
           onClick={() => onChange(item.key)}
           className="app-tab"
           data-active={item.key === activeKey}
+          role="tab"
+          aria-selected={item.key === activeKey}
           type="button"
         >
           {item.icon}

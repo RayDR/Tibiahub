@@ -1,8 +1,9 @@
-from sqlalchemy import Boolean, Column, DateTime, ForeignKey, Integer, JSON, String
+from sqlalchemy import Boolean, Column, DateTime, ForeignKey, Integer, String
 from sqlalchemy.orm import relationship
 from sqlalchemy.sql import func
 
 from app.db.database import Base
+from app.db.types import JSONBType
 
 
 class WorkspaceAudit(Base):
@@ -16,7 +17,7 @@ class WorkspaceAudit(Base):
     target_type = Column(String(80), nullable=True)
     target_id = Column(String(100), nullable=True)
     assisted = Column(Boolean, nullable=False, default=False)
-    safe_metadata = Column(JSON, nullable=False, default=dict)
+    safe_metadata = Column(JSONBType, nullable=False, default=dict)
     created_at = Column(DateTime(timezone=True), nullable=False, server_default=func.now())
 
     actor = relationship("User")

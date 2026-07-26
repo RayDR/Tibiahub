@@ -26,7 +26,7 @@ export default function LanguageSwitcher() {
             <button
                 onClick={() => setIsOpen(!isOpen)}
                 aria-label={t('a11y.languageSelector')}
-                className="flex items-center gap-2 rounded-lg px-3 py-2 text-sm text-[color:var(--color-text-muted)] transition-all duration-300 hover:bg-white/5 hover:text-[color:var(--color-primary)]"
+                className="flex items-center gap-2 rounded-lg px-3 py-2 text-sm text-content-muted transition-all duration-300 hover:bg-surface-inverse/5 hover:text-primary"
             >
                 <FontAwesomeIcon icon={faLanguage} className="w-4" />
                 <span className="text-xs font-semibold tracking-wide">{currentLang.short}</span>
@@ -34,11 +34,11 @@ export default function LanguageSwitcher() {
 
             {isOpen && (
                 <>
-                    <div 
-                        className="fixed inset-0 z-10" 
+                    <div
+                        className="fixed inset-0 z-base"
                         onClick={() => setIsOpen(false)}
                     />
-                    <div className="absolute right-0 z-20 mt-2 w-44 overflow-hidden rounded-lg border border-[color:var(--color-border)] bg-[color:var(--color-surface)] shadow-xl backdrop-blur-sm">
+                    <div className="ds-dropdown absolute right-0 z-dropdown mt-2 w-44 overflow-hidden backdrop-blur-sm">
                         {languages.map((lang) => (
                             <button
                                 key={lang.code}
@@ -46,16 +46,16 @@ export default function LanguageSwitcher() {
                                 aria-label={t('a11y.switchLanguageTo', { language: lang.name })}
                                 className={`w-full flex items-center gap-3 px-4 py-3 text-sm transition-all duration-300 ${
                                     activeCode === lang.code
-                                        ? 'bg-[color:var(--color-primary)]/20 text-[color:var(--color-primary)] font-semibold'
-                                        : 'text-[color:var(--color-text)] hover:bg-white/5'
+                                        ? 'bg-primary/20 text-primary font-semibold'
+                                        : 'text-content-primary hover:bg-surface-inverse/5'
                                 }`}
                             >
-                                <span className="inline-flex w-8 items-center justify-center rounded border border-[color:var(--color-border)] px-1 py-0.5 text-[11px] font-semibold text-[color:var(--color-text-muted)]">
+                                <span className="inline-flex w-8 items-center justify-center rounded border border-line px-1 py-0.5 text-[11px] font-semibold text-content-muted">
                                     {lang.short}
                                 </span>
                                 <div className="text-left">
                                     <div className="text-xs font-medium">{lang.name}</div>
-                                    <div className="text-[10px] text-[color:var(--color-text-muted)]">{lang.region}</div>
+                                    <div className="text-[10px] text-content-muted">{lang.region}</div>
                                 </div>
                                 {activeCode === lang.code ? <FontAwesomeIcon icon={faCheck} className="ml-auto text-xs" /> : null}
                             </button>

@@ -3,7 +3,7 @@ from datetime import UTC, datetime, timedelta
 from app.models.raffle import RaffleParticipant, RaffleTestAudit
 from app.models.user import User
 from app.models.user_character import UserCharacter
-from tests.conftest import make_user
+from conftest import make_user
 from tests.test_automatic_raffle_stage1 import auth, make_automatic_raffle
 
 

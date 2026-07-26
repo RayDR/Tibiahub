@@ -1,37 +1,15 @@
 
 import asyncio
-from sqlalchemy.orm import Session
-from app.db.database import SessionLocal, engine
-from app.db.database import SessionLocal, engine, Base
+from app.db.database import SessionLocal, verify_connection_and_schema
 from app.models import Creature, Loot, HuntZone, User, Quest
 from app.services.extractor import TibiaWikiExtractor
-from passlib.context import CryptContext
-
-pwd_context = CryptContext(schemes=["bcrypt"], deprecated="auto")
-
-def get_password_hash(password):
-    return pwd_context.hash(password)
 
 async def seed_data():
-    # 1. Create Tables
-    print("Creating tables...")
-    Base.metadata.create_all(bind=engine)
+    # Schema creation is exclusively managed by Alembic.
+    verify_connection_and_schema()
     db = SessionLocal()
 
-    # 2. Seed Admin User
-    admin_user = db.query(User).filter(User.username == "admin").first()
-    if not admin_user:
-        print("Creating admin user...")
-        user = User(
-            username="admin",
-            email="admin@tibiabestiary.com",
-            hashed_password=get_password_hash("admin123"),
-            is_superuser=True
-        )
-        db.add(user)
-        db.commit()
-
-    # 3. Fetch Creatures
+    # Fetch Creatures
     extractor = TibiaWikiExtractor()
     creatures_to_fetch = ["Dragon", "Dragon Lord", "Demon", "Cyclops", "Rat", "Monk (Creature)"]
     

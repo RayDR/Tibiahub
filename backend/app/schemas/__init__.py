@@ -5,6 +5,7 @@ from pydantic import BaseModel, Field
 from typing import List, Optional
 from enum import Enum
 from datetime import datetime
+from uuid import UUID
 
 
 # Vocation Enum for Winter Update 2025
@@ -220,6 +221,8 @@ class Creature(CreatureBase):
     normalized_name: Optional[str] = None
     external_id: Optional[str] = None
     source_name: Optional[str] = None
+    knowledge_entity_id: Optional[UUID] = None
+    data_version: int = 1
     last_synced_at: Optional[datetime] = None
     loot_items: List[Loot] = []
     spawn_locations: List[SpawnLocation] = []
@@ -239,20 +242,30 @@ class HuntRecommendation(BaseModel):
 
 
 class ItemDropCreature(BaseModel):
-    creature_id: int
+    creature_id: Optional[int] = None
     creature_name: str
     creature_slug: Optional[str] = None
     chance: Optional[float] = None
     rarity: Optional[str] = None
     hunt_zones: List[HuntZoneSimple] = []
+    relationship_id: Optional[UUID] = None
+    knowledge_entity_id: Optional[UUID] = None
+    resolution_status: Optional[str] = None
+    source_provider: Optional[str] = None
 
 
 class ItemSearchResult(BaseModel):
+    id: Optional[int] = None
     image_item_id: Optional[int] = None
     item_name: str
     normalized_name: str
     item_image_url: Optional[str] = None
     source_url: Optional[str] = None
+    knowledge_entity_id: Optional[UUID] = None
+    item_type: Optional[str] = None
+    category: Optional[str] = None
+    data_version: int = 1
+    last_synced_at: Optional[datetime] = None
     drops: List[ItemDropCreature] = []
 
 
@@ -264,6 +277,32 @@ class ItemDetail(BaseModel):
     source_url: Optional[str] = None
     rarity: Optional[str] = None
     drop_chance: Optional[float] = None
+    knowledge_entity_id: Optional[UUID] = None
+    data_version: int = 1
+    last_synced_at: Optional[datetime] = None
+    game_item_id: Optional[int] = None
+    item_class: Optional[str] = None
+    item_type: Optional[str] = None
+    category: Optional[str] = None
+    weight: Optional[float] = None
+    value: Optional[int] = None
+    level_requirement: Optional[int] = None
+    vocation_requirements: List[str] = []
+    attack: Optional[int] = None
+    defense: Optional[int] = None
+    armor: Optional[int] = None
+    range: Optional[int] = None
+    slots: List[str] = []
+    imbuement_slots: Optional[int] = None
+    attributes: dict = {}
+    resistances: dict = {}
+    bonuses: dict = {}
+    description: Optional[str] = None
+    notes: Optional[str] = None
+    buy_from: List[dict] = []
+    sell_to: List[dict] = []
+    rewards_from: List[str] = []
+    required_for: List[str] = []
     drops: List[ItemDropCreature] = []
 
 
@@ -281,6 +320,11 @@ class QuestSearchResult(BaseModel):
     location: Optional[str] = None
     npc: Optional[str] = None
     source_url: Optional[str] = None
+    category: Optional[str] = None
+    quest_type: Optional[str] = None
+    premium_required: Optional[bool] = None
+    repeatable: Optional[bool] = None
+    last_synced_at: Optional[datetime] = None
 
 
 class QuestRelatedCreature(BaseModel):
@@ -292,8 +336,42 @@ class QuestRelatedCreature(BaseModel):
     image_url: Optional[str] = None
 
 
+class QuestNamedValue(BaseModel):
+    name: str
+    external_id: Optional[str] = None
+
+
+class QuestItemValue(QuestNamedValue):
+    amount: int = 1
+    note: Optional[str] = None
+
+
+class QuestMissionResult(BaseModel):
+    id: UUID
+    external_id: Optional[str] = None
+    title: str
+    sequence: int
+    description: Optional[str] = None
+    objectives: List[str] = []
+    required_items: List[QuestItemValue] = []
+    rewarded_items: List[QuestItemValue] = []
+    related_npcs: List[QuestNamedValue] = []
+    related_creatures: List[QuestNamedValue] = []
+    locations: List[QuestNamedValue] = []
+
+
+class QuestRelationResult(BaseModel):
+    relation_type: str
+    target_entity_type: str
+    target_name: str
+    resolution_status: str
+    target_slug: Optional[str] = None
+    mission_id: Optional[UUID] = None
+
+
 class QuestDetail(BaseModel):
     id: int
+    knowledge_entity_id: Optional[UUID] = None
     name: str
     slug: Optional[str] = None
     description: Optional[str] = None
@@ -310,6 +388,29 @@ class QuestDetail(BaseModel):
     requirements: List[str] = []
     related_quest_names: List[str] = []
     related_creatures: List[QuestRelatedCreature] = []
+    summary: Optional[str] = None
+    image_url: Optional[str] = None
+    quest_type: Optional[str] = None
+    category: Optional[str] = None
+    difficulty: Optional[str] = None
+    duration: Optional[str] = None
+    premium_required: Optional[bool] = None
+    repeatable: Optional[bool] = None
+    solo_possible: Optional[bool] = None
+    data_version: int = 1
+    last_synced_at: Optional[datetime] = None
+    starting_npcs: List[QuestNamedValue] = []
+    related_npcs: List[QuestNamedValue] = []
+    required_items: List[QuestItemValue] = []
+    rewarded_items: List[QuestItemValue] = []
+    required_quests: List[QuestNamedValue] = []
+    unlocked_quests: List[QuestNamedValue] = []
+    required_creatures: List[QuestNamedValue] = []
+    bosses: List[QuestNamedValue] = []
+    locations: List[QuestNamedValue] = []
+    access_unlocks: List[dict] = []
+    missions: List[QuestMissionResult] = []
+    relationships: List[QuestRelationResult] = []
 
 
 class HomeHighlights(BaseModel):

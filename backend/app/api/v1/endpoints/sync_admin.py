@@ -1,7 +1,7 @@
 """Admin sync endpoints backed by centralized SyncService."""
 from __future__ import annotations
 
-from datetime import datetime
+from datetime import UTC, datetime
 from typing import Any, Optional
 
 from fastapi import APIRouter, Depends, HTTPException, Query
@@ -194,7 +194,7 @@ def _start_job(
         "status": "queued",
         "job_id": job.id,
         "target": target,
-        "queued_at": datetime.utcnow().isoformat() + "Z",
+        "queued_at": datetime.now(UTC).isoformat(),
     }
 
 

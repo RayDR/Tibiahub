@@ -40,10 +40,10 @@ export default function AdminSettings() {
 
     const handleSave = async () => {
         if (!settings) return;
-        
+
         setSaving(true);
         setMessage(null);
-        
+
         try {
             await guildManagementApi.updateSettings(settings);
             setMessage({ type: 'success', text: 'Settings saved successfully!' });
@@ -87,26 +87,26 @@ export default function AdminSettings() {
     if (loading) {
         return (
             <div className="flex items-center justify-center min-h-[400px]">
-                <RefreshCw className="w-8 h-8 animate-spin text-red-500" />
+                <RefreshCw className="w-8 h-8 animate-spin text-danger" />
             </div>
         );
     }
 
     if (!settings) {
-        return <div className="text-center text-slate-400">Failed to load settings</div>;
+        return <div className="text-center text-content-secondary">Failed to load settings</div>;
     }
 
     return (
         <div className="space-y-6">
             <div className="flex items-center justify-between">
-                <h1 className="text-3xl font-serif text-slate-100 flex items-center gap-3">
-                    <SettingsIcon className="w-8 h-8 text-red-500" />
+                <h1 className="text-3xl font-serif text-content-primary flex items-center gap-3">
+                    <SettingsIcon className="w-8 h-8 text-danger" />
                     System Settings
                 </h1>
                 <button
                     onClick={handleSave}
                     disabled={saving}
-                    className="flex items-center gap-2 bg-red-600 hover:bg-red-500 disabled:bg-slate-700 disabled:text-slate-500 text-white px-6 py-2.5 rounded-md transition-colors font-medium"
+                    className="flex items-center gap-2 bg-danger hover:bg-danger-hover disabled:bg-surface-raised disabled:text-content-muted text-content-on-primary px-6 py-2.5 rounded-md transition-colors font-medium"
                 >
                     <Save className="w-4 h-4" />
                     {saving ? 'Saving...' : 'Save Changes'}
@@ -115,9 +115,9 @@ export default function AdminSettings() {
 
             {message && (
                 <div className={`p-4 rounded-lg border flex items-center gap-3 ${
-                    message.type === 'success' 
-                        ? 'bg-green-900/20 border-green-700/50 text-green-400' 
-                        : 'bg-red-900/20 border-red-700/50 text-red-400'
+                    message.type === 'success'
+                        ? 'bg-success/20 border-success/50 text-success'
+                        : 'bg-danger/20 border-danger/50 text-danger'
                 }`}>
                     {message.type === 'success' ? (
                         <CheckCircle className="w-5 h-5" />
@@ -130,14 +130,14 @@ export default function AdminSettings() {
 
             <div className="space-y-6">
                 {/* Tibia Validation Settings */}
-                <div className="bg-slate-900/50 border border-slate-700 rounded-lg p-6">
-                    <h2 className="text-xl font-semibold text-slate-100 mb-4">Tibia Character Validation</h2>
-                    
+                <div className="bg-surface-base/50 border border-line rounded-lg p-6">
+                    <h2 className="text-xl font-semibold text-content-primary mb-4">Tibia Character Validation</h2>
+
                     <div className="space-y-4">
                         <div className="flex items-center justify-between">
                             <div>
-                                <h3 className="font-medium text-slate-200">Enable Validation</h3>
-                                <p className="text-sm text-slate-400">Validate character names against Tibia API during registration</p>
+                                <h3 className="font-medium text-content-primary">Enable Validation</h3>
+                                <p className="text-sm text-content-secondary">Validate character names against Tibia API during registration</p>
                             </div>
                             <label className="relative inline-flex items-center cursor-pointer">
                                 <input
@@ -146,14 +146,14 @@ export default function AdminSettings() {
                                     onChange={(e) => updateSetting('tibia_validation_enabled', e.target.checked)}
                                     className="sr-only peer"
                                 />
-                                <div className="w-11 h-6 bg-slate-700 peer-focus:outline-none peer-focus:ring-2 peer-focus:ring-red-500 rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-slate-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-red-600"></div>
+                                <div className="w-11 h-6 bg-surface-raised peer-focus:outline-none peer-focus:ring-2 peer-focus:ring-danger rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-line after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-surface-inverse after:border-line after:border after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-danger"></div>
                             </label>
                         </div>
 
                         <div className="flex items-center justify-between">
                             <div>
-                                <h3 className="font-medium text-slate-200">Strict Mode</h3>
-                                <p className="text-sm text-slate-400">Block registration if Tibia API is unavailable</p>
+                                <h3 className="font-medium text-content-primary">Strict Mode</h3>
+                                <p className="text-sm text-content-secondary">Block registration if Tibia API is unavailable</p>
                             </div>
                             <label className="relative inline-flex items-center cursor-pointer">
                                 <input
@@ -162,35 +162,35 @@ export default function AdminSettings() {
                                     onChange={(e) => updateSetting('tibia_validation_strict', e.target.checked)}
                                     className="sr-only peer"
                                 />
-                                <div className="w-11 h-6 bg-slate-700 peer-focus:outline-none peer-focus:ring-2 peer-focus:ring-red-500 rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-slate-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-red-600"></div>
+                                <div className="w-11 h-6 bg-surface-raised peer-focus:outline-none peer-focus:ring-2 peer-focus:ring-danger rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-line after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-surface-inverse after:border-line after:border after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-danger"></div>
                             </label>
                         </div>
                     </div>
                 </div>
 
                 {/* Discord Integration Settings */}
-                <div className="bg-slate-900/50 border border-slate-700 rounded-lg p-6">
-                    <h2 className="text-xl font-semibold text-slate-100 mb-4">Discord Integration</h2>
-                    
+                <div className="bg-surface-base/50 border border-line rounded-lg p-6">
+                    <h2 className="text-xl font-semibold text-content-primary mb-4">Discord Integration</h2>
+
                     <div className="space-y-4">
                         <div>
-                            <label className="block font-medium text-slate-200 mb-2">Webhook URL</label>
+                            <label className="block font-medium text-content-primary mb-2">Webhook URL</label>
                             <input
                                 type="text"
                                 value={settings.discord_webhook_url}
                                 onChange={(e) => updateSetting('discord_webhook_url', e.target.value)}
                                 placeholder="https://discord.com/api/webhooks/..."
-                                className="w-full bg-slate-950 border border-slate-700 rounded-md px-4 py-2.5 text-slate-200 focus:border-red-500 focus:outline-none"
+                                className="w-full bg-surface-base border border-line rounded-md px-4 py-2.5 text-content-primary focus:border-danger focus:outline-none"
                             />
-                            <p className="text-xs text-slate-500 mt-1">
+                            <p className="text-xs text-content-muted mt-1">
                                 Get your webhook URL from Discord Server Settings → Integrations → Webhooks
                             </p>
                         </div>
 
                         <div className="flex items-center justify-between">
                             <div>
-                                <h3 className="font-medium text-slate-200">Auto-Post Announcements</h3>
-                                <p className="text-sm text-slate-400">Automatically post new announcements to Discord</p>
+                                <h3 className="font-medium text-content-primary">Auto-Post Announcements</h3>
+                                <p className="text-sm text-content-secondary">Automatically post new announcements to Discord</p>
                             </div>
                             <label className="relative inline-flex items-center cursor-pointer">
                                 <input
@@ -199,29 +199,29 @@ export default function AdminSettings() {
                                     onChange={(e) => updateSetting('discord_auto_post', e.target.checked)}
                                     className="sr-only peer"
                                 />
-                                <div className="w-11 h-6 bg-slate-700 peer-focus:outline-none peer-focus:ring-2 peer-focus:ring-red-500 rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-slate-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-purple-600"></div>
+                                <div className="w-11 h-6 bg-surface-raised peer-focus:outline-none peer-focus:ring-2 peer-focus:ring-danger rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-line after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-surface-inverse after:border-line after:border after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-accent"></div>
                             </label>
                         </div>
                     </div>
                 </div>
 
                 {/* Cyclopedia Category Images */}
-                <div className="bg-slate-900/50 border border-slate-700 rounded-lg p-6">
-                    <h2 className="text-xl font-semibold text-slate-100 mb-2">Cyclopedia Category Images</h2>
-                    <p className="text-sm text-slate-400 mb-4">Set URL or upload local file for each creature category card.</p>
+                <div className="bg-surface-base/50 border border-line rounded-lg p-6">
+                    <h2 className="text-xl font-semibold text-content-primary mb-2">Cyclopedia Category Images</h2>
+                    <p className="text-sm text-content-secondary mb-4">Set URL or upload local file for each creature category card.</p>
 
                     <div className="grid gap-4 sm:grid-cols-2">
                         {CREATURE_CATEGORY_KEYS.map((category) => (
-                            <div key={category} className="rounded-lg border border-slate-800 bg-slate-950/50 p-3">
-                                <div className="mb-2 text-sm font-medium text-slate-200 capitalize">{category}</div>
+                            <div key={category} className="rounded-lg border border-line bg-surface-base/50 p-3">
+                                <div className="mb-2 text-sm font-medium text-content-primary capitalize">{category}</div>
                                 <input
                                     type="text"
                                     value={settings.cyclopedia_category_images?.[category] || ''}
                                     onChange={(e) => updateCategoryImage(category, e.target.value)}
                                     placeholder="https://... or /api/v1/creatures/category-images/file/..."
-                                    className="w-full bg-slate-950 border border-slate-700 rounded-md px-3 py-2 text-slate-200 focus:border-red-500 focus:outline-none"
+                                    className="w-full bg-surface-base border border-line rounded-md px-3 py-2 text-content-primary focus:border-danger focus:outline-none"
                                 />
-                                <label className="mt-2 inline-flex cursor-pointer items-center rounded-md border border-slate-700 px-3 py-1.5 text-xs text-slate-300 hover:border-red-500/50">
+                                <label className="mt-2 inline-flex cursor-pointer items-center rounded-md border border-line px-3 py-1.5 text-xs text-content-secondary hover:border-danger/50">
                                     Upload local image
                                     <input
                                         type="file"
@@ -236,14 +236,14 @@ export default function AdminSettings() {
                 </div>
 
                 {/* Guild Features */}
-                <div className="bg-slate-900/50 border border-slate-700 rounded-lg p-6">
-                    <h2 className="text-xl font-semibold text-slate-100 mb-4">Guild Feature Toggles</h2>
+                <div className="bg-surface-base/50 border border-line rounded-lg p-6">
+                    <h2 className="text-xl font-semibold text-content-primary mb-4">Guild Feature Toggles</h2>
 
                     <div className="space-y-4">
                         <div className="flex items-center justify-between">
                             <div>
-                                <h3 className="font-medium text-slate-200">Guild Raffles</h3>
-                                <p className="text-sm text-slate-400">Enable or disable raffle views and registration flows</p>
+                                <h3 className="font-medium text-content-primary">Guild Raffles</h3>
+                                <p className="text-sm text-content-secondary">Enable or disable raffle views and registration flows</p>
                             </div>
                             <label className="relative inline-flex items-center cursor-pointer">
                                 <input
@@ -252,14 +252,14 @@ export default function AdminSettings() {
                                     onChange={(e) => updateSetting('guild_raffles_enabled', e.target.checked)}
                                     className="sr-only peer"
                                 />
-                                <div className="w-11 h-6 bg-slate-700 peer-focus:outline-none peer-focus:ring-2 peer-focus:ring-red-500 rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-slate-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-red-600"></div>
+                                <div className="w-11 h-6 bg-surface-raised peer-focus:outline-none peer-focus:ring-2 peer-focus:ring-danger rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-line after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-surface-inverse after:border-line after:border after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-danger"></div>
                             </label>
                         </div>
 
                         <div className="flex items-center justify-between">
                             <div>
-                                <h3 className="font-medium text-slate-200">Guild Contests</h3>
-                                <p className="text-sm text-slate-400">Enable or disable contest references in guild event flows</p>
+                                <h3 className="font-medium text-content-primary">Guild Contests</h3>
+                                <p className="text-sm text-content-secondary">Enable or disable contest references in guild event flows</p>
                             </div>
                             <label className="relative inline-flex items-center cursor-pointer">
                                 <input
@@ -268,7 +268,7 @@ export default function AdminSettings() {
                                     onChange={(e) => updateSetting('guild_contests_enabled', e.target.checked)}
                                     className="sr-only peer"
                                 />
-                                <div className="w-11 h-6 bg-slate-700 peer-focus:outline-none peer-focus:ring-2 peer-focus:ring-red-500 rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-slate-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-red-600"></div>
+                                <div className="w-11 h-6 bg-surface-raised peer-focus:outline-none peer-focus:ring-2 peer-focus:ring-danger rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-line after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-surface-inverse after:border-line after:border after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-danger"></div>
                             </label>
                         </div>
                     </div>

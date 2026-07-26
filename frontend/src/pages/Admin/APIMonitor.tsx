@@ -1,8 +1,8 @@
 import { useEffect, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useAuth } from '../../context/AuthContext';
-import { 
-    Activity, CheckCircle, XCircle, AlertCircle, 
+import {
+    Activity, CheckCircle, XCircle, AlertCircle,
     Loader2, RefreshCw, Database, Globe, BookOpen,
     Clock, Code
 } from 'lucide-react';
@@ -92,33 +92,33 @@ export default function APIMonitor() {
 
     const getStatusIcon = (status: string) => {
         switch (status) {
-            case 'online': return <CheckCircle className="w-5 h-5 text-green-400" />;
-            case 'offline': return <XCircle className="w-5 h-5 text-red-400" />;
-            case 'error': return <AlertCircle className="w-5 h-5 text-yellow-400" />;
-            default: return <Activity className="w-5 h-5 text-gray-400" />;
+            case 'online': return <CheckCircle className="w-5 h-5 text-success" />;
+            case 'offline': return <XCircle className="w-5 h-5 text-danger" />;
+            case 'error': return <AlertCircle className="w-5 h-5 text-primary" />;
+            default: return <Activity className="w-5 h-5 text-content-secondary" />;
         }
     };
 
     const getStatusColor = (status: string) => {
         switch (status) {
-            case 'online': return 'bg-green-500/10 border-green-500/30';
-            case 'offline': return 'bg-red-500/10 border-red-500/30';
-            case 'error': return 'bg-yellow-500/10 border-yellow-500/30';
-            default: return 'bg-gray-500/10 border-gray-500/30';
+            case 'online': return 'bg-success/10 border-success/30';
+            case 'offline': return 'bg-danger/10 border-danger/30';
+            case 'error': return 'bg-primary/10 border-primary/30';
+            default: return 'bg-surface-hover/10 border-line/30';
         }
     };
 
     const getAPIIcon = (name: string) => {
-        if (name.includes('TibiaData')) return <Database className="w-6 h-6 text-blue-400" />;
-        if (name.includes('TibiaWiki') || name.includes('Fandom')) return <BookOpen className="w-6 h-6 text-purple-400" />;
-        if (name.includes('Tibia.com') || name.includes('Official')) return <Globe className="w-6 h-6 text-amber-400" />;
-        return <Database className="w-6 h-6 text-slate-400" />;
+        if (name.includes('TibiaData')) return <Database className="w-6 h-6 text-info" />;
+        if (name.includes('TibiaWiki') || name.includes('Fandom')) return <BookOpen className="w-6 h-6 text-accent" />;
+        if (name.includes('Tibia.com') || name.includes('Official')) return <Globe className="w-6 h-6 text-primary" />;
+        return <Database className="w-6 h-6 text-content-secondary" />;
     };
 
     if (loading) {
         return (
             <div className="flex items-center justify-center min-h-screen">
-                <Loader2 className="w-8 h-8 animate-spin text-amber-500" />
+                <Loader2 className="w-8 h-8 animate-spin text-primary" />
             </div>
         );
     }
@@ -157,35 +157,35 @@ export default function APIMonitor() {
             {/* Summary Stats */}
             {data && (
                 <div className="grid md:grid-cols-3 gap-4 mb-8">
-                    <div className="bg-slate-900 border border-slate-700 rounded-xl p-6">
+                    <div className="bg-surface-base border border-line rounded-xl p-6">
                         <div className="flex items-center justify-between">
                             <div>
-                                <p className="text-slate-400 text-sm mb-1">Total APIs</p>
-                                <p className="text-3xl font-bold text-white">{data.total_apis}</p>
+                                <p className="text-content-secondary text-sm mb-1">Total APIs</p>
+                                <p className="text-3xl font-bold text-content-primary">{data.total_apis}</p>
                             </div>
-                            <Database className="w-8 h-8 text-slate-500" />
+                            <Database className="w-8 h-8 text-content-muted" />
                         </div>
                     </div>
 
-                    <div className="bg-slate-900 border border-green-500/30 rounded-xl p-6">
+                    <div className="bg-surface-base border border-success/30 rounded-xl p-6">
                         <div className="flex items-center justify-between">
                             <div>
-                                <p className="text-slate-400 text-sm mb-1">Online</p>
-                                <p className="text-3xl font-bold text-green-400">{data.online_count}</p>
+                                <p className="text-content-secondary text-sm mb-1">Online</p>
+                                <p className="text-3xl font-bold text-success">{data.online_count}</p>
                             </div>
-                            <CheckCircle className="w-8 h-8 text-green-500" />
+                            <CheckCircle className="w-8 h-8 text-success" />
                         </div>
                     </div>
 
-                    <div className="bg-slate-900 border border-slate-700 rounded-xl p-6">
+                    <div className="bg-surface-base border border-line rounded-xl p-6">
                         <div className="flex items-center justify-between">
                             <div>
-                                <p className="text-slate-400 text-sm mb-1">Last Check</p>
-                                <p className="text-sm font-medium text-white">
+                                <p className="text-content-secondary text-sm mb-1">Last Check</p>
+                                <p className="text-sm font-medium text-content-primary">
                                     {new Date(data.timestamp).toLocaleTimeString()}
                                 </p>
                             </div>
-                            <Clock className="w-8 h-8 text-slate-500" />
+                            <Clock className="w-8 h-8 text-content-muted" />
                         </div>
                     </div>
                 </div>
@@ -196,21 +196,21 @@ export default function APIMonitor() {
                 {data?.apis.map((api, index) => (
                     <div
                         key={index}
-                        className={`bg-slate-900 border rounded-xl p-6 ${getStatusColor(api.status)}`}
+                        className={`bg-surface-base border rounded-xl p-6 ${getStatusColor(api.status)}`}
                     >
                         <div className="flex items-start justify-between mb-4">
                             <div className="flex items-center gap-3">
                                 {getAPIIcon(api.name)}
                                 <div>
-                                    <h3 className="text-xl font-bold text-white">{api.name}</h3>
-                                    <p className="text-sm text-slate-400 font-mono">{api.url}</p>
+                                    <h3 className="text-xl font-bold text-content-primary">{api.name}</h3>
+                                    <p className="text-sm text-content-secondary font-mono">{api.url}</p>
                                 </div>
                             </div>
                             <div className="flex items-center gap-2">
                                 {getStatusIcon(api.status)}
                                 <span className={`text-sm font-medium ${
-                                    api.status === 'online' ? 'text-green-400' : 
-                                    api.status === 'offline' ? 'text-red-400' : 'text-yellow-400'
+                                    api.status === 'online' ? 'text-success' :
+                                    api.status === 'offline' ? 'text-danger' : 'text-primary'
                                 }`}>
                                     {api.status.toUpperCase()}
                                 </span>
@@ -220,30 +220,30 @@ export default function APIMonitor() {
                         {/* Status Details */}
                         <div className="grid md:grid-cols-3 gap-4 mb-4">
                             {api.status_code && (
-                                <div className="bg-slate-800/50 rounded-lg p-3">
-                                    <p className="text-xs text-slate-400 mb-1">Status Code</p>
-                                    <p className="text-lg font-mono text-white">{api.status_code}</p>
+                                <div className="bg-surface/50 rounded-lg p-3">
+                                    <p className="text-xs text-content-secondary mb-1">Status Code</p>
+                                    <p className="text-lg font-mono text-content-primary">{api.status_code}</p>
                                 </div>
                             )}
                             {api.latency_ms !== undefined && (
-                                <div className="bg-slate-800/50 rounded-lg p-3">
-                                    <p className="text-xs text-slate-400 mb-1">Latency</p>
-                                    <p className="text-lg font-mono text-white">{api.latency_ms}ms</p>
+                                <div className="bg-surface/50 rounded-lg p-3">
+                                    <p className="text-xs text-content-secondary mb-1">Latency</p>
+                                    <p className="text-lg font-mono text-content-primary">{api.latency_ms}ms</p>
                                 </div>
                             )}
                             {api.error && (
-                                <div className="bg-red-900/20 rounded-lg p-3 md:col-span-3">
-                                    <p className="text-xs text-red-400 mb-1">Error</p>
-                                    <p className="text-sm font-mono text-red-300">{api.error}</p>
+                                <div className="bg-danger/20 rounded-lg p-3 md:col-span-3">
+                                    <p className="text-xs text-danger mb-1">Error</p>
+                                    <p className="text-sm font-mono text-danger">{api.error}</p>
                                 </div>
                             )}
                         </div>
 
                         {/* Sample Data */}
                         {api.sample_data && (
-                            <div className="bg-slate-800/50 rounded-lg p-4 mb-3">
-                                <p className="text-xs text-slate-400 mb-2 font-semibold">Sample Data</p>
-                                <pre className="text-xs text-emerald-400 font-mono overflow-x-auto">
+                            <div className="bg-surface/50 rounded-lg p-4 mb-3">
+                                <p className="text-xs text-content-secondary mb-2 font-semibold">Sample Data</p>
+                                <pre className="text-xs text-success font-mono overflow-x-auto">
                                     {JSON.stringify(api.sample_data, null, 2)}
                                 </pre>
                             </div>
@@ -254,15 +254,15 @@ export default function APIMonitor() {
                             <div>
                                 <button
                                     onClick={() => setExpandedAPI(expandedAPI === api.name ? null : api.name)}
-                                    className="flex items-center gap-2 text-sm text-amber-400 hover:text-amber-300 transition-colors"
+                                    className="flex items-center gap-2 text-sm text-primary hover:text-primary transition-colors"
                                 >
                                     <Code className="w-4 h-4" />
                                     {expandedAPI === api.name ? 'Hide' : 'Show'} Full JSON Response
                                 </button>
 
                                 {expandedAPI === api.name && (
-                                    <div className="mt-3 bg-slate-950 rounded-lg p-4 border border-slate-700">
-                                        <pre className="text-xs text-green-400 font-mono overflow-x-auto max-h-96 overflow-y-auto">
+                                    <div className="mt-3 bg-surface-base rounded-lg p-4 border border-line">
+                                        <pre className="text-xs text-success font-mono overflow-x-auto max-h-96 overflow-y-auto">
                                             {JSON.stringify(api.full_response, null, 2)}
                                         </pre>
                                     </div>

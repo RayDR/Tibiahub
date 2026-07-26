@@ -1,9 +1,10 @@
 """Hunt Zone model - Areas where players can hunt."""
-from sqlalchemy import Boolean, Column, DateTime, ForeignKey, Integer, JSON, String, Text
+from sqlalchemy import Boolean, Column, DateTime, ForeignKey, Integer, String, Text
 from sqlalchemy.orm import relationship
 from sqlalchemy.sql import func
 
 from app.db.database import Base
+from app.db.types import JSONBType
 
 
 class HuntZone(Base):
@@ -24,7 +25,7 @@ class HuntZone(Base):
     min_level = Column(Integer, nullable=False)
     max_level = Column(Integer)
     recommended_level = Column(Integer)
-    recommended_vocations = Column(JSON, nullable=True)
+    recommended_vocations = Column(JSONBType, nullable=True)
     recommended_party_size = Column(String(50), nullable=True)
     exp_rating = Column(String(20), nullable=True)
     profit_rating = Column(String(20), nullable=True)
@@ -63,10 +64,10 @@ class HuntZone(Base):
     map_x = Column(Integer, nullable=True)
     map_y = Column(Integer, nullable=True)
     map_z = Column(Integer, nullable=True)
-    map_bounds = Column(JSON, nullable=True)
+    map_bounds = Column(JSONBType, nullable=True)
     map_image_url = Column(String(255))
     map_asset_id = Column(Integer, ForeignKey("media_assets.id"), nullable=True)
-    raw_data = Column(JSON, nullable=True)
+    raw_data = Column(JSONBType, nullable=True)
     last_synced_at = Column(DateTime(timezone=True), nullable=True)
     created_at = Column(DateTime(timezone=True), server_default=func.now())
     updated_at = Column(DateTime(timezone=True), server_default=func.now(), onupdate=func.now())

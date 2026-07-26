@@ -1,9 +1,10 @@
 """User activity model for personalized history and continue flow."""
 
-from sqlalchemy import Column, DateTime, ForeignKey, Integer, JSON, String, Text
+from sqlalchemy import Column, DateTime, ForeignKey, Integer, String, Text
 from sqlalchemy.sql import func
 
 from app.db.database import Base
+from app.db.types import JSONBType
 
 
 class UserActivity(Base):
@@ -15,7 +16,7 @@ class UserActivity(Base):
     entity_type = Column(String(50), nullable=True)
     entity_id = Column(String(120), nullable=True)
     query = Column(String(255), nullable=True)
-    meta_payload = Column("metadata", JSON, nullable=True)
+    meta_payload = Column("metadata", JSONBType, nullable=True)
     created_at = Column(DateTime(timezone=True), server_default=func.now(), index=True)
 
     def __repr__(self):

@@ -287,10 +287,10 @@ const DataSyncPanel: React.FC = () => {
 
   const getStatusColor = (status: string): string => {
     switch (status) {
-      case 'success': return 'text-green-400';
-      case 'error': return 'text-red-400';
-      case 'running': return 'text-blue-400';
-      default: return 'text-yellow-400';
+      case 'success': return 'text-success';
+      case 'error': return 'text-danger';
+      case 'running': return 'text-info';
+      default: return 'text-primary';
     }
   };
 
@@ -318,11 +318,11 @@ const DataSyncPanel: React.FC = () => {
     <div className="min-h-screen py-6 sm:py-12 px-3 sm:px-4">
       <div className="container mx-auto max-w-7xl">
         {/* Header */}
-        <div className="text-center mb-8 sm:mb-12 fade-in">
-          <h1 className="text-3xl sm:text-5xl font-bold mb-3 sm:mb-4 bg-gradient-to-r from-blue-400 via-cyan-500 to-teal-600 bg-clip-text text-transparent">
+        <div className="text-center mb-8 sm:mb-12 ds-enter">
+          <h1 className="text-3xl sm:text-5xl font-bold mb-3 sm:mb-4 bg-gradient-to-r from-info via-info to-success bg-clip-text text-transparent">
             🔄 Sincronización de Datos
           </h1>
-          <p className="text-gray-300 text-base sm:text-lg">
+          <p className="text-content-secondary text-base sm:text-lg">
             Gestiona la sincronización con APIs externas
           </p>
         </div>
@@ -331,15 +331,15 @@ const DataSyncPanel: React.FC = () => {
         <div className="card mb-6">
           <div className="flex items-center justify-between">
             <div>
-              <h3 className="text-lg font-semibold text-white mb-1">Modo de Sincronización</h3>
-              <p className="text-sm text-gray-400">Elige cómo manejar conflictos de datos</p>
+              <h3 className="text-lg font-semibold text-content-primary mb-1">Modo de Sincronización</h3>
+              <p className="text-sm text-content-secondary">Elige cómo manejar conflictos de datos</p>
             </div>
             <div className="flex gap-2">
               <button
                 onClick={() => setSyncMode('auto')}
                 className={`px-4 py-2 rounded-lg font-semibold transition-all ${syncMode === 'auto'
-                    ? 'bg-blue-600 text-white'
-                    : 'bg-gray-700 text-gray-300 hover:bg-gray-600'
+                    ? 'bg-info text-content-on-primary'
+                    : 'bg-surface-raised text-content-secondary hover:bg-surface-hover'
                   }`}
               >
                 ⚡ Automático
@@ -347,15 +347,15 @@ const DataSyncPanel: React.FC = () => {
               <button
                 onClick={() => setSyncMode('compare')}
                 className={`px-4 py-2 rounded-lg font-semibold transition-all ${syncMode === 'compare'
-                    ? 'bg-blue-600 text-white'
-                    : 'bg-gray-700 text-gray-300 hover:bg-gray-600'
+                    ? 'bg-info text-content-on-primary'
+                    : 'bg-surface-raised text-content-secondary hover:bg-surface-hover'
                   }`}
               >
                 🔍 Comparar
               </button>
             </div>
           </div>
-          <div className="mt-4 text-sm text-gray-400">
+          <div className="mt-4 text-sm text-content-secondary">
             {syncMode === 'auto'
               ? '⚡ Sobrescribirá datos automáticamente sin confirmación'
               : '🔍 Te mostrará los conflictos antes de sobrescribir'}
@@ -364,26 +364,26 @@ const DataSyncPanel: React.FC = () => {
 
         {runtimeSettings && (
           <div className="card mb-6">
-            <h3 className="text-lg font-semibold text-white mb-4">⚙️ Cache & Sync Runtime</h3>
+            <h3 className="text-lg font-semibold text-content-primary mb-4">⚙️ Cache & Sync Runtime</h3>
             <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-              <label className="flex items-center justify-between gap-3 rounded-lg border border-gray-700 p-3">
-                <span className="text-sm text-gray-200">Cache-only reads (Bestiary)</span>
+              <label className="flex items-center justify-between gap-3 rounded-lg border border-line p-3">
+                <span className="text-sm text-content-primary">Cache-only reads (Bestiary)</span>
                 <input
                   type="checkbox"
                   checked={runtimeSettings.bestiary_cache_only_reads}
                   onChange={(event) => void updateRuntimeSettings({ bestiary_cache_only_reads: event.target.checked })}
                 />
               </label>
-              <label className="flex items-center justify-between gap-3 rounded-lg border border-gray-700 p-3">
-                <span className="text-sm text-gray-200">Allow external detail fallback</span>
+              <label className="flex items-center justify-between gap-3 rounded-lg border border-line p-3">
+                <span className="text-sm text-content-primary">Allow external detail fallback</span>
                 <input
                   type="checkbox"
                   checked={runtimeSettings.bestiary_allow_external_detail_fallback}
                   onChange={(event) => void updateRuntimeSettings({ bestiary_allow_external_detail_fallback: event.target.checked })}
                 />
               </label>
-              <label className="rounded-lg border border-gray-700 p-3">
-                <div className="text-sm text-gray-200 mb-2">Bestiary page size</div>
+              <label className="rounded-lg border border-line p-3">
+                <div className="text-sm text-content-primary mb-2">Bestiary page size</div>
                 <input
                   type="number"
                   min={10}
@@ -394,11 +394,11 @@ const DataSyncPanel: React.FC = () => {
                     setRuntimeSettings({ ...runtimeSettings, bestiary_search_page_size: value });
                   }}
                   onBlur={() => void updateRuntimeSettings({ bestiary_search_page_size: runtimeSettings.bestiary_search_page_size })}
-                  className="w-full rounded bg-gray-800 border border-gray-700 px-3 py-2 text-white"
+                  className="w-full rounded bg-surface border border-line px-3 py-2 text-content-primary"
                 />
               </label>
-              <label className="rounded-lg border border-gray-700 p-3">
-                <div className="text-sm text-gray-200 mb-2">Sync cooldown (minutes)</div>
+              <label className="rounded-lg border border-line p-3">
+                <div className="text-sm text-content-primary mb-2">Sync cooldown (minutes)</div>
                 <input
                   type="number"
                   min={1}
@@ -409,7 +409,7 @@ const DataSyncPanel: React.FC = () => {
                     setRuntimeSettings({ ...runtimeSettings, sync_cooldown_minutes: value });
                   }}
                   onBlur={() => void updateRuntimeSettings({ sync_cooldown_minutes: runtimeSettings.sync_cooldown_minutes })}
-                  className="w-full rounded bg-gray-800 border border-gray-700 px-3 py-2 text-white"
+                  className="w-full rounded bg-surface border border-line px-3 py-2 text-content-primary"
                 />
               </label>
             </div>
@@ -421,8 +421,8 @@ const DataSyncPanel: React.FC = () => {
           <button
             onClick={() => setActiveTab('sync')}
             className={`px-4 sm:px-8 py-2 sm:py-3 rounded-xl font-semibold transition-all duration-300 text-sm sm:text-base ${activeTab === 'sync'
-                ? 'bg-gradient-to-r from-blue-500 to-cyan-600 text-white shadow-glow'
-                : 'bg-glass-bg border-2 border-glass-border text-white hover:border-blue-500'
+                ? 'bg-gradient-to-r from-info to-info-hover text-content-on-primary shadow-lg'
+                : 'bg-surface/80 border-2 border-line text-content-primary hover:border-info'
               }`}
           >
             🔄 Sincronizar
@@ -430,8 +430,8 @@ const DataSyncPanel: React.FC = () => {
           <button
             onClick={() => setActiveTab('logs')}
             className={`px-4 sm:px-8 py-2 sm:py-3 rounded-xl font-semibold transition-all duration-300 text-sm sm:text-base ${activeTab === 'logs'
-                ? 'bg-gradient-to-r from-blue-500 to-cyan-600 text-white shadow-glow'
-                : 'bg-glass-bg border-2 border-glass-border text-white hover:border-blue-500'
+                ? 'bg-gradient-to-r from-info to-info-hover text-content-on-primary shadow-lg'
+                : 'bg-surface/80 border-2 border-line text-content-primary hover:border-info'
               }`}
           >
             📋 Logs
@@ -439,8 +439,8 @@ const DataSyncPanel: React.FC = () => {
           <button
             onClick={() => setActiveTab('stats')}
             className={`px-4 sm:px-8 py-2 sm:py-3 rounded-xl font-semibold transition-all duration-300 text-sm sm:text-base ${activeTab === 'stats'
-                ? 'bg-gradient-to-r from-blue-500 to-cyan-600 text-white shadow-glow'
-                : 'bg-glass-bg border-2 border-glass-border text-white hover:border-blue-500'
+                ? 'bg-gradient-to-r from-info to-info-hover text-content-on-primary shadow-lg'
+                : 'bg-surface/80 border-2 border-line text-content-primary hover:border-info'
               }`}
           >
             📊 Estadísticas
@@ -449,22 +449,22 @@ const DataSyncPanel: React.FC = () => {
 
         {/* Sync Tab */}
         {activeTab === 'sync' && (
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-6 fade-in">
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-6 ds-enter">
             {syncApis.map((api) => {
               const isSyncing = syncingApis.has(api.name);
               const latestLog = syncLogs.find(log => log.api_name === api.name && log.status === 'running');
 
               return (
-                <div key={api.name} className="card hover:border-blue-500/50 transition-all">
+                <div key={api.name} className="card hover:border-info/50 transition-all">
                   <div className="flex items-start justify-between mb-4">
                     <div>
-                      <h3 className="text-2xl font-bold text-white mb-1">
+                      <h3 className="text-2xl font-bold text-content-primary mb-1">
                         {api.icon} {api.label}
                       </h3>
-                      <p className="text-sm text-gray-400">{api.description}</p>
+                      <p className="text-sm text-content-secondary">{api.description}</p>
                     </div>
                     {isSyncing && (
-                      <span className="px-3 py-1 bg-blue-600 text-white text-xs rounded-full animate-pulse">
+                      <span className="px-3 py-1 bg-info text-content-on-primary text-xs rounded-full animate-pulse">
                         Sincronizando...
                       </span>
                     )}
@@ -472,13 +472,13 @@ const DataSyncPanel: React.FC = () => {
 
                   {latestLog && isSyncing && (
                     <div className="mb-4">
-                      <div className="flex justify-between text-sm text-gray-400 mb-2">
+                      <div className="flex justify-between text-sm text-content-secondary mb-2">
                         <span>Progreso: {latestLog.processed_items}/{latestLog.total_items || 0}</span>
                         <span>{getLogProgress(latestLog)}%</span>
                       </div>
-                      <div className="w-full bg-gray-700 rounded-full h-2">
+                      <div className="w-full bg-surface-raised rounded-full h-2">
                         <div
-                          className="bg-blue-600 h-2 rounded-full transition-all duration-300"
+                          className="bg-info h-2 rounded-full transition-all duration-300"
                           style={{ width: `${getLogProgress(latestLog)}%` }}
                         />
                       </div>
@@ -489,8 +489,8 @@ const DataSyncPanel: React.FC = () => {
                     onClick={() => startSync(api.name)}
                     disabled={loading || isSyncing}
                     className={`w-full py-3 rounded-xl font-semibold transition-all ${loading || isSyncing
-                        ? 'bg-gray-700 text-gray-500 cursor-not-allowed'
-                        : 'bg-gradient-to-r from-blue-600 to-cyan-600 hover:from-blue-500 hover:to-cyan-500 text-white shadow-lg hover:shadow-xl'
+                        ? 'bg-surface-raised text-content-muted cursor-not-allowed'
+                        : 'bg-gradient-to-r from-info to-info hover:from-info hover:to-info text-content-primary shadow-lg hover:shadow-xl'
                       }`}
                   >
                     {isSyncing ? '⏳ Sincronizando...' : '▶️ Iniciar Sincronización'}
@@ -503,13 +503,13 @@ const DataSyncPanel: React.FC = () => {
 
         {/* Logs Tab */}
         {activeTab === 'logs' && (
-          <div className="fade-in">
+          <div className="ds-enter">
             <div className="card">
               <div className="flex items-center justify-between mb-6">
-                <h2 className="text-2xl font-bold text-white">📋 Historial de Sincronizaciones</h2>
+                <h2 className="text-2xl font-bold text-content-primary">📋 Historial de Sincronizaciones</h2>
                 <button
                   onClick={loadSyncLogs}
-                  className="px-4 py-2 bg-blue-600 hover:bg-blue-500 rounded-lg font-semibold text-white transition-all"
+                  className="px-4 py-2 bg-info hover:bg-info-hover rounded-lg font-semibold text-content-on-primary transition-all"
                 >
                   🔄 Actualizar
                 </button>
@@ -518,7 +518,7 @@ const DataSyncPanel: React.FC = () => {
               {syncLogs.length === 0 ? (
                 <div className="text-center py-12">
                   <div className="text-6xl mb-4">📭</div>
-                  <p className="text-gray-400">No hay sincronizaciones registradas</p>
+                  <p className="text-content-secondary">No hay sincronizaciones registradas</p>
                 </div>
               ) : (
                 <div className="space-y-4">
@@ -526,8 +526,8 @@ const DataSyncPanel: React.FC = () => {
                     <div
                       key={log.id}
                       className={`border-2 rounded-xl p-4 transition-all cursor-pointer ${selectedLog === log.id
-                          ? 'border-blue-500 bg-blue-900/20'
-                          : 'border-gray-700 hover:border-gray-600'
+                          ? 'border-info bg-info/20'
+                          : 'border-line hover:border-line'
                         }`}
                       onClick={() => setSelectedLog(selectedLog === log.id ? null : log.id)}
                     >
@@ -536,10 +536,10 @@ const DataSyncPanel: React.FC = () => {
                           <div className="flex items-center gap-3 mb-2">
                             <span className="text-2xl">{getStatusIcon(log.status)}</span>
                             <div>
-                              <h3 className="font-bold text-white text-lg">
+                              <h3 className="font-bold text-content-primary text-lg">
                                 {log.api_name}
                               </h3>
-                              <p className="text-sm text-gray-400">
+                              <p className="text-sm text-content-secondary">
                                 {formatDate(log.started_at)}
                               </p>
                             </div>
@@ -550,25 +550,25 @@ const DataSyncPanel: React.FC = () => {
                               {log.status.toUpperCase()}
                             </span>
                             {log.source && (
-                              <span className="text-gray-400">
-                                Fuente: <span className="text-blue-400">{log.source}</span>
+                              <span className="text-content-secondary">
+                                Fuente: <span className="text-info">{log.source}</span>
                               </span>
                             )}
                           </div>
 
                           {log.total_items && (
                             <div className="mt-3">
-                              <div className="flex justify-between text-sm text-gray-400 mb-1">
+                              <div className="flex justify-between text-sm text-content-secondary mb-1">
                                 <span>
                                   {log.processed_items}/{log.total_items} items
                                 </span>
                                 <span>{getLogProgress(log)}%</span>
                               </div>
-                              <div className="w-full bg-gray-700 rounded-full h-1.5">
+                              <div className="w-full bg-surface-raised rounded-full h-1.5">
                                 <div
-                                  className={`h-1.5 rounded-full ${log.status === 'success' ? 'bg-green-600' :
-                                      log.status === 'error' ? 'bg-red-600' :
-                                        log.status === 'running' ? 'bg-blue-600' : 'bg-yellow-600'
+                                  className={`h-1.5 rounded-full ${log.status === 'success' ? 'bg-success' :
+                                      log.status === 'error' ? 'bg-danger' :
+                                        log.status === 'running' ? 'bg-info' : 'bg-primary'
                                     }`}
                                   style={{ width: `${getLogProgress(log)}%` }}
                                 />
@@ -577,34 +577,34 @@ const DataSyncPanel: React.FC = () => {
                           )}
 
                           {selectedLog === log.id && (
-                            <div className="mt-4 pt-4 border-t border-gray-700">
+                            <div className="mt-4 pt-4 border-t border-line">
                               <div className="grid grid-cols-2 gap-4 text-sm">
                                 <div>
-                                  <span className="text-gray-400">Endpoint:</span>
-                                  <p className="text-white font-mono text-xs mt-1">{log.endpoint}</p>
+                                  <span className="text-content-secondary">Endpoint:</span>
+                                  <p className="text-content-primary font-mono text-xs mt-1">{log.endpoint}</p>
                                 </div>
                                 <div>
-                                  <span className="text-gray-400">Errores:</span>
-                                  <p className="text-white mt-1">{log.error_count}</p>
+                                  <span className="text-content-secondary">Errores:</span>
+                                  <p className="text-content-primary mt-1">{log.error_count}</p>
                                 </div>
                                 {log.message && (
                                   <div className="col-span-2">
-                                    <span className="text-gray-400">Mensaje:</span>
-                                    <p className="text-white mt-1">{log.message}</p>
+                                    <span className="text-content-secondary">Mensaje:</span>
+                                    <p className="text-content-primary mt-1">{log.message}</p>
                                   </div>
                                 )}
                                 {log.error_details && (
                                   <div className="col-span-2">
-                                    <span className="text-red-400">Detalles del Error:</span>
-                                    <p className="text-red-300 font-mono text-xs mt-1 bg-red-900/20 p-2 rounded">
+                                    <span className="text-danger">Detalles del Error:</span>
+                                    <p className="text-danger font-mono text-xs mt-1 bg-danger/20 p-2 rounded">
                                       {log.error_details}
                                     </p>
                                   </div>
                                 )}
                                 {log.completed_at && (
                                   <div className="col-span-2">
-                                    <span className="text-gray-400">Completado:</span>
-                                    <p className="text-white mt-1">{formatDate(log.completed_at)}</p>
+                                    <span className="text-content-secondary">Completado:</span>
+                                    <p className="text-content-primary mt-1">{formatDate(log.completed_at)}</p>
                                   </div>
                                 )}
                               </div>
@@ -612,7 +612,7 @@ const DataSyncPanel: React.FC = () => {
                           )}
                         </div>
 
-                        <button className="text-gray-400 hover:text-white transition-colors">
+                        <button className="text-content-secondary hover:text-content-primary transition-colors">
                           {selectedLog === log.id ? '▲' : '▼'}
                         </button>
                       </div>
@@ -626,42 +626,42 @@ const DataSyncPanel: React.FC = () => {
 
         {/* Stats Tab */}
         {activeTab === 'stats' && stats && (
-          <div className="fade-in">
+          <div className="ds-enter">
             <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-              <div className="card bg-gradient-to-br from-purple-900/40 to-purple-700/20">
+              <div className="card bg-gradient-to-br from-accent/40 to-accent/20">
                 <div className="text-5xl mb-3">🐉</div>
-                <h3 className="text-lg text-gray-300 mb-1">Criaturas</h3>
-                <p className="text-4xl font-bold text-white">{stats.creatures}</p>
+                <h3 className="text-lg text-content-secondary mb-1">Criaturas</h3>
+                <p className="text-4xl font-bold text-content-primary">{stats.creatures}</p>
               </div>
 
-              <div className="card bg-gradient-to-br from-blue-900/40 to-blue-700/20">
+              <div className="card bg-gradient-to-br from-info/40 to-info/20">
                 <div className="text-5xl mb-3">⚔️</div>
-                <h3 className="text-lg text-gray-300 mb-1">Items</h3>
-                <p className="text-4xl font-bold text-white">{stats.items}</p>
+                <h3 className="text-lg text-content-secondary mb-1">Items</h3>
+                <p className="text-4xl font-bold text-content-primary">{stats.items}</p>
               </div>
 
-              <div className="card bg-gradient-to-br from-green-900/40 to-green-700/20">
+              <div className="card bg-gradient-to-br from-success/40 to-success/20">
                 <div className="text-5xl mb-3">🗺️</div>
-                <h3 className="text-lg text-gray-300 mb-1">Zonas de Hunt</h3>
-                <p className="text-4xl font-bold text-white">{stats.hunting_places}</p>
+                <h3 className="text-lg text-content-secondary mb-1">Zonas de Hunt</h3>
+                <p className="text-4xl font-bold text-content-primary">{stats.hunting_places}</p>
               </div>
 
-              <div className="card bg-gradient-to-br from-yellow-900/40 to-yellow-700/20">
+              <div className="card bg-gradient-to-br from-primary/40 to-primary/20">
                 <div className="text-5xl mb-3">📜</div>
-                <h3 className="text-lg text-gray-300 mb-1">Quests</h3>
-                <p className="text-4xl font-bold text-white">{stats.quests}</p>
+                <h3 className="text-lg text-content-secondary mb-1">Quests</h3>
+                <p className="text-4xl font-bold text-content-primary">{stats.quests}</p>
               </div>
 
-              <div className="card bg-gradient-to-br from-cyan-900/40 to-cyan-700/20">
+              <div className="card bg-gradient-to-br from-info/40 to-info/20">
                 <div className="text-5xl mb-3">📋</div>
-                <h3 className="text-lg text-gray-300 mb-1">Sincronizaciones</h3>
-                <p className="text-4xl font-bold text-white">{stats.sync_logs}</p>
+                <h3 className="text-lg text-content-secondary mb-1">Sincronizaciones</h3>
+                <p className="text-4xl font-bold text-content-primary">{stats.sync_logs}</p>
               </div>
 
-              <div className="card bg-gradient-to-br from-pink-900/40 to-pink-700/20">
+              <div className="card bg-gradient-to-br from-accent/40 to-accent/20">
                 <div className="text-5xl mb-3">📈</div>
-                <h3 className="text-lg text-gray-300 mb-1">Total de Datos</h3>
-                <p className="text-4xl font-bold text-white">
+                <h3 className="text-lg text-content-secondary mb-1">Total de Datos</h3>
+                <p className="text-4xl font-bold text-content-primary">
                   {stats.creatures + stats.items + stats.hunting_places + stats.quests}
                 </p>
               </div>
@@ -671,30 +671,30 @@ const DataSyncPanel: React.FC = () => {
 
         {/* Conflict Modal */}
         {showConflictModal && (
-          <div className="fixed inset-0 bg-black/80 flex items-center justify-center z-50 p-4">
-            <div className="bg-gray-900 rounded-2xl max-w-4xl w-full max-h-[90vh] overflow-y-auto border-2 border-yellow-500/50">
+          <div className="fixed inset-0 bg-surface-base/80 flex items-center justify-center z-modal p-4">
+            <div className="bg-surface-base rounded-2xl max-w-4xl w-full max-h-[90vh] overflow-y-auto border-2 border-primary/50">
               <div className="p-6">
-                <h2 className="text-2xl font-bold text-white mb-4">
+                <h2 className="text-2xl font-bold text-content-primary mb-4">
                   ⚠️ Conflictos Detectados
                 </h2>
-                <p className="text-gray-300 mb-6">
+                <p className="text-content-secondary mb-6">
                   Se encontraron {conflicts.length} elementos con datos diferentes.
                   Revisa los cambios y decide qué hacer:
                 </p>
 
                 <div className="space-y-4 mb-6">
                   {conflicts.slice(0, 5).map((conflict, idx) => (
-                    <div key={idx} className="border border-yellow-500/30 rounded-lg p-4 bg-yellow-900/10">
-                      <h3 className="font-bold text-white mb-2">{conflict.item_name}</h3>
+                    <div key={idx} className="border border-primary/30 rounded-lg p-4 bg-primary/10">
+                      <h3 className="font-bold text-content-primary mb-2">{conflict.item_name}</h3>
                       <div className="space-y-2">
                         {conflict.conflicts.map((comp, cIdx) => (
                           comp.different && (
                             <div key={cIdx} className="text-sm grid grid-cols-3 gap-2">
-                              <span className="text-gray-400">{comp.field}:</span>
-                              <span className="text-red-400">
+                              <span className="text-content-secondary">{comp.field}:</span>
+                              <span className="text-danger">
                                 {JSON.stringify(comp.old_value)}
                               </span>
-                              <span className="text-green-400">
+                              <span className="text-success">
                                 → {JSON.stringify(comp.new_value)}
                               </span>
                             </div>
@@ -704,7 +704,7 @@ const DataSyncPanel: React.FC = () => {
                     </div>
                   ))}
                   {conflicts.length > 5 && (
-                    <p className="text-gray-400 text-sm text-center">
+                    <p className="text-content-secondary text-sm text-center">
                       ... y {conflicts.length - 5} más
                     </p>
                   )}
@@ -714,20 +714,20 @@ const DataSyncPanel: React.FC = () => {
                   <button
                     onClick={() => resolveConflicts('skip_all')}
                     disabled={loading}
-                    className="flex-1 px-6 py-3 bg-gray-700 hover:bg-gray-600 text-white rounded-xl font-semibold transition-all"
+                    className="flex-1 px-6 py-3 bg-surface-raised hover:bg-surface-hover text-content-primary rounded-xl font-semibold transition-all"
                   >
                     ⏭️ Omitir Todos
                   </button>
                   <button
                     onClick={() => resolveConflicts('overwrite_all')}
                     disabled={loading}
-                    className="flex-1 px-6 py-3 bg-yellow-600 hover:bg-yellow-500 text-white rounded-xl font-semibold transition-all"
+                    className="flex-1 px-6 py-3 bg-primary hover:bg-primary-hover text-content-on-primary rounded-xl font-semibold transition-all"
                   >
                     ✏️ Sobrescribir Todos
                   </button>
                   <button
                     onClick={() => setShowConflictModal(false)}
-                    className="px-6 py-3 bg-red-600 hover:bg-red-500 text-white rounded-xl font-semibold transition-all"
+                    className="px-6 py-3 bg-danger hover:bg-danger-hover text-content-on-primary rounded-xl font-semibold transition-all"
                   >
                     ✖️ Cancelar
                   </button>

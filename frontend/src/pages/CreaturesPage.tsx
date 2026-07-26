@@ -1,6 +1,5 @@
 import React, { useEffect, useRef, useState } from 'react';
 import { Link, useSearchParams } from 'react-router-dom';
-import { motion } from 'framer-motion';
 import { AlertTriangle, ArrowDownAZ, ArrowUpAZ, Crown, Loader2, ScrollText, Sparkles } from 'lucide-react';
 import { useTranslation } from 'react-i18next';
 import axios from 'axios';
@@ -97,7 +96,7 @@ const CreaturesPage: React.FC = () => {
   // Tracks whether mode was just set from a URL navigation (Effect 1) so
   // Effect 2 doesn't immediately push a redundant URL update.
   const urlSyncedRef = useRef(true);
-  const [searchTerm, setSearchTerm] = useState('');
+  const [searchTerm, setSearchTerm] = useState(() => new URLSearchParams(window.location.search).get('q') || '');
   const [creatureSort, setCreatureSort] = useState<CreatureSort>('name');
   const [sortOrder, setSortOrder] = useState<SortOrder>('asc');
   const [creatureCategory, setCreatureCategory] = useState<CreatureCategory>('');
@@ -193,7 +192,7 @@ const CreaturesPage: React.FC = () => {
               cards.push({
                 id: String(preview.id),
                 name: String(preview.name),
-                subtitle: String(preview.subtitle || (entry.query ? `Search: ${entry.query}` : 'Recent search')),
+                subtitle: String(preview.subtitle || (entry.query ? t('cyclopedia.cards.searchWithQuery', { query: entry.query }) : t('cyclopedia.cards.recentSearch'))),
                 to: String(preview.to),
                 imageUrl: preview.imageUrl ? String(preview.imageUrl) : undefined,
                 createdAt: entry.created_at,
@@ -221,19 +220,19 @@ const CreaturesPage: React.FC = () => {
         let top: CyclopediaPreviewCard[] = [];
         if (mode === 'creatures') {
           const data = (await creaturesApi.getHighlights(5, controller.signal)).filter((x) => !x.is_boss);
-          top = data.map((c) => ({ id: `creature:${c.id}`, name: c.name, subtitle: `EXP ${c.experience.toLocaleString()}`, to: `/creatures/${c.slug || c.id}`, imageUrl: `/api/v1/creatures/${c.id}/image` }));
+          top = data.map((c) => ({ id: `creature:${c.id}`, name: c.name, subtitle: t('cyclopedia.cards.experience', { value: c.experience.toLocaleString() }), to: `/creatures/${c.slug || c.id}`, imageUrl: `/api/v1/creatures/${c.id}/image` }));
         } else if (mode === 'bosses') {
           const data = await creaturesApi.getBosses({ skip: 0, limit: 5 }, controller.signal);
-          top = data.map((c) => ({ id: `boss:${c.id}`, name: c.name, subtitle: c.difficulty || 'Boss', to: `/creatures/${c.slug || c.id}`, imageUrl: `/api/v1/creatures/${c.id}/image` }));
+          top = data.map((c) => ({ id: `boss:${c.id}`, name: c.name, subtitle: c.difficulty || t('cyclopedia.cards.boss'), to: `/creatures/${c.slug || c.id}`, imageUrl: `/api/v1/creatures/${c.id}/image` }));
         } else if (mode === 'items') {
           const data = await itemsApi.getHighlights(5, controller.signal);
-          top = data.map((i) => ({ id: `item:${i.normalized_name}`, name: i.item_name, subtitle: `${i.drops.length} drops`, to: '/cyclopedia?tab=items', imageUrl: i.image_item_id ? `/api/v1/items/${i.image_item_id}/image` : undefined }));
+          top = data.map((i) => ({ id: `item:${i.normalized_name}`, name: i.item_name, subtitle: t('cyclopedia.cards.drops', { count: i.drops.length }), to: '/cyclopedia?tab=items', imageUrl: i.image_item_id ? `/api/v1/items/${i.image_item_id}/image` : undefined }));
         } else if (mode === 'quests') {
           const data = await questsApi.getHighlights(5, controller.signal);
-          top = data.map((q) => ({ id: `quest:${q.id || q.name}`, name: q.name, subtitle: q.group_name || 'Quest', to: q.id ? `/quests/${q.id}` : '/cyclopedia?tab=quests' }));
+          top = data.map((q) => ({ id: `quest:${q.id || q.name}`, name: q.name, subtitle: q.group_name || t('cyclopedia.cards.quest'), to: q.id ? `/quests/${q.id}` : '/cyclopedia?tab=quests' }));
         } else {
           const data = await huntZonesApi.getHighlights(5, controller.signal);
-          top = data.map((z) => ({ id: `zone:${z.id}`, name: z.name, subtitle: z.region || z.city || 'Hunt zone', to: '/cyclopedia?tab=zones', imageUrl: `/api/v1/hunt-zones/${z.id}/map-image` }));
+          top = data.map((z) => ({ id: `zone:${z.id}`, name: z.name, subtitle: z.region || z.city || t('cyclopedia.cards.huntZone'), to: '/cyclopedia?tab=zones', imageUrl: `/api/v1/hunt-zones/${z.id}/map-image` }));
         }
         if (mounted) setTopPreviewCards(top);
       } catch {
@@ -434,7 +433,7 @@ const CreaturesPage: React.FC = () => {
         searchPreviewCards = data.slice(0, 5).map((c) => ({
           id: `creature:${c.id}`,
           name: c.name,
-          subtitle: c.difficulty || 'Creature',
+          subtitle: c.difficulty || t('cyclopedia.cards.creature'),
           to: `/creatures/${c.slug || c.id}`,
           imageUrl: `/api/v1/creatures/${c.id}/image`,
         }));
@@ -460,7 +459,7 @@ const CreaturesPage: React.FC = () => {
         searchPreviewCards = data.slice(0, 5).map((c) => ({
           id: `boss:${c.id}`,
           name: c.name,
-          subtitle: c.difficulty || 'Boss',
+          subtitle: c.difficulty || t('cyclopedia.cards.boss'),
           to: `/creatures/${c.slug || c.id}`,
           imageUrl: `/api/v1/creatures/${c.id}/image`,
         }));
@@ -482,7 +481,7 @@ const CreaturesPage: React.FC = () => {
         searchPreviewCards = data.slice(0, 5).map((i) => ({
           id: `item:${i.normalized_name}`,
           name: i.item_name,
-          subtitle: `${i.drops.length} drops`,
+          subtitle: t('cyclopedia.cards.drops', { count: i.drops.length }),
           to: '/cyclopedia?tab=items',
           imageUrl: i.image_item_id ? `/api/v1/items/${i.image_item_id}/image` : undefined,
         }));
@@ -502,7 +501,7 @@ const CreaturesPage: React.FC = () => {
         searchPreviewCards = data.slice(0, 5).map((q) => ({
           id: `quest:${q.id || q.name}`,
           name: q.name,
-          subtitle: q.group_name || 'Quest',
+          subtitle: q.group_name || t('cyclopedia.cards.quest'),
           to: q.id ? `/quests/${q.id}` : '/cyclopedia?tab=quests',
         }));
         if (reset) _cacheResult = { creatures: [], items: [], quests: data, zones: [], hasMore: false, usedHighlightsSource: false };
@@ -518,7 +517,7 @@ const CreaturesPage: React.FC = () => {
         searchPreviewCards = data.slice(0, 5).map((z) => ({
           id: `zone:${z.id}`,
           name: z.name,
-          subtitle: z.region || z.city || 'Hunt zone',
+          subtitle: z.region || z.city || t('cyclopedia.cards.huntZone'),
           to: '/cyclopedia?tab=zones',
           imageUrl: `/api/v1/hunt-zones/${z.id}/map-image`,
         }));
@@ -686,25 +685,17 @@ const CreaturesPage: React.FC = () => {
   }, [initialLoaded]); // eslint-disable-line react-hooks/exhaustive-deps
 
   return (
-    <div className="min-h-screen">
-      <div className="relative space-y-6 py-12 text-center md:py-20">
-        <motion.div
-          initial={{ opacity: 0, y: 20 }}
-          animate={{ opacity: 1, y: 0 }}
-        >
+    <div className="py-6 sm:py-8">
+      <div className="relative space-y-5">
+        <div className="ds-enter">
           <PageHeader
             title={t('hero.title')}
             subtitle={t('hero.subtitle')}
             icon={faBook}
           />
-        </motion.div>
+        </div>
 
-        <motion.div
-          initial={{ opacity: 0, y: 20 }}
-          animate={{ opacity: 1, y: 0 }}
-          transition={{ delay: 0.1 }}
-          className="relative z-20 mx-auto max-w-6xl px-4"
-        >
+        <div className="relative z-20 mx-auto max-w-6xl">
           <AppCard className="flex flex-col gap-2 p-2 shadow-2xl">
             <div className="flex min-w-0 flex-col gap-2 lg:flex-row lg:items-center">
               <AppTabs
@@ -774,13 +765,13 @@ const CreaturesPage: React.FC = () => {
                         <button
                           key={category || 'all'}
                           onClick={() => setCreatureCategory(category)}
-                          className={`app-stone-panel rounded-xl px-3 py-2 text-left text-xs transition ${active ? 'ring-1 ring-[color:var(--color-primary)] text-[color:var(--color-text)]' : 'text-[color:var(--color-text-muted)] hover:text-[color:var(--color-text)]'}`}
+                          className={`app-stone-panel rounded-xl px-3 py-2 text-left text-xs transition ${active ? 'ring-1 ring-primary text-content-primary' : 'text-content-muted hover:text-content-primary'}`}
                         >
                           <div className="mb-1 flex items-center gap-1.5">
                             {categoryImageUrl ? (
-                              <img src={categoryImageUrl} alt={category || 'All'} className="h-5 w-5 rounded object-cover" loading="lazy" />
+                              <img src={categoryImageUrl} alt={category || t('cyclopedia.categories.all')} className="h-5 w-5 rounded object-cover" loading="lazy" />
                             ) : (
-                              <CategoryIcon className="text-[color:var(--color-primary)]" />
+                              <CategoryIcon className="text-primary" />
                             )}
                             <span className="truncate font-semibold">{category || t('cyclopedia.categories.all')}</span>
                           </div>
@@ -794,13 +785,13 @@ const CreaturesPage: React.FC = () => {
                 )}
 
                 {mode === 'creatures' && !searchTerm.trim() && !creatureCategory && (
-                  <div className="flex items-center gap-2 rounded-xl border border-[color:var(--color-border)] bg-[color:var(--color-surface-alt)] px-3 py-2 text-xs text-[color:var(--color-text-muted)]">
+                  <div className="flex items-center gap-2 rounded-xl border border-line bg-surface-raised px-3 py-2 text-xs text-content-muted">
                     <Sparkles size={14} /> {t('cyclopedia.helpers.classification')}
                   </div>
                 )}
 
                 {mode === 'bosses' && (
-                  <div className="flex items-center gap-2 rounded-xl border border-red-500/20 bg-red-500/10 px-3 py-2 text-xs text-red-200">
+                  <div className="flex items-center gap-2 rounded-xl border border-danger/20 bg-danger/10 px-3 py-2 text-xs text-danger">
                     <Crown size={14} /> {t('cyclopedia.helpers.bosses')}
                   </div>
                 )}
@@ -820,27 +811,27 @@ const CreaturesPage: React.FC = () => {
               </div>
             )}
           </AppCard>
-        </motion.div>
+        </div>
       </div>
 
-      <div className="container mx-auto px-4 pb-20">
+      <div className="pb-12 pt-6">
         {loading && (
           <div className="flex justify-center py-20">
-            <Loader2 className="animate-spin text-amber-500" size={48} />
+            <Loader2 className="animate-spin text-primary" size={48} />
           </div>
         )}
 
         {!loading && errorMessage && (
-          <div className="mx-auto mb-8 max-w-3xl rounded-2xl border border-red-500/20 bg-red-950/20 p-5 text-red-100">
+          <div className="mx-auto mb-8 max-w-3xl rounded-2xl border border-danger/20 bg-danger/20 p-5 text-danger">
             <div className="mb-2 flex items-center gap-2 font-semibold">
               <AlertTriangle className="h-4 w-4" /> {errorTitle}
             </div>
-            <p className="text-sm text-red-200/80">{errorSubtitle}</p>
+            <p className="text-sm text-danger/80">{errorSubtitle}</p>
             <button
               onClick={() => void performSearch(true)}
-              className="mt-3 rounded-lg border border-red-400/30 bg-red-500/20 px-3 py-1.5 text-sm text-red-100 hover:bg-red-500/30"
+              className="mt-3 rounded-lg border border-danger/30 bg-danger/20 px-3 py-1.5 text-sm text-danger hover:bg-danger/30"
             >
-              Retry
+              {t('common.retry')}
             </button>
           </div>
         )}
@@ -848,8 +839,8 @@ const CreaturesPage: React.FC = () => {
         {!loading && (
           <>
             {!searchTerm.trim() && (mode !== 'creatures' || !creatureCategory) && recentPreviewCards.length > 0 && (
-              <div className="mb-8 rounded-2xl border border-slate-700/50 bg-slate-900/50 p-5">
-                <div className="mb-3 text-sm font-semibold uppercase tracking-wide text-amber-300">
+              <div className="mb-8 rounded-2xl border border-line/50 bg-surface-base/50 p-5">
+                <div className="mb-3 text-sm font-semibold uppercase tracking-wide text-primary">
                   {isAuthenticated ? t('cyclopedia.cards.yourRecent') : t('cyclopedia.cards.recent')}
                 </div>
                 <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-5">
@@ -857,22 +848,22 @@ const CreaturesPage: React.FC = () => {
                     <Link
                       key={`recent-${entry.id}`}
                       to={entry.to}
-                      className="rounded-xl border border-slate-700 bg-slate-950/40 p-3 transition hover:border-amber-500/40"
+                      className="rounded-xl border border-line bg-surface-base/40 p-3 transition hover:border-primary/40"
                     >
                       <div className="mb-2 flex items-center gap-2">
                         {entry.imageUrl ? (
                           <img src={entry.imageUrl} alt={entry.name} className="h-10 w-10 rounded object-cover" loading="lazy" />
                         ) : (
-                          <div className="flex h-10 w-10 items-center justify-center rounded bg-slate-800 text-slate-400">
+                          <div className="flex h-10 w-10 items-center justify-center rounded bg-surface text-content-secondary">
                             <ScrollText size={14} />
                           </div>
                         )}
                         <div>
-                          <div className="truncate text-sm font-semibold text-slate-100">{entry.name}</div>
-                          <div className="text-xs text-slate-500">{entry.subtitle}</div>
+                          <div className="truncate text-sm font-semibold text-content-primary">{entry.name}</div>
+                          <div className="text-xs text-content-muted">{entry.subtitle}</div>
                         </div>
                       </div>
-                      {entry.createdAt && <div className="text-[11px] text-slate-600">{new Date(entry.createdAt).toLocaleDateString()}</div>}
+                      {entry.createdAt && <div className="text-[11px] text-content-muted">{new Date(entry.createdAt).toLocaleDateString()}</div>}
                     </Link>
                   ))}
                 </div>
@@ -880,26 +871,26 @@ const CreaturesPage: React.FC = () => {
             )}
 
             {!searchTerm.trim() && (mode !== 'creatures' || !creatureCategory) && isAuthenticated && topPreviewCards.length > 0 && (
-              <div className="mb-8 rounded-2xl border border-slate-700/50 bg-slate-900/50 p-5">
-                <div className="mb-3 text-sm font-semibold uppercase tracking-wide text-amber-300">{t('cyclopedia.cards.topGlobal')}</div>
+              <div className="mb-8 rounded-2xl border border-line/50 bg-surface-base/50 p-5">
+                <div className="mb-3 text-sm font-semibold uppercase tracking-wide text-primary">{t('cyclopedia.cards.topGlobal')}</div>
                 <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-5">
                   {topPreviewCards.map((entry) => (
                     <Link
                       key={`top-${entry.id}`}
                       to={entry.to}
-                      className="rounded-xl border border-slate-700 bg-slate-950/40 p-3 transition hover:border-amber-500/40"
+                      className="rounded-xl border border-line bg-surface-base/40 p-3 transition hover:border-primary/40"
                     >
                       <div className="mb-2 flex items-center gap-2">
                         {entry.imageUrl ? (
                           <img src={entry.imageUrl} alt={entry.name} className="h-10 w-10 rounded object-cover" loading="lazy" />
                         ) : (
-                          <div className="flex h-10 w-10 items-center justify-center rounded bg-slate-800 text-slate-400">
+                          <div className="flex h-10 w-10 items-center justify-center rounded bg-surface text-content-secondary">
                             <ScrollText size={14} />
                           </div>
                         )}
                         <div>
-                          <div className="truncate text-sm font-semibold text-slate-100">{entry.name}</div>
-                          <div className="text-xs text-slate-500">{entry.subtitle}</div>
+                          <div className="truncate text-sm font-semibold text-content-primary">{entry.name}</div>
+                          <div className="text-xs text-content-muted">{entry.subtitle}</div>
                         </div>
                       </div>
                     </Link>
@@ -914,71 +905,71 @@ const CreaturesPage: React.FC = () => {
             ))}
 
             {mode === 'items' && items.map((item, index) => (
-              <motion.div initial={{ opacity: 0, scale: 0.95 }} animate={{ opacity: 1, scale: 1 }} key={`${item.normalized_name}-${index}`} className="rounded-xl border border-slate-700/50 bg-slate-900/50 p-6">
+              <AppCard key={`${item.normalized_name}-${index}`} className="ds-enter p-5">
                 <div className="mb-4 flex items-start gap-3">
                   <ImageWithFallback
                     src={item.image_item_id ? `/api/v1/items/${item.image_item_id}/image` : item.item_image_url || null}
                     alt={item.item_name}
-                    className="h-12 w-12 rounded-lg bg-slate-950/60 object-contain p-1"
+                    className="h-12 w-12 rounded-lg bg-surface-base/60 object-contain p-1"
                     containerClassName="h-12 w-12"
-                    fallbackLabel="Item"
+                    fallbackLabel={item.item_name}
                   />
                   <div>
-                    <div className="text-xl font-bold text-amber-100">{item.item_name}</div>
-                    <div className="text-xs text-slate-500">{t('cyclopedia.items.creaturesMatched', { count: item.drops.length })}</div>
+                    <div className="text-xl font-bold text-primary">{item.item_name}</div>
+                    <div className="text-xs text-content-muted">{t('cyclopedia.items.creaturesMatched', { count: item.drops.length })}</div>
                   </div>
                 </div>
-                <div className="space-y-3 text-sm text-slate-300">
+                <div className="space-y-3 text-sm text-content-secondary">
                   {item.drops.slice(0, 3).map((drop) => (
-                    <div key={`${item.normalized_name}-${drop.creature_id}`} className="rounded-lg bg-slate-950/40 px-3 py-2">
-                      <div className="font-medium text-slate-100">{drop.creature_name}</div>
-                      <div className="text-xs text-slate-400">{t('cyclopedia.items.chance')}: {drop.chance ?? t('cyclopedia.states.unknown')} · {t('cyclopedia.items.rarity')}: {drop.rarity || t('cyclopedia.states.unknown')}</div>
+                    <div key={`${item.normalized_name}-${drop.creature_id}`} className="rounded-lg bg-surface-base/40 px-3 py-2">
+                      <div className="font-medium text-content-primary">{drop.creature_name}</div>
+                      <div className="text-xs text-content-secondary">{t('cyclopedia.items.chance')}: {drop.chance ?? t('cyclopedia.states.unknown')} · {t('cyclopedia.items.rarity')}: {drop.rarity || t('cyclopedia.states.unknown')}</div>
                       {drop.hunt_zones.length > 0 && (
-                        <div className="mt-1 text-xs text-slate-500">{t('cyclopedia.items.zones')}: {drop.hunt_zones.slice(0, 2).map((zone) => zone.name).join(', ')}</div>
+                        <div className="mt-1 text-xs text-content-muted">{t('cyclopedia.items.zones')}: {drop.hunt_zones.slice(0, 2).map((zone) => zone.name).join(', ')}</div>
                       )}
                     </div>
                   ))}
                 </div>
                 {item.source_url && (
-                  <a href={item.source_url} target="_blank" rel="noreferrer" className="mt-4 inline-block text-xs text-amber-400 hover:text-amber-300">
+                  <a href={item.source_url} target="_blank" rel="noreferrer" className="mt-4 inline-block text-xs text-primary hover:text-primary">
                     {t('cyclopedia.items.sourcePage')}
                   </a>
                 )}
-              </motion.div>
+              </AppCard>
             ))}
 
             {mode === 'quests' && quests.map((quest, index) => (
-              <motion.div initial={{ opacity: 0, scale: 0.95 }} animate={{ opacity: 1, scale: 1 }} key={`${quest.id || quest.name}-${index}`} className="rounded-xl border border-slate-700/50 bg-slate-900/50 p-6">
+              <AppCard key={`${quest.id || quest.name}-${index}`} className="ds-enter p-5">
                 <div className="mb-3 flex items-start gap-3">
-                  <div className="flex h-12 w-12 items-center justify-center rounded-lg bg-slate-950/60 text-amber-300">
+                  <div className="flex h-12 w-12 items-center justify-center rounded-lg bg-surface-base/60 text-primary">
                     <ScrollText size={22} />
                   </div>
                   <div>
-                    <div className="text-xl font-bold text-amber-100">{quest.name}</div>
+                    <div className="text-xl font-bold text-primary">{quest.name}</div>
                     {quest.group_name ? (
-                      <div className="mt-1 inline-flex rounded-md border border-amber-400/30 bg-amber-500/10 px-2 py-0.5 text-[11px] text-amber-200">
+                      <div className="mt-1 inline-flex rounded-md border border-primary/30 bg-primary/10 px-2 py-0.5 text-[11px] text-primary">
                         {t('cyclopedia.quests.group')}: {quest.group_name}
                       </div>
                     ) : null}
-                    <div className="text-xs text-slate-500">{t('cyclopedia.quests.levelRange', { min: quest.min_level ?? 'N/A', max: quest.max_level ?? 'N/A' })}</div>
+                    <div className="text-xs text-content-muted">{t('cyclopedia.quests.levelRange', { min: quest.min_level ?? t('common.notAvailable'), max: quest.max_level ?? t('common.notAvailable') })}</div>
                   </div>
                 </div>
-                <p className="mb-3 text-sm text-slate-300">{quest.description || t('cyclopedia.quests.noDetails')}</p>
-                <div className="text-xs text-slate-500">{t('cyclopedia.quests.npc')}: {quest.npc || t('cyclopedia.states.unknown')} · {t('cyclopedia.quests.location')}: {quest.location || t('cyclopedia.states.unknown')}</div>
+                <p className="mb-3 text-sm text-content-secondary">{quest.description || t('cyclopedia.quests.noDetails')}</p>
+                <div className="text-xs text-content-muted">{t('cyclopedia.quests.npc')}: {quest.npc || t('cyclopedia.states.unknown')} · {t('cyclopedia.quests.location')}: {quest.location || t('cyclopedia.states.unknown')}</div>
                 <div className="mt-4 flex items-center gap-3">
                   {quest.id ? (
-                    <Link to={`/quests/${quest.id}`} className="text-xs text-amber-400 hover:text-amber-300">{t('cyclopedia.quests.openDetail')}</Link>
+                    <Link to={`/quests/${quest.id}`} className="text-xs text-primary hover:text-primary">{t('cyclopedia.quests.openDetail')}</Link>
                   ) : null}
                   {quest.source_url && (
-                    <a href={quest.source_url} target="_blank" rel="noreferrer" className="text-xs text-amber-400 hover:text-amber-300">{t('cyclopedia.items.sourcePage')}</a>
+                    <a href={quest.source_url} target="_blank" rel="noreferrer" className="text-xs text-primary hover:text-primary">{t('cyclopedia.items.sourcePage')}</a>
                   )}
                 </div>
-              </motion.div>
+              </AppCard>
             ))}
 
             {mode === 'zones' && zones.map((zone) => (
-              <motion.div initial={{ opacity: 0, scale: 0.95 }} animate={{ opacity: 1, scale: 1 }} key={zone.id} className="overflow-hidden rounded-xl border border-slate-700/50 bg-slate-900/50">
-                <div className="relative h-40 bg-slate-950">
+              <AppCard key={zone.id} className="ds-enter overflow-hidden">
+                <div className="relative h-40 bg-surface-base">
                   {(zone.map_image_url || zone.map_asset_id) && !mapPreviewFailed[zone.id] ? (
                     <img
                       src={huntZonesApi.getMapImageUrl(zone.id)}
@@ -988,25 +979,25 @@ const CreaturesPage: React.FC = () => {
                       onError={() => setMapPreviewFailed((prev) => ({ ...prev, [zone.id]: true }))}
                     />
                   ) : (
-                    <div className="flex h-full w-full items-center justify-center bg-gradient-to-br from-slate-900 via-slate-800 to-slate-900 text-slate-300">
+                    <div className="flex h-full w-full items-center justify-center bg-gradient-to-br from-surface-base via-surface to-surface-base text-content-secondary">
                       <div className="text-center">
                         <div className="text-sm font-semibold">{t('cyclopedia.zones.mapPreviewUnavailable')}</div>
-                        <div className="mt-1 text-xs text-slate-400">{t('cyclopedia.zones.usingPlaceholder')}</div>
+                        <div className="mt-1 text-xs text-content-secondary">{t('cyclopedia.zones.usingPlaceholder')}</div>
                       </div>
                     </div>
                   )}
                   <div className="absolute inset-0 bg-transparent" />
                 </div>
                 <div className="p-6">
-                  <h3 className="mb-2 text-xl font-bold text-amber-100">{zone.name}</h3>
-                  <div className="mb-3 flex gap-2 text-xs text-slate-400">
-                    <span className="rounded bg-slate-800 px-2 py-1">{zone.region || zone.city || t('cyclopedia.states.unknownRegion')}</span>
-                    <span className="rounded bg-slate-800 px-2 py-1">Lvl {zone.recommended_level ?? zone.min_level ?? 'N/A'}+</span>
+                  <h3 className="mb-2 text-xl font-bold text-primary">{zone.name}</h3>
+                  <div className="mb-3 flex gap-2 text-xs text-content-secondary">
+                    <span className="rounded bg-surface px-2 py-1">{zone.region || zone.city || t('cyclopedia.states.unknownRegion')}</span>
+                    <span className="rounded bg-surface px-2 py-1">{t('cyclopedia.zones.level', { level: zone.recommended_level ?? zone.min_level ?? t('common.notAvailable') })}</span>
                   </div>
-                  <div className="text-sm text-slate-400">{zone.difficulty || 'Not available'} difficulty</div>
-                  <div className="mt-2 text-xs text-slate-500">Source: {zone.source_provider || zone.source_name || 'local'}</div>
+                  <div className="text-sm text-content-secondary">{zone.difficulty || 'Not available'} difficulty</div>
+                  <div className="mt-2 text-xs text-content-muted">Source: {zone.source_provider || zone.source_name || 'local'}</div>
                 </div>
-              </motion.div>
+              </AppCard>
             ))}
             </div>
           </>
@@ -1016,7 +1007,7 @@ const CreaturesPage: React.FC = () => {
           <div className="mt-8 flex justify-center">
             <button
               onClick={() => void performSearch(false)}
-              className="rounded-xl border border-slate-700 bg-slate-900 px-5 py-3 text-sm font-semibold text-slate-200 hover:border-amber-500/60 hover:text-amber-300"
+              className="rounded-xl border border-line bg-surface-base px-5 py-3 text-sm font-semibold text-content-primary hover:border-primary/60 hover:text-primary"
             >
               {t('cyclopedia.actions.loadMore')}
             </button>
@@ -1025,9 +1016,9 @@ const CreaturesPage: React.FC = () => {
 
         {isEmpty && !errorMessage && (
           <div className="py-20 text-center opacity-70">
-            <div className="mb-4 text-5xl text-[color:var(--color-primary)]"><FontAwesomeIcon icon={faScroll} /></div>
-            <p className="font-serif text-xl text-slate-300">{emptyTitle}</p>
-            <p className="mt-2 text-sm text-slate-500">{emptySubtitle}</p>
+            <div className="mb-4 text-5xl text-primary"><FontAwesomeIcon icon={faScroll} /></div>
+            <p className="font-serif text-xl text-content-secondary">{emptyTitle}</p>
+            <p className="mt-2 text-sm text-content-muted">{emptySubtitle}</p>
           </div>
         )}
       </div>

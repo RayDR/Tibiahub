@@ -1,8 +1,9 @@
-from sqlalchemy import Boolean, Column, DateTime, ForeignKey, Index, Integer, JSON, String, Text, UniqueConstraint, text
+from sqlalchemy import Boolean, Column, DateTime, ForeignKey, Index, Integer, String, Text, UniqueConstraint, text
 from sqlalchemy.orm import relationship
 from sqlalchemy.sql import func
 
 from app.db.database import Base
+from app.db.types import JSONBType
 
 
 class GuildLeadershipRole(Base):
@@ -63,7 +64,7 @@ class GuildLeadershipApplication(Base):
     availability = Column(Text, nullable=False)
     leadership_experience = Column(Text, nullable=False)
     applicant_message = Column(Text, nullable=True)
-    profile_snapshot = Column(JSON, nullable=False, default=dict)
+    profile_snapshot = Column(JSONBType, nullable=False, default=dict)
     conduct_agreed_at = Column(DateTime(timezone=True), nullable=False)
     conduct_version = Column(String(30), nullable=False)
     submitted_at = Column(DateTime(timezone=True), nullable=False)
@@ -119,7 +120,7 @@ class GuildLeadershipApplicationHistory(Base):
     actor_id = Column(Integer, ForeignKey("users.id"), nullable=False)
     actor_context = Column(String(40), nullable=False)
     reason = Column(Text, nullable=True)
-    safe_metadata = Column(JSON, nullable=False, default=dict)
+    safe_metadata = Column(JSONBType, nullable=False, default=dict)
     created_at = Column(DateTime(timezone=True), nullable=False, server_default=func.now())
     application = relationship("GuildLeadershipApplication", back_populates="histories")
     actor = relationship("User", foreign_keys=[actor_id])

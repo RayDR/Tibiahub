@@ -6,6 +6,10 @@
   "scripts": {
     "dev": "vite",
     "build": "vite build",
+    "check:design-system": "node scripts/check-design-system.mjs",
+    "check:appearance": "node scripts/check-appearance-persistence.mjs",
+    "check:layouts": "node scripts/check-layouts.mjs",
+    "check:i18n": "node scripts/check-i18n.mjs",
     "lint": "eslint . --ext ts,tsx --report-unused-disable-directives --max-warnings 0",
     "preview": "vite preview"
   },

@@ -151,20 +151,30 @@ export interface HuntZone {
 }
 
 export interface ItemDropCreature {
-  creature_id: number;
+  creature_id?: number | null;
   creature_name: string;
   creature_slug?: string;
   chance?: number | null;
   rarity?: string | null;
   hunt_zones: HuntZoneSimple[];
+  relationship_id?: string | null;
+  knowledge_entity_id?: string | null;
+  resolution_status?: 'resolved' | 'unresolved' | 'ambiguous' | null;
+  source_provider?: string | null;
 }
 
 export interface ItemSearchResult {
+  id?: number | null;
   image_item_id?: number | null;
   item_name: string;
   normalized_name: string;
   item_image_url?: string | null;
   source_url?: string | null;
+  knowledge_entity_id?: string | null;
+  item_type?: string | null;
+  category?: string | null;
+  data_version: number;
+  last_synced_at?: string | null;
   drops: ItemDropCreature[];
 }
 
@@ -176,6 +186,32 @@ export interface ItemDetail {
   source_url?: string | null;
   rarity?: string | null;
   drop_chance?: number | null;
+  knowledge_entity_id?: string | null;
+  data_version: number;
+  last_synced_at?: string | null;
+  game_item_id?: number | null;
+  item_class?: string | null;
+  item_type?: string | null;
+  category?: string | null;
+  weight?: number | null;
+  value?: number | null;
+  level_requirement?: number | null;
+  vocation_requirements: string[];
+  attack?: number | null;
+  defense?: number | null;
+  armor?: number | null;
+  range?: number | null;
+  slots: string[];
+  imbuement_slots?: number | null;
+  attributes: Record<string, unknown>;
+  resistances: Record<string, unknown>;
+  bonuses: Record<string, unknown>;
+  description?: string | null;
+  notes?: string | null;
+  buy_from: Record<string, unknown>[];
+  sell_to: Record<string, unknown>[];
+  rewards_from: string[];
+  required_for: string[];
   drops: ItemDropCreature[];
 }
 
@@ -193,6 +229,11 @@ export interface QuestSearchResult {
   location?: string;
   npc?: string;
   source_url?: string;
+  category?: string;
+  quest_type?: string;
+  premium_required?: boolean;
+  repeatable?: boolean;
+  last_synced_at?: string;
 }
 
 export interface QuestRelatedCreature {
@@ -206,6 +247,7 @@ export interface QuestRelatedCreature {
 
 export interface QuestDetail {
   id: number;
+  knowledge_entity_id?: string;
   name: string;
   slug?: string;
   description?: string;
@@ -222,6 +264,111 @@ export interface QuestDetail {
   requirements: string[];
   related_quest_names?: string[];
   related_creatures: QuestRelatedCreature[];
+  summary?: string;
+  image_url?: string;
+  quest_type?: string;
+  category?: string;
+  difficulty?: string;
+  duration?: string;
+  premium_required?: boolean;
+  repeatable?: boolean;
+  solo_possible?: boolean;
+  data_version: number;
+  last_synced_at?: string;
+  starting_npcs: QuestNamedValue[];
+  related_npcs: QuestNamedValue[];
+  required_items: QuestItemValue[];
+  rewarded_items: QuestItemValue[];
+  required_quests: QuestNamedValue[];
+  unlocked_quests: QuestNamedValue[];
+  required_creatures: QuestNamedValue[];
+  bosses: QuestNamedValue[];
+  locations: QuestNamedValue[];
+  access_unlocks: Array<{ name: string; description?: string; destination_name?: string }>;
+  missions: QuestMission[];
+  relationships: QuestRelationship[];
+}
+
+export interface QuestNamedValue { name: string; external_id?: string; }
+export interface QuestItemValue extends QuestNamedValue { amount: number; note?: string; }
+export interface QuestMission {
+  id: string; external_id?: string; title: string; sequence: number; description?: string;
+  objectives: string[]; required_items: QuestItemValue[]; rewarded_items: QuestItemValue[];
+  related_npcs: QuestNamedValue[]; related_creatures: QuestNamedValue[]; locations: QuestNamedValue[];
+}
+export interface QuestRelationship {
+  relation_type: string; target_entity_type: string; target_name: string;
+  resolution_status: 'resolved' | 'unresolved' | 'ambiguous'; target_slug?: string; mission_id?: string;
+}
+
+export interface NamedKnowledgeRelationship {
+  relationship_type: string;
+  target_name: string;
+  target_type: string;
+  target_slug?: string;
+  resolution_state: 'resolved' | 'unresolved' | 'ambiguous';
+}
+
+export interface NamedKnowledgeSummary {
+  id: number;
+  name: string;
+  slug: string;
+  knowledge_entity_id: string;
+  entity_type: 'npc' | 'location' | 'area' | 'town';
+  description?: string;
+  image_url?: string;
+  source_url?: string;
+  data_version: number;
+  last_synced_at?: string;
+}
+
+export interface NpcKnowledgeDetail extends NamedKnowledgeSummary {
+  title?: string;
+  occupation?: string;
+  sex?: string;
+  location_name?: string;
+  buys: QuestNamedValue[];
+  sells: QuestNamedValue[];
+  destinations: QuestNamedValue[];
+  related_quests: QuestNamedValue[];
+  relationships: NamedKnowledgeRelationship[];
+}
+
+export interface LocationKnowledgeDetail extends NamedKnowledgeSummary {
+  location_kind?: string;
+  region?: string;
+  parent_location?: string;
+  premium_required?: boolean;
+  minimum_level?: number;
+  maximum_level?: number;
+  npcs: QuestNamedValue[];
+  creatures: QuestNamedValue[];
+  quests: QuestNamedValue[];
+  sublocations: QuestNamedValue[];
+  access_notes?: string;
+  relationships: NamedKnowledgeRelationship[];
+}
+
+export interface SpatialPointMetadata {
+  id: string; name: string; x?: number; y?: number; z?: number;
+  confidence: string; verification_state: string;
+}
+
+export interface SpatialRegionMetadata {
+  id: string; name: string;
+  bounds: { min_x?: number; min_y?: number; max_x?: number; max_y?: number; min_z?: number; max_z?: number };
+  confidence: string; verification_state: string;
+}
+
+export interface SpatialRouteStep {
+  id: string; sequence: number; kind: string; instruction?: string; location_name?: string;
+  x?: number; y?: number; z?: number;
+}
+
+export interface SpatialRouteMetadata {
+  id: string; name: string; slug: string; step_count: number;
+  start_location?: string; end_location?: string; confidence: string; verification_state: string;
+  steps?: SpatialRouteStep[];
 }
 
 export interface HuntRecommendation {

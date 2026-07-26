@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 from app.core.security import create_access_token
-from tests.conftest import make_user
+from conftest import make_user
 
 
 def auth(user):

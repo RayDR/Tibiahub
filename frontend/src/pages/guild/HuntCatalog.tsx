@@ -139,15 +139,15 @@ export default function HuntCatalog() {
     return (
         <div className="space-y-4 sm:space-y-6">
             <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 sm:gap-4">
-                <h1 className="text-2xl sm:text-3xl font-serif text-slate-100 flex items-center gap-2 sm:gap-3">
-                    <Compass className="w-6 h-6 sm:w-8 sm:h-8 text-amber-500" />
+                <h1 className="text-2xl sm:text-3xl font-serif text-content-primary flex items-center gap-2 sm:gap-3">
+                    <Compass className="w-6 h-6 sm:w-8 sm:h-8 text-primary" />
                     Hunt Catalog
                 </h1>
 
                 <div className="flex gap-2">
                     <button
                         onClick={() => setShowFilters(!showFilters)}
-                        className="flex items-center gap-2 bg-slate-800 hover:bg-slate-700 text-slate-200 px-3 sm:px-4 py-2 rounded-md transition-colors text-sm font-medium"
+                        className="flex items-center gap-2 bg-surface hover:bg-surface-raised text-content-primary px-3 sm:px-4 py-2 rounded-md transition-colors text-sm font-medium"
                     >
                         <Filter className="w-4 h-4" />
                         Filters
@@ -160,7 +160,7 @@ export default function HuntCatalog() {
                                 setEditingHunt(null);
                                 setShowModal(true);
                             }}
-                            className="flex items-center gap-2 bg-amber-600 hover:bg-amber-500 text-white px-4 py-2 rounded-md transition-colors text-sm font-medium"
+                            className="flex items-center gap-2 bg-primary hover:bg-primary-hover text-content-on-primary px-4 py-2 rounded-md transition-colors text-sm font-medium"
                         >
                             <Plus className="w-4 h-4" />
                             Add Hunt
@@ -171,34 +171,34 @@ export default function HuntCatalog() {
 
             {/* Filters */}
             {showFilters && (
-                <div className="bg-slate-900/50 border border-slate-700 rounded-lg p-4">
+                <div className="bg-surface-base/50 border border-line rounded-lg p-4">
                     <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
                         <div>
-                            <label className="block text-sm font-medium text-slate-400 mb-1">Min Level</label>
+                            <label className="block text-sm font-medium text-content-secondary mb-1">Min Level</label>
                             <input
                                 type="number"
                                 value={filters.level_min}
                                 onChange={e => setFilters({ ...filters, level_min: e.target.value })}
                                 placeholder="e.g. 50"
-                                className="w-full bg-slate-950 border border-slate-700 rounded p-2 text-slate-200 text-sm"
+                                className="w-full bg-surface-base border border-line rounded p-2 text-content-primary text-sm"
                             />
                         </div>
                         <div>
-                            <label className="block text-sm font-medium text-slate-400 mb-1">Max Level</label>
+                            <label className="block text-sm font-medium text-content-secondary mb-1">Max Level</label>
                             <input
                                 type="number"
                                 value={filters.level_max}
                                 onChange={e => setFilters({ ...filters, level_max: e.target.value })}
                                 placeholder="e.g. 150"
-                                className="w-full bg-slate-950 border border-slate-700 rounded p-2 text-slate-200 text-sm"
+                                className="w-full bg-surface-base border border-line rounded p-2 text-content-primary text-sm"
                             />
                         </div>
                         <div>
-                            <label className="block text-sm font-medium text-slate-400 mb-1">Vocation</label>
+                            <label className="block text-sm font-medium text-content-secondary mb-1">Vocation</label>
                             <select
                                 value={filters.vocation}
                                 onChange={e => setFilters({ ...filters, vocation: e.target.value })}
-                                className="w-full bg-slate-950 border border-slate-700 rounded p-2 text-slate-200 text-sm"
+                                className="w-full bg-surface-base border border-line rounded p-2 text-content-primary text-sm"
                             >
                                 <option value="">All</option>
                                 <option value="EK">Knight</option>
@@ -208,20 +208,20 @@ export default function HuntCatalog() {
                             </select>
                         </div>
                         <div>
-                            <label className="block text-sm font-medium text-slate-400 mb-1">Location</label>
+                            <label className="block text-sm font-medium text-content-secondary mb-1">Location</label>
                             <input
                                 type="text"
                                 value={filters.location}
                                 onChange={e => setFilters({ ...filters, location: e.target.value })}
                                 placeholder="e.g. Edron"
-                                className="w-full bg-slate-950 border border-slate-700 rounded p-2 text-slate-200 text-sm"
+                                className="w-full bg-surface-base border border-line rounded p-2 text-content-primary text-sm"
                             />
                         </div>
                     </div>
                     <div className="mt-3 flex justify-end">
                         <button
                             onClick={clearFilters}
-                            className="text-sm text-slate-400 hover:text-slate-200 flex items-center gap-1"
+                            className="text-sm text-content-secondary hover:text-content-primary flex items-center gap-1"
                         >
                             <X className="w-4 h-4" />
                             Clear filters
@@ -233,29 +233,29 @@ export default function HuntCatalog() {
             {/* Hunt Cards */}
             {loading ? (
                 <div className="flex justify-center p-12">
-                    <Loader2 className="w-8 h-8 animate-spin text-amber-500" />
+                    <Loader2 className="w-8 h-8 animate-spin text-primary" />
                 </div>
             ) : (
                 <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
                     {hunts.map(hunt => (
                         <div
                             key={hunt.id}
-                            className="bg-slate-900/50 border border-slate-700 rounded-lg p-5 hover:border-amber-500/50 transition-all cursor-pointer"
+                            className="bg-surface-base/50 border border-line rounded-lg p-5 hover:border-primary/50 transition-all cursor-pointer"
                             onClick={() => setDetailModal(hunt)}
                         >
                             <div className="flex items-start justify-between mb-3">
-                                <h3 className="text-lg font-bold text-slate-100">{hunt.name}</h3>
+                                <h3 className="text-lg font-bold text-content-primary">{hunt.name}</h3>
                                 {canManage && (
                                     <div className="flex gap-1" onClick={e => e.stopPropagation()}>
                                         <button
                                             onClick={() => openEditModal(hunt)}
-                                            className="p-1 text-blue-400 hover:bg-blue-900/20 rounded"
+                                            className="p-1 text-info hover:bg-info/20 rounded"
                                         >
                                             <Edit2 className="w-4 h-4" />
                                         </button>
                                         <button
                                             onClick={() => handleDelete(hunt.id, hunt.name)}
-                                            className="p-1 text-red-400 hover:bg-red-900/20 rounded"
+                                            className="p-1 text-danger hover:bg-danger/20 rounded"
                                         >
                                             <Trash2 className="w-4 h-4" />
                                         </button>
@@ -263,44 +263,44 @@ export default function HuntCatalog() {
                                 )}
                             </div>
 
-                            <div className="flex items-center gap-2 text-sm text-slate-400 mb-3">
+                            <div className="flex items-center gap-2 text-sm text-content-secondary mb-3">
                                 <MapPin className="w-4 h-4" />
                                 {hunt.location}
                             </div>
 
                             <div className="space-y-2 text-sm">
                                 <div className="flex justify-between">
-                                    <span className="text-slate-400">Level Range:</span>
-                                    <span className="text-slate-200 font-semibold">
+                                    <span className="text-content-secondary">Level Range:</span>
+                                    <span className="text-content-primary font-semibold">
                                         {hunt.level_min} - {hunt.level_max}
                                     </span>
                                 </div>
                                 {hunt.vocation && (
                                     <div className="flex justify-between">
-                                        <span className="text-slate-400">Vocation:</span>
-                                        <span className="text-amber-400">{hunt.vocation}</span>
+                                        <span className="text-content-secondary">Vocation:</span>
+                                        <span className="text-primary">{hunt.vocation}</span>
                                     </div>
                                 )}
                                 {hunt.exp_per_hour && (
                                     <div className="flex justify-between items-center">
-                                        <span className="text-slate-400 flex items-center gap-1">
+                                        <span className="text-content-secondary flex items-center gap-1">
                                             <TrendingUp className="w-3 h-3" /> XP/hour:
                                         </span>
-                                        <span className="text-green-400">{formatNumber(hunt.exp_per_hour)}</span>
+                                        <span className="text-success">{formatNumber(hunt.exp_per_hour)}</span>
                                     </div>
                                 )}
                                 {hunt.profit_per_hour && (
                                     <div className="flex justify-between items-center">
-                                        <span className="text-slate-400 flex items-center gap-1">
+                                        <span className="text-content-secondary flex items-center gap-1">
                                             <DollarSign className="w-3 h-3" /> Profit/hour:
                                         </span>
-                                        <span className="text-yellow-400">{formatNumber(hunt.profit_per_hour)}k</span>
+                                        <span className="text-primary">{formatNumber(hunt.profit_per_hour)}k</span>
                                     </div>
                                 )}
                             </div>
 
-                            <div className="mt-3 pt-3 border-t border-slate-800">
-                                <div className="text-xs text-slate-500 flex items-center gap-1">
+                            <div className="mt-3 pt-3 border-t border-line">
+                                <div className="text-xs text-content-muted flex items-center gap-1">
                                     <Users className="w-3 h-3" />
                                     {hunt.creatures.split(',').length} creature types
                                 </div>
@@ -311,7 +311,7 @@ export default function HuntCatalog() {
             )}
 
             {hunts.length === 0 && !loading && (
-                <div className="text-center py-12 text-slate-500">
+                <div className="text-center py-12 text-content-muted">
                     <Compass className="w-12 h-12 mx-auto mb-4 opacity-20" />
                     <p>No hunts found</p>
                 </div>
@@ -320,56 +320,56 @@ export default function HuntCatalog() {
             {/* Detail Modal */}
             {detailModal && (
                 <div
-                    className="fixed inset-0 bg-black/80 backdrop-blur-sm z-50 flex items-center justify-center p-4"
+                    className="fixed inset-0 bg-surface-base/80 backdrop-blur-sm z-modal flex items-center justify-center p-4"
                     onClick={() => setDetailModal(null)}
                 >
                     <div
-                        className="bg-slate-900 border border-slate-700 rounded-lg w-full max-w-2xl shadow-2xl max-h-[80vh] overflow-y-auto"
+                        className="bg-surface-base border border-line rounded-lg w-full max-w-2xl shadow-2xl max-h-[80vh] overflow-y-auto"
                         onClick={e => e.stopPropagation()}
                     >
-                        <div className="sticky top-0 bg-slate-900 p-6 border-b border-slate-800 flex items-center justify-between">
+                        <div className="sticky top-0 bg-surface-base p-6 border-b border-line flex items-center justify-between">
                             <div>
-                                <h3 className="text-2xl font-bold text-slate-100">{detailModal.name}</h3>
-                                <div className="flex items-center gap-2 text-slate-400 mt-1">
+                                <h3 className="text-2xl font-bold text-content-primary">{detailModal.name}</h3>
+                                <div className="flex items-center gap-2 text-content-secondary mt-1">
                                     <MapPin className="w-4 h-4" />
                                     {detailModal.location}
                                 </div>
                             </div>
-                            <button onClick={() => setDetailModal(null)} className="text-slate-400 hover:text-slate-200">
+                            <button onClick={() => setDetailModal(null)} className="text-content-secondary hover:text-content-primary">
                                 <X className="w-6 h-6" />
                             </button>
                         </div>
 
                         <div className="p-6 space-y-4">
                             <div className="grid grid-cols-2 gap-4">
-                                <div className="bg-slate-950/50 rounded p-3">
-                                    <div className="text-sm text-slate-400">Level Range</div>
-                                    <div className="text-xl font-bold text-slate-100">
+                                <div className="bg-surface-base/50 rounded p-3">
+                                    <div className="text-sm text-content-secondary">Level Range</div>
+                                    <div className="text-xl font-bold text-content-primary">
                                         {detailModal.level_min} - {detailModal.level_max}
                                     </div>
                                 </div>
                                 {detailModal.vocation && (
-                                    <div className="bg-slate-950/50 rounded p-3">
-                                        <div className="text-sm text-slate-400">Recommended Vocation</div>
-                                        <div className="text-xl font-bold text-amber-500">{detailModal.vocation}</div>
+                                    <div className="bg-surface-base/50 rounded p-3">
+                                        <div className="text-sm text-content-secondary">Recommended Vocation</div>
+                                        <div className="text-xl font-bold text-primary">{detailModal.vocation}</div>
                                     </div>
                                 )}
                                 {detailModal.exp_per_hour && (
-                                    <div className="bg-slate-950/50 rounded p-3">
-                                        <div className="text-sm text-slate-400 flex items-center gap-1">
+                                    <div className="bg-surface-base/50 rounded p-3">
+                                        <div className="text-sm text-content-secondary flex items-center gap-1">
                                             <TrendingUp className="w-4 h-4" /> Experience/hour
                                         </div>
-                                        <div className="text-xl font-bold text-green-400">
+                                        <div className="text-xl font-bold text-success">
                                             {formatNumber(detailModal.exp_per_hour)}
                                         </div>
                                     </div>
                                 )}
                                 {detailModal.profit_per_hour && (
-                                    <div className="bg-slate-950/50 rounded p-3">
-                                        <div className="text-sm text-slate-400 flex items-center gap-1">
+                                    <div className="bg-surface-base/50 rounded p-3">
+                                        <div className="text-sm text-content-secondary flex items-center gap-1">
                                             <DollarSign className="w-4 h-4" /> Profit/hour
                                         </div>
-                                        <div className="text-xl font-bold text-yellow-400">
+                                        <div className="text-xl font-bold text-primary">
                                             {formatNumber(detailModal.profit_per_hour)}k
                                         </div>
                                     </div>
@@ -377,18 +377,18 @@ export default function HuntCatalog() {
                             </div>
 
                             <div>
-                                <h4 className="text-sm font-semibold text-slate-400 mb-2 flex items-center gap-2">
+                                <h4 className="text-sm font-semibold text-content-secondary mb-2 flex items-center gap-2">
                                     <Users className="w-4 h-4" /> Creatures
                                 </h4>
-                                <div className="bg-slate-950/50 rounded p-3 text-slate-300">
+                                <div className="bg-surface-base/50 rounded p-3 text-content-secondary">
                                     {detailModal.creatures}
                                 </div>
                             </div>
 
                             {detailModal.strategy && (
                                 <div>
-                                    <h4 className="text-sm font-semibold text-slate-400 mb-2">Strategy</h4>
-                                    <div className="bg-slate-950/50 rounded p-3 text-slate-300 whitespace-pre-line">
+                                    <h4 className="text-sm font-semibold text-content-secondary mb-2">Strategy</h4>
+                                    <div className="bg-surface-base/50 rounded p-3 text-content-secondary whitespace-pre-line">
                                         {detailModal.strategy}
                                     </div>
                                 </div>
@@ -396,10 +396,10 @@ export default function HuntCatalog() {
 
                             {detailModal.notes && (
                                 <div>
-                                    <h4 className="text-sm font-semibold text-slate-400 mb-2 flex items-center gap-2">
+                                    <h4 className="text-sm font-semibold text-content-secondary mb-2 flex items-center gap-2">
                                         <Info className="w-4 h-4" /> Additional Notes
                                     </h4>
-                                    <div className="bg-yellow-900/20 border border-yellow-700/50 rounded p-3 text-slate-300 text-sm whitespace-pre-line">
+                                    <div className="bg-primary/20 border border-primary/50 rounded p-3 text-content-secondary text-sm whitespace-pre-line">
                                         {detailModal.notes}
                                     </div>
                                 </div>
@@ -411,10 +411,10 @@ export default function HuntCatalog() {
 
             {/* Create/Edit Modal */}
             {showModal && (
-                <div className="fixed inset-0 bg-black/80 backdrop-blur-sm z-50 flex items-center justify-center p-4">
-                    <div className="bg-slate-900 border border-slate-700 rounded-lg w-full max-w-2xl shadow-2xl max-h-[90vh] overflow-y-auto">
-                        <div className="p-6 border-b border-slate-800">
-                            <h3 className="text-xl font-bold text-slate-100">
+                <div className="fixed inset-0 bg-surface-base/80 backdrop-blur-sm z-modal flex items-center justify-center p-4">
+                    <div className="bg-surface-base border border-line rounded-lg w-full max-w-2xl shadow-2xl max-h-[90vh] overflow-y-auto">
+                        <div className="p-6 border-b border-line">
+                            <h3 className="text-xl font-bold text-content-primary">
                                 {editingHunt ? 'Edit Hunt' : 'Add New Hunt'}
                             </h3>
                         </div>
@@ -422,109 +422,109 @@ export default function HuntCatalog() {
                         <form onSubmit={handleSubmit} className="p-6 space-y-4">
                             <div className="grid grid-cols-2 gap-4">
                                 <div className="col-span-2">
-                                    <label className="block text-sm font-medium text-slate-400 mb-1">Hunt Name *</label>
+                                    <label className="block text-sm font-medium text-content-secondary mb-1">Hunt Name *</label>
                                     <input
                                         type="text"
                                         required
                                         value={formData.name}
                                         onChange={e => setFormData({ ...formData, name: e.target.value })}
-                                        className="w-full bg-slate-950 border border-slate-700 rounded p-2 text-slate-200"
+                                        className="w-full bg-surface-base border border-line rounded p-2 text-content-primary"
                                     />
                                 </div>
 
                                 <div className="col-span-2">
-                                    <label className="block text-sm font-medium text-slate-400 mb-1">Location *</label>
+                                    <label className="block text-sm font-medium text-content-secondary mb-1">Location *</label>
                                     <input
                                         type="text"
                                         required
                                         value={formData.location}
                                         onChange={e => setFormData({ ...formData, location: e.target.value })}
-                                        className="w-full bg-slate-950 border border-slate-700 rounded p-2 text-slate-200"
+                                        className="w-full bg-surface-base border border-line rounded p-2 text-content-primary"
                                     />
                                 </div>
 
                                 <div>
-                                    <label className="block text-sm font-medium text-slate-400 mb-1">Min Level *</label>
+                                    <label className="block text-sm font-medium text-content-secondary mb-1">Min Level *</label>
                                     <input
                                         type="number"
                                         required
                                         value={formData.level_min}
                                         onChange={e => setFormData({ ...formData, level_min: parseInt(e.target.value) })}
-                                        className="w-full bg-slate-950 border border-slate-700 rounded p-2 text-slate-200"
+                                        className="w-full bg-surface-base border border-line rounded p-2 text-content-primary"
                                     />
                                 </div>
 
                                 <div>
-                                    <label className="block text-sm font-medium text-slate-400 mb-1">Max Level *</label>
+                                    <label className="block text-sm font-medium text-content-secondary mb-1">Max Level *</label>
                                     <input
                                         type="number"
                                         required
                                         value={formData.level_max}
                                         onChange={e => setFormData({ ...formData, level_max: parseInt(e.target.value) })}
-                                        className="w-full bg-slate-950 border border-slate-700 rounded p-2 text-slate-200"
+                                        className="w-full bg-surface-base border border-line rounded p-2 text-content-primary"
                                     />
                                 </div>
 
                                 <div>
-                                    <label className="block text-sm font-medium text-slate-400 mb-1">Vocation</label>
+                                    <label className="block text-sm font-medium text-content-secondary mb-1">Vocation</label>
                                     <input
                                         type="text"
                                         value={formData.vocation}
                                         onChange={e => setFormData({ ...formData, vocation: e.target.value })}
                                         placeholder="e.g., EK, MS, All"
-                                        className="w-full bg-slate-950 border border-slate-700 rounded p-2 text-slate-200"
+                                        className="w-full bg-surface-base border border-line rounded p-2 text-content-primary"
                                     />
                                 </div>
 
                                 <div>
-                                    <label className="block text-sm font-medium text-slate-400 mb-1">XP/hour</label>
+                                    <label className="block text-sm font-medium text-content-secondary mb-1">XP/hour</label>
                                     <input
                                         type="number"
                                         value={formData.exp_per_hour}
                                         onChange={e => setFormData({ ...formData, exp_per_hour: parseInt(e.target.value) })}
-                                        className="w-full bg-slate-950 border border-slate-700 rounded p-2 text-slate-200"
+                                        className="w-full bg-surface-base border border-line rounded p-2 text-content-primary"
                                     />
                                 </div>
 
                                 <div className="col-span-2">
-                                    <label className="block text-sm font-medium text-slate-400 mb-1">Profit/hour (k)</label>
+                                    <label className="block text-sm font-medium text-content-secondary mb-1">Profit/hour (k)</label>
                                     <input
                                         type="number"
                                         value={formData.profit_per_hour}
                                         onChange={e => setFormData({ ...formData, profit_per_hour: parseInt(e.target.value) })}
-                                        className="w-full bg-slate-950 border border-slate-700 rounded p-2 text-slate-200"
+                                        className="w-full bg-surface-base border border-line rounded p-2 text-content-primary"
                                     />
                                 </div>
 
                                 <div className="col-span-2">
-                                    <label className="block text-sm font-medium text-slate-400 mb-1">Creatures *</label>
+                                    <label className="block text-sm font-medium text-content-secondary mb-1">Creatures *</label>
                                     <textarea
                                         required
                                         rows={2}
                                         value={formData.creatures}
                                         onChange={e => setFormData({ ...formData, creatures: e.target.value })}
                                         placeholder="e.g., Dragon, Dragon Lord, Wyrm"
-                                        className="w-full bg-slate-950 border border-slate-700 rounded p-2 text-slate-200 text-sm"
+                                        className="w-full bg-surface-base border border-line rounded p-2 text-content-primary text-sm"
                                     />
                                 </div>
 
                                 <div className="col-span-2">
-                                    <label className="block text-sm font-medium text-slate-400 mb-1">Strategy</label>
+                                    <label className="block text-sm font-medium text-content-secondary mb-1">Strategy</label>
                                     <textarea
                                         rows={3}
                                         value={formData.strategy}
                                         onChange={e => setFormData({ ...formData, strategy: e.target.value })}
-                                        className="w-full bg-slate-950 border border-slate-700 rounded p-2 text-slate-200 text-sm"
+                                        className="w-full bg-surface-base border border-line rounded p-2 text-content-primary text-sm"
                                     />
                                 </div>
 
                                 <div className="col-span-2">
-                                    <label className="block text-sm font-medium text-slate-400 mb-1">Notes</label>
+                                    <label className="block text-sm font-medium text-content-secondary mb-1">Notes</label>
                                     <textarea
                                         rows={2}
                                         value={formData.notes}
                                         onChange={e => setFormData({ ...formData, notes: e.target.value })}
-                                        className="w-full bg-slate-950 border border-slate-700 rounded p-2 text-slate-200 text-sm"
+                                        className="w-full bg-surface-base border border-line rounded p-2 text-content-primary text-sm"
                                     />
                                 </div>
                             </div>
@@ -537,13 +537,13 @@ export default function HuntCatalog() {
                                         setEditingHunt(null);
                                         resetForm();
                                     }}
-                                    className="px-4 py-2 text-slate-400 hover:text-slate-200 font-medium"
+                                    className="px-4 py-2 text-content-secondary hover:text-content-primary font-medium"
                                 >
                                     Cancel
                                 </button>
                                 <button
                                     type="submit"
-                                    className="bg-amber-600 hover:bg-amber-500 text-white px-4 py-2 rounded-md font-medium flex items-center gap-2"
+                                    className="bg-primary hover:bg-primary-hover text-content-on-primary px-4 py-2 rounded-md font-medium flex items-center gap-2"
                                 >
                                     <Save className="w-4 h-4" />
                                     {editingHunt ? 'Update' : 'Create'}

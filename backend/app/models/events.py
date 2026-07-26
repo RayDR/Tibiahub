@@ -1,7 +1,7 @@
 """
 Events and Raffles Model - System for guild events, contests, and raffles
 """
-from sqlalchemy import Column, Integer, String, Text, DateTime, Boolean, ForeignKey, func
+from sqlalchemy import Column, Integer, String, Text, DateTime, Boolean, ForeignKey, UniqueConstraint, func
 from sqlalchemy.orm import relationship
 import uuid
 from app.db.database import Base
@@ -20,9 +20,9 @@ class Event(Base):
     reward = Column(String(500), nullable=True)
     
     # Event timing
-    start_date = Column(DateTime, nullable=False)
-    end_date = Column(DateTime, nullable=True)
-    draw_date = Column(DateTime, nullable=True)  # For raffles
+    start_date = Column(DateTime(timezone=True), nullable=False)
+    end_date = Column(DateTime(timezone=True), nullable=True)
+    draw_date = Column(DateTime(timezone=True), nullable=True)  # For raffles
     
     # Raffle specific
     total_slots = Column(Integer, nullable=True)  # Max participants
@@ -39,7 +39,7 @@ class Event(Base):
     is_public = Column(Boolean, default=False)
     registration_enabled = Column(Boolean, default=True)
     archive_after_days = Column(Integer, default=7)
-    archived_at = Column(DateTime, nullable=True)
+    archived_at = Column(DateTime(timezone=True), nullable=True)
     
     # Participant configuration
     participant_mode = Column(String(20), default='manual')  # 'manual', 'guild_auto'
@@ -51,9 +51,9 @@ class Event(Base):
     creator_id = Column(Integer, ForeignKey('users.id'), nullable=False)
     announcement_id = Column(Integer, ForeignKey('announcements.id'), nullable=True)
     
-    created_at = Column(DateTime, server_default=func.now())
-    updated_at = Column(DateTime, server_default=func.now(), onupdate=func.now())
-    deleted_at = Column(DateTime, nullable=True)
+    created_at = Column(DateTime(timezone=True), server_default=func.now())
+    updated_at = Column(DateTime(timezone=True), server_default=func.now(), onupdate=func.now())
+    deleted_at = Column(DateTime(timezone=True), nullable=True)
     deleted_by_user_id = Column(Integer, ForeignKey('users.id'), nullable=True)
     delete_reason = Column(Text, nullable=True)
     is_deleted = Column(Boolean, default=False, nullable=False)
@@ -66,16 +66,19 @@ class Event(Base):
 
 class EventParticipant(Base):
     __tablename__ = "event_participants"
-    __table_args__ = {'extend_existing': True}
+    __table_args__ = (
+        UniqueConstraint("event_id", "user_id", name="uq_event_participant_user"),
+        {"extend_existing": True},
+    )
 
     id = Column(Integer, primary_key=True, index=True)
-    event_id = Column(Integer, ForeignKey('events.id'), nullable=False)
+    event_id = Column(Integer, ForeignKey('events.id', ondelete="CASCADE"), nullable=False)
     user_id = Column(Integer, ForeignKey('users.id'), nullable=False)
     
     assigned_number = Column(Integer, nullable=True)  # For raffles
     entry_data = Column(Text, nullable=True)  # JSON data for custom entries
     
-    joined_at = Column(DateTime, server_default=func.now())
+    joined_at = Column(DateTime(timezone=True), server_default=func.now())
     
     # Relationships
     event = relationship("Event", back_populates="participants")
@@ -85,10 +88,13 @@ class EventParticipant(Base):
 class PublicEventParticipant(Base):
     """Participants for public events - can be non-registered users (Tibia characters)"""
     __tablename__ = "public_event_participants"
-    __table_args__ = {'extend_existing': True}
+    __table_args__ = (
+        UniqueConstraint("event_id", "character_name", name="uq_public_event_participant_character"),
+        {"extend_existing": True},
+    )
 
     id = Column(Integer, primary_key=True, index=True)
-    event_id = Column(Integer, ForeignKey('events.id'), nullable=False)
+    event_id = Column(Integer, ForeignKey('events.id', ondelete="CASCADE"), nullable=False)
     
     # Tibia character data
     character_name = Column(String(100), nullable=False)
@@ -100,13 +106,13 @@ class PublicEventParticipant(Base):
     assigned_number = Column(Integer, nullable=True)  # For raffles
     is_auto_loaded = Column(Boolean, default=False)  # True if loaded from guild, False if manually added
     is_excluded = Column(Boolean, default=False)  # True if admin explicitly excluded from event
-    deleted_at = Column(DateTime, nullable=True)
+    deleted_at = Column(DateTime(timezone=True), nullable=True)
     deleted_by_user_id = Column(Integer, ForeignKey('users.id'), nullable=True)
     delete_reason = Column(Text, nullable=True)
     is_deleted = Column(Boolean, default=False, nullable=False)
     
-    created_at = Column(DateTime, server_default=func.now())
-    updated_at = Column(DateTime, server_default=func.now(), onupdate=func.now())
+    created_at = Column(DateTime(timezone=True), server_default=func.now())
+    updated_at = Column(DateTime(timezone=True), server_default=func.now(), onupdate=func.now())
     
     # Relationships
     event = relationship("Event", backref="public_participants")

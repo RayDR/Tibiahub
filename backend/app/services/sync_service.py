@@ -15,7 +15,7 @@ import logging
 import os
 from collections import defaultdict
 from concurrent.futures import ThreadPoolExecutor
-from datetime import datetime
+from datetime import UTC, datetime
 from pathlib import Path
 from typing import Any
 
@@ -135,7 +135,7 @@ class SyncService:
             if active_full:
                 raise RuntimeError("A full sync job is already running")
 
-        job_id = hashlib.sha1(f"{job_type}:{datetime.utcnow().isoformat()}".encode("utf-8")).hexdigest()[:32]
+        job_id = hashlib.sha1(f"{job_type}:{datetime.now(UTC).isoformat()}".encode("utf-8")).hexdigest()[:32]
         job = SyncJob(
             id=job_id,
             job_type=job_type,
@@ -171,7 +171,7 @@ class SyncService:
         reason: str = "stale after backend recovery",
     ) -> list[str]:
         threshold_minutes = stale_minutes if stale_minutes is not None else _SYNC_STALE_RUNNING_MINUTES
-        now = datetime.utcnow()
+        now = datetime.now(UTC)
         now_str = now.strftime("%Y-%m-%d %H:%M:%S")
         stale_ids: list[str] = []
 
@@ -231,7 +231,7 @@ class SyncService:
 
     @staticmethod
     def _heartbeat(db: Session, job: SyncJob, *, message: str | None = None) -> None:
-        job.updated_at = datetime.utcnow()
+        job.updated_at = datetime.now(UTC)
         if message is not None:
             job.message = message
         db.add(job)
@@ -304,8 +304,8 @@ class SyncService:
             retry_count = job.max_retries if job.max_retries is not None else max(0, int(SyncService._get_setting(db, "sync_retry_count", "2") or "2"))
 
             job.status = "running"
-            job.started_at = datetime.utcnow()
-            job.updated_at = datetime.utcnow()
+            job.started_at = datetime.now(UTC)
+            job.updated_at = datetime.now(UTC)
             if not resume:
                 job.current_step = "starting"
                 job.message = "Sync started"
@@ -337,7 +337,7 @@ class SyncService:
                         message="Sync cancelled by user",
                     )
                     job.status = "cancelled"
-                    job.finished_at = datetime.utcnow()
+                    job.finished_at = datetime.now(UTC)
                     job.message = "Sync cancelled by user"
                     db.commit()
                     return
@@ -361,7 +361,7 @@ class SyncService:
                 db.add(job)
                 db.commit()
 
-            finished_at = datetime.utcnow()
+            finished_at = datetime.now(UTC)
             job.status = "completed"
             job.finished_at = finished_at
             job.current_step = "done"
@@ -377,7 +377,7 @@ class SyncService:
             job = SyncService.get_job(db, job_id)
             if job:
                 job.status = "failed"
-                job.finished_at = datetime.utcnow()
+                job.finished_at = datetime.now(UTC)
                 job.error = str(exc)
                 job.error_message = str(exc)
                 job.message = "Sync failed"
@@ -438,7 +438,7 @@ class SyncService:
             "failed_count": int(job.failed_count or 0),
             "last_successful_external_id": last_successful_external_id or job.last_successful_external_id,
             "batch_size": int(job.batch_size or 100),
-            "updated_at": datetime.utcnow().isoformat(),
+            "updated_at": datetime.now(UTC).isoformat(),
         }
         job.current_entity_type = entity_type
         job.current_offset = max(0, offset)
@@ -473,7 +473,7 @@ class SyncService:
         existing.tradeable = payload.get("tradeable", existing.tradeable)
         existing.stackable = payload.get("stackable", existing.stackable)
         existing.raw_data = payload
-        existing.updated_at = datetime.utcnow()
+        existing.updated_at = datetime.now(UTC)
         return "created" if created else "updated"
 
     @staticmethod
@@ -508,7 +508,7 @@ class SyncService:
         existing.rewards = payload.get("rewards") or existing.rewards
         existing.requirements = payload.get("requirements") or existing.requirements
         existing.related_creatures = payload.get("related_creatures") or existing.related_creatures
-        existing.last_synced_at = datetime.utcnow()
+        existing.last_synced_at = datetime.now(UTC)
         existing.raw_data = payload
         return "created" if created else "updated"
 
@@ -546,7 +546,7 @@ class SyncService:
         zone.map_bounds = payload.get("map_bounds") or zone.map_bounds
         zone.map_image_url = payload.get("map_image_url") or zone.map_image_url
         zone.raw_data = payload
-        zone.last_synced_at = datetime.utcnow()
+        zone.last_synced_at = datetime.now(UTC)
         return "created" if created else "updated"
 
     @staticmethod
@@ -1066,7 +1066,7 @@ class SyncService:
                     "source_provider": "tibiamaps",
                     "tibiamaps_marker_count": len(markers),
                 }
-                zone.last_synced_at = datetime.utcnow()
+                zone.last_synced_at = datetime.now(UTC)
                 if before_provider is None:
                     created += 1
                 else:
@@ -1179,7 +1179,7 @@ class SyncService:
             resource.checksum = checksum
             resource.etag_hash = checksum
             resource.status = "ready"
-            resource.last_fetched_at = datetime.utcnow()
+            resource.last_fetched_at = datetime.now(UTC)
             resource.fetch_attempts = (resource.fetch_attempts or 0) + 1
             resource.error = None
             resource.error_message = None
@@ -1240,7 +1240,7 @@ class DatabaseSyncService:
         creatures = db.query(Creature).all()
         zones = db.query(HuntZone).all()
         return {
-            "timestamp": datetime.utcnow().isoformat(),
+            "timestamp": datetime.now(UTC).isoformat(),
             "creatures": [{"id": c.id, "name": c.name} for c in creatures],
             "zones": [{"id": z.id, "name": z.name} for z in zones],
         }
@@ -1251,9 +1251,9 @@ class DatabaseSyncService:
         zones_count = db.query(HuntZone).count()
         return {
             "backup_created": True,
-            "backup_timestamp": datetime.utcnow().isoformat(),
+            "backup_timestamp": datetime.now(UTC).isoformat(),
             "tracked_changes": {
-                "timestamp": datetime.utcnow().isoformat(),
+                "timestamp": datetime.now(UTC).isoformat(),
                 "total_changes": 0,
                 "pending": 0,
                 "changes": [],

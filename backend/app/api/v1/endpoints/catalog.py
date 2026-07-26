@@ -5,7 +5,7 @@ from fastapi import APIRouter, Depends, HTTPException, status
 from sqlalchemy.orm import Session
 from sqlalchemy import desc, or_
 from typing import List, Optional
-from datetime import datetime
+from datetime import UTC, datetime
 
 from app.db.database import get_db
 from app.models.catalog import Catalog
@@ -160,7 +160,7 @@ def update_catalog_item(
         if hasattr(item, key):
             setattr(item, key, value)
     
-    item.updated_at = datetime.utcnow()
+    item.updated_at = datetime.now(UTC)
     db.commit()
     db.refresh(item)
     

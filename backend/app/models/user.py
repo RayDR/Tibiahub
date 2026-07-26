@@ -1,5 +1,5 @@
 """User model for authentication and admin privileges."""
-from sqlalchemy import Boolean, Column, DateTime, Integer, String
+from sqlalchemy import Boolean, Column, DateTime, Integer, String, false, true
 from sqlalchemy.orm import relationship
 from sqlalchemy.sql import func
 from app.db.database import Base
@@ -18,11 +18,11 @@ class User(Base):
     discord_id = Column(String(100), nullable=True)
     discord_username = Column(String(100), nullable=True)
     join_date = Column(DateTime(timezone=True), nullable=True)
-    is_active = Column(Boolean, default=True)
-    is_superuser = Column(Boolean, default=False)
+    is_active = Column(Boolean, default=True, server_default=true(), nullable=False)
+    is_superuser = Column(Boolean, default=False, server_default=false(), nullable=False)
     # Independent platform capabilities; users may hold any combination.
-    is_moderator = Column(Boolean, default=False, nullable=False)
-    is_writer = Column(Boolean, default=False, nullable=False)
+    is_moderator = Column(Boolean, default=False, server_default=false(), nullable=False)
+    is_writer = Column(Boolean, default=False, server_default=false(), nullable=False)
     created_at = Column(DateTime(timezone=True), server_default=func.now())
     
     # Player info from Tibia API

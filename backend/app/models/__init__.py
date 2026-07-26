@@ -10,6 +10,12 @@ from app.models.user_character import UserCharacter
 from app.models.quest import Quest
 from app.models.settings import SystemSettings
 from app.models.user_activity import UserActivity
+from app.models.catalog import Catalog
+from app.models.hunt import HuntCatalog
+from app.models.external_data import (
+    APISync, CachedResource, HuntingPlace, Item, SyncJob, SyncJobError,
+    QuestMission, TibiaWikiLocation, TibiaWikiNpc, TibiaWikiQuest,
+)
 from app.models.guild import GuildEvent, EventAttendance, Announcement, Recruitment
 from app.models.events import Event, EventParticipant, PublicEventParticipant
 from app.models.entity_metadata import EntityMetadata
@@ -26,6 +32,18 @@ from app.models.leadership import (
     GuildLeadershipAssignment, GuildLeadershipApplicationHistory,
     GuildLeadershipApplicationMessage, GuildLeadershipInterview, GuildLeadershipVote,
 )
+# Alembic and test metadata registration only; Knowledge Platform behavior stays
+# inside app.knowledge.
+from app.knowledge.models import (
+    KnowledgeDocument, KnowledgeDomainEvent, KnowledgeEntity, KnowledgeEntityAlias,
+    KnowledgeEntityType, KnowledgeProvider, KnowledgeSearchMetadata,
+    KnowledgeJob, KnowledgeJobAttempt, KnowledgeProviderCursor, KnowledgeWorkerHeartbeat,
+    KnowledgeExternalMapping,
+    KnowledgeCreatureItemDrop,
+    KnowledgeAccess, KnowledgeQuestRelation,
+    KnowledgeRelationship, KnowledgeRelationshipType,
+    SpatialEntityLocationLink, SpatialMapPoint, SpatialMapRegion, SpatialRoute, SpatialRouteStep,
+)
 
 __all__ = [
     "Creature",
@@ -38,6 +56,18 @@ __all__ = [
     "Quest",
     "SystemSettings",
     "UserActivity",
+    "Catalog",
+    "HuntCatalog",
+    "Item",
+    "HuntingPlace",
+    "TibiaWikiQuest",
+    "TibiaWikiNpc",
+    "TibiaWikiLocation",
+    "QuestMission",
+    "APISync",
+    "SyncJob",
+    "SyncJobError",
+    "CachedResource",
     "EntityMetadata",
     "GuildEvent",
     "EventAttendance",
@@ -69,5 +99,14 @@ __all__ = [
     "GuildLeadershipAssignment", "GuildLeadershipApplicationHistory",
     "GuildLeadershipApplicationMessage", "GuildLeadershipInterview", "GuildLeadershipVote",
     "creature_weaknesses",
-    "creature_resistances"
+    "creature_resistances",
+    "KnowledgeProvider", "KnowledgeEntityType", "KnowledgeEntity",
+    "KnowledgeEntityAlias", "KnowledgeDocument", "KnowledgeSearchMetadata",
+    "KnowledgeDomainEvent",
+    "KnowledgeJob", "KnowledgeJobAttempt", "KnowledgeProviderCursor", "KnowledgeWorkerHeartbeat",
+    "KnowledgeExternalMapping",
+    "KnowledgeCreatureItemDrop",
+    "KnowledgeAccess", "KnowledgeQuestRelation",
+    "KnowledgeRelationship", "KnowledgeRelationshipType",
+    "SpatialMapPoint", "SpatialMapRegion", "SpatialRoute", "SpatialRouteStep", "SpatialEntityLocationLink",
 ]

@@ -1,0 +1,8 @@
+{
+  "parse": {
+    "title": "Port Hope",
+    "pageid": 900,
+    "wikitext": {"*": "{{Infobox Location\n| name = Port Hope\n| type = City\n| region = Tiquanda\n| parent = Tiquanda\n| description = A port city surrounded by jungle.\n| premium = yes\n| minlevel = 1\n| maxlevel = 200\n| npcs = [[Angus]], [[Lorek]]\n| creatures = [[Crocodile]], [[Tarantula]]\n| quests = [[Explorer Society Quest]]\n| sublocations = [[Banuta]], [[Chor]]\n| access = Travel by ship or walk through the jungle.\n}}"}
+  },
+  "future_envelope_field": "retained"
+}

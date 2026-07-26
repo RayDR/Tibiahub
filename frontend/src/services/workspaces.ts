@@ -14,7 +14,17 @@ export interface AdminGuildWorkspace {
   audit_notice: boolean;
 }
 
+export interface WorkspaceAuditEntry {
+  id: number;
+  action: string;
+  target_type?: string;
+  target_id?: string;
+  created_at: string;
+  safe_metadata?: Record<string, unknown>;
+}
+
 export const workspaceApi = {
   async guilds(): Promise<GuildDirectoryEntry[]> { return (await api.get('/admin/guilds')).data; },
   async adminGuild(key: string): Promise<AdminGuildWorkspace> { return (await api.get(`/admin/guilds/${encodeURIComponent(key)}`)).data; },
+  async guildAudits(key: string): Promise<WorkspaceAuditEntry[]> { return (await api.get(`/admin/guilds/${encodeURIComponent(key)}/audits`)).data; },
 };

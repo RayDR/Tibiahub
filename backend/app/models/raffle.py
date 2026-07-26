@@ -4,15 +4,27 @@ Guild raffle models.
 This system is account-based through local users, while keeping the winning
 character that represents each account inside the guild raffle.
 """
-from sqlalchemy import Boolean, Column, DateTime, Float, ForeignKey, Integer, JSON, Numeric, String, Text, UniqueConstraint
+from sqlalchemy import Boolean, Column, DateTime, Float, ForeignKey, Index, Integer, Numeric, String, Text, UniqueConstraint, text
 from sqlalchemy.orm import relationship
 from sqlalchemy.sql import func
 
 from app.db.database import Base
+from app.db.types import JSONBType
 
 
 class Raffle(Base):
     __tablename__ = "raffles"
+    __table_args__ = (
+        Index(
+            "ix_raffles_scheduler_due",
+            "scheduled_run_at",
+            "next_retry_at",
+            postgresql_where=text(
+                "run_mode = 'automatic' AND is_deleted IS FALSE "
+                "AND execution_state IN ('pending','failed','claimed','running')"
+            ),
+        ),
+    )
 
     id = Column(Integer, primary_key=True, index=True)
     title = Column(String(200), nullable=False)
@@ -92,7 +104,7 @@ class RaffleParticipant(Base):
     eligibility_override = Column(Boolean, nullable=True)
     eligibility_override_reason = Column(Text, nullable=True)
     source = Column(String(50), nullable=False, default="guild_sync")
-    source_data = Column(JSON, nullable=True)
+    source_data = Column(JSONBType, nullable=True)
     created_at = Column(DateTime(timezone=True), server_default=func.now())
     updated_at = Column(DateTime(timezone=True), server_default=func.now(), onupdate=func.now())
     deleted_at = Column(DateTime(timezone=True), nullable=True)
@@ -133,7 +145,7 @@ class RaffleWinner(Base):
     run_number = Column(Integer, nullable=False, default=1)
     is_rerun = Column(Boolean, nullable=False, default=False)
     rerun_reason = Column(Text, nullable=True)
-    participant_snapshot = Column(JSON, nullable=True)
+    participant_snapshot = Column(JSONBType, nullable=True)
     created_at = Column(DateTime(timezone=True), server_default=func.now())
 
     raffle = relationship("Raffle", back_populates="winners")
@@ -195,7 +207,7 @@ class RaffleEligibilityEntry(Base):
     is_eligible = Column(Boolean, nullable=False)
     exclusion_code = Column(String(50), nullable=True)
     exclusion_summary = Column(String(255), nullable=True)
-    source_data = Column(JSON, nullable=True)
+    source_data = Column(JSONBType, nullable=True)
     created_at = Column(DateTime(timezone=True), server_default=func.now(), nullable=False)
 
     snapshot = relationship("RaffleEligibilitySnapshot", back_populates="entries")
@@ -297,7 +309,7 @@ class RaffleRerunAudit(Base):
     source_run_id = Column(Integer, ForeignKey("raffle_runs.id"), nullable=False)
     new_run_id = Column(Integer, ForeignKey("raffle_runs.id"), nullable=False)
     actor_id = Column(Integer, ForeignKey("users.id"), nullable=False)
-    positions = Column(JSON, nullable=False)
+    positions = Column(JSONBType, nullable=False)
     reason = Column(Text, nullable=False)
     override_delivered = Column(Boolean, nullable=False, default=False)
     override_reason = Column(Text, nullable=True)
@@ -317,7 +329,7 @@ class RaffleTestAudit(Base):
     actor_id = Column(Integer, ForeignKey("users.id"), nullable=False)
     action = Column(String(80), nullable=False, index=True)
     reason = Column(Text, nullable=True)
-    details = Column(JSON, nullable=False, default=dict)
+    details = Column(JSONBType, nullable=False, default=dict)
     created_at = Column(DateTime(timezone=True), server_default=func.now(), nullable=False)
 
     raffle = relationship("Raffle")
@@ -369,7 +381,7 @@ class InternalNotification(Base):
     notification_type = Column(String(80), nullable=False, index=True)
     title_key = Column(String(255), nullable=False)
     message_key = Column(String(255), nullable=False)
-    interpolation = Column(JSON, nullable=False, default=dict)
+    interpolation = Column(JSONBType, nullable=False, default=dict)
     deep_link = Column(String(500), nullable=True)
     deduplication_key = Column(String(255), nullable=False)
     is_read = Column(Boolean, nullable=False, default=False, index=True)

@@ -1,0 +1,240 @@
+/*
+ * TibiaHub theme layer
+ *
+ * This is the only stylesheet allowed to define theme palettes. Every theme
+ * provides the complete RGB channel contract consumed by design-system.css.
+ */
+:root,
+[data-theme="default"] {
+  color-scheme: dark;
+  --ds-surface-base: 2 6 23;
+  --ds-surface: 15 23 42;
+  --ds-surface-raised: 30 41 59;
+  --ds-surface-hover: 51 65 85;
+  --ds-surface-active: 71 85 105;
+  --ds-surface-overlay: 15 23 42;
+  --ds-surface-inverse: 248 250 252;
+  --ds-primary: 96 165 250;
+  --ds-primary-hover: 147 197 253;
+  --ds-primary-active: 59 130 246;
+  --ds-success: 52 211 153;
+  --ds-warning: 251 191 36;
+  --ds-danger: 248 113 113;
+  --ds-info: 56 189 248;
+  --ds-accent: 192 132 252;
+  --ds-text-primary: 248 250 252;
+  --ds-text-secondary: 203 213 225;
+  --ds-text-muted: 148 163 184;
+  --ds-text-inverse: 2 6 23;
+  --ds-text-on-primary: 2 6 23;
+  --ds-border: 71 85 105;
+  --ds-border-strong: 100 116 139;
+  --ds-focus: 125 211 252;
+  --ds-selected: 96 165 250;
+  --ds-disabled: 71 85 105;
+  --ds-shadow: 0 0 0;
+  --ds-scrollbar-track: 2 6 23;
+  --ds-scrollbar-thumb: 100 116 139;
+  --ds-scrollbar-thumb-hover: 148 163 184;
+  --ds-chart-1: 96 165 250;
+  --ds-chart-2: 192 132 252;
+  --ds-chart-3: 56 189 248;
+  --ds-chart-4: 52 211 153;
+  --ds-chart-5: 251 191 36;
+  --ds-chart-6: 248 113 113;
+}
+
+[data-theme="medieval"] {
+  color-scheme: dark;
+  --ds-surface-base: 12 17 28;
+  --ds-surface: 19 26 40;
+  --ds-surface-raised: 29 38 56;
+  --ds-surface-hover: 40 50 70;
+  --ds-surface-active: 57 71 95;
+  --ds-surface-overlay: 19 26 40;
+  --ds-surface-inverse: 245 230 211;
+  --ds-primary: 232 200 91;
+  --ds-primary-hover: 245 216 124;
+  --ds-primary-active: 212 175 55;
+  --ds-success: 110 231 183;
+  --ds-warning: 251 191 36;
+  --ds-danger: 248 113 113;
+  --ds-info: 125 211 252;
+  --ds-accent: 216 180 254;
+  --ds-text-primary: 245 230 211;
+  --ds-text-secondary: 222 207 188;
+  --ds-text-muted: 180 165 144;
+  --ds-text-inverse: 12 17 28;
+  --ds-text-on-primary: 12 17 28;
+  --ds-border: 111 96 67;
+  --ds-border-strong: 151 126 72;
+  --ds-focus: 253 224 71;
+  --ds-selected: 232 200 91;
+  --ds-disabled: 57 71 95;
+  --ds-shadow: 3 6 13;
+  --ds-scrollbar-track: 12 17 28;
+  --ds-scrollbar-thumb: 151 126 72;
+  --ds-scrollbar-thumb-hover: 232 200 91;
+  --ds-chart-1: 232 200 91;
+  --ds-chart-2: 216 180 254;
+  --ds-chart-3: 125 211 252;
+  --ds-chart-4: 110 231 183;
+  --ds-chart-5: 251 191 36;
+  --ds-chart-6: 248 113 113;
+}
+
+[data-theme="tibia-stone"] {
+  color-scheme: dark;
+  --ds-surface-base: 11 12 16;
+  --ds-surface: 26 26 26;
+  --ds-surface-raised: 35 35 35;
+  --ds-surface-hover: 48 48 48;
+  --ds-surface-active: 64 62 58;
+  --ds-surface-overlay: 26 26 26;
+  --ds-surface-inverse: 232 225 212;
+  --ds-primary: 224 190 113;
+  --ds-primary-hover: 239 211 149;
+  --ds-primary-active: 202 162 74;
+  --ds-success: 134 239 172;
+  --ds-warning: 250 204 21;
+  --ds-danger: 252 129 121;
+  --ds-info: 125 211 252;
+  --ds-accent: 216 180 254;
+  --ds-text-primary: 232 225 212;
+  --ds-text-secondary: 202 193 178;
+  --ds-text-muted: 170 161 148;
+  --ds-text-inverse: 11 12 16;
+  --ds-text-on-primary: 11 12 16;
+  --ds-border: 90 85 76;
+  --ds-border-strong: 132 123 108;
+  --ds-focus: 253 224 71;
+  --ds-selected: 224 190 113;
+  --ds-disabled: 64 62 58;
+  --ds-shadow: 0 0 0;
+  --ds-scrollbar-track: 11 12 16;
+  --ds-scrollbar-thumb: 132 123 108;
+  --ds-scrollbar-thumb-hover: 224 190 113;
+  --ds-chart-1: 224 190 113;
+  --ds-chart-2: 216 180 254;
+  --ds-chart-3: 125 211 252;
+  --ds-chart-4: 134 239 172;
+  --ds-chart-5: 250 204 21;
+  --ds-chart-6: 252 129 121;
+}
+
+[data-theme="midnight-arcana"] {
+  color-scheme: dark;
+  --ds-surface-base: 5 7 20;
+  --ds-surface: 12 15 35;
+  --ds-surface-raised: 23 25 55;
+  --ds-surface-hover: 39 42 78;
+  --ds-surface-active: 55 58 98;
+  --ds-surface-overlay: 10 12 30;
+  --ds-surface-inverse: 242 238 255;
+  --ds-primary: 167 139 250;
+  --ds-primary-hover: 196 181 253;
+  --ds-primary-active: 139 92 246;
+  --ds-success: 94 234 212;
+  --ds-warning: 253 224 71;
+  --ds-danger: 251 113 133;
+  --ds-info: 103 232 249;
+  --ds-accent: 244 114 182;
+  --ds-text-primary: 242 238 255;
+  --ds-text-secondary: 211 204 239;
+  --ds-text-muted: 164 156 201;
+  --ds-text-inverse: 5 7 20;
+  --ds-text-on-primary: 5 7 20;
+  --ds-border: 75 72 120;
+  --ds-border-strong: 112 103 160;
+  --ds-focus: 103 232 249;
+  --ds-selected: 167 139 250;
+  --ds-disabled: 55 58 98;
+  --ds-shadow: 1 2 12;
+  --ds-scrollbar-track: 5 7 20;
+  --ds-scrollbar-thumb: 112 103 160;
+  --ds-scrollbar-thumb-hover: 167 139 250;
+  --ds-chart-1: 167 139 250;
+  --ds-chart-2: 244 114 182;
+  --ds-chart-3: 103 232 249;
+  --ds-chart-4: 94 234 212;
+  --ds-chart-5: 253 224 71;
+  --ds-chart-6: 251 113 133;
+}
+
+[data-theme="blood-moon"] {
+  color-scheme: dark;
+  --ds-surface-base: 15 5 10;
+  --ds-surface: 34 10 18;
+  --ds-surface-raised: 54 17 28;
+  --ds-surface-hover: 77 25 39;
+  --ds-surface-active: 99 35 50;
+  --ds-surface-overlay: 30 8 16;
+  --ds-surface-inverse: 255 241 242;
+  --ds-primary: 248 113 113;
+  --ds-primary-hover: 252 165 165;
+  --ds-primary-active: 239 68 68;
+  --ds-success: 74 222 128;
+  --ds-warning: 251 191 36;
+  --ds-danger: 251 113 133;
+  --ds-info: 103 232 249;
+  --ds-accent: 251 146 60;
+  --ds-text-primary: 255 241 242;
+  --ds-text-secondary: 254 205 211;
+  --ds-text-muted: 203 150 160;
+  --ds-text-inverse: 15 5 10;
+  --ds-text-on-primary: 15 5 10;
+  --ds-border: 118 47 63;
+  --ds-border-strong: 159 69 85;
+  --ds-focus: 253 224 71;
+  --ds-selected: 248 113 113;
+  --ds-disabled: 99 35 50;
+  --ds-shadow: 8 1 4;
+  --ds-scrollbar-track: 15 5 10;
+  --ds-scrollbar-thumb: 159 69 85;
+  --ds-scrollbar-thumb-hover: 248 113 113;
+  --ds-chart-1: 248 113 113;
+  --ds-chart-2: 251 146 60;
+  --ds-chart-3: 103 232 249;
+  --ds-chart-4: 74 222 128;
+  --ds-chart-5: 251 191 36;
+  --ds-chart-6: 251 113 133;
+}
+
+[data-theme="high-contrast"] {
+  color-scheme: dark;
+  --ds-surface-base: 0 0 0;
+  --ds-surface: 9 9 9;
+  --ds-surface-raised: 20 20 20;
+  --ds-surface-hover: 36 36 36;
+  --ds-surface-active: 54 54 54;
+  --ds-surface-overlay: 0 0 0;
+  --ds-surface-inverse: 255 255 255;
+  --ds-primary: 255 225 0;
+  --ds-primary-hover: 255 240 112;
+  --ds-primary-active: 255 196 0;
+  --ds-success: 74 255 130;
+  --ds-warning: 255 211 77;
+  --ds-danger: 255 107 107;
+  --ds-info: 88 225 255;
+  --ds-accent: 255 128 255;
+  --ds-text-primary: 255 255 255;
+  --ds-text-secondary: 245 245 245;
+  --ds-text-muted: 212 212 212;
+  --ds-text-inverse: 0 0 0;
+  --ds-text-on-primary: 0 0 0;
+  --ds-border: 212 212 212;
+  --ds-border-strong: 255 255 255;
+  --ds-focus: 88 225 255;
+  --ds-selected: 255 225 0;
+  --ds-disabled: 84 84 84;
+  --ds-shadow: 0 0 0;
+  --ds-scrollbar-track: 0 0 0;
+  --ds-scrollbar-thumb: 212 212 212;
+  --ds-scrollbar-thumb-hover: 255 225 0;
+  --ds-chart-1: 255 225 0;
+  --ds-chart-2: 255 128 255;
+  --ds-chart-3: 88 225 255;
+  --ds-chart-4: 74 255 130;
+  --ds-chart-5: 255 211 77;
+  --ds-chart-6: 255 107 107;
+}
