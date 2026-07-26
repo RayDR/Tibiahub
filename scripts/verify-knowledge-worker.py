@@ -13,6 +13,7 @@ sys.path.insert(0, str(ROOT / "backend"))
 
 from app.core.config import settings  # noqa: E402
 from app.db.database import SessionLocal, verify_connection_and_schema  # noqa: E402
+import app.models  # noqa: E402,F401  # Register every relationship target before mapper configuration.
 from app.knowledge.models import KnowledgeJob, KnowledgeProvider, KnowledgeWorkerHeartbeat  # noqa: E402
 
 
