@@ -26,6 +26,7 @@ import { cyclopediaSections, modeToTab, tabToMode } from '../config/cyclopediaSe
 import { iconByCategory } from '../components/icons/CategoryIcons';
 import { useAuth } from '../context/AuthContext';
 import { activityApi } from '../services/activity';
+import CyclopediaDiscovery from '../components/CyclopediaDiscovery';
 
 type SearchMode = 'creatures' | 'bosses' | 'items' | 'quests' | 'zones';
 type CreatureSort = 'name' | 'experience' | 'hitpoints' | 'difficulty';
@@ -111,7 +112,7 @@ const CreaturesPage: React.FC = () => {
   const [hasMore, setHasMore] = useState(false);
   const [mapPreviewFailed, setMapPreviewFailed] = useState<Record<number, boolean>>({});
   const [usedHighlightsSource, setUsedHighlightsSource] = useState(false);
-  const [showCategories, setShowCategories] = useState(true);
+  const [showCategories, setShowCategories] = useState(false);
   const [categoryImages, setCategoryImages] = useState<Record<string, string>>({});
   const [recentPreviewCards, setRecentPreviewCards] = useState<CyclopediaPreviewCard[]>([]);
   const [topPreviewCards, setTopPreviewCards] = useState<CyclopediaPreviewCard[]>([]);
@@ -694,6 +695,8 @@ const CreaturesPage: React.FC = () => {
             icon={faBook}
           />
         </div>
+
+        {!searchTerm.trim() && !creatureCategory && <CyclopediaDiscovery />}
 
         <div className="relative z-20 mx-auto max-w-6xl">
           <AppCard className="flex flex-col gap-2 p-2 shadow-2xl">

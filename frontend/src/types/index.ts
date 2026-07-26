@@ -66,6 +66,7 @@ export interface CreatureSimple {
 
 export interface Creature {
   id: number;
+  knowledge_entity_id?: string | null;
   slug?: string;
   name: string;
   article?: string;
@@ -368,6 +369,7 @@ export interface SpatialRouteStep {
 export interface SpatialRouteMetadata {
   id: string; name: string; slug: string; step_count: number;
   start_location?: string; end_location?: string; confidence: string; verification_state: string;
+  map_images?: string[];
   steps?: SpatialRouteStep[];
 }
 

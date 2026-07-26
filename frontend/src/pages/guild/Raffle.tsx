@@ -1,5 +1,5 @@
-import { FormEvent, useEffect, useState } from 'react';
-import { FontAwesomeIcon } from '@fortawesome/react-fontawesome';
+import { FormEvent, useEffect, useState } from "react";
+import { FontAwesomeIcon } from "@fortawesome/react-fontawesome";
 import {
   faDice,
   faFlask,
@@ -17,33 +17,40 @@ import {
   faUserMinus,
   faUserPlus,
   faUsers,
-} from '@fortawesome/free-solid-svg-icons';
-import { useTranslation } from 'react-i18next';
+} from "@fortawesome/free-solid-svg-icons";
+import { useTranslation } from "react-i18next";
 
-import { useAuth } from '../../context/AuthContext';
-import { useToast } from '../../context/ToastContext';
-import { guildApi } from '../../services/guild';
-import { Raffle, RaffleAccessMode, RaffleSimulation, RaffleStatus, raffleApi } from '../../services/raffle';
+import { useAuth } from "../../context/AuthContext";
+import { useToast } from "../../context/ToastContext";
+import { useConfirmation } from "../../context/ConfirmationContext";
+import { guildApi } from "../../services/guild";
+import {
+  Raffle,
+  RaffleAccessMode,
+  RaffleSimulation,
+  RaffleStatus,
+  raffleApi,
+} from "../../services/raffle";
 
 // ---------------------------------------------------------------------------
 // Helpers
 // ---------------------------------------------------------------------------
 
-type Tab = 'overview' | 'participants' | 'prizes' | 'winners' | 'admin';
+type Tab = "overview" | "participants" | "prizes" | "winners" | "admin";
 
 const STATUS_COLORS: Record<string, string> = {
-  draft: 'bg-surface-hover/15 text-content-secondary border-line/30',
-  open: 'bg-success/15 text-success border-success/30',
-  closed: 'bg-primary/15 text-primary border-primary/30',
-  completed: 'bg-primary/15 text-primary border-primary/30',
-  cancelled: 'bg-danger/15 text-danger border-danger/30',
-  deleted: 'bg-danger/15 text-danger border-danger/30',
+  draft: "bg-surface-hover/15 text-content-secondary border-line/30",
+  open: "bg-success/15 text-success border-success/30",
+  closed: "bg-primary/15 text-primary border-primary/30",
+  completed: "bg-primary/15 text-primary border-primary/30",
+  cancelled: "bg-danger/15 text-danger border-danger/30",
+  deleted: "bg-danger/15 text-danger border-danger/30",
 };
 
 const ACCESS_MODE_COLORS: Record<string, string> = {
-  guild_only: 'bg-danger/15 text-danger border-danger/30',
-  world_only: 'bg-info/15 text-info border-info/30',
-  public: 'bg-accent/15 text-accent border-accent/30',
+  guild_only: "bg-danger/15 text-danger border-danger/30",
+  world_only: "bg-info/15 text-info border-info/30",
+  public: "bg-accent/15 text-accent border-accent/30",
 };
 
 interface TooltipButtonProps {
@@ -53,17 +60,27 @@ interface TooltipButtonProps {
   danger?: boolean;
   primary?: boolean;
   children: React.ReactNode;
-  type?: 'button' | 'submit';
-  'aria-label'?: string;
+  type?: "button" | "submit";
+  "aria-label"?: string;
 }
 
-function IconBtn({ onClick, tooltip, disabled, danger, primary, children, type = 'button', 'aria-label': ariaLabel }: TooltipButtonProps) {
-  const base = 'group relative inline-flex items-center justify-center rounded-xl border p-2 transition disabled:opacity-40';
+function IconBtn({
+  onClick,
+  tooltip,
+  disabled,
+  danger,
+  primary,
+  children,
+  type = "button",
+  "aria-label": ariaLabel,
+}: TooltipButtonProps) {
+  const base =
+    "group relative inline-flex items-center justify-center rounded-xl border p-2 transition disabled:opacity-40";
   const variant = danger
-    ? 'border-danger/40 text-danger hover:bg-danger/10'
+    ? "border-danger/40 text-danger hover:bg-danger/10"
     : primary
-    ? 'border-primary bg-primary text-content-inverse hover:bg-primary-hover'
-    : 'border-line text-content-secondary hover:border-line hover:text-content-primary';
+      ? "border-primary bg-primary text-content-inverse hover:bg-primary-hover"
+      : "border-line text-content-secondary hover:border-line hover:text-content-primary";
 
   return (
     <button
@@ -85,7 +102,9 @@ function StatusBadge({ status }: { status: string }) {
   const { t } = useTranslation();
   const color = STATUS_COLORS[status] ?? STATUS_COLORS.draft;
   return (
-    <span className={`inline-flex rounded-full border px-2 py-0.5 text-xs font-medium ${color}`}>
+    <span
+      className={`inline-flex rounded-full border px-2 py-0.5 text-xs font-medium ${color}`}
+    >
       {t(`raffle.statusBadge.${status}`, status)}
     </span>
   );
@@ -95,13 +114,15 @@ function AccessModeBadge({ accessMode }: { accessMode: string }) {
   const { t } = useTranslation();
   const color = ACCESS_MODE_COLORS[accessMode] ?? ACCESS_MODE_COLORS.guild_only;
   return (
-    <span className={`inline-flex rounded-full border px-2 py-0.5 text-xs font-medium ${color}`}>
+    <span
+      className={`inline-flex rounded-full border px-2 py-0.5 text-xs font-medium ${color}`}
+    >
       {t(`raffle.accessModes.${accessMode}`, accessMode)}
     </span>
   );
 }
 
-const emptyPrize = { name: '', reward: '' };
+const emptyPrize = { name: "", reward: "" };
 
 // ---------------------------------------------------------------------------
 // Main component
@@ -110,6 +131,7 @@ const emptyPrize = { name: '', reward: '' };
 export default function RafflePage() {
   const { user } = useAuth();
   const toast = useToast();
+  const confirmation = useConfirmation();
   const { t } = useTranslation();
 
   const [raffles, setRaffles] = useState<Raffle[]>([]);
@@ -117,7 +139,7 @@ export default function RafflePage() {
   const [loading, setLoading] = useState(true);
   const [busyAction, setBusyAction] = useState<string | null>(null);
   const [rafflesEnabled, setRafflesEnabled] = useState(true);
-  const [activeTab, setActiveTab] = useState<Tab>('overview');
+  const [activeTab, setActiveTab] = useState<Tab>("overview");
   const [simulation, setSimulation] = useState<RaffleSimulation | null>(null);
 
   const [createForm, setCreateForm] = useState<{
@@ -128,39 +150,47 @@ export default function RafflePage() {
     show_participants: boolean;
     prizes: Array<{ name: string; reward: string }>;
   }>({
-    title: '',
-    description: '',
-    guild_name: '',
-    access_mode: 'guild_only' as const,
+    title: "",
+    description: "",
+    guild_name: "",
+    access_mode: "guild_only" as const,
     show_participants: true,
     prizes: [
-      { name: '', reward: '' },
-      { name: '', reward: '' },
-      { name: '', reward: '' },
+      { name: "", reward: "" },
+      { name: "", reward: "" },
+      { name: "", reward: "" },
     ],
   });
   const [newPrize, setNewPrize] = useState(emptyPrize);
-  const [rerunReason, setRerunReason] = useState('');
-  const [manualCharacter, setManualCharacter] = useState('');
+  const [rerunReason, setRerunReason] = useState("");
+  const [manualCharacter, setManualCharacter] = useState("");
   const [editMode, setEditMode] = useState(false);
 
-  const isLeader = ['leader', 'vice leader', 'guild leader', 'alpha warbringer', 'bloodhowl marshal'].includes(
-    (user?.guild_rank || '').toLowerCase(),
-  );
+  const isLeader = [
+    "leader",
+    "vice leader",
+    "guild leader",
+    "alpha warbringer",
+    "bloodhowl marshal",
+  ].includes((user?.guild_rank || "").toLowerCase());
   const canManage = Boolean(user?.is_superuser || isLeader);
 
-  useEffect(() => { void loadRaffles(); }, []);
+  useEffect(() => {
+    void loadRaffles();
+  }, []);
   useEffect(() => {
     void (async () => {
       try {
         const flags = await guildApi.getFeatureFlags();
         setRafflesEnabled(flags.guild_raffles_enabled);
-      } catch { setRafflesEnabled(true); }
+      } catch {
+        setRafflesEnabled(true);
+      }
     })();
   }, []);
   useEffect(() => {
     if (!createForm.guild_name && user?.guild_name) {
-      setCreateForm((c) => ({ ...c, guild_name: user.guild_name || '' }));
+      setCreateForm((c) => ({ ...c, guild_name: user.guild_name || "" }));
     }
   }, [user?.guild_name, createForm.guild_name]);
 
@@ -177,7 +207,7 @@ export default function RafflePage() {
         setSelectedRaffleId(null);
       }
     } catch (err: any) {
-      toast.error(err?.message || 'Failed to load raffles');
+      toast.error(err?.message || "Failed to load raffles");
     } finally {
       setLoading(false);
     }
@@ -191,7 +221,7 @@ export default function RafflePage() {
 
   async function handleCreateRaffle(event: FormEvent) {
     event.preventDefault();
-    setBusyAction('create');
+    setBusyAction("create");
     try {
       const raffle = await raffleApi.create({
         title: createForm.title,
@@ -201,18 +231,24 @@ export default function RafflePage() {
         show_participants: createForm.show_participants,
         prizes: createForm.prizes.filter((p) => p.name && p.reward),
       });
-      toast.success(t('raffle.create.success'));
+      toast.success(t("raffle.create.success"));
       setCreateForm({
-        title: '', description: '', guild_name: '', access_mode: 'guild_only', show_participants: true,
+        title: "",
+        description: "",
+        guild_name: "",
+        access_mode: "guild_only",
+        show_participants: true,
         prizes: [
-          { name: '', reward: '' },
-          { name: '', reward: '' },
-          { name: '', reward: '' },
+          { name: "", reward: "" },
+          { name: "", reward: "" },
+          { name: "", reward: "" },
         ],
       });
       await loadRaffles(raffle.id);
     } catch (err: any) {
-      toast.error(err?.response?.data?.detail || err?.message || t('raffle.create.error'));
+      toast.error(
+        err?.response?.data?.detail || err?.message || t("raffle.create.error"),
+      );
     } finally {
       setBusyAction(null);
     }
@@ -220,13 +256,23 @@ export default function RafflePage() {
 
   async function handleSyncParticipants() {
     if (!selectedRaffle) return;
-    setBusyAction('sync');
+    setBusyAction("sync");
     try {
       const updated = await raffleApi.syncParticipants(selectedRaffle.id);
-      setRaffles((curr) => curr.map((r) => (r.id === updated.id ? updated : r)));
-      toast.success(t('raffle.participants.syncSuccess', { count: updated.participants.length }));
+      setRaffles((curr) =>
+        curr.map((r) => (r.id === updated.id ? updated : r)),
+      );
+      toast.success(
+        t("raffle.participants.syncSuccess", {
+          count: updated.participants.length,
+        }),
+      );
     } catch (err: any) {
-      toast.error(err?.response?.data?.detail || err?.message || t('raffle.participants.syncError'));
+      toast.error(
+        err?.response?.data?.detail ||
+          err?.message ||
+          t("raffle.participants.syncError"),
+      );
     } finally {
       setBusyAction(null);
     }
@@ -235,14 +281,18 @@ export default function RafflePage() {
   async function handleAddPrize(event: FormEvent) {
     event.preventDefault();
     if (!selectedRaffle) return;
-    setBusyAction('prize');
+    setBusyAction("prize");
     try {
       const updated = await raffleApi.addPrize(selectedRaffle.id, newPrize);
       setNewPrize(emptyPrize);
-      setRaffles((curr) => curr.map((r) => (r.id === updated.id ? updated : r)));
-      toast.success(t('raffle.prizes.success'));
+      setRaffles((curr) =>
+        curr.map((r) => (r.id === updated.id ? updated : r)),
+      );
+      toast.success(t("raffle.prizes.success"));
     } catch (err: any) {
-      toast.error(err?.response?.data?.detail || err?.message || t('raffle.prizes.error'));
+      toast.error(
+        err?.response?.data?.detail || err?.message || t("raffle.prizes.error"),
+      );
     } finally {
       setBusyAction(null);
     }
@@ -250,14 +300,16 @@ export default function RafflePage() {
 
   async function handleDraw() {
     if (!selectedRaffle) return;
-    setBusyAction('draw');
+    setBusyAction("draw");
     try {
       await raffleApi.draw(selectedRaffle.id);
       await refreshSelectedRaffle(selectedRaffle.id);
       setSimulation(null);
-      toast.success(t('raffle.draw.success'));
+      toast.success(t("raffle.draw.success"));
     } catch (err: any) {
-      toast.error(err?.response?.data?.detail || err?.message || t('raffle.draw.error'));
+      toast.error(
+        err?.response?.data?.detail || err?.message || t("raffle.draw.error"),
+      );
     } finally {
       setBusyAction(null);
     }
@@ -265,14 +317,18 @@ export default function RafflePage() {
 
   async function handleSimulate() {
     if (!selectedRaffle) return;
-    setBusyAction('simulate');
+    setBusyAction("simulate");
     try {
       const result = await raffleApi.simulate(selectedRaffle.id);
       setSimulation(result);
-      setActiveTab('winners');
-      toast.success(t('raffle.simulation.title'));
+      setActiveTab("winners");
+      toast.success(t("raffle.simulation.title"));
     } catch (err: any) {
-      toast.error(err?.response?.data?.detail || err?.message || t('raffle.simulation.error'));
+      toast.error(
+        err?.response?.data?.detail ||
+          err?.message ||
+          t("raffle.simulation.error"),
+      );
     } finally {
       setBusyAction(null);
     }
@@ -280,15 +336,17 @@ export default function RafflePage() {
 
   async function handleRerun() {
     if (!selectedRaffle) return;
-    setBusyAction('rerun');
+    setBusyAction("rerun");
     try {
       await raffleApi.rerun(selectedRaffle.id, rerunReason);
-      setRerunReason('');
+      setRerunReason("");
       await refreshSelectedRaffle(selectedRaffle.id);
       setSimulation(null);
-      toast.success(t('raffle.rerun.success'));
+      toast.success(t("raffle.rerun.success"));
     } catch (err: any) {
-      toast.error(err?.response?.data?.detail || err?.message || t('raffle.rerun.error'));
+      toast.error(
+        err?.response?.data?.detail || err?.message || t("raffle.rerun.error"),
+      );
     } finally {
       setBusyAction(null);
     }
@@ -296,7 +354,7 @@ export default function RafflePage() {
 
   async function handleSaveRaffleSettings() {
     if (!selectedRaffle) return;
-    setBusyAction('save');
+    setBusyAction("save");
     try {
       const updated = await raffleApi.update(selectedRaffle.id, {
         title: selectedRaffle.title,
@@ -308,11 +366,17 @@ export default function RafflePage() {
         scheduled_run_at: selectedRaffle.scheduled_run_at,
         archive_after_days: selectedRaffle.archive_after_days,
       });
-      setRaffles((curr) => curr.map((r) => (r.id === updated.id ? updated : r)));
+      setRaffles((curr) =>
+        curr.map((r) => (r.id === updated.id ? updated : r)),
+      );
       setEditMode(false);
-      toast.success(t('raffle.edit.saveSuccess'));
+      toast.success(t("raffle.edit.saveSuccess"));
     } catch (err: any) {
-      toast.error(err?.response?.data?.detail || err?.message || t('raffle.edit.saveError'));
+      toast.error(
+        err?.response?.data?.detail ||
+          err?.message ||
+          t("raffle.edit.saveError"),
+      );
     } finally {
       setBusyAction(null);
     }
@@ -323,22 +387,29 @@ export default function RafflePage() {
     const url = `${window.location.origin}/raffles/${selectedRaffle.public_code}`;
     try {
       await navigator.clipboard.writeText(url);
-      toast.success(t('raffle.share.success'));
+      toast.success(t("raffle.share.success"));
     } catch {
-      toast.error(t('raffle.share.error'));
+      toast.error(t("raffle.share.error"));
     }
   }
 
   async function handleDeleteRaffle() {
     if (!selectedRaffle) return;
-    if (!window.confirm(t('raffle.delete.confirm'))) return;
-    setBusyAction('delete');
+    if (
+      !(await confirmation.confirm(t("raffle.delete.confirm"), {
+        danger: true,
+      }))
+    )
+      return;
+    setBusyAction("delete");
     try {
-      await raffleApi.softDelete(selectedRaffle.id, 'deleted by manager');
+      await raffleApi.softDelete(selectedRaffle.id, "deleted by manager");
       await loadRaffles();
-      toast.success(t('raffle.delete.success'));
+      toast.success(t("raffle.delete.success"));
     } catch (err: any) {
-      toast.error(err?.response?.data?.detail || err?.message || t('raffle.delete.error'));
+      toast.error(
+        err?.response?.data?.detail || err?.message || t("raffle.delete.error"),
+      );
     } finally {
       setBusyAction(null);
     }
@@ -346,14 +417,23 @@ export default function RafflePage() {
 
   async function handleManualParticipant() {
     if (!selectedRaffle || !manualCharacter.trim()) return;
-    setBusyAction('manual');
+    setBusyAction("manual");
     try {
-      const updated = await raffleApi.addManualParticipant(selectedRaffle.id, manualCharacter.trim());
-      setRaffles((curr) => curr.map((r) => (r.id === updated.id ? updated : r)));
-      setManualCharacter('');
-      toast.success(t('raffle.participants.addSuccess'));
+      const updated = await raffleApi.addManualParticipant(
+        selectedRaffle.id,
+        manualCharacter.trim(),
+      );
+      setRaffles((curr) =>
+        curr.map((r) => (r.id === updated.id ? updated : r)),
+      );
+      setManualCharacter("");
+      toast.success(t("raffle.participants.addSuccess"));
     } catch (err: any) {
-      toast.error(err?.response?.data?.detail || err?.message || t('raffle.participants.addError'));
+      toast.error(
+        err?.response?.data?.detail ||
+          err?.message ||
+          t("raffle.participants.addError"),
+      );
     } finally {
       setBusyAction(null);
     }
@@ -363,10 +443,20 @@ export default function RafflePage() {
     if (!selectedRaffle) return;
     setBusyAction(`weight-${participantId}`);
     try {
-      const updated = await raffleApi.updateWeightMultiplier(selectedRaffle.id, participantId, value);
-      setRaffles((curr) => curr.map((r) => (r.id === updated.id ? updated : r)));
+      const updated = await raffleApi.updateWeightMultiplier(
+        selectedRaffle.id,
+        participantId,
+        value,
+      );
+      setRaffles((curr) =>
+        curr.map((r) => (r.id === updated.id ? updated : r)),
+      );
     } catch (err: any) {
-      toast.error(err?.response?.data?.detail || err?.message || t('raffle.participants.weightError'));
+      toast.error(
+        err?.response?.data?.detail ||
+          err?.message ||
+          t("raffle.participants.weightError"),
+      );
     } finally {
       setBusyAction(null);
     }
@@ -374,14 +464,28 @@ export default function RafflePage() {
 
   async function handleRemoveParticipant(participantId: number) {
     if (!selectedRaffle) return;
-    if (!window.confirm(t('raffle.participants.removeConfirm'))) return;
+    if (
+      !(await confirmation.confirm(t("raffle.participants.removeConfirm"), {
+        danger: true,
+      }))
+    )
+      return;
     setBusyAction(`remove-${participantId}`);
     try {
-      const updated = await raffleApi.removeParticipant(selectedRaffle.id, participantId);
-      setRaffles((curr) => curr.map((r) => (r.id === updated.id ? updated : r)));
-      toast.success(t('raffle.participants.removeSuccess'));
+      const updated = await raffleApi.removeParticipant(
+        selectedRaffle.id,
+        participantId,
+      );
+      setRaffles((curr) =>
+        curr.map((r) => (r.id === updated.id ? updated : r)),
+      );
+      toast.success(t("raffle.participants.removeSuccess"));
     } catch (err: any) {
-      toast.error(err?.response?.data?.detail || err?.message || t('raffle.participants.removeError'));
+      toast.error(
+        err?.response?.data?.detail ||
+          err?.message ||
+          t("raffle.participants.removeError"),
+      );
     } finally {
       setBusyAction(null);
     }
@@ -392,9 +496,11 @@ export default function RafflePage() {
       <div className="rounded-2xl border border-danger/20 bg-danger/20 p-6 text-danger">
         <div className="mb-3 flex items-center gap-3 text-lg font-semibold">
           <FontAwesomeIcon icon={faTriangleExclamation} className="h-5 w-5" />
-          {t('raffle.console.noAccess')}
+          {t("raffle.console.noAccess")}
         </div>
-        <p className="text-sm text-danger/80">{t('raffle.console.noAccessDesc')}</p>
+        <p className="text-sm text-danger/80">
+          {t("raffle.console.noAccessDesc")}
+        </p>
       </div>
     );
   }
@@ -402,75 +508,111 @@ export default function RafflePage() {
   if (!rafflesEnabled) {
     return (
       <div className="rounded-2xl border border-primary/20 bg-primary/20 p-6 text-primary">
-        {t('raffle.console.disabled')}
+        {t("raffle.console.disabled")}
       </div>
     );
   }
 
   const TABS: { id: Tab; label: string }[] = [
-    { id: 'overview',     label: t('raffle.detail.tabs.overview') },
-    { id: 'participants', label: t('raffle.detail.tabs.participants') },
-    { id: 'prizes',       label: t('raffle.detail.tabs.prizes') },
-    { id: 'winners',      label: t('raffle.detail.tabs.winners') },
-    { id: 'admin',        label: t('raffle.detail.tabs.admin') },
+    { id: "overview", label: t("raffle.detail.tabs.overview") },
+    { id: "participants", label: t("raffle.detail.tabs.participants") },
+    { id: "prizes", label: t("raffle.detail.tabs.prizes") },
+    { id: "winners", label: t("raffle.detail.tabs.winners") },
+    { id: "admin", label: t("raffle.detail.tabs.admin") },
   ];
 
   return (
     <div className="space-y-6">
       <div className="rounded-2xl border border-line bg-gradient-to-br from-surface-base/80 to-surface-base p-6">
-        <div className="mb-3 inline-flex rounded-full border border-line px-3 py-1 text-xs text-content-secondary">{t('raffle.legacyLabel')}</div>
+        <div className="mb-3 inline-flex rounded-full border border-line px-3 py-1 text-xs text-content-secondary">
+          {t("raffle.legacyLabel")}
+        </div>
         <div className="flex items-center gap-3">
           <FontAwesomeIcon icon={faTrophy} className="h-6 w-6 text-primary" />
-          <h1 className="text-2xl font-bold text-content-primary">{t('raffle.console.title')}</h1>
+          <h1 className="text-2xl font-bold text-content-primary">
+            {t("raffle.console.title")}
+          </h1>
         </div>
-        <p className="mt-2 max-w-3xl text-sm text-content-secondary">{t('raffle.console.subtitle')}</p>
+        <p className="mt-2 max-w-3xl text-sm text-content-secondary">
+          {t("raffle.console.subtitle")}
+        </p>
       </div>
 
       <div className="grid gap-6 xl:grid-cols-[380px_minmax(0,1fr)]">
-        <form onSubmit={handleCreateRaffle} className="space-y-4 rounded-2xl border border-line bg-surface-base/70 p-5">
+        <form
+          onSubmit={handleCreateRaffle}
+          className="space-y-4 rounded-2xl border border-line bg-surface-base/70 p-5"
+        >
           <h2 className="flex items-center gap-2 text-lg font-semibold text-content-primary">
             <FontAwesomeIcon icon={faGift} className="h-4 w-4 text-primary" />
-            {t('raffle.create.title')}
+            {t("raffle.create.title")}
           </h2>
 
           <input
             value={createForm.title}
-            onChange={(e) => setCreateForm((c) => ({ ...c, title: e.target.value }))}
-            placeholder={t('raffle.create.titlePlaceholder')}
+            onChange={(e) =>
+              setCreateForm((c) => ({ ...c, title: e.target.value }))
+            }
+            placeholder={t("raffle.create.titlePlaceholder")}
             className="w-full rounded-xl border border-line bg-surface-base px-4 py-2.5 text-content-primary outline-none focus:border-primary"
             required
           />
 
-          <input value={createForm.guild_name} readOnly aria-readonly="true" className="w-full rounded-xl border border-line bg-surface-base/60 px-4 py-2.5 text-content-secondary" required />
+          <input
+            value={createForm.guild_name}
+            readOnly
+            aria-readonly="true"
+            className="w-full rounded-xl border border-line bg-surface-base/60 px-4 py-2.5 text-content-secondary"
+            required
+          />
 
           <div className="grid gap-3 sm:grid-cols-2">
             <div>
-              <label className="mb-1 block text-xs text-content-secondary">{t('raffle.create.accessModeLabel')}</label>
+              <label className="mb-1 block text-xs text-content-secondary">
+                {t("raffle.create.accessModeLabel")}
+              </label>
               <select
                 value={createForm.access_mode}
-                onChange={(e) => setCreateForm((c) => ({ ...c, access_mode: e.target.value as 'guild_only' | 'world_only' | 'public' }))}
+                onChange={(e) =>
+                  setCreateForm((c) => ({
+                    ...c,
+                    access_mode: e.target.value as
+                      "guild_only" | "world_only" | "public",
+                  }))
+                }
                 className="w-full rounded-xl border border-line bg-surface-base px-4 py-2.5 text-content-primary outline-none focus:border-primary"
               >
-                <option value="guild_only">{t('raffle.accessModes.guild_only')}</option>
-                <option value="world_only">{t('raffle.accessModes.world_only')}</option>
-                <option value="public">{t('raffle.accessModes.public')}</option>
+                <option value="guild_only">
+                  {t("raffle.accessModes.guild_only")}
+                </option>
+                <option value="world_only">
+                  {t("raffle.accessModes.world_only")}
+                </option>
+                <option value="public">{t("raffle.accessModes.public")}</option>
               </select>
             </div>
             <label className="flex items-center gap-3 rounded-xl border border-line bg-surface-base/60 px-4 py-3 text-sm text-content-secondary">
               <input
                 type="checkbox"
                 checked={createForm.show_participants}
-                onChange={(e) => setCreateForm((c) => ({ ...c, show_participants: e.target.checked }))}
+                onChange={(e) =>
+                  setCreateForm((c) => ({
+                    ...c,
+                    show_participants: e.target.checked,
+                  }))
+                }
                 className="accent-primary"
               />
-              {t('raffle.create.showParticipantsLabel')}
+              {t("raffle.create.showParticipantsLabel")}
             </label>
           </div>
 
           <textarea
             value={createForm.description}
-            onChange={(e) => setCreateForm((c) => ({ ...c, description: e.target.value }))}
-            placeholder={t('raffle.create.descriptionPlaceholder')}
+            onChange={(e) =>
+              setCreateForm((c) => ({ ...c, description: e.target.value }))
+            }
+            placeholder={t("raffle.create.descriptionPlaceholder")}
             className="min-h-20 w-full rounded-xl border border-line bg-surface-base px-4 py-2.5 text-content-primary outline-none focus:border-primary"
           />
 
@@ -479,20 +621,28 @@ export default function RafflePage() {
               <div key={idx} className="grid gap-2 sm:grid-cols-2">
                 <input
                   value={prize.name}
-                  onChange={(e) => setCreateForm((c) => ({
-                    ...c,
-                    prizes: c.prizes.map((p, i) => (i === idx ? { ...p, name: e.target.value } : p)),
-                  }))}
-                  placeholder={`${t('raffle.create.prizeName')} ${idx + 1}`}
+                  onChange={(e) =>
+                    setCreateForm((c) => ({
+                      ...c,
+                      prizes: c.prizes.map((p, i) =>
+                        i === idx ? { ...p, name: e.target.value } : p,
+                      ),
+                    }))
+                  }
+                  placeholder={`${t("raffle.create.prizeName")} ${idx + 1}`}
                   className="rounded-xl border border-line bg-surface-base px-3 py-2 text-content-primary outline-none focus:border-primary"
                 />
                 <input
                   value={prize.reward}
-                  onChange={(e) => setCreateForm((c) => ({
-                    ...c,
-                    prizes: c.prizes.map((p, i) => (i === idx ? { ...p, reward: e.target.value } : p)),
-                  }))}
-                  placeholder={t('raffle.create.prizeReward')}
+                  onChange={(e) =>
+                    setCreateForm((c) => ({
+                      ...c,
+                      prizes: c.prizes.map((p, i) =>
+                        i === idx ? { ...p, reward: e.target.value } : p,
+                      ),
+                    }))
+                  }
+                  placeholder={t("raffle.create.prizeReward")}
                   className="rounded-xl border border-line bg-surface-base px-3 py-2 text-content-primary outline-none focus:border-primary"
                 />
               </div>
@@ -501,13 +651,19 @@ export default function RafflePage() {
 
           <button
             type="submit"
-            disabled={busyAction === 'create'}
+            disabled={busyAction === "create"}
             className="inline-flex w-full items-center justify-center gap-2 rounded-xl bg-primary px-4 py-2.5 font-semibold text-content-inverse transition hover:bg-primary-hover disabled:opacity-50"
           >
-            {busyAction === 'create' ? (
-              <><FontAwesomeIcon icon={faSpinner} spin className="h-4 w-4" /> {t('raffle.create.submitting')}</>
+            {busyAction === "create" ? (
+              <>
+                <FontAwesomeIcon icon={faSpinner} spin className="h-4 w-4" />{" "}
+                {t("raffle.create.submitting")}
+              </>
             ) : (
-              <><FontAwesomeIcon icon={faGift} className="h-4 w-4" /> {t('raffle.create.submit')}</>
+              <>
+                <FontAwesomeIcon icon={faGift} className="h-4 w-4" />{" "}
+                {t("raffle.create.submit")}
+              </>
             )}
           </button>
         </form>
@@ -515,41 +671,65 @@ export default function RafflePage() {
         <div className="space-y-5">
           <div className="rounded-2xl border border-line bg-surface-base/70 p-5">
             <div className="mb-3 flex items-center justify-between">
-              <h2 className="text-lg font-semibold text-content-primary">{t('raffle.list.title')}</h2>
-              <IconBtn onClick={() => void loadRaffles()} tooltip={t('raffle.list.refresh')} disabled={loading}>
+              <h2 className="text-lg font-semibold text-content-primary">
+                {t("raffle.list.title")}
+              </h2>
+              <IconBtn
+                onClick={() => void loadRaffles()}
+                tooltip={t("raffle.list.refresh")}
+                disabled={loading}
+              >
                 <FontAwesomeIcon icon={faRotate} className="h-4 w-4" />
               </IconBtn>
             </div>
 
             {loading ? (
               <div className="flex items-center gap-3 text-content-secondary">
-                <FontAwesomeIcon icon={faSpinner} spin className="h-4 w-4" /> {t('raffle.list.refresh')}...
+                <FontAwesomeIcon icon={faSpinner} spin className="h-4 w-4" />{" "}
+                {t("raffle.list.refresh")}...
               </div>
             ) : raffles.length === 0 ? (
               <div className="rounded-xl border border-dashed border-line py-8 text-center text-sm text-content-muted">
-                {t('raffle.list.empty')}
+                {t("raffle.list.empty")}
               </div>
             ) : (
               <div className="grid gap-3 sm:grid-cols-2">
                 {raffles.map((raffle) => (
                   <button
                     key={raffle.id}
-                    onClick={() => { setSelectedRaffleId(raffle.id); setActiveTab('overview'); setSimulation(null); }}
+                    onClick={() => {
+                      setSelectedRaffleId(raffle.id);
+                      setActiveTab("overview");
+                      setSimulation(null);
+                    }}
                     className={`rounded-xl border p-4 text-left transition ${
                       selectedRaffleId === raffle.id
-                        ? 'border-primary bg-primary/10'
-                        : 'border-line bg-surface-base/60 hover:border-line'
+                        ? "border-primary bg-primary/10"
+                        : "border-line bg-surface-base/60 hover:border-line"
                     }`}
                   >
                     <div className="mb-1.5 flex items-start justify-between gap-2">
-                      <div className="truncate text-base font-semibold text-content-primary">{raffle.title}</div>
+                      <div className="truncate text-base font-semibold text-content-primary">
+                        {raffle.title}
+                      </div>
                       <StatusBadge status={raffle.status} />
                     </div>
-                    <div className="text-xs uppercase tracking-wide text-content-muted">{raffle.guild_name}</div>
+                    <div className="text-xs uppercase tracking-wide text-content-muted">
+                      {raffle.guild_name}
+                    </div>
                     <div className="mt-2.5 flex flex-wrap gap-3 text-xs text-content-secondary">
-                      <span className="flex items-center gap-1"><FontAwesomeIcon icon={faUsers} className="h-3 w-3" />{raffle.participant_count} {t('raffle.list.participants')}</span>
-                      <span className="flex items-center gap-1"><FontAwesomeIcon icon={faGift} className="h-3 w-3" />{raffle.prizes.length} {t('raffle.list.prizes')}</span>
-                      <span>{t('raffle.list.run')} {raffle.current_run_number}</span>
+                      <span className="flex items-center gap-1">
+                        <FontAwesomeIcon icon={faUsers} className="h-3 w-3" />
+                        {raffle.participant_count}{" "}
+                        {t("raffle.list.participants")}
+                      </span>
+                      <span className="flex items-center gap-1">
+                        <FontAwesomeIcon icon={faGift} className="h-3 w-3" />
+                        {raffle.prizes.length} {t("raffle.list.prizes")}
+                      </span>
+                      <span>
+                        {t("raffle.list.run")} {raffle.current_run_number}
+                      </span>
                     </div>
                   </button>
                 ))}
@@ -562,40 +742,127 @@ export default function RafflePage() {
               <div className="flex flex-col gap-3 border-b border-line p-5 sm:flex-row sm:items-start sm:justify-between">
                 <div className="min-w-0">
                   <div className="flex flex-wrap items-center gap-2">
-                    <h2 className="truncate text-xl font-bold text-content-primary">{selectedRaffle.title}</h2>
+                    <h2 className="truncate text-xl font-bold text-content-primary">
+                      {selectedRaffle.title}
+                    </h2>
                     <StatusBadge status={selectedRaffle.status} />
                     <AccessModeBadge accessMode={selectedRaffle.access_mode} />
                   </div>
                   <p className="mt-1 text-sm text-content-secondary">
-                    {selectedRaffle.description || t('raffle.detail.noDescription')}
+                    {selectedRaffle.description ||
+                      t("raffle.detail.noDescription")}
                   </p>
                   <p className="mt-1 text-xs text-content-muted">
-                    {t('raffle.detail.guild')}: {selectedRaffle.guild_name}
-                    <> &middot; {t('raffle.detail.accessMode')}: {t(`raffle.accessModes.${selectedRaffle.access_mode}`)}</>
+                    {t("raffle.detail.guild")}: {selectedRaffle.guild_name}
+                    <>
+                      {" "}
+                      &middot; {t("raffle.detail.accessMode")}:{" "}
+                      {t(`raffle.accessModes.${selectedRaffle.access_mode}`)}
+                    </>
                     {selectedRaffle.rerun_count > 0 && (
-                      <> &middot; {t('raffle.detail.reruns')}: {selectedRaffle.rerun_count}</>
+                      <>
+                        {" "}
+                        &middot; {t("raffle.detail.reruns")}:{" "}
+                        {selectedRaffle.rerun_count}
+                      </>
                     )}
                   </p>
                 </div>
 
                 <div className="flex flex-wrap items-center gap-1.5">
-                  <IconBtn onClick={() => void handleShareRaffle()} tooltip={t('raffle.actions.share')} disabled={busyAction === 'share'}>
-                    {busyAction === 'share' ? <FontAwesomeIcon icon={faSpinner} spin className="h-4 w-4" /> : <FontAwesomeIcon icon={faShareNodes} className="h-4 w-4" />}
+                  <IconBtn
+                    onClick={() => void handleShareRaffle()}
+                    tooltip={t("raffle.actions.share")}
+                    disabled={busyAction === "share"}
+                  >
+                    {busyAction === "share" ? (
+                      <FontAwesomeIcon
+                        icon={faSpinner}
+                        spin
+                        className="h-4 w-4"
+                      />
+                    ) : (
+                      <FontAwesomeIcon
+                        icon={faShareNodes}
+                        className="h-4 w-4"
+                      />
+                    )}
                   </IconBtn>
-                  <IconBtn onClick={() => setEditMode((v) => !v)} tooltip={editMode ? t('raffle.actions.closeEdit') : t('raffle.actions.edit')}>
-                    {editMode ? <FontAwesomeIcon icon={faLock} className="h-4 w-4" /> : <FontAwesomeIcon icon={faPen} className="h-4 w-4" />}
+                  <IconBtn
+                    onClick={() => setEditMode((v) => !v)}
+                    tooltip={
+                      editMode
+                        ? t("raffle.actions.closeEdit")
+                        : t("raffle.actions.edit")
+                    }
+                  >
+                    {editMode ? (
+                      <FontAwesomeIcon icon={faLock} className="h-4 w-4" />
+                    ) : (
+                      <FontAwesomeIcon icon={faPen} className="h-4 w-4" />
+                    )}
                   </IconBtn>
-                  <IconBtn onClick={() => void handleSyncParticipants()} tooltip={t('raffle.actions.sync')} disabled={busyAction === 'sync'}>
-                    {busyAction === 'sync' ? <FontAwesomeIcon icon={faSpinner} spin className="h-4 w-4" /> : <FontAwesomeIcon icon={faRotate} className="h-4 w-4" />}
+                  <IconBtn
+                    onClick={() => void handleSyncParticipants()}
+                    tooltip={t("raffle.actions.sync")}
+                    disabled={busyAction === "sync"}
+                  >
+                    {busyAction === "sync" ? (
+                      <FontAwesomeIcon
+                        icon={faSpinner}
+                        spin
+                        className="h-4 w-4"
+                      />
+                    ) : (
+                      <FontAwesomeIcon icon={faRotate} className="h-4 w-4" />
+                    )}
                   </IconBtn>
-                  <IconBtn onClick={() => void handleSimulate()} tooltip={t('raffle.actions.simulate')} disabled={busyAction === 'simulate'}>
-                    {busyAction === 'simulate' ? <FontAwesomeIcon icon={faSpinner} spin className="h-4 w-4" /> : <FontAwesomeIcon icon={faFlask} className="h-4 w-4" />}
+                  <IconBtn
+                    onClick={() => void handleSimulate()}
+                    tooltip={t("raffle.actions.simulate")}
+                    disabled={busyAction === "simulate"}
+                  >
+                    {busyAction === "simulate" ? (
+                      <FontAwesomeIcon
+                        icon={faSpinner}
+                        spin
+                        className="h-4 w-4"
+                      />
+                    ) : (
+                      <FontAwesomeIcon icon={faFlask} className="h-4 w-4" />
+                    )}
                   </IconBtn>
-                  <IconBtn onClick={() => void handleDraw()} tooltip={t('raffle.actions.draw')} disabled={busyAction === 'draw'} primary>
-                    {busyAction === 'draw' ? <FontAwesomeIcon icon={faSpinner} spin className="h-4 w-4" /> : <FontAwesomeIcon icon={faDice} className="h-4 w-4" />}
+                  <IconBtn
+                    onClick={() => void handleDraw()}
+                    tooltip={t("raffle.actions.draw")}
+                    disabled={busyAction === "draw"}
+                    primary
+                  >
+                    {busyAction === "draw" ? (
+                      <FontAwesomeIcon
+                        icon={faSpinner}
+                        spin
+                        className="h-4 w-4"
+                      />
+                    ) : (
+                      <FontAwesomeIcon icon={faDice} className="h-4 w-4" />
+                    )}
                   </IconBtn>
-                  <IconBtn onClick={() => void handleDeleteRaffle()} tooltip={t('raffle.actions.delete')} disabled={busyAction === 'delete'} danger>
-                    {busyAction === 'delete' ? <FontAwesomeIcon icon={faSpinner} spin className="h-4 w-4" /> : <FontAwesomeIcon icon={faTrash} className="h-4 w-4" />}
+                  <IconBtn
+                    onClick={() => void handleDeleteRaffle()}
+                    tooltip={t("raffle.actions.delete")}
+                    disabled={busyAction === "delete"}
+                    danger
+                  >
+                    {busyAction === "delete" ? (
+                      <FontAwesomeIcon
+                        icon={faSpinner}
+                        spin
+                        className="h-4 w-4"
+                      />
+                    ) : (
+                      <FontAwesomeIcon icon={faTrash} className="h-4 w-4" />
+                    )}
                   </IconBtn>
                 </div>
               </div>
@@ -604,59 +871,140 @@ export default function RafflePage() {
                 <div className="border-b border-line bg-surface-base/40 p-5">
                   <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
                     <div>
-                      <label className="mb-1 block text-xs text-content-secondary">{t('raffle.edit.titleLabel')}</label>
+                      <label className="mb-1 block text-xs text-content-secondary">
+                        {t("raffle.edit.titleLabel")}
+                      </label>
                       <input
                         value={selectedRaffle.title}
-                        onChange={(e) => setRaffles((curr) => curr.map((r) => r.id === selectedRaffle.id ? { ...r, title: e.target.value } : r))}
+                        onChange={(e) =>
+                          setRaffles((curr) =>
+                            curr.map((r) =>
+                              r.id === selectedRaffle.id
+                                ? { ...r, title: e.target.value }
+                                : r,
+                            ),
+                          )
+                        }
                         className="w-full rounded-xl border border-line bg-surface-base px-3 py-2 text-content-primary"
                       />
                     </div>
                     <div>
-                      <label className="mb-1 block text-xs text-content-secondary">{t('raffle.edit.accessMode')}</label>
+                      <label className="mb-1 block text-xs text-content-secondary">
+                        {t("raffle.edit.accessMode")}
+                      </label>
                       <select
                         value={selectedRaffle.access_mode}
-                        onChange={(e) => setRaffles((curr) => curr.map((r) => r.id === selectedRaffle.id ? { ...r, access_mode: e.target.value as 'guild_only' | 'world_only' | 'public' } : r))}
+                        onChange={(e) =>
+                          setRaffles((curr) =>
+                            curr.map((r) =>
+                              r.id === selectedRaffle.id
+                                ? {
+                                    ...r,
+                                    access_mode: e.target.value as
+                                      "guild_only" | "world_only" | "public",
+                                  }
+                                : r,
+                            ),
+                          )
+                        }
                         className="w-full rounded-xl border border-line bg-surface-base px-3 py-2 text-content-primary"
                       >
-                        <option value="guild_only">{t('raffle.accessModes.guild_only')}</option>
-                        <option value="world_only">{t('raffle.accessModes.world_only')}</option>
-                        <option value="public">{t('raffle.accessModes.public')}</option>
+                        <option value="guild_only">
+                          {t("raffle.accessModes.guild_only")}
+                        </option>
+                        <option value="world_only">
+                          {t("raffle.accessModes.world_only")}
+                        </option>
+                        <option value="public">
+                          {t("raffle.accessModes.public")}
+                        </option>
                       </select>
                       <p className="mt-1 text-xs text-content-muted">
-                        {selectedRaffle.access_mode === 'guild_only' && t('raffle.edit.accessModeHelpGuild')}
-                        {selectedRaffle.access_mode === 'world_only' && t('raffle.edit.accessModeHelpWorld')}
-                        {selectedRaffle.access_mode === 'public' && t('raffle.edit.accessModeHelpPublic')}
+                        {selectedRaffle.access_mode === "guild_only" &&
+                          t("raffle.edit.accessModeHelpGuild")}
+                        {selectedRaffle.access_mode === "world_only" &&
+                          t("raffle.edit.accessModeHelpWorld")}
+                        {selectedRaffle.access_mode === "public" &&
+                          t("raffle.edit.accessModeHelpPublic")}
                       </p>
                     </div>
                     <div>
-                      <label className="mb-1 block text-xs text-content-secondary">{t('raffle.edit.statusLabel')}</label>
+                      <label className="mb-1 block text-xs text-content-secondary">
+                        {t("raffle.edit.statusLabel")}
+                      </label>
                       <select
                         value={selectedRaffle.status}
-                        onChange={(e) => setRaffles((curr) => curr.map((r) => r.id === selectedRaffle.id ? { ...r, status: e.target.value as RaffleStatus } : r))}
+                        onChange={(e) =>
+                          setRaffles((curr) =>
+                            curr.map((r) =>
+                              r.id === selectedRaffle.id
+                                ? {
+                                    ...r,
+                                    status: e.target.value as RaffleStatus,
+                                  }
+                                : r,
+                            ),
+                          )
+                        }
                         className="w-full rounded-xl border border-line bg-surface-base px-3 py-2 text-content-primary"
                       >
-                        <option value="draft">{t('raffle.edit.statusDraft')}</option>
-                        <option value="open">{t('raffle.edit.statusOpen')}</option>
-                        <option value="closed">{t('raffle.edit.statusClosed')}</option>
-                        <option value="completed">{t('raffle.edit.statusCompleted')}</option>
-                        <option value="cancelled">{t('raffle.edit.statusCancelled')}</option>
+                        <option value="draft">
+                          {t("raffle.edit.statusDraft")}
+                        </option>
+                        <option value="open">
+                          {t("raffle.edit.statusOpen")}
+                        </option>
+                        <option value="closed">
+                          {t("raffle.edit.statusClosed")}
+                        </option>
+                        <option value="completed">
+                          {t("raffle.edit.statusCompleted")}
+                        </option>
+                        <option value="cancelled">
+                          {t("raffle.edit.statusCancelled")}
+                        </option>
                       </select>
                     </div>
                     <label className="flex items-center gap-2 text-sm text-content-secondary sm:col-span-2 lg:col-span-3">
-                      <input type="checkbox" checked={selectedRaffle.show_participants}
-                        onChange={(e) => setRaffles((curr) => curr.map((r) => r.id === selectedRaffle.id ? { ...r, show_participants: e.target.checked } : r))}
+                      <input
+                        type="checkbox"
+                        checked={selectedRaffle.show_participants}
+                        onChange={(e) =>
+                          setRaffles((curr) =>
+                            curr.map((r) =>
+                              r.id === selectedRaffle.id
+                                ? { ...r, show_participants: e.target.checked }
+                                : r,
+                            ),
+                          )
+                        }
                         className="accent-primary"
                       />
-                      {selectedRaffle.show_participants ? t('raffle.edit.showParticipantsEnabled') : t('raffle.edit.showParticipantsDisabled')}
+                      {selectedRaffle.show_participants
+                        ? t("raffle.edit.showParticipantsEnabled")
+                        : t("raffle.edit.showParticipantsDisabled")}
                     </label>
                   </div>
                   <button
                     onClick={() => void handleSaveRaffleSettings()}
-                    disabled={busyAction === 'save'}
+                    disabled={busyAction === "save"}
                     className="mt-3 inline-flex items-center gap-2 rounded-xl bg-primary px-4 py-2 text-sm font-semibold text-content-inverse disabled:opacity-50"
                   >
-                    {busyAction === 'save' ? <FontAwesomeIcon icon={faSpinner} spin className="h-4 w-4" /> : <FontAwesomeIcon icon={faFloppyDisk} className="h-4 w-4" />}
-                    {busyAction === 'save' ? t('raffle.actionLabels.saving') : t('raffle.actions.save')}
+                    {busyAction === "save" ? (
+                      <FontAwesomeIcon
+                        icon={faSpinner}
+                        spin
+                        className="h-4 w-4"
+                      />
+                    ) : (
+                      <FontAwesomeIcon
+                        icon={faFloppyDisk}
+                        className="h-4 w-4"
+                      />
+                    )}
+                    {busyAction === "save"
+                      ? t("raffle.actionLabels.saving")
+                      : t("raffle.actions.save")}
                   </button>
                 </div>
               )}
@@ -668,43 +1016,69 @@ export default function RafflePage() {
                     onClick={() => setActiveTab(tab.id)}
                     className={`shrink-0 border-b-2 px-4 py-3 text-sm font-medium transition ${
                       activeTab === tab.id
-                        ? 'border-primary text-primary'
-                        : 'border-transparent text-content-secondary hover:text-content-primary'
+                        ? "border-primary text-primary"
+                        : "border-transparent text-content-secondary hover:text-content-primary"
                     }`}
                   >
                     {tab.label}
-                    {tab.id === 'participants' && selectedRaffle.participants.length > 0 && (
-                      <span className="ml-1.5 rounded-full bg-surface-raised px-1.5 py-0.5 text-xs">{selectedRaffle.participants.length}</span>
-                    )}
-                    {tab.id === 'prizes' && selectedRaffle.prizes.length > 0 && (
-                      <span className="ml-1.5 rounded-full bg-surface-raised px-1.5 py-0.5 text-xs">{selectedRaffle.prizes.length}</span>
-                    )}
+                    {tab.id === "participants" &&
+                      selectedRaffle.participants.length > 0 && (
+                        <span className="ml-1.5 rounded-full bg-surface-raised px-1.5 py-0.5 text-xs">
+                          {selectedRaffle.participants.length}
+                        </span>
+                      )}
+                    {tab.id === "prizes" &&
+                      selectedRaffle.prizes.length > 0 && (
+                        <span className="ml-1.5 rounded-full bg-surface-raised px-1.5 py-0.5 text-xs">
+                          {selectedRaffle.prizes.length}
+                        </span>
+                      )}
                   </button>
                 ))}
               </div>
 
               <div className="p-5">
-                {activeTab === 'overview' && (
+                {activeTab === "overview" && (
                   <div className="grid gap-4 sm:grid-cols-3">
                     <div className="rounded-xl border border-line bg-surface-base/60 p-4 text-center">
-                      <div className="text-2xl font-bold text-primary">{selectedRaffle.participant_count}</div>
-                      <div className="mt-1 text-xs text-content-secondary">{t('raffle.detail.tabs.participants')}</div>
+                      <div className="text-2xl font-bold text-primary">
+                        {selectedRaffle.participant_count}
+                      </div>
+                      <div className="mt-1 text-xs text-content-secondary">
+                        {t("raffle.detail.tabs.participants")}
+                      </div>
                     </div>
                     <div className="rounded-xl border border-line bg-surface-base/60 p-4 text-center">
-                      <div className="text-2xl font-bold text-primary">{selectedRaffle.prizes.length}</div>
-                      <div className="mt-1 text-xs text-content-secondary">{t('raffle.detail.tabs.prizes')}</div>
+                      <div className="text-2xl font-bold text-primary">
+                        {selectedRaffle.prizes.length}
+                      </div>
+                      <div className="mt-1 text-xs text-content-secondary">
+                        {t("raffle.detail.tabs.prizes")}
+                      </div>
                     </div>
                     <div className="rounded-xl border border-line bg-surface-base/60 p-4 text-center">
-                      <div className="text-2xl font-bold text-primary">{selectedRaffle.current_run_number}</div>
-                      <div className="mt-1 text-xs text-content-secondary">{t('raffle.list.run')}</div>
+                      <div className="text-2xl font-bold text-primary">
+                        {selectedRaffle.current_run_number}
+                      </div>
+                      <div className="mt-1 text-xs text-content-secondary">
+                        {t("raffle.list.run")}
+                      </div>
                     </div>
                     {selectedRaffle.prizes.length > 0 && (
                       <div className="sm:col-span-3">
-                        <div className="mb-2 text-sm font-medium text-content-secondary">{t('raffle.detail.tabs.prizes')}</div>
+                        <div className="mb-2 text-sm font-medium text-content-secondary">
+                          {t("raffle.detail.tabs.prizes")}
+                        </div>
                         <div className="flex flex-wrap gap-2">
                           {selectedRaffle.prizes.map((prize) => (
-                            <span key={prize.id} className="inline-flex items-center gap-1.5 rounded-full border border-primary/30 bg-primary/10 px-3 py-1 text-sm text-primary">
-                              <FontAwesomeIcon icon={faTrophy} className="h-3 w-3" />
+                            <span
+                              key={prize.id}
+                              className="inline-flex items-center gap-1.5 rounded-full border border-primary/30 bg-primary/10 px-3 py-1 text-sm text-primary"
+                            >
+                              <FontAwesomeIcon
+                                icon={faTrophy}
+                                className="h-3 w-3"
+                              />
                               <span className="font-medium">{prize.name}</span>
                               <span className="text-primary/70">&middot;</span>
                               <span>{prize.reward}</span>
@@ -716,48 +1090,122 @@ export default function RafflePage() {
                   </div>
                 )}
 
-                {activeTab === 'participants' && (
+                {activeTab === "participants" && (
                   <div className="space-y-4">
                     <div className="flex gap-2">
                       <input
                         value={manualCharacter}
                         onChange={(e) => setManualCharacter(e.target.value)}
-                        placeholder={t('raffle.participants.characterPlaceholder')}
+                        placeholder={t(
+                          "raffle.participants.characterPlaceholder",
+                        )}
                         className="flex-1 rounded-xl border border-line bg-surface-base px-3 py-2 text-content-primary outline-none focus:border-primary"
-                        onKeyDown={(e) => { if (e.key === 'Enter') { e.preventDefault(); void handleManualParticipant(); } }}
+                        onKeyDown={(e) => {
+                          if (e.key === "Enter") {
+                            e.preventDefault();
+                            void handleManualParticipant();
+                          }
+                        }}
                       />
-                      <IconBtn onClick={() => void handleManualParticipant()} tooltip={t('raffle.actions.addParticipant')} disabled={busyAction === 'manual' || !manualCharacter.trim()}>
-                        {busyAction === 'manual' ? <FontAwesomeIcon icon={faSpinner} spin className="h-4 w-4" /> : <FontAwesomeIcon icon={faUserPlus} className="h-4 w-4" />}
+                      <IconBtn
+                        onClick={() => void handleManualParticipant()}
+                        tooltip={t("raffle.actions.addParticipant")}
+                        disabled={
+                          busyAction === "manual" || !manualCharacter.trim()
+                        }
+                      >
+                        {busyAction === "manual" ? (
+                          <FontAwesomeIcon
+                            icon={faSpinner}
+                            spin
+                            className="h-4 w-4"
+                          />
+                        ) : (
+                          <FontAwesomeIcon
+                            icon={faUserPlus}
+                            className="h-4 w-4"
+                          />
+                        )}
                       </IconBtn>
                     </div>
                     <div className="max-h-80 space-y-2 overflow-y-auto pr-1">
                       {selectedRaffle.participants.length === 0 ? (
                         <div className="rounded-xl border border-dashed border-line py-8 text-center text-sm text-content-muted">
-                          {t('raffle.participants.empty')}
+                          {t("raffle.participants.empty")}
                         </div>
                       ) : (
                         selectedRaffle.participants.map((participant) => (
-                          <div key={participant.id} className="flex items-center justify-between rounded-xl border border-line bg-surface-base/50 px-3 py-2.5">
+                          <div
+                            key={participant.id}
+                            className="flex items-center justify-between rounded-xl border border-line bg-surface-base/50 px-3 py-2.5"
+                          >
                             <div className="min-w-0">
-                              <div className="truncate font-medium text-content-primary">{participant.character_name}</div>
-                              <div className="text-xs text-content-muted">{participant.username} &middot; {participant.guild_rank || t('guild.member')}</div>
+                              <div className="truncate font-medium text-content-primary">
+                                {participant.character_name}
+                              </div>
+                              <div className="text-xs text-content-muted">
+                                {participant.username} &middot;{" "}
+                                {participant.guild_rank || t("guild.member")}
+                              </div>
                             </div>
                             <div className="ml-3 flex shrink-0 items-center gap-2">
                               <div className="text-right text-xs text-content-secondary">
-                                <div className={participant.is_eligible ? 'text-success' : 'text-content-muted'}>
-                                  {participant.is_eligible ? t('raffle.participants.eligible') : t('raffle.participants.ineligible')}
+                                <div
+                                  className={
+                                    participant.is_eligible
+                                      ? "text-success"
+                                      : "text-content-muted"
+                                  }
+                                >
+                                  {participant.is_eligible
+                                    ? t("raffle.participants.eligible")
+                                    : t("raffle.participants.ineligible")}
                                 </div>
-                                <div>{t('raffle.participants.weight')} {Number.isFinite(Number(participant.weight)) ? Number(participant.weight).toFixed(1) : '1.0'}</div>
+                                <div>
+                                  {t("raffle.participants.weight")}{" "}
+                                  {Number.isFinite(Number(participant.weight))
+                                    ? Number(participant.weight).toFixed(1)
+                                    : "1.0"}
+                                </div>
                               </div>
                               <div className="flex gap-0.5">
                                 {[1, 2, 3, 4, 5].map((w) => (
-                                  <button key={w} onClick={() => void handleWeightChange(participant.id, w)} disabled={busyAction === `weight-${participant.id}`}
-                                    className={`h-6 w-5 rounded text-xs transition ${Math.round(participant.weight_multiplier || 1) === w ? 'bg-primary text-content-inverse' : 'border border-line text-content-secondary hover:border-primary/50'}`}
-                                  >{w}</button>
+                                  <button
+                                    key={w}
+                                    onClick={() =>
+                                      void handleWeightChange(participant.id, w)
+                                    }
+                                    disabled={
+                                      busyAction === `weight-${participant.id}`
+                                    }
+                                    className={`h-6 w-5 rounded text-xs transition ${Math.round(participant.weight_multiplier || 1) === w ? "bg-primary text-content-inverse" : "border border-line text-content-secondary hover:border-primary/50"}`}
+                                  >
+                                    {w}
+                                  </button>
                                 ))}
                               </div>
-                              <IconBtn onClick={() => void handleRemoveParticipant(participant.id)} tooltip={t('raffle.actions.removeParticipant')} disabled={busyAction === `remove-${participant.id}`} danger>
-                                {busyAction === `remove-${participant.id}` ? <FontAwesomeIcon icon={faSpinner} spin className="h-3 w-3" /> : <FontAwesomeIcon icon={faUserMinus} className="h-3 w-3" />}
+                              <IconBtn
+                                onClick={() =>
+                                  void handleRemoveParticipant(participant.id)
+                                }
+                                tooltip={t("raffle.actions.removeParticipant")}
+                                disabled={
+                                  busyAction === `remove-${participant.id}`
+                                }
+                                danger
+                              >
+                                {busyAction === `remove-${participant.id}` ? (
+                                  <FontAwesomeIcon
+                                    icon={faSpinner}
+                                    spin
+                                    className="h-3 w-3"
+                                  />
+                                ) : (
+                                  <FontAwesomeIcon
+                                    icon={faUserMinus}
+                                    className="h-3 w-3"
+                                  />
+                                )}
                               </IconBtn>
                             </div>
                           </div>
@@ -767,71 +1215,130 @@ export default function RafflePage() {
                   </div>
                 )}
 
-                {activeTab === 'prizes' && (
+                {activeTab === "prizes" && (
                   <div className="space-y-4">
                     <div className="flex flex-wrap gap-2">
                       {selectedRaffle.prizes.length === 0 ? (
                         <div className="w-full rounded-xl border border-dashed border-line py-6 text-center text-sm text-content-muted">
-                          {t('raffle.prizes.empty')}
+                          {t("raffle.prizes.empty")}
                         </div>
                       ) : (
                         selectedRaffle.prizes.map((prize) => (
-                          <div key={prize.id} className="flex items-center gap-2 rounded-xl border border-primary/20 bg-primary/8 px-4 py-2.5">
-                            <FontAwesomeIcon icon={faGift} className="h-4 w-4 text-primary" />
+                          <div
+                            key={prize.id}
+                            className="flex items-center gap-2 rounded-xl border border-primary/20 bg-primary/8 px-4 py-2.5"
+                          >
+                            <FontAwesomeIcon
+                              icon={faGift}
+                              className="h-4 w-4 text-primary"
+                            />
                             <div>
-                              <div className="text-sm font-medium text-primary">{prize.name}</div>
-                              <div className="text-xs text-primary/70">{prize.reward}</div>
+                              <div className="text-sm font-medium text-primary">
+                                {prize.name}
+                              </div>
+                              <div className="text-xs text-primary/70">
+                                {prize.reward}
+                              </div>
                             </div>
                           </div>
                         ))
                       )}
                     </div>
                     <form onSubmit={handleAddPrize} className="flex gap-2">
-                      <input value={newPrize.name} onChange={(e) => setNewPrize((p) => ({ ...p, name: e.target.value }))} placeholder={t('raffle.prizes.namePlaceholder')}
-                        className="flex-1 rounded-xl border border-line bg-surface-base px-3 py-2 text-content-primary outline-none focus:border-primary" required />
-                      <input value={newPrize.reward} onChange={(e) => setNewPrize((p) => ({ ...p, reward: e.target.value }))} placeholder={t('raffle.prizes.rewardPlaceholder')}
-                        className="w-24 rounded-xl border border-line bg-surface-base px-3 py-2 text-content-primary outline-none focus:border-primary" required />
-                      <IconBtn type="submit" tooltip={t('raffle.actions.addPrize')} disabled={busyAction === 'prize'}>
-                        {busyAction === 'prize' ? <FontAwesomeIcon icon={faSpinner} spin className="h-4 w-4" /> : <FontAwesomeIcon icon={faGift} className="h-4 w-4" />}
+                      <input
+                        value={newPrize.name}
+                        onChange={(e) =>
+                          setNewPrize((p) => ({ ...p, name: e.target.value }))
+                        }
+                        placeholder={t("raffle.prizes.namePlaceholder")}
+                        className="flex-1 rounded-xl border border-line bg-surface-base px-3 py-2 text-content-primary outline-none focus:border-primary"
+                        required
+                      />
+                      <input
+                        value={newPrize.reward}
+                        onChange={(e) =>
+                          setNewPrize((p) => ({ ...p, reward: e.target.value }))
+                        }
+                        placeholder={t("raffle.prizes.rewardPlaceholder")}
+                        className="w-24 rounded-xl border border-line bg-surface-base px-3 py-2 text-content-primary outline-none focus:border-primary"
+                        required
+                      />
+                      <IconBtn
+                        type="submit"
+                        tooltip={t("raffle.actions.addPrize")}
+                        disabled={busyAction === "prize"}
+                      >
+                        {busyAction === "prize" ? (
+                          <FontAwesomeIcon
+                            icon={faSpinner}
+                            spin
+                            className="h-4 w-4"
+                          />
+                        ) : (
+                          <FontAwesomeIcon icon={faGift} className="h-4 w-4" />
+                        )}
                       </IconBtn>
                     </form>
                   </div>
                 )}
 
-                {activeTab === 'winners' && (
+                {activeTab === "winners" && (
                   <div className="space-y-5">
                     {simulation && (
                       <div className="rounded-xl border border-info/30 bg-info/20 p-4">
                         <div className="mb-3 flex items-center gap-2 text-sm font-medium text-info">
                           <FontAwesomeIcon icon={faFlask} className="h-4 w-4" />
-                          {t('raffle.simulation.title')}
+                          {t("raffle.simulation.title")}
                           <span className="ml-auto rounded-full bg-info/20 px-2 py-0.5 text-xs">
-                            {t('raffle.simulation.eligible')}: {simulation.eligible_count} &middot; {t('raffle.simulation.ineligible')}: {simulation.ineligible_count}
+                            {t("raffle.simulation.eligible")}:{" "}
+                            {simulation.eligible_count} &middot;{" "}
+                            {t("raffle.simulation.ineligible")}:{" "}
+                            {simulation.ineligible_count}
                           </span>
                         </div>
                         <div className="mb-3 flex flex-wrap gap-2 text-xs text-info">
                           {simulation.prizes.map((prize) => (
-                            <span key={prize.id} className="rounded-full border border-info/20 px-2 py-1">
+                            <span
+                              key={prize.id}
+                              className="rounded-full border border-info/20 px-2 py-1"
+                            >
                               {prize.name}: {prize.reward}
                             </span>
                           ))}
                         </div>
                         <div className="mb-3 rounded-lg border border-info/20 bg-surface-base/20 p-3 text-xs text-info">
-                          <div className="mb-1 font-semibold">{t('raffle.simulation.warnings')}</div>
-                          {simulation.warnings.length > 0 ? simulation.warnings.map((warning) => (
-                            <div key={warning}>{warning}</div>
-                          )) : <div>{t('raffle.simulation.noWarnings')}</div>}
+                          <div className="mb-1 font-semibold">
+                            {t("raffle.simulation.warnings")}
+                          </div>
+                          {simulation.warnings.length > 0 ? (
+                            simulation.warnings.map((warning) => (
+                              <div key={warning}>{warning}</div>
+                            ))
+                          ) : (
+                            <div>{t("raffle.simulation.noWarnings")}</div>
+                          )}
                         </div>
                         <div className="space-y-2">
                           {simulation.winners.map((w) => (
-                            <div key={w.id} className="flex items-center justify-between rounded-lg border border-info/20 px-3 py-2 text-sm">
+                            <div
+                              key={w.id}
+                              className="flex items-center justify-between rounded-lg border border-info/20 px-3 py-2 text-sm"
+                            >
                               <div>
-                                <span className="font-medium text-info">{w.character_name}</span>
-                                <span className="ml-1 text-info/60">&middot; {w.username}</span>
+                                <span className="font-medium text-info">
+                                  {w.character_name}
+                                </span>
+                                <span className="ml-1 text-info/60">
+                                  &middot; {w.username}
+                                </span>
                               </div>
                               <div className="text-right text-info">
-                                <div className="font-medium">{w.prize_name}</div>
-                                <div className="text-xs text-info/60">{w.reward}</div>
+                                <div className="font-medium">
+                                  {w.prize_name}
+                                </div>
+                                <div className="text-xs text-info/60">
+                                  {w.reward}
+                                </div>
                               </div>
                             </div>
                           ))}
@@ -841,23 +1348,41 @@ export default function RafflePage() {
 
                     <div>
                       <div className="mb-3 flex items-center gap-2 text-sm font-medium text-content-primary">
-                        <FontAwesomeIcon icon={faTrophy} className="h-4 w-4 text-primary" />
-                        {t('raffle.winners.title')}
+                        <FontAwesomeIcon
+                          icon={faTrophy}
+                          className="h-4 w-4 text-primary"
+                        />
+                        {t("raffle.winners.title")}
                       </div>
                       <div className="space-y-2">
                         {selectedRaffle.current_winners.length === 0 ? (
-                          <div className="text-sm text-content-muted">{t('raffle.winners.empty')}</div>
+                          <div className="text-sm text-content-muted">
+                            {t("raffle.winners.empty")}
+                          </div>
                         ) : (
                           selectedRaffle.current_winners.map((winner) => (
-                            <div key={winner.id} className="flex items-center justify-between rounded-xl border border-line bg-surface-base/60 px-4 py-3">
+                            <div
+                              key={winner.id}
+                              className="flex items-center justify-between rounded-xl border border-line bg-surface-base/60 px-4 py-3"
+                            >
                               <div>
-                                <div className="font-medium text-content-primary">{winner.character_name}</div>
-                                <div className="text-xs text-content-muted">{winner.username}</div>
+                                <div className="font-medium text-content-primary">
+                                  {winner.character_name}
+                                </div>
+                                <div className="text-xs text-content-muted">
+                                  {winner.username}
+                                </div>
                               </div>
                               <div className="text-right">
-                                <div className="text-sm font-medium text-primary">{winner.prize_name}</div>
-                                <div className="text-xs text-primary/70">{winner.reward}</div>
-                                <div className="text-xs text-content-muted">{t('raffle.winners.run')} {winner.run_number}</div>
+                                <div className="text-sm font-medium text-primary">
+                                  {winner.prize_name}
+                                </div>
+                                <div className="text-xs text-primary/70">
+                                  {winner.reward}
+                                </div>
+                                <div className="text-xs text-content-muted">
+                                  {t("raffle.winners.run")} {winner.run_number}
+                                </div>
                               </div>
                             </div>
                           ))
@@ -868,16 +1393,24 @@ export default function RafflePage() {
                     {selectedRaffle.history.length > 0 && (
                       <details>
                         <summary className="cursor-pointer text-sm text-content-secondary hover:text-content-primary">
-                          {t('raffle.winners.history')} ({selectedRaffle.history.length})
+                          {t("raffle.winners.history")} (
+                          {selectedRaffle.history.length})
                         </summary>
                         <div className="mt-3 max-h-60 space-y-2 overflow-y-auto">
                           {selectedRaffle.history.map((winner) => (
-                            <div key={winner.id} className="rounded-lg border border-line/60 px-3 py-2 text-sm text-content-secondary">
-                              <span className="font-medium text-content-secondary">{winner.prize_name}</span>
-                              {' \u2192 '}{winner.character_name}
+                            <div
+                              key={winner.id}
+                              className="rounded-lg border border-line/60 px-3 py-2 text-sm text-content-secondary"
+                            >
+                              <span className="font-medium text-content-secondary">
+                                {winner.prize_name}
+                              </span>
+                              {" \u2192 "}
+                              {winner.character_name}
                               <span className="ml-2 text-xs">
-                                {t('raffle.winners.run')} {winner.run_number}
-                                {winner.is_rerun && ` \u00b7 ${t('raffle.winners.rerun')}: ${winner.rerun_reason || t('raffle.winners.noReason')}`}
+                                {t("raffle.winners.run")} {winner.run_number}
+                                {winner.is_rerun &&
+                                  ` \u00b7 ${t("raffle.winners.rerun")}: ${winner.rerun_reason || t("raffle.winners.noReason")}`}
                               </span>
                             </div>
                           ))}
@@ -887,26 +1420,42 @@ export default function RafflePage() {
                   </div>
                 )}
 
-                {activeTab === 'admin' && (
+                {activeTab === "admin" && (
                   <div className="space-y-5">
                     <div className="rounded-xl border border-danger/20 bg-danger/10 p-4">
                       <div className="mb-3 flex items-center gap-2 text-sm font-medium text-danger">
-                        <FontAwesomeIcon icon={faRotateLeft} className="h-4 w-4" />
-                        {t('raffle.rerun.title')}
+                        <FontAwesomeIcon
+                          icon={faRotateLeft}
+                          className="h-4 w-4"
+                        />
+                        {t("raffle.rerun.title")}
                       </div>
                       <textarea
                         value={rerunReason}
                         onChange={(e) => setRerunReason(e.target.value)}
-                        placeholder={t('raffle.rerun.reasonPlaceholder')}
+                        placeholder={t("raffle.rerun.reasonPlaceholder")}
                         className="min-h-20 w-full rounded-xl border border-line bg-surface-base px-3 py-2 text-content-primary outline-none focus:border-danger"
                       />
                       <button
                         onClick={() => void handleRerun()}
-                        disabled={!rerunReason.trim() || busyAction === 'rerun'}
+                        disabled={!rerunReason.trim() || busyAction === "rerun"}
                         className="mt-3 inline-flex items-center gap-2 rounded-xl bg-danger px-4 py-2 text-sm font-semibold text-content-on-primary disabled:opacity-50"
                       >
-                        {busyAction === 'rerun' ? <FontAwesomeIcon icon={faSpinner} spin className="h-4 w-4" /> : <FontAwesomeIcon icon={faRotateLeft} className="h-4 w-4" />}
-                        {busyAction === 'rerun' ? t('raffle.actionLabels.rerunning') : t('raffle.actions.rerun')}
+                        {busyAction === "rerun" ? (
+                          <FontAwesomeIcon
+                            icon={faSpinner}
+                            spin
+                            className="h-4 w-4"
+                          />
+                        ) : (
+                          <FontAwesomeIcon
+                            icon={faRotateLeft}
+                            className="h-4 w-4"
+                          />
+                        )}
+                        {busyAction === "rerun"
+                          ? t("raffle.actionLabels.rerunning")
+                          : t("raffle.actions.rerun")}
                       </button>
                     </div>
                   </div>

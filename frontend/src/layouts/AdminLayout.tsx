@@ -1,4 +1,4 @@
-import { Activity, BookOpenCheck, ClipboardList, LifeBuoy, Palette, RefreshCw, Settings, Shield, Users } from 'lucide-react';
+import { Activity, BookOpenCheck, ClipboardList, LifeBuoy, Palette, RefreshCw, Settings, Shield, Users, Wrench } from 'lucide-react';
 import { Link, Navigate, Outlet, useLocation } from 'react-router-dom';
 import { useTranslation } from 'react-i18next';
 
@@ -23,6 +23,7 @@ export default function AdminLayout() {
     { key: 'knowledge', label: t('workspace.adminNav.knowledge'), path: '/admin/knowledge', icon: BookOpenCheck },
     { key: 'sync', label: t('workspace.adminNav.sync'), path: '/admin/sync', icon: RefreshCw },
     { key: 'audits', label: t('workspace.adminNav.audits'), path: '/admin/audits', icon: ClipboardList },
+    { key: 'maintenance', label: t('workspace.adminNav.maintenance'), path: '/admin/maintenance', icon: Wrench },
     { key: 'settings', label: t('workspace.adminNav.settings'), path: '/admin/settings', icon: Settings },
     { key: 'appearance', label: t('workspace.adminNav.appearance'), path: '/admin/theme-playground', icon: Palette },
   ];

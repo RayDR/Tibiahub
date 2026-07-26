@@ -1,25 +1,40 @@
-import React, { useState, useEffect } from 'react';
-import { useTranslation } from 'react-i18next';
-import { Calendar, Trophy, Users, Ticket, Gift, Plus, Trash2, Loader2 } from 'lucide-react';
-import { eventsApi, Event, EventCreate } from '../../services/events';
-import { guildApi } from '../../services/guild';
-import { useAuth } from '../../context/AuthContext';
-import { useToast } from '../../context/ToastContext';
-import { useSearchParams } from 'react-router-dom';
-import { useGuildContext } from '../../utils/guildContext';
+import React, { useState, useEffect } from "react";
+import { useTranslation } from "react-i18next";
+import {
+  Calendar,
+  Trophy,
+  Users,
+  Ticket,
+  Gift,
+  Plus,
+  Trash2,
+  Loader2,
+} from "lucide-react";
+import { eventsApi, Event, EventCreate } from "../../services/events";
+import { guildApi } from "../../services/guild";
+import { useAuth } from "../../context/AuthContext";
+import { useToast } from "../../context/ToastContext";
+import { useConfirmation } from "../../context/ConfirmationContext";
+import { useSearchParams } from "react-router-dom";
+import { useGuildContext } from "../../utils/guildContext";
 
 export const Events: React.FC = () => {
   useTranslation();
   const { user } = useAuth();
   const toast = useToast();
+  const confirmation = useConfirmation();
   const [searchParams, setSearchParams] = useSearchParams();
   const [events, setEvents] = useState<Event[]>([]);
   const [loading, setLoading] = useState(true);
   const [showCreateModal, setShowCreateModal] = useState(false);
   const [showDetailModal, setShowDetailModal] = useState(false);
   const [selectedEvent, setSelectedEvent] = useState<Event | null>(null);
-  const initialFilter = (searchParams.get('type') as 'raffle' | 'contest' | 'hunt' | 'quest' | null) || 'all';
-  const [filter, setFilter] = useState<'all' | 'raffle' | 'contest' | 'hunt' | 'quest'>(initialFilter);
+  const initialFilter =
+    (searchParams.get("type") as
+      "raffle" | "contest" | "hunt" | "quest" | null) || "all";
+  const [filter, setFilter] = useState<
+    "all" | "raffle" | "contest" | "hunt" | "quest"
+  >(initialFilter);
   const [isDrawing, setIsDrawing] = useState(false);
   const [winnerNumber, setWinnerNumber] = useState<number | null>(null);
   const [winnerName, setWinnerName] = useState<string | null>(null);
@@ -27,11 +42,22 @@ export const Events: React.FC = () => {
     guild_raffles_enabled: true,
     guild_contests_enabled: true,
   });
-  const canManageEvents = Boolean(user?.is_superuser || ['leader', 'vice leader', 'guild leader', 'alpha warbringer', 'bloodhowl marshal'].includes((user?.guild_rank || '').toLowerCase()));
+  const canManageEvents = Boolean(
+    user?.is_superuser ||
+    [
+      "leader",
+      "vice leader",
+      "guild leader",
+      "alpha warbringer",
+      "bloodhowl marshal",
+    ].includes((user?.guild_rank || "").toLowerCase()),
+  );
   const scopedGuild = useGuildContext(user);
 
   useEffect(() => {
-    const queryType = (searchParams.get('type') as 'raffle' | 'contest' | 'hunt' | 'quest' | null) || 'all';
+    const queryType =
+      (searchParams.get("type") as
+        "raffle" | "contest" | "hunt" | "quest" | null) || "all";
     if (queryType !== filter) {
       setFilter(queryType);
     }
@@ -47,28 +73,35 @@ export const Events: React.FC = () => {
         const flags = await guildApi.getFeatureFlags();
         setFeatureFlags(flags);
       } catch {
-        setFeatureFlags({ guild_raffles_enabled: true, guild_contests_enabled: true });
+        setFeatureFlags({
+          guild_raffles_enabled: true,
+          guild_contests_enabled: true,
+        });
       }
     };
     void loadFlags();
   }, []);
 
   useEffect(() => {
-    if (!featureFlags.guild_contests_enabled && filter === 'contest') {
-      setFilter('all');
+    if (!featureFlags.guild_contests_enabled && filter === "contest") {
+      setFilter("all");
     }
-    if (!featureFlags.guild_raffles_enabled && filter === 'raffle') {
-      setFilter('all');
+    if (!featureFlags.guild_raffles_enabled && filter === "raffle") {
+      setFilter("all");
     }
   }, [featureFlags, filter]);
 
   const loadEvents = async () => {
     try {
       setLoading(true);
-      const data = await eventsApi.getEvents('active', filter === 'all' ? undefined : filter, scopedGuild);
+      const data = await eventsApi.getEvents(
+        "active",
+        filter === "all" ? undefined : filter,
+        scopedGuild,
+      );
       setEvents(data);
     } catch (error) {
-      console.error('Failed to load events:', error);
+      console.error("Failed to load events:", error);
     } finally {
       setLoading(false);
     }
@@ -78,15 +111,17 @@ export const Events: React.FC = () => {
     try {
       const payload: EventCreate = {
         ...event,
-        guild_name: user?.is_superuser ? scopedGuild : (event.guild_name || user?.guild_name),
+        guild_name: user?.is_superuser
+          ? scopedGuild
+          : event.guild_name || user?.guild_name,
       };
       await eventsApi.createEvent(payload);
       setShowCreateModal(false);
       loadEvents();
-      toast.success('Event created successfully!');
+      toast.success("Event created successfully!");
     } catch (error) {
-      console.error('Failed to create event:', error);
-      toast.error('Failed to create event');
+      console.error("Failed to create event:", error);
+      toast.error("Failed to create event");
     }
   };
 
@@ -98,9 +133,9 @@ export const Events: React.FC = () => {
         const updated = await eventsApi.getEvent(eventId);
         setSelectedEvent(updated);
       }
-      toast.success('Successfully joined the event!');
+      toast.success("Successfully joined the event!");
     } catch (error: any) {
-      toast.error(error.message || 'Failed to join event');
+      toast.error(error.message || "Failed to join event");
     }
   };
 
@@ -116,11 +151,12 @@ export const Events: React.FC = () => {
       const intervals = animationDuration / intervalTime;
       let count = 0;
 
-      const event = events.find(e => e.id === eventId);
+      const event = events.find((e) => e.id === eventId);
       if (!event) return;
 
       const interval = setInterval(() => {
-        const randomNum = Math.floor(Math.random() * (event.total_slots || 100)) + 1;
+        const randomNum =
+          Math.floor(Math.random() * (event.total_slots || 100)) + 1;
         setWinnerNumber(randomNum);
         count++;
 
@@ -141,19 +177,22 @@ export const Events: React.FC = () => {
             setSelectedEvent(updated);
           }
         } catch (error: any) {
-          toast.error(error.message || 'Failed to draw winner');
+          toast.error(error.message || "Failed to draw winner");
         } finally {
           setIsDrawing(false);
         }
       }, animationDuration);
     } catch (error) {
       setIsDrawing(false);
-      console.error('Failed to draw winner:', error);
+      console.error("Failed to draw winner:", error);
     }
   };
 
   const handleDeleteEvent = async (eventId: number) => {
-    const confirmed = window.confirm('Are you sure you want to delete this event?');
+    const confirmed = await confirmation.confirm(
+      "Are you sure you want to delete this event?",
+      { danger: true },
+    );
     if (!confirmed) return;
 
     try {
@@ -161,10 +200,10 @@ export const Events: React.FC = () => {
       loadEvents();
       setShowDetailModal(false);
       setSelectedEvent(null);
-      toast.success('Event deleted successfully');
+      toast.success("Event deleted successfully");
     } catch (error) {
-      console.error('Failed to delete event:', error);
-      toast.error('Failed to delete event');
+      console.error("Failed to delete event:", error);
+      toast.error("Failed to delete event");
     }
   };
 
@@ -174,27 +213,42 @@ export const Events: React.FC = () => {
       setSelectedEvent(detailed);
       setShowDetailModal(true);
     } catch (error) {
-      console.error('Failed to load event details:', error);
+      console.error("Failed to load event details:", error);
     }
   };
 
   const hasUserJoined = (event: Event) => {
-    return event.participants.some(p => p.user_id === user?.id);
+    return event.participants.some((p) => p.user_id === user?.id);
   };
 
   const getTypeMeta = (type: string) => {
     switch (type) {
-      case 'raffle':
-        return { label: 'Raffle', badge: 'bg-primary/15 text-primary border-primary/50' };
-      case 'contest':
-        return { label: 'Contest', badge: 'bg-danger/15 text-danger border-danger/50' };
-      case 'hunt':
-      case 'hunt_event':
-        return { label: 'Hunt', badge: 'bg-success/15 text-success border-success/50' };
-      case 'quest':
-        return { label: 'Quest', badge: 'bg-accent/15 text-accent border-accent/50' };
+      case "raffle":
+        return {
+          label: "Raffle",
+          badge: "bg-primary/15 text-primary border-primary/50",
+        };
+      case "contest":
+        return {
+          label: "Contest",
+          badge: "bg-danger/15 text-danger border-danger/50",
+        };
+      case "hunt":
+      case "hunt_event":
+        return {
+          label: "Hunt",
+          badge: "bg-success/15 text-success border-success/50",
+        };
+      case "quest":
+        return {
+          label: "Quest",
+          badge: "bg-accent/15 text-accent border-accent/50",
+        };
       default:
-        return { label: 'Custom', badge: 'bg-surface text-content-secondary border-line' };
+        return {
+          label: "Custom",
+          badge: "bg-surface text-content-secondary border-line",
+        };
     }
   };
 
@@ -203,7 +257,7 @@ export const Events: React.FC = () => {
       <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 sm:gap-4">
         <h1 className="text-2xl sm:text-3xl font-serif text-content-primary flex items-center gap-2 sm:gap-3">
           <Trophy className="w-6 h-6 sm:w-8 sm:h-8 text-primary" />
-          {filter === 'contest' ? 'Guild Contests' : 'Events & Raffles'}
+          {filter === "contest" ? "Guild Contests" : "Events & Raffles"}
         </h1>
         {canManageEvents && (
           <button
@@ -219,23 +273,34 @@ export const Events: React.FC = () => {
 
       <div className="flex flex-wrap gap-2 sm:gap-3">
         {[
-          { key: 'all', label: 'All Events', icon: null },
-          ...(featureFlags.guild_raffles_enabled ? [{ key: 'raffle', label: 'Raffles', icon: <Ticket size={16} /> }] : []),
-          ...(featureFlags.guild_contests_enabled ? [{ key: 'contest', label: 'Contests', icon: <Trophy size={16} /> }] : []),
-          { key: 'hunt', label: 'Hunts', icon: <Users size={16} /> },
-          { key: 'quest', label: 'Quests', icon: <Calendar size={16} /> },
+          { key: "all", label: "All Events", icon: null },
+          ...(featureFlags.guild_raffles_enabled
+            ? [{ key: "raffle", label: "Raffles", icon: <Ticket size={16} /> }]
+            : []),
+          ...(featureFlags.guild_contests_enabled
+            ? [
+                {
+                  key: "contest",
+                  label: "Contests",
+                  icon: <Trophy size={16} />,
+                },
+              ]
+            : []),
+          { key: "hunt", label: "Hunts", icon: <Users size={16} /> },
+          { key: "quest", label: "Quests", icon: <Calendar size={16} /> },
         ].map(({ key, label, icon }) => (
           <button
             key={key}
-            className={`flex items-center gap-2 px-4 py-2 rounded-md transition-colors font-medium ${filter === key
-              ? 'bg-primary text-content-on-primary'
-              : 'bg-surface/50 text-content-secondary hover:bg-surface-raised/50 border border-line'
-              }`}
+            className={`flex items-center gap-2 px-4 py-2 rounded-md transition-colors font-medium ${
+              filter === key
+                ? "bg-primary text-content-on-primary"
+                : "bg-surface/50 text-content-secondary hover:bg-surface-raised/50 border border-line"
+            }`}
             onClick={() => {
               setFilter(key as any);
-              if (key === 'all') {
+              if (key === "all") {
                 const nextParams = new URLSearchParams(searchParams);
-                nextParams.delete('type');
+                nextParams.delete("type");
                 setSearchParams(nextParams, { replace: true });
               } else {
                 setSearchParams({ type: key }, { replace: true });
@@ -249,30 +314,48 @@ export const Events: React.FC = () => {
       </div>
 
       {loading ? (
-        <div className="text-center py-12 text-content-secondary">Loading events...</div>
+        <div className="text-center py-12 text-content-secondary">
+          Loading events...
+        </div>
       ) : events.length === 0 ? (
         <div className="bg-surface-base/50 rounded-lg border border-line p-12 text-center">
           <Trophy size={48} className="mx-auto mb-4 text-content-muted" />
-          <p className="text-content-secondary">No active events at the moment</p>
+          <p className="text-content-secondary">
+            No active events at the moment
+          </p>
         </div>
       ) : (
         <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-4 sm:gap-6">
-          {events.map(event => (
+          {events.map((event) => (
             <div
               key={event.id}
-              className={`bg-surface-base/80 border rounded-lg p-4 sm:p-6 hover:border-primary/50 transition-all ${getTypeMeta(event.type).badge?.includes('amber') ? 'border-primary/50' :
-                getTypeMeta(event.type).badge?.includes('red') ? 'border-danger/50' :
-                  getTypeMeta(event.type).badge?.includes('green') ? 'border-success/50' :
-                    getTypeMeta(event.type).badge?.includes('indigo') ? 'border-accent/50' : 'border-line'
-                }`}
+              className={`bg-surface-base/80 border rounded-lg p-4 sm:p-6 hover:border-primary/50 transition-all ${
+                getTypeMeta(event.type).badge?.includes("amber")
+                  ? "border-primary/50"
+                  : getTypeMeta(event.type).badge?.includes("red")
+                    ? "border-danger/50"
+                    : getTypeMeta(event.type).badge?.includes("green")
+                      ? "border-success/50"
+                      : getTypeMeta(event.type).badge?.includes("indigo")
+                        ? "border-accent/50"
+                        : "border-line"
+              }`}
             >
               <div className="flex justify-between items-start mb-3 sm:mb-4">
-                <h3 className="text-lg sm:text-xl font-bold text-content-primary">{event.title}</h3>
+                <h3 className="text-lg sm:text-xl font-bold text-content-primary">
+                  {event.title}
+                </h3>
                 {(() => {
                   const meta = getTypeMeta(event.type);
                   return (
-                    <span className={`flex items-center gap-1 px-2 py-1 rounded text-xs font-bold uppercase border ${meta.badge}`}>
-                      {event.type === 'raffle' ? <Ticket size={12} /> : <Trophy size={12} />}
+                    <span
+                      className={`flex items-center gap-1 px-2 py-1 rounded text-xs font-bold uppercase border ${meta.badge}`}
+                    >
+                      {event.type === "raffle" ? (
+                        <Ticket size={12} />
+                      ) : (
+                        <Trophy size={12} />
+                      )}
                       {meta.label}
                     </span>
                   );
@@ -280,25 +363,33 @@ export const Events: React.FC = () => {
               </div>
 
               {event.description && (
-                <p className="text-content-secondary text-sm mb-4 leading-relaxed">{event.description}</p>
+                <p className="text-content-secondary text-sm mb-4 leading-relaxed">
+                  {event.description}
+                </p>
               )}
 
               {event.reward && (
                 <div className="flex items-center gap-2 p-3 bg-primary/20 border border-primary/30 rounded-md mb-4">
                   <Gift size={16} className="text-primary" />
-                  <span className="text-primary font-medium text-sm">{event.reward}</span>
+                  <span className="text-primary font-medium text-sm">
+                    {event.reward}
+                  </span>
                 </div>
               )}
 
               <div className="flex gap-4 mb-4 text-sm">
                 <div className="flex items-center gap-2 text-content-secondary">
                   <Users size={16} />
-                  <span>{event.participant_count} / {event.total_slots || '∞'}</span>
+                  <span>
+                    {event.participant_count} / {event.total_slots || "∞"}
+                  </span>
                 </div>
                 {event.draw_date && (
                   <div className="flex items-center gap-2 text-content-secondary">
                     <Calendar size={16} />
-                    <span>{new Date(event.draw_date).toLocaleDateString()}</span>
+                    <span>
+                      {new Date(event.draw_date).toLocaleDateString()}
+                    </span>
                   </div>
                 )}
               </div>
@@ -308,7 +399,11 @@ export const Events: React.FC = () => {
                   <Trophy size={16} className="text-success" />
                   <span className="text-success font-medium text-sm">
                     Winner: {event.winner_name}
-                    {event.winner_number && <span className="ml-2 text-success">#{event.winner_number}</span>}
+                    {event.winner_number && (
+                      <span className="ml-2 text-success">
+                        #{event.winner_number}
+                      </span>
+                    )}
                   </span>
                 </div>
               )}
@@ -324,7 +419,9 @@ export const Events: React.FC = () => {
                   <button
                     className="flex-1 px-4 py-2 bg-success hover:bg-success-hover text-content-on-primary rounded-md transition-colors font-medium text-sm disabled:opacity-50 disabled:cursor-not-allowed"
                     onClick={() => handleJoinEvent(event.id)}
-                    disabled={event.participant_count >= (event.total_slots || Infinity)}
+                    disabled={
+                      event.participant_count >= (event.total_slots || Infinity)
+                    }
                   >
                     Join Event
                   </button>
@@ -344,7 +441,13 @@ export const Events: React.FC = () => {
         <CreateEventModal
           contestsEnabled={featureFlags.guild_contests_enabled}
           rafflesEnabled={featureFlags.guild_raffles_enabled}
-          defaultType={filter === 'contest' ? 'contest' : (filter === 'raffle' ? 'raffle' : 'raffle')}
+          defaultType={
+            filter === "contest"
+              ? "contest"
+              : filter === "raffle"
+                ? "raffle"
+                : "raffle"
+          }
           onClose={() => setShowCreateModal(false)}
           onCreate={handleCreateEvent}
         />
@@ -375,29 +478,35 @@ export const Events: React.FC = () => {
 interface CreateEventModalProps {
   contestsEnabled: boolean;
   rafflesEnabled: boolean;
-  defaultType: 'raffle' | 'contest';
+  defaultType: "raffle" | "contest";
   onClose: () => void;
   onCreate: (event: EventCreate) => void;
 }
 
-const CreateEventModal: React.FC<CreateEventModalProps> = ({ contestsEnabled, rafflesEnabled, defaultType, onClose, onCreate }) => {
+const CreateEventModal: React.FC<CreateEventModalProps> = ({
+  contestsEnabled,
+  rafflesEnabled,
+  defaultType,
+  onClose,
+  onCreate,
+}) => {
   const [formData, setFormData] = useState<EventCreate>({
     type: defaultType,
-    title: '',
-    description: '',
-    rules: '',
-    reward: '',
+    title: "",
+    description: "",
+    rules: "",
+    reward: "",
     total_slots: 100,
-    entry_cost: '',
-    status: 'active',
+    entry_cost: "",
+    status: "active",
     start_date: new Date().toISOString(),
-    end_date: '',
-    draw_date: '',
+    end_date: "",
+    draw_date: "",
     is_public: false,
-    participant_mode: 'manual',
+    participant_mode: "manual",
     active_days_limit: 10,
-    guild_name: '',
-    guild_world: '',
+    guild_name: "",
+    guild_world: "",
   });
 
   const handleSubmit = (e: React.FormEvent) => {
@@ -411,23 +520,35 @@ const CreateEventModal: React.FC<CreateEventModalProps> = ({ contestsEnabled, ra
   };
 
   const toLocalInput = (value?: string) => {
-    if (!value) return '';
+    if (!value) return "";
     return new Date(value).toISOString().slice(0, 16);
   };
 
   return (
-    <div className="fixed inset-0 bg-surface-base/80 backdrop-blur-sm flex items-center justify-center z-modal p-4" onClick={onClose}>
-      <div className="bg-surface-base border border-line rounded-lg w-full max-w-2xl max-h-[90vh] overflow-y-auto" onClick={e => e.stopPropagation()}>
+    <div
+      className="fixed inset-0 bg-surface-base/80 backdrop-blur-sm flex items-center justify-center z-modal p-4"
+      onClick={onClose}
+    >
+      <div
+        className="bg-surface-base border border-line rounded-lg w-full max-w-2xl max-h-[90vh] overflow-y-auto"
+        onClick={(e) => e.stopPropagation()}
+      >
         <div className="p-6 border-b border-line sticky top-0 bg-surface-base z-10">
-          <h2 className="text-2xl font-bold text-content-primary">Create New Event</h2>
+          <h2 className="text-2xl font-bold text-content-primary">
+            Create New Event
+          </h2>
         </div>
 
         <form onSubmit={handleSubmit} className="p-6 space-y-5">
           <div>
-            <label className="block text-sm font-medium text-content-secondary mb-2">Event Type</label>
+            <label className="block text-sm font-medium text-content-secondary mb-2">
+              Event Type
+            </label>
             <select
               value={formData.type}
-              onChange={e => setFormData({ ...formData, type: e.target.value as any })}
+              onChange={(e) =>
+                setFormData({ ...formData, type: e.target.value as any })
+              }
               required
               className="w-full bg-surface-base border border-line rounded-md p-3 text-content-primary focus:border-primary focus:outline-none focus:ring-2 focus:ring-primary/20"
             >
@@ -440,11 +561,15 @@ const CreateEventModal: React.FC<CreateEventModalProps> = ({ contestsEnabled, ra
           </div>
 
           <div>
-            <label className="block text-sm font-medium text-content-secondary mb-2">Title</label>
+            <label className="block text-sm font-medium text-content-secondary mb-2">
+              Title
+            </label>
             <input
               type="text"
               value={formData.title}
-              onChange={e => setFormData({ ...formData, title: e.target.value })}
+              onChange={(e) =>
+                setFormData({ ...formData, title: e.target.value })
+              }
               required
               className="w-full bg-surface-base border border-line rounded-md p-3 text-content-primary focus:border-primary focus:outline-none focus:ring-2 focus:ring-primary/20"
               placeholder="Enter event title"
@@ -452,10 +577,14 @@ const CreateEventModal: React.FC<CreateEventModalProps> = ({ contestsEnabled, ra
           </div>
 
           <div>
-            <label className="block text-sm font-medium text-content-secondary mb-2">Description</label>
+            <label className="block text-sm font-medium text-content-secondary mb-2">
+              Description
+            </label>
             <textarea
               value={formData.description}
-              onChange={e => setFormData({ ...formData, description: e.target.value })}
+              onChange={(e) =>
+                setFormData({ ...formData, description: e.target.value })
+              }
               rows={3}
               className="w-full bg-surface-base border border-line rounded-md p-3 text-content-primary focus:border-primary focus:outline-none focus:ring-2 focus:ring-primary/20 resize-none"
               placeholder="Describe your event..."
@@ -464,40 +593,69 @@ const CreateEventModal: React.FC<CreateEventModalProps> = ({ contestsEnabled, ra
 
           <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
             <div>
-              <label className="block text-sm font-medium text-content-secondary mb-2">Start Date</label>
+              <label className="block text-sm font-medium text-content-secondary mb-2">
+                Start Date
+              </label>
               <input
                 type="datetime-local"
                 required
                 value={toLocalInput(formData.start_date)}
-                onChange={e => setFormData({ ...formData, start_date: new Date(e.target.value).toISOString() })}
+                onChange={(e) =>
+                  setFormData({
+                    ...formData,
+                    start_date: new Date(e.target.value).toISOString(),
+                  })
+                }
                 className="w-full bg-surface-base border border-line rounded-md p-3 text-content-primary focus:border-primary focus:outline-none focus:ring-2 focus:ring-primary/20"
               />
             </div>
             <div>
-              <label className="block text-sm font-medium text-content-secondary mb-2">End Date (optional)</label>
+              <label className="block text-sm font-medium text-content-secondary mb-2">
+                End Date (optional)
+              </label>
               <input
                 type="datetime-local"
                 value={toLocalInput(formData.end_date)}
-                onChange={e => setFormData({ ...formData, end_date: e.target.value ? new Date(e.target.value).toISOString() : '' })}
+                onChange={(e) =>
+                  setFormData({
+                    ...formData,
+                    end_date: e.target.value
+                      ? new Date(e.target.value).toISOString()
+                      : "",
+                  })
+                }
                 className="w-full bg-surface-base border border-line rounded-md p-3 text-content-primary focus:border-primary focus:outline-none focus:ring-2 focus:ring-primary/20"
               />
             </div>
             <div>
-              <label className="block text-sm font-medium text-content-secondary mb-2">Draw Date (raffles)</label>
+              <label className="block text-sm font-medium text-content-secondary mb-2">
+                Draw Date (raffles)
+              </label>
               <input
                 type="datetime-local"
                 value={toLocalInput(formData.draw_date)}
-                onChange={e => setFormData({ ...formData, draw_date: e.target.value ? new Date(e.target.value).toISOString() : '' })}
+                onChange={(e) =>
+                  setFormData({
+                    ...formData,
+                    draw_date: e.target.value
+                      ? new Date(e.target.value).toISOString()
+                      : "",
+                  })
+                }
                 className="w-full bg-surface-base border border-line rounded-md p-3 text-content-primary focus:border-primary focus:outline-none focus:ring-2 focus:ring-primary/20"
               />
             </div>
           </div>
 
           <div>
-            <label className="block text-sm font-medium text-content-secondary mb-2">Rules</label>
+            <label className="block text-sm font-medium text-content-secondary mb-2">
+              Rules
+            </label>
             <textarea
               value={formData.rules}
-              onChange={e => setFormData({ ...formData, rules: e.target.value })}
+              onChange={(e) =>
+                setFormData({ ...formData, rules: e.target.value })
+              }
               rows={4}
               className="w-full bg-surface-base border border-line rounded-md p-3 text-content-primary focus:border-primary focus:outline-none focus:ring-2 focus:ring-primary/20 resize-none font-mono text-sm"
               placeholder="Define event rules and guidelines..."
@@ -505,35 +663,50 @@ const CreateEventModal: React.FC<CreateEventModalProps> = ({ contestsEnabled, ra
           </div>
 
           <div>
-            <label className="block text-sm font-medium text-content-secondary mb-2">Reward</label>
+            <label className="block text-sm font-medium text-content-secondary mb-2">
+              Reward
+            </label>
             <input
               type="text"
               value={formData.reward}
-              onChange={e => setFormData({ ...formData, reward: e.target.value })}
+              onChange={(e) =>
+                setFormData({ ...formData, reward: e.target.value })
+              }
               className="w-full bg-surface-base border border-line rounded-md p-3 text-content-primary focus:border-primary focus:outline-none focus:ring-2 focus:ring-primary/20"
               placeholder="e.g., 500k gold, Demon Helmet, etc."
             />
           </div>
 
-          {formData.type === 'raffle' && (
+          {formData.type === "raffle" && (
             <div className="grid grid-cols-2 gap-4">
               <div>
-                <label className="block text-sm font-medium text-content-secondary mb-2">Total Slots</label>
+                <label className="block text-sm font-medium text-content-secondary mb-2">
+                  Total Slots
+                </label>
                 <input
                   type="number"
                   value={formData.total_slots}
-                  onChange={e => setFormData({ ...formData, total_slots: parseInt(e.target.value) })}
+                  onChange={(e) =>
+                    setFormData({
+                      ...formData,
+                      total_slots: parseInt(e.target.value),
+                    })
+                  }
                   min="1"
                   className="w-full bg-surface-base border border-line rounded-md p-3 text-content-primary focus:border-primary focus:outline-none focus:ring-2 focus:ring-primary/20"
                 />
               </div>
 
               <div>
-                <label className="block text-sm font-medium text-content-secondary mb-2">Entry Cost</label>
+                <label className="block text-sm font-medium text-content-secondary mb-2">
+                  Entry Cost
+                </label>
                 <input
                   type="text"
                   value={formData.entry_cost}
-                  onChange={e => setFormData({ ...formData, entry_cost: e.target.value })}
+                  onChange={(e) =>
+                    setFormData({ ...formData, entry_cost: e.target.value })
+                  }
                   placeholder="e.g., 100k gold"
                   className="w-full bg-surface-base border border-line rounded-md p-3 text-content-primary focus:border-primary focus:outline-none focus:ring-2 focus:ring-primary/20"
                 />
@@ -542,11 +715,15 @@ const CreateEventModal: React.FC<CreateEventModalProps> = ({ contestsEnabled, ra
           )}
 
           <div>
-            <label className="block text-sm font-medium text-content-secondary mb-2">Draw Date (Optional)</label>
+            <label className="block text-sm font-medium text-content-secondary mb-2">
+              Draw Date (Optional)
+            </label>
             <input
               type="datetime-local"
               value={formData.draw_date}
-              onChange={e => setFormData({ ...formData, draw_date: e.target.value })}
+              onChange={(e) =>
+                setFormData({ ...formData, draw_date: e.target.value })
+              }
               className="w-full bg-surface-base border border-line rounded-md p-3 text-content-primary focus:border-primary focus:outline-none focus:ring-2 focus:ring-primary/20"
             />
           </div>
@@ -556,73 +733,113 @@ const CreateEventModal: React.FC<CreateEventModalProps> = ({ contestsEnabled, ra
               type="checkbox"
               id="is_public"
               checked={formData.is_public || false}
-              onChange={e => setFormData({ ...formData, is_public: e.target.checked })}
+              onChange={(e) =>
+                setFormData({ ...formData, is_public: e.target.checked })
+              }
               className="w-5 h-5 rounded border-line bg-surface-base text-primary"
             />
             <label htmlFor="is_public" className="cursor-pointer">
-              <span className="block text-sm font-medium text-content-primary">Public Event</span>
-              <span className="block text-xs text-content-secondary">Generate a public link for live viewing</span>
+              <span className="block text-sm font-medium text-content-primary">
+                Public Event
+              </span>
+              <span className="block text-xs text-content-secondary">
+                Generate a public link for live viewing
+              </span>
             </label>
           </div>
 
           {formData.is_public && (
             <div className="space-y-4 bg-surface-base/50 p-4 rounded-md border border-line">
-              <h3 className="text-sm font-semibold text-primary">Public Event Configuration</h3>
+              <h3 className="text-sm font-semibold text-primary">
+                Public Event Configuration
+              </h3>
 
               <div>
-                <label className="block text-sm font-medium text-content-secondary mb-2">Participant Mode</label>
+                <label className="block text-sm font-medium text-content-secondary mb-2">
+                  Participant Mode
+                </label>
                 <select
                   value={formData.participant_mode}
-                  onChange={e => setFormData({ ...formData, participant_mode: e.target.value })}
+                  onChange={(e) =>
+                    setFormData({
+                      ...formData,
+                      participant_mode: e.target.value,
+                    })
+                  }
                   className="w-full bg-surface-base border border-line rounded-md p-3 text-content-primary focus:border-primary focus:outline-none focus:ring-2 focus:ring-primary/20"
                 >
-                  <option value="manual">Manual - Add participants manually</option>
-                  <option value="guild_auto">Guild Auto - Load from guild automatically</option>
+                  <option value="manual">
+                    Manual - Add participants manually
+                  </option>
+                  <option value="guild_auto">
+                    Guild Auto - Load from guild automatically
+                  </option>
                 </select>
               </div>
 
-              {formData.participant_mode === 'guild_auto' && (
+              {formData.participant_mode === "guild_auto" && (
                 <>
                   <div>
-                    <label className="block text-sm font-medium text-content-secondary mb-2">Guild Name</label>
+                    <label className="block text-sm font-medium text-content-secondary mb-2">
+                      Guild Name
+                    </label>
                     <input
                       type="text"
                       value={formData.guild_name}
-                      onChange={e => setFormData({ ...formData, guild_name: e.target.value })}
+                      onChange={(e) =>
+                        setFormData({ ...formData, guild_name: e.target.value })
+                      }
                       placeholder="e.g., Bloodborne Warhowl"
                       className="w-full bg-surface-base border border-line rounded-md p-3 text-content-primary focus:border-primary focus:outline-none focus:ring-2 focus:ring-primary/20"
                     />
                   </div>
 
                   <div>
-                    <label className="block text-sm font-medium text-content-secondary mb-2">Active Days Limit</label>
+                    <label className="block text-sm font-medium text-content-secondary mb-2">
+                      Active Days Limit
+                    </label>
                     <input
                       type="number"
                       value={formData.active_days_limit}
-                      onChange={e => setFormData({ ...formData, active_days_limit: parseInt(e.target.value) || 10 })}
+                      onChange={(e) =>
+                        setFormData({
+                          ...formData,
+                          active_days_limit: parseInt(e.target.value) || 10,
+                        })
+                      }
                       min="1"
                       max="365"
                       className="w-full bg-surface-base border border-line rounded-md p-3 text-content-primary focus:border-primary focus:outline-none focus:ring-2 focus:ring-primary/20"
                     />
-                    <p className="text-xs text-content-muted mt-1">Only load members active within last X days</p>
+                    <p className="text-xs text-content-muted mt-1">
+                      Only load members active within last X days
+                    </p>
                   </div>
 
                   <div>
-                    <label className="block text-sm font-medium text-content-secondary mb-2">Guild World (Optional)</label>
+                    <label className="block text-sm font-medium text-content-secondary mb-2">
+                      Guild World (Optional)
+                    </label>
                     <input
                       type="text"
                       value={formData.guild_world}
-                      onChange={e => setFormData({ ...formData, guild_world: e.target.value })}
+                      onChange={(e) =>
+                        setFormData({
+                          ...formData,
+                          guild_world: e.target.value,
+                        })
+                      }
                       placeholder="e.g., Antica, Belobra..."
                       className="w-full bg-surface-base border border-line rounded-md p-3 text-content-primary focus:border-primary focus:outline-none focus:ring-2 focus:ring-primary/20"
                     />
-                    <p className="text-xs text-content-muted mt-1">Restrict participants to this world</p>
+                    <p className="text-xs text-content-muted mt-1">
+                      Restrict participants to this world
+                    </p>
                   </div>
                 </>
               )}
             </div>
           )}
-
 
           <div className="flex gap-3 pt-4">
             <button
@@ -668,44 +885,60 @@ const EventDetailModal: React.FC<EventDetailModalProps> = ({
   currentUser,
 }) => {
   const toast = useToast();
+  const confirmation = useConfirmation();
   const [isPublicEdit, setIsPublicEdit] = useState(event.is_public);
   const [syncLoading, setSyncLoading] = useState(false);
   const [syncLog, setSyncLog] = useState<string[]>([]);
   const [showLog, setShowLog] = useState(false);
-  const [manualCharName, setManualCharName] = useState('');
+  const [manualCharName, setManualCharName] = useState("");
   const [addingManual, setAddingManual] = useState(false);
-  const canManageEvent = Boolean(currentUser?.is_superuser || ['leader', 'vice leader', 'guild leader', 'alpha warbringer', 'bloodhowl marshal'].includes((currentUser?.guild_rank || '').toLowerCase()));
-  const publicUrl = event.type === 'contest' && event.public_code
-    ? `https://tibiahub.domoforge.com/contests/${event.public_code}`
-    : `https://tibiahub.domoforge.com/public/event/${event.uuid}`;
+  const canManageEvent = Boolean(
+    currentUser?.is_superuser ||
+    [
+      "leader",
+      "vice leader",
+      "guild leader",
+      "alpha warbringer",
+      "bloodhowl marshal",
+    ].includes((currentUser?.guild_rank || "").toLowerCase()),
+  );
+  const publicUrl =
+    event.type === "contest" && event.public_code
+      ? `https://tibiahub.domoforge.com/contests/${event.public_code}`
+      : `https://tibiahub.domoforge.com/public/event/${event.uuid}`;
 
   const addLog = (message: string) => {
-    setSyncLog(prev => [...prev, `[${new Date().toLocaleTimeString()}] ${message}`]);
+    setSyncLog((prev) => [
+      ...prev,
+      `[${new Date().toLocaleTimeString()}] ${message}`,
+    ]);
   };
 
   const handleTogglePublic = async () => {
     try {
-      addLog(`Changing event visibility to ${!isPublicEdit ? 'PUBLIC' : 'PRIVATE'}...`);
+      addLog(
+        `Changing event visibility to ${!isPublicEdit ? "PUBLIC" : "PRIVATE"}...`,
+      );
       await eventsApi.updateEvent(event.id, { is_public: !isPublicEdit });
       setIsPublicEdit(!isPublicEdit);
-      addLog(`✅ Event is now ${!isPublicEdit ? 'PUBLIC' : 'PRIVATE'}`);
-      toast.success?.(`Event is now ${!isPublicEdit ? 'public' : 'private'}`);
+      addLog(`✅ Event is now ${!isPublicEdit ? "PUBLIC" : "PRIVATE"}`);
+      toast.success?.(`Event is now ${!isPublicEdit ? "public" : "private"}`);
     } catch (err: any) {
       const errorMsg = err.message || err.toString();
       addLog(`❌ Error: ${errorMsg}`);
       toast.error?.(`Failed to update visibility: ${errorMsg}`);
-      console.error('Toggle public error:', err);
+      console.error("Toggle public error:", err);
     }
   };
 
   const handleSyncParticipants = async () => {
     if (!canManageEvent) return;
     setSyncLoading(true);
-    addLog('🔄 Refreshing participant list...');
+    addLog("🔄 Refreshing participant list...");
 
     try {
       addLog(`Loading current guild roster...`);
-      addLog(`Guild: ${event.guild_name || 'Not configured'}`);
+      addLog(`Guild: ${event.guild_name || "Not configured"}`);
 
       const result = await eventsApi.loadGuildParticipants(event.id, true);
 
@@ -714,7 +947,9 @@ const EventDetailModal: React.FC<EventDetailModalProps> = ({
       addLog(`  - Updated: ${result.updated} existing participants`);
       addLog(`  - Total: ${result.total} participants`);
 
-      toast.success?.(`Participants updated! ${result.total} total participants`);
+      toast.success?.(
+        `Participants updated! ${result.total} total participants`,
+      );
 
       // Refresh event data without full reload
       setTimeout(() => {
@@ -724,7 +959,7 @@ const EventDetailModal: React.FC<EventDetailModalProps> = ({
       const errorMsg = err.message || err.toString();
       addLog(`❌ Error: ${errorMsg}`);
       toast.error?.(`Failed to refresh participants: ${errorMsg}`);
-      console.error('Sync error:', err);
+      console.error("Sync error:", err);
     } finally {
       setSyncLoading(false);
     }
@@ -737,7 +972,9 @@ const EventDetailModal: React.FC<EventDetailModalProps> = ({
 
     try {
       addLog(`Validating character...`);
-      const result = await eventsApi.addManualParticipant(event.id, { character_name: manualCharName });
+      const result = await eventsApi.addManualParticipant(event.id, {
+        character_name: manualCharName,
+      });
 
       addLog(`✅ Participant added!`);
       addLog(`  - Character: ${result.character_name}`);
@@ -746,7 +983,7 @@ const EventDetailModal: React.FC<EventDetailModalProps> = ({
       addLog(`  - Number: #${result.assigned_number}`);
 
       toast.success?.(`${result.character_name} added successfully!`);
-      setManualCharName('');
+      setManualCharName("");
 
       // Refresh event data without immediate reload
       setTimeout(() => {
@@ -756,16 +993,24 @@ const EventDetailModal: React.FC<EventDetailModalProps> = ({
       const errorMsg = err.message || err.toString();
       addLog(`❌ Error: ${errorMsg}`);
       toast.error?.(`Failed to add participant: ${errorMsg}`);
-      console.error('Add participant error:', err);
+      console.error("Add participant error:", err);
     } finally {
       setAddingManual(false);
     }
   };
 
-  const handleExcludeParticipant = async (participantId: number, participantName: string) => {
+  const handleExcludeParticipant = async (
+    participantId: number,
+    participantName: string,
+  ) => {
     if (!canManageEvent) return;
 
-    if (!confirm(`¿Marcar a ${participantName} como NO participante? No volverá a aparecer en actualizaciones automáticas.`)) {
+    if (
+      !(await confirmation.confirm(
+        `¿Marcar a ${participantName} como NO participante? No volverá a aparecer en actualizaciones automáticas.`,
+        { danger: true },
+      ))
+    ) {
       return;
     }
 
@@ -783,14 +1028,22 @@ const EventDetailModal: React.FC<EventDetailModalProps> = ({
       const errorMsg = err.message || err.toString();
       addLog(`❌ Error: ${errorMsg}`);
       toast.error?.(`Failed to exclude: ${errorMsg}`);
-      console.error('Exclude error:', err);
+      console.error("Exclude error:", err);
     }
   };
 
-  const handleDeleteParticipant = async (participantId: number, participantName: string) => {
+  const handleDeleteParticipant = async (
+    participantId: number,
+    participantName: string,
+  ) => {
     if (!canManageEvent) return;
 
-    if (!confirm(`¿Eliminar a ${participantName}? Podrá volver a agregarse en la próxima actualización.`)) {
+    if (
+      !(await confirmation.confirm(
+        `¿Eliminar a ${participantName}? Podrá volver a agregarse en la próxima actualización.`,
+        { danger: true },
+      ))
+    ) {
       return;
     }
 
@@ -808,15 +1061,23 @@ const EventDetailModal: React.FC<EventDetailModalProps> = ({
       const errorMsg = err.message || err.toString();
       addLog(`❌ Error: ${errorMsg}`);
       toast.error?.(`Failed to delete: ${errorMsg}`);
-      console.error('Delete error:', err);
+      console.error("Delete error:", err);
     }
   };
 
   return (
-    <div className="fixed inset-0 bg-surface-base/80 backdrop-blur-sm flex items-center justify-center z-modal p-4" onClick={onClose}>
-      <div className="bg-surface-base border border-line rounded-lg w-full max-w-3xl max-h-[90vh] overflow-y-auto" onClick={e => e.stopPropagation()}>
+    <div
+      className="fixed inset-0 bg-surface-base/80 backdrop-blur-sm flex items-center justify-center z-modal p-4"
+      onClick={onClose}
+    >
+      <div
+        className="bg-surface-base border border-line rounded-lg w-full max-w-3xl max-h-[90vh] overflow-y-auto"
+        onClick={(e) => e.stopPropagation()}
+      >
         <div className="p-6 border-b border-line flex justify-between items-start sticky top-0 bg-surface-base z-10">
-          <h2 className="text-2xl font-bold text-content-primary">{event.title}</h2>
+          <h2 className="text-2xl font-bold text-content-primary">
+            {event.title}
+          </h2>
           {canManageEvent && (
             <button
               onClick={() => onDelete(event.id)}
@@ -830,8 +1091,12 @@ const EventDetailModal: React.FC<EventDetailModalProps> = ({
         <div className="p-6 space-y-6">
           {event.description && (
             <div>
-              <h3 className="text-lg font-semibold text-content-primary mb-2">Description</h3>
-              <p className="text-content-secondary leading-relaxed">{event.description}</p>
+              <h3 className="text-lg font-semibold text-content-primary mb-2">
+                Description
+              </h3>
+              <p className="text-content-secondary leading-relaxed">
+                {event.description}
+              </p>
             </div>
           )}
 
@@ -841,35 +1106,49 @@ const EventDetailModal: React.FC<EventDetailModalProps> = ({
                 <Trophy size={18} />
                 Rules
               </h3>
-              <p className="text-content-secondary whitespace-pre-line leading-relaxed font-mono text-sm">{event.rules}</p>
+              <p className="text-content-secondary whitespace-pre-line leading-relaxed font-mono text-sm">
+                {event.rules}
+              </p>
             </div>
           )}
 
           <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
             <div>
               <div className="text-sm text-content-secondary">Starts</div>
-              <div className="text-content-primary font-medium">{event.start_date ? new Date(event.start_date).toLocaleString() : 'TBD'}</div>
+              <div className="text-content-primary font-medium">
+                {event.start_date
+                  ? new Date(event.start_date).toLocaleString()
+                  : "TBD"}
+              </div>
             </div>
             {event.end_date && (
               <div>
                 <div className="text-sm text-content-secondary">Ends</div>
-                <div className="text-content-primary font-medium">{new Date(event.end_date).toLocaleString()}</div>
+                <div className="text-content-primary font-medium">
+                  {new Date(event.end_date).toLocaleString()}
+                </div>
               </div>
             )}
             {event.draw_date && (
               <div>
                 <div className="text-sm text-content-secondary">Draw</div>
-                <div className="text-content-primary font-medium">{new Date(event.draw_date).toLocaleString()}</div>
+                <div className="text-content-primary font-medium">
+                  {new Date(event.draw_date).toLocaleString()}
+                </div>
               </div>
             )}
           </div>
 
           {event.reward && (
             <div className="bg-primary/20 border border-primary/30 rounded-lg p-4">
-              <h3 className="text-lg font-semibold text-primary mb-3">Reward</h3>
+              <h3 className="text-lg font-semibold text-primary mb-3">
+                Reward
+              </h3>
               <div className="flex items-center gap-3">
                 <Gift size={24} className="text-primary" />
-                <span className="text-primary font-medium text-lg">{event.reward}</span>
+                <span className="text-primary font-medium text-lg">
+                  {event.reward}
+                </span>
               </div>
             </div>
           )}
@@ -885,27 +1164,32 @@ const EventDetailModal: React.FC<EventDetailModalProps> = ({
               {/* Info Box for Public Events */}
               {isPublicEdit && (
                 <div className="p-3 bg-info/20 border border-info/30 rounded-md text-sm text-info">
-                  ℹ️ Public events should be drawn from the public page. Participants update automatically.
+                  ℹ️ Public events should be drawn from the public page.
+                  Participants update automatically.
                 </div>
               )}
 
               {/* Public/Private Toggle */}
               <div className="flex items-center justify-between p-3 bg-surface-base/50 rounded-md">
                 <div>
-                  <div className="font-medium text-content-primary">Event Visibility</div>
+                  <div className="font-medium text-content-primary">
+                    Event Visibility
+                  </div>
                   <div className="text-xs text-content-secondary">
-                    {isPublicEdit ? '🌐 Public - Anyone can view' : '🔒 Private - Members only'}
+                    {isPublicEdit
+                      ? "🌐 Public - Anyone can view"
+                      : "🔒 Private - Members only"}
                   </div>
                 </div>
                 <button
                   onClick={handleTogglePublic}
                   className={`px-4 py-2 rounded-md font-medium transition-colors ${
                     isPublicEdit
-                      ? 'bg-success hover:bg-success-hover text-content-on-primary'
-                      : 'bg-surface-raised hover:bg-surface-hover text-content-secondary'
+                      ? "bg-success hover:bg-success-hover text-content-on-primary"
+                      : "bg-surface-raised hover:bg-surface-hover text-content-secondary"
                   }`}
                 >
-                  {isPublicEdit ? 'Public' : 'Private'}
+                  {isPublicEdit ? "Public" : "Private"}
                 </button>
               </div>
 
@@ -914,8 +1198,19 @@ const EventDetailModal: React.FC<EventDetailModalProps> = ({
                 <div className="space-y-3">
                   <div className="p-3 bg-surface-base/50 rounded-md">
                     <div className="text-sm text-content-secondary mb-2">
-                      Mode: <span className="text-primary font-mono">{event.participant_mode || 'manual'}</span>
-                      {event.guild_name && <> | Guild: <span className="text-primary">{event.guild_name}</span></>}
+                      Mode:{" "}
+                      <span className="text-primary font-mono">
+                        {event.participant_mode || "manual"}
+                      </span>
+                      {event.guild_name && (
+                        <>
+                          {" "}
+                          | Guild:{" "}
+                          <span className="text-primary">
+                            {event.guild_name}
+                          </span>
+                        </>
+                      )}
                     </div>
                   </div>
 
@@ -943,17 +1238,23 @@ const EventDetailModal: React.FC<EventDetailModalProps> = ({
                       <input
                         type="text"
                         value={manualCharName}
-                        onChange={e => setManualCharName(e.target.value)}
+                        onChange={(e) => setManualCharName(e.target.value)}
                         placeholder="Character name..."
                         className="flex-1 bg-surface-base border border-line rounded-md p-2 text-content-primary text-sm"
-                        onKeyPress={e => e.key === 'Enter' && handleAddManualParticipant()}
+                        onKeyPress={(e) =>
+                          e.key === "Enter" && handleAddManualParticipant()
+                        }
                       />
                       <button
                         onClick={handleAddManualParticipant}
                         disabled={addingManual || !manualCharName.trim()}
                         className="px-4 py-2 bg-success hover:bg-success-hover text-content-on-primary rounded-md font-medium text-sm transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
                       >
-                        {addingManual ? <Loader2 className="animate-spin" size={16} /> : 'Add'}
+                        {addingManual ? (
+                          <Loader2 className="animate-spin" size={16} />
+                        ) : (
+                          "Add"
+                        )}
                       </button>
                     </div>
                   </div>
@@ -963,17 +1264,21 @@ const EventDetailModal: React.FC<EventDetailModalProps> = ({
                     onClick={() => setShowLog(!showLog)}
                     className="w-full px-4 py-2 bg-surface hover:bg-surface-raised text-content-secondary rounded-md text-sm font-medium transition-colors"
                   >
-                    {showLog ? '🔽 Hide Logs' : '🔼 Show Logs'}
+                    {showLog ? "🔽 Hide Logs" : "🔼 Show Logs"}
                   </button>
 
                   {/* Log Display */}
                   {showLog && (
                     <div className="bg-surface-base border border-line rounded-md p-3 max-h-48 overflow-y-auto font-mono text-xs">
                       {syncLog.length === 0 ? (
-                        <div className="text-content-muted">No logs yet. Perform an action to see logs.</div>
+                        <div className="text-content-muted">
+                          No logs yet. Perform an action to see logs.
+                        </div>
                       ) : (
                         syncLog.map((log, i) => (
-                          <div key={i} className="text-content-secondary mb-1">{log}</div>
+                          <div key={i} className="text-content-secondary mb-1">
+                            {log}
+                          </div>
                         ))
                       )}
                     </div>
@@ -982,7 +1287,9 @@ const EventDetailModal: React.FC<EventDetailModalProps> = ({
                   {/* Public URL */}
                   {isPublicEdit && event.uuid && (
                     <div className="p-3 bg-success/20 border border-success/30 rounded-md">
-                      <div className="text-xs text-success mb-1">Public URL:</div>
+                      <div className="text-xs text-success mb-1">
+                        Public URL:
+                      </div>
                       <div className="flex gap-2">
                         <input
                           type="text"
@@ -991,7 +1298,9 @@ const EventDetailModal: React.FC<EventDetailModalProps> = ({
                           className="flex-1 bg-surface-base border border-success/50 rounded p-2 text-success text-xs font-mono"
                         />
                         <button
-                          onClick={() => navigator.clipboard.writeText(publicUrl)}
+                          onClick={() =>
+                            navigator.clipboard.writeText(publicUrl)
+                          }
                           className="px-3 py-2 bg-success hover:bg-success-hover text-content-on-primary rounded text-xs"
                         >
                           Copy
@@ -1004,42 +1313,58 @@ const EventDetailModal: React.FC<EventDetailModalProps> = ({
             </div>
           )}
 
-          {event.type === 'raffle' && !event.is_drawn && !event.is_public && canManageEvent && (
-            <div className="bg-gradient-to-br from-surface to-surface-base border border-line rounded-lg p-6 text-center">
-              <button
-                className="px-6 py-3 bg-primary hover:bg-primary-hover text-content-on-primary rounded-md font-bold text-lg transition-all disabled:opacity-50 disabled:cursor-not-allowed hover:scale-105 active:scale-95"
-                onClick={() => onDrawWinner(event.id)}
-                disabled={isDrawing || event.participants.length === 0}
-              >
-                {isDrawing ? 'Drawing Winner...' : 'Draw Winner'}
-              </button>
+          {event.type === "raffle" &&
+            !event.is_drawn &&
+            !event.is_public &&
+            canManageEvent && (
+              <div className="bg-gradient-to-br from-surface to-surface-base border border-line rounded-lg p-6 text-center">
+                <button
+                  className="px-6 py-3 bg-primary hover:bg-primary-hover text-content-on-primary rounded-md font-bold text-lg transition-all disabled:opacity-50 disabled:cursor-not-allowed hover:scale-105 active:scale-95"
+                  onClick={() => onDrawWinner(event.id)}
+                  disabled={isDrawing || event.participants.length === 0}
+                >
+                  {isDrawing ? "Drawing Winner..." : "Draw Winner"}
+                </button>
 
-
-              {isDrawing && winnerNumber && (
-                <div className="mt-6 flex justify-center">
-                  <div className="animate-bounce">
-                    <div className="w-32 h-32 bg-gradient-to-br from-primary to-primary rounded-2xl flex items-center justify-center shadow-2xl">
-                      <div className="text-5xl font-bold text-content-primary">{winnerNumber}</div>
+                {isDrawing && winnerNumber && (
+                  <div className="mt-6 flex justify-center">
+                    <div className="animate-bounce">
+                      <div className="flex h-32 w-32 items-center justify-center rounded-2xl bg-gradient-to-br from-primary to-primary-hover shadow-lg">
+                        <div className="text-5xl font-bold text-content-primary">
+                          {winnerNumber}
+                        </div>
+                      </div>
                     </div>
                   </div>
-                </div>
-              )}
+                )}
 
-              {!isDrawing && winnerName && (
-                <div className="mt-6 bg-gradient-to-br from-primary/30 to-primary/30 border border-primary/50 rounded-lg p-6 animate-pulse">
-                  <Trophy size={40} className="mx-auto text-primary mb-3" />
-                  <h3 className="text-2xl font-bold text-primary mb-2">🎉 Winner: {winnerName} 🎉</h3>
-                  {winnerNumber && <p className="text-3xl font-bold text-primary">#{winnerNumber}</p>}
-                </div>
-              )}
-            </div>
-          )}
+                {!isDrawing && winnerName && (
+                  <div className="mt-6 bg-gradient-to-br from-primary/30 to-primary/30 border border-primary/50 rounded-lg p-6 animate-pulse">
+                    <Trophy size={40} className="mx-auto text-primary mb-3" />
+                    <h3 className="text-2xl font-bold text-primary mb-2">
+                      🎉 Winner: {winnerName} 🎉
+                    </h3>
+                    {winnerNumber && (
+                      <p className="text-3xl font-bold text-primary">
+                        #{winnerNumber}
+                      </p>
+                    )}
+                  </div>
+                )}
+              </div>
+            )}
 
           {event.is_drawn && event.winner_name && (
             <div className="bg-gradient-to-br from-success/30 to-success/30 border border-success/50 rounded-lg p-6 text-center">
               <Trophy size={40} className="mx-auto text-success mb-3" />
-              <h3 className="text-2xl font-bold text-success mb-2">Winner: {event.winner_name}</h3>
-              {event.winner_number && <p className="text-3xl font-bold text-success">#{event.winner_number}</p>}
+              <h3 className="text-2xl font-bold text-success mb-2">
+                Winner: {event.winner_name}
+              </h3>
+              {event.winner_number && (
+                <p className="text-3xl font-bold text-success">
+                  #{event.winner_number}
+                </p>
+              )}
             </div>
           )}
 
@@ -1049,13 +1374,15 @@ const EventDetailModal: React.FC<EventDetailModalProps> = ({
             </h3>
             <div className="bg-surface-base/50 border border-line rounded-lg p-4 max-h-64 overflow-y-auto">
               <div className="grid grid-cols-1 gap-3">
-                {event.participants.map(p => (
+                {event.participants.map((p) => (
                   <div
                     key={p.id}
                     className="flex justify-between items-center bg-surface-base/50 border border-line rounded-md p-3"
                   >
                     <div className="flex items-center gap-2">
-                      <span className="text-content-secondary text-sm truncate">{p.username}</span>
+                      <span className="text-content-secondary text-sm truncate">
+                        {p.username}
+                      </span>
                       {p.assigned_number && (
                         <span className="px-2 py-1 bg-primary/20 text-primary rounded font-bold text-xs border border-primary/50">
                           #{p.assigned_number}
@@ -1065,14 +1392,24 @@ const EventDetailModal: React.FC<EventDetailModalProps> = ({
                     {canManageEvent && event.is_public && (
                       <div className="flex gap-2">
                         <button
-                          onClick={() => handleExcludeParticipant(p.id, p.username || 'Unknown participant')}
+                          onClick={() =>
+                            handleExcludeParticipant(
+                              p.id,
+                              p.username || "Unknown participant",
+                            )
+                          }
                           className="px-2 py-1 bg-danger/15 hover:bg-danger/20 text-danger rounded text-xs border border-danger/50 transition-colors"
                           title="Excluir permanentemente (no volverá en actualizaciones automáticas)"
                         >
                           🚫
                         </button>
                         <button
-                          onClick={() => handleDeleteParticipant(p.id, p.username || 'Unknown participant')}
+                          onClick={() =>
+                            handleDeleteParticipant(
+                              p.id,
+                              p.username || "Unknown participant",
+                            )
+                          }
                           className="px-2 py-1 bg-surface hover:bg-surface-raised text-content-secondary rounded text-xs border border-line transition-colors"
                           title="Eliminar (puede volver en próxima actualización)"
                         >

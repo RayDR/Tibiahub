@@ -206,6 +206,9 @@ export const spatialApi = {
   route: async (identifier: string, signal?: AbortSignal): Promise<SpatialRouteMetadata> => (
     await api.get(`/spatial/routes/${encodeURIComponent(identifier)}`, { signal })
   ).data,
+  nearby: async (x: number, y: number, z: number, signal?: AbortSignal): Promise<{ items: Array<{ source_entity_id: string; canonical_name: string; entity_type: string; slug: string; distance: number }> }> => (
+    await api.get('/spatial/nearby', { params: { x, y, z, distance: 50, limit: 12 }, signal })
+  ).data,
 };
 
 export const adminCreaturesApi = {
