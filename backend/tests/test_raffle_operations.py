@@ -8,7 +8,7 @@ from app.models.user_character import UserCharacter
 from app.services.notification_service import NotificationService
 from app.services.raffle_scheduler_service import RaffleSchedulerService
 from app.services.raffle_eligibility_service import compute_eligibility_cutoff
-from tests.conftest import make_user
+from conftest import make_user
 from tests.test_automatic_raffle_stage1 import make_automatic_raffle
 
 

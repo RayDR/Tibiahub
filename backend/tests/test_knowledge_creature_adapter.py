@@ -45,7 +45,7 @@ from app.knowledge.workers.knowledge_worker import KnowledgeWorker
 from app.models import Creature
 from app.models.workspace_audit import WorkspaceAudit
 from app.services.text_utils import normalize_search_text
-from tests.conftest import make_user
+from conftest import make_user
 
 
 FIXTURES = Path(__file__).parent / "fixtures"

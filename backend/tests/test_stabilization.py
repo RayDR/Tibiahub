@@ -12,7 +12,7 @@ from app.core.security import create_access_token
 from app.models.guild import Announcement
 from app.services import media_asset_service as media
 from app.api.v1.endpoints.health import health_check, readiness_check
-from tests.conftest import make_user
+from conftest import make_user
 
 
 def _auth_headers(username: str) -> dict[str, str]:

@@ -10,7 +10,7 @@ from app.knowledge.registry import EntityTypeRegistry, ProviderRegistry, Relatio
 from app.knowledge.schemas import KnowledgeEntityCreate
 from app.knowledge.services import KnowledgeEntityService, KnowledgeGraphService, RelationshipInput
 from app.models.workspace_audit import WorkspaceAudit
-from tests.conftest import make_user
+from conftest import make_user
 
 
 @pytest.fixture

@@ -15,7 +15,7 @@ from app.services.automatic_raffle_service import (
     AutomaticRaffleError, AutomaticRaffleService, POSITIONS, validate_automatic_prizes,
 )
 from app.services.raffle_eligibility_service import RaffleEligibilityService, compute_eligibility_cutoff
-from tests.conftest import make_raffle, make_user
+from conftest import make_raffle, make_user
 
 
 DRAW_AT = datetime(2026, 7, 25, 1, 0, tzinfo=UTC)

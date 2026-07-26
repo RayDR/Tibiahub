@@ -5,7 +5,7 @@ from app.models.leadership import GuildLeadershipApplication, GuildLeadershipAss
 from app.models.raffle import InternalNotification
 from app.models.workspace_audit import WorkspaceAudit
 from app.models.user_character import UserCharacter
-from tests.conftest import make_user
+from conftest import make_user
 
 
 def auth(user):

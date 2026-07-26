@@ -62,6 +62,15 @@ def client(db):
     app.dependency_overrides.pop(get_db, None)
 
 
+@pytest.fixture(scope="function")
+def token(client: TestClient, db: Session) -> str:
+    """
+    Creates a user and returns a token.
+    """
+    from app.core.security import create_access_token
+    user = make_user(db, is_superuser=True)
+    return create_access_token(user.id)
+
 # ---------------------------------------------------------------------------
 # Helper factories
 # ---------------------------------------------------------------------------

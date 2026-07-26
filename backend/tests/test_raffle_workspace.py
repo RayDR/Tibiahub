@@ -6,7 +6,7 @@ from app.core.security import create_access_token
 from app.models.raffle import RaffleManagerGrant
 from app.models.workspace_audit import WorkspaceAudit
 from app.schemas.raffle import EligibilityEntryResponse
-from tests.conftest import make_raffle, make_user
+from conftest import make_raffle, make_user
 
 
 def auth(user):

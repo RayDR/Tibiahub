@@ -49,7 +49,7 @@ from app.knowledge.services.idempotency import knowledge_job_idempotency_key
 from app.knowledge.services.provider_health import record_provider_failure, record_provider_success
 from app.knowledge.workers.knowledge_worker import KnowledgeWorker
 from app.models.workspace_audit import WorkspaceAudit
-from tests.conftest import make_user
+from conftest import make_user
 
 
 @pytest.fixture

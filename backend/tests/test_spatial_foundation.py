@@ -24,7 +24,7 @@ from app.knowledge.services.spatial import (
 )
 from app.models import TibiaWikiLocation
 from app.models.workspace_audit import WorkspaceAudit
-from tests.conftest import make_user
+from conftest import make_user
 
 
 @pytest.fixture

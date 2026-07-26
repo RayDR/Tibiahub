@@ -40,7 +40,7 @@ from app.knowledge.services.normalization import KnowledgeNormalizationService
 from app.knowledge.workers.knowledge_worker import KnowledgeWorker
 from app.models import Creature, Item, QuestMission, TibiaWikiQuest
 from app.models.workspace_audit import WorkspaceAudit
-from tests.conftest import make_user
+from conftest import make_user
 
 
 FIXTURES = Path(__file__).parent / "fixtures"
