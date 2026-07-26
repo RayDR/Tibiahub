@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import logging
+import asyncio
 import random
 import signal
 import threading
@@ -51,6 +52,7 @@ from app.knowledge.services.provider_health import (
 )
 from app.knowledge.services.idempotency import scope_hash
 from app.knowledge.storage import KnowledgeDocumentStore
+from app.services.character_ownership_service import CharacterOwnershipService
 
 
 logger = logging.getLogger("app.knowledge.worker")
@@ -67,6 +69,8 @@ class KnowledgeWorker:
         session_factory: sessionmaker = SessionLocal,
         adapters: KnowledgeAdapterRegistry | None = None,
         random_source: Callable[[], float] = random.random,
+        enable_knowledge_jobs: bool = True,
+        enable_ownership_claims: bool = True,
     ):
         self.worker_id = worker_id
         self.lease_seconds = lease_seconds
@@ -75,6 +79,8 @@ class KnowledgeWorker:
         self.session_factory = session_factory
         self.adapters = adapters or KnowledgeAdapterRegistry()
         self.random_source = random_source
+        self.enable_knowledge_jobs = enable_knowledge_jobs
+        self.enable_ownership_claims = enable_ownership_claims
 
     def _heartbeat(self, state: str, current_job_id: UUID | None = None) -> None:
         with self.session_factory.begin() as db:
@@ -327,8 +333,14 @@ class KnowledgeWorker:
         raise MalformedProviderPayloadError()
 
     def run_once(self) -> bool:
-        job_id = self._claim()
+        if self.enable_knowledge_jobs:
+            job_id = self._claim()
+        else:
+            self._heartbeat("idle")
+            job_id = None
         if job_id is None:
+            if self.enable_ownership_claims:
+                return asyncio.run(CharacterOwnershipService.process_one(session_factory=self.session_factory))
             return False
         attempt_id: UUID | None = None
         try:
@@ -354,7 +366,7 @@ class KnowledgeWorker:
             return True
 
     def run(self, stop_event: threading.Event) -> None:
-        if not settings.KNOWLEDGE_WORKER_ENABLED:
+        if not (settings.KNOWLEDGE_WORKER_ENABLED or settings.CHARACTER_OWNERSHIP_WORKER_ENABLED):
             logger.info("knowledge_worker_disabled worker_id=%s", self.worker_id)
             return
         idle_seconds = 0.0
@@ -380,7 +392,7 @@ class KnowledgeWorker:
 
 def main() -> None:
     logging.basicConfig(level=logging.INFO, format="%(asctime)s %(levelname)s %(name)s %(message)s")
-    if not settings.KNOWLEDGE_WORKER_ENABLED:
+    if not (settings.KNOWLEDGE_WORKER_ENABLED or settings.CHARACTER_OWNERSHIP_WORKER_ENABLED):
         logger.info("knowledge_worker_disabled worker_id=%s", settings.KNOWLEDGE_WORKER_ID)
         return
     verify_connection_and_schema()
@@ -392,6 +404,8 @@ def main() -> None:
         lease_seconds=settings.KNOWLEDGE_WORKER_LEASE_SECONDS,
         poll_seconds=settings.KNOWLEDGE_WORKER_POLL_SECONDS,
         max_idle_seconds=settings.KNOWLEDGE_WORKER_MAX_IDLE_SECONDS,
+        enable_knowledge_jobs=settings.KNOWLEDGE_WORKER_ENABLED,
+        enable_ownership_claims=settings.CHARACTER_OWNERSHIP_WORKER_ENABLED,
     )
     worker.run(stop_event)
 

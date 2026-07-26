@@ -93,8 +93,8 @@ def get_roles(db: Session = Depends(get_db), user: User = Depends(get_current_ac
 @router.get("/me/leadership/openings")
 def list_openings(db: Session = Depends(get_db), user: User = Depends(get_current_active_user)):
     guild = own_guild(user); query = db.query(GuildLeadershipOpening).filter(GuildLeadershipOpening.guild_name.ilike(guild))
-    if not LeadershipService.reviewer(user, type("Opening", (), {"guild_name": guild, "allow_viceleader_review": True})()): query = query.filter(GuildLeadershipOpening.status.in_(["open", "closed", "archived"]))
-    return [opening_data(row) for row in query.order_by(GuildLeadershipOpening.created_at.desc()).all()]
+    rows = query.order_by(GuildLeadershipOpening.created_at.desc()).all()
+    return [opening_data(row) for row in rows if LeadershipService.can_view_opening(row, user)]
 
 
 def create_opening_for(db: Session, guild: str, user: User, payload: OpeningCreate):
@@ -111,13 +111,19 @@ def create_opening(payload: OpeningCreate, db: Session = Depends(get_db), user: 
 
 
 @router.get("/me/leadership/openings/{opening_id}")
-def get_opening(opening_id: int, db: Session = Depends(get_db), user: User = Depends(get_current_active_user)): return opening_data(opening_or_404(db, opening_id, own_guild(user)))
+def get_opening(opening_id: int, db: Session = Depends(get_db), user: User = Depends(get_current_active_user)):
+    row = opening_or_404(db, opening_id, own_guild(user))
+    if not LeadershipService.can_view_opening(row, user):
+        raise HTTPException(404, "Leadership opening not found")
+    return opening_data(row)
 
 
 @router.patch("/me/leadership/openings/{opening_id}")
 def update_opening(opening_id: int, payload: OpeningUpdate, db: Session = Depends(get_db), user: User = Depends(get_current_active_user)):
     row = opening_or_404(db, opening_id, own_guild(user))
     if not LeadershipService.manager(user, row.guild_name) or row.status == "archived": raise HTTPException(403, "Opening is read-only")
+    if payload.application_deadline and payload.application_deadline < datetime.now(UTC):
+        raise HTTPException(400, "Deadline cannot be in the past")
     for key, value in payload.model_dump(exclude_unset=True).items(): setattr(row, key, value)
     row.version += 1; LeadershipService.audit(db, user, row.guild_name, "leadership_opening_updated", "leadership_opening", row.id); db.commit(); return opening_data(row)
 
@@ -205,6 +211,10 @@ def comment(application_id: int, payload: MessageCreate, db: Session = Depends(g
 def interview(application_id: int, payload: InterviewCreate, db: Session = Depends(get_db), user: User = Depends(get_current_active_user)):
     row = application_or_404(db, application_id, own_guild(user))
     if not LeadershipService.manager(user, row.opening.guild_name): raise HTTPException(403, "Only guild leaders schedule interviews")
+    if row.status in {"under_review", "more_information_requested"}:
+        LeadershipService.transition(db, row, user, "interview")
+    elif row.status != "interview":
+        raise HTTPException(409, "Application must be under review before an interview")
     item = row.interview or GuildLeadershipInterview(application_id=row.id, created_by_id=user.id, scheduled_at=payload.scheduled_at, timezone=payload.timezone, meeting_location=payload.meeting_location)
     item.scheduled_at=payload.scheduled_at; item.timezone=payload.timezone; item.meeting_location=payload.meeting_location; item.interview_notes=payload.interview_notes
     if payload.completed: item.completed_at=datetime.now(UTC); item.completed_by_id=user.id
@@ -215,7 +225,7 @@ def interview(application_id: int, payload: InterviewCreate, db: Session = Depen
 @router.post("/me/leadership/applications/{application_id}/votes")
 def vote(application_id: int, payload: VoteCreate, db: Session = Depends(get_db), user: User = Depends(get_current_active_user)):
     row = application_or_404(db, application_id, own_guild(user))
-    if not row.opening.voting_enabled or not LeadershipService.reviewer(user, row.opening) or row.applicant_user_id == user.id: raise HTTPException(403, "Voting is not permitted")
+    if row.status != "voting" or not row.opening.voting_enabled or not LeadershipService.reviewer(user, row.opening) or row.applicant_user_id == user.id: raise HTTPException(403, "Voting is not permitted")
     item = db.query(GuildLeadershipVote).filter_by(application_id=row.id, voter_user_id=user.id).first()
     if item: item.vote=payload.vote; item.comment=payload.comment
     else: item=GuildLeadershipVote(application_id=row.id, voter_user_id=user.id, **payload.model_dump()); db.add(item)
@@ -272,6 +282,8 @@ def admin_create_opening(guild_key: str, payload: OpeningCreate, db: Session = D
 def admin_update_opening(guild_key: str, opening_id: int, payload: OpeningUpdate, db: Session = Depends(get_db), admin: User = Depends(get_current_admin_user)):
     guild = _resolve_registered_guild(db, guild_key); row = opening_or_404(db, opening_id, guild)
     if row.status == "archived": raise HTTPException(409, "Archived openings are read-only")
+    if payload.application_deadline and payload.application_deadline < datetime.now(UTC):
+        raise HTTPException(400, "Deadline cannot be in the past")
     for key, value in payload.model_dump(exclude_unset=True).items(): setattr(row, key, value)
     row.version += 1; LeadershipService.audit(db, admin, guild, "leadership_opening_updated", "leadership_opening", row.id); db.commit()
     return opening_data(row)
@@ -323,6 +335,10 @@ def admin_decision(guild_key: str, application_id: int, payload: DecisionCreate,
 @admin_router.post("/guilds/{guild_key}/leadership/applications/{application_id}/interview")
 def admin_interview(guild_key: str, application_id: int, payload: InterviewCreate, db: Session = Depends(get_db), admin: User = Depends(get_current_admin_user)):
     guild = _resolve_registered_guild(db, guild_key); row = application_or_404(db, application_id, guild)
+    if row.status in {"under_review", "more_information_requested"}:
+        LeadershipService.transition(db, row, admin, "interview")
+    elif row.status != "interview":
+        raise HTTPException(409, "Application must be under review before an interview")
     item = row.interview or GuildLeadershipInterview(application_id=row.id, created_by_id=admin.id, scheduled_at=payload.scheduled_at, timezone=payload.timezone, meeting_location=payload.meeting_location)
     item.scheduled_at = payload.scheduled_at; item.timezone = payload.timezone; item.meeting_location = payload.meeting_location; item.interview_notes = payload.interview_notes
     if payload.completed: item.completed_at = datetime.now(UTC); item.completed_by_id = admin.id
@@ -334,7 +350,7 @@ def admin_interview(guild_key: str, application_id: int, payload: InterviewCreat
 @admin_router.post("/guilds/{guild_key}/leadership/applications/{application_id}/votes")
 def admin_vote(guild_key: str, application_id: int, payload: VoteCreate, db: Session = Depends(get_db), admin: User = Depends(get_current_admin_user)):
     guild = _resolve_registered_guild(db, guild_key); row = application_or_404(db, application_id, guild)
-    if not row.opening.voting_enabled: raise HTTPException(409, "Voting is disabled")
+    if not row.opening.voting_enabled or row.status != "voting": raise HTTPException(409, "Voting is not active")
     item = db.query(GuildLeadershipVote).filter_by(application_id=row.id, voter_user_id=admin.id).first()
     changed = item is not None
     if item: item.vote = payload.vote; item.comment = payload.comment

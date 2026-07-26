@@ -26,6 +26,10 @@ export default function RaffleCreationWizard({
   const [scope, setScope] = useState<RaffleScope>(permitted[0]);
   const [title, setTitle] = useState("");
   const [purpose, setPurpose] = useState<"test" | "real">("test");
+  const [execution, setExecution] = useState<"manual" | "automatic" | "scheduled">("scheduled");
+  const [secondAmount, setSecondAmount] = useState("100");
+  const [firstAmount, setFirstAmount] = useState("250");
+  const [currency, setCurrency] = useState("TC");
   const [schedule, setSchedule] = useState("");
   const [timezone, setTimezone] = useState(
     Intl.DateTimeFormat().resolvedOptions().timeZone || "UTC",
@@ -42,19 +46,27 @@ export default function RaffleCreationWizard({
       setError(t("raffle.workspace.wizard.confirmRequired"));
       return;
     }
-    let scheduled: string;
-    try {
-      scheduled = wallTimeToUtc(schedule, timezone);
-    } catch {
-      setError(t("raffle.workspace.wizard.invalidSchedule"));
+    let scheduled: string | undefined;
+    if (scope === "guild" && execution === "scheduled") {
+      try {
+        scheduled = wallTimeToUtc(schedule, timezone);
+      } catch {
+        setError(t("raffle.workspace.wizard.invalidSchedule"));
+        return;
+      }
+    }
+    const second = Number(secondAmount);
+    const first = Number(firstAmount);
+    if (!(second > 0) || !(first > 0) || !currency.trim()) {
+      setError(t("raffle.workspace.wizard.invalidPrizes"));
       return;
     }
     setBusy(true);
     try {
-      const automatic = scope === "guild";
+      const automatic = scope === "guild" && execution !== "manual";
       await raffleApi.create({
         title,
-        guild_name: guildName || "TibiaHub",
+        guild_name: scope === "guild" ? (guildName || "") : scope === "server" ? `Server: ${world}` : "Global",
         scope_type: scope,
         world_name: scope === "global" ? undefined : world,
         access_mode:
@@ -63,32 +75,30 @@ export default function RaffleCreationWizard({
             : scope === "server"
               ? "world_only"
               : "public",
-        purpose: automatic ? purpose : "legacy",
+        purpose: automatic ? (execution === "scheduled" ? purpose : "real") : "legacy",
         run_mode: automatic ? "automatic" : "manual",
         scheduled_run_at: scheduled,
         timezone_name: timezone,
         eligibility_days: 5,
         show_participants: showParticipants,
-        prizes: automatic
-          ? [
+        prizes: [
               {
                 name: t("raffle.operations.secondPlace"),
-                reward: "100 TC",
+                reward: `${second} ${currency.trim().toUpperCase()}`,
                 order_index: 1,
-                position: "second",
-                amount: 100,
-                currency: "TC",
+                position: automatic ? "second" : undefined,
+                amount: second,
+                currency: currency.trim().toUpperCase(),
               },
               {
                 name: t("raffle.operations.firstPlace"),
-                reward: "250 TC",
+                reward: `${first} ${currency.trim().toUpperCase()}`,
                 order_index: 2,
-                position: "first",
-                amount: 250,
-                currency: "TC",
+                position: automatic ? "first" : undefined,
+                amount: first,
+                currency: currency.trim().toUpperCase(),
               },
-            ]
-          : [],
+            ],
       });
       setTitle("");
       setSchedule("");
@@ -182,7 +192,7 @@ export default function RaffleCreationWizard({
               className="mt-1 min-h-11 w-full rounded-lg bg-surface-base px-3"
             />
           </label>
-          {scope === "guild" && (
+          {scope === "guild" && execution === "scheduled" && (
             <label className="text-sm">
               {t("raffle.workspace.fields.purpose")}
               <select
@@ -197,7 +207,17 @@ export default function RaffleCreationWizard({
               </select>
             </label>
           )}
-          <label className="text-sm">
+          {scope === "guild" && (
+            <label className="text-sm">
+              {t("raffle.workspace.fields.execution")}
+              <select value={execution} onChange={(event) => setExecution(event.target.value as typeof execution)} className="mt-1 min-h-11 w-full rounded-lg bg-surface-base px-3">
+                <option value="manual">{t("raffle.workspace.execution.manual")}</option>
+                <option value="automatic">{t("raffle.workspace.execution.automatic")}</option>
+                <option value="scheduled">{t("raffle.workspace.execution.scheduled")}</option>
+              </select>
+            </label>
+          )}
+          {scope === "guild" && execution === "scheduled" && <label className="text-sm">
             {t("raffle.workspace.fields.timezone")}
             <input
               value={timezone}
@@ -205,8 +225,8 @@ export default function RaffleCreationWizard({
               required
               className="mt-1 min-h-11 w-full rounded-lg bg-surface-base px-3"
             />
-          </label>
-          <label className="text-sm">
+          </label>}
+          {scope === "guild" && execution === "scheduled" && <label className="text-sm">
             {t("raffle.workspace.fields.schedule")}
             <input
               type="datetime-local"
@@ -215,7 +235,7 @@ export default function RaffleCreationWizard({
               required
               className="mt-1 min-h-11 w-full rounded-lg bg-surface-base px-3"
             />
-          </label>
+          </label>}
           <label className="flex min-h-11 items-center gap-3 rounded-lg border border-line p-3 text-sm">
             <input
               type="checkbox"
@@ -224,19 +244,16 @@ export default function RaffleCreationWizard({
             />
             {t("raffle.workspace.fields.showParticipants")}
           </label>
-          {scope === "guild" && (
-            <div className="sm:col-span-2 grid gap-2 text-sm sm:grid-cols-2">
-              <div className="rounded-lg bg-surface-base p-3">
-                {t("raffle.operations.secondPlace")} — 100 TC
-              </div>
-              <div className="rounded-lg bg-surface-base p-3">
-                {t("raffle.operations.firstPlace")} — 250 TC
-              </div>
+          <div className="sm:col-span-2 grid gap-3 text-sm sm:grid-cols-[1fr_1fr_8rem]">
+              <label>{t("raffle.operations.secondPlace")}<input type="number" min="0.01" step="0.01" value={secondAmount} onChange={(event)=>setSecondAmount(event.target.value)} required className="mt-1 min-h-11 w-full rounded-lg bg-surface-base px-3" /></label>
+              <label>{t("raffle.operations.firstPlace")}<input type="number" min="0.01" step="0.01" value={firstAmount} onChange={(event)=>setFirstAmount(event.target.value)} required className="mt-1 min-h-11 w-full rounded-lg bg-surface-base px-3" /></label>
+              <label>{t("raffle.workspace.fields.currency")}<input value={currency} onChange={(event)=>setCurrency(event.target.value)} required maxLength={20} className="mt-1 min-h-11 w-full rounded-lg bg-surface-base px-3 uppercase" /></label>
+              {scope === "guild" && (
               <p className="text-content-secondary sm:col-span-2">
                 {t("raffle.workspace.wizard.guildRules")}
               </p>
-            </div>
-          )}
+              )}
+          </div>
           <label className="flex min-h-11 items-start gap-3 rounded-lg border border-primary/20 p-3 text-sm sm:col-span-2">
             <input
               className="mt-1"

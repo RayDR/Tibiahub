@@ -6,6 +6,7 @@ import { useTranslation } from 'react-i18next';
 
 import { raffleApi, type PublicRaffle } from '../services/raffle';
 import AutomaticRaffleDraw from '../components/raffle/AutomaticRaffleDraw';
+import { useAuth } from '../context/AuthContext';
 
 const STATUS_BANNER_CLASS: Record<string, string> = {
   open: 'border-success/30 bg-success/20 text-success',
@@ -17,6 +18,7 @@ const STATUS_BANNER_CLASS: Record<string, string> = {
 export default function RafflePublicPage() {
   const { publicCode } = useParams<{ publicCode: string }>();
   const { t } = useTranslation();
+  const { isAuthenticated } = useAuth();
 
   const [raffle, setRaffle] = useState<PublicRaffle | null>(null);
   const [characterName, setCharacterName] = useState('');
@@ -66,7 +68,7 @@ export default function RafflePublicPage() {
     }
   };
 
-  const registrationBlocked = raffle ? raffle.status !== 'open' : true;
+  const registrationBlocked = raffle ? raffle.status !== 'open' || !isAuthenticated : true;
   const bannerMessage = raffle?.status === 'draft'
     ? t('raffle.publicPage.draftBanner')
     : raffle?.status === 'cancelled'
@@ -119,6 +121,7 @@ export default function RafflePublicPage() {
             <FontAwesomeIcon icon={faUsers} className="h-5 w-5 text-primary" /> {t('raffle.publicPage.joinTitle')}
           </h2>
           <p className="mb-4 text-sm text-content-secondary">{t('raffle.publicPage.joinSubtitle')}</p>
+          {!isAuthenticated && <p className="mb-4 rounded-lg border border-warning/30 bg-warning/10 p-3 text-sm text-warning">{t('raffle.publicPage.signInRequired')}</p>}
           <input
             value={characterName}
             onChange={(e) => setCharacterName(e.target.value)}

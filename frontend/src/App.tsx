@@ -16,6 +16,7 @@ import Overview from './pages/Admin/Overview';
 import GuildView from './pages/Admin/GuildView';
 import Profile from './pages/Profile';
 import PasswordReset from './pages/PasswordReset';
+import VerifyEmail from './pages/VerifyEmail';
 import { lazy, Suspense, useEffect, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 
@@ -121,6 +122,7 @@ function App() {
               <Route path="/login" element={<Login />} />
               <Route path="/register" element={<Register />} />
               <Route path="/reset-password" element={<PasswordReset />} />
+              <Route path="/verify-email" element={<VerifyEmail />} />
               <Route path="/profile" element={<Profile />} />
               <Route path="/settings" element={<Navigate to="/profile" replace />} />
 

@@ -72,6 +72,9 @@ export default function AutomaticRaffleOperations({
   const [confirmedCreation, setConfirmedCreation] = useState(false);
   const [eligibilityDays, setEligibilityDays] = useState(5);
   const [showParticipants, setShowParticipants] = useState(false);
+  const [secondAmount, setSecondAmount] = useState(100);
+  const [firstAmount, setFirstAmount] = useState(250);
+  const [prizeCurrency, setPrizeCurrency] = useState("TC");
   const [rerunPositions, setRerunPositions] = useState<
     Array<"second" | "first">
   >([]);
@@ -178,24 +181,28 @@ export default function AutomaticRaffleOperations({
       setError(t("raffle.operations.errors.future"));
       return;
     }
+    if (!(secondAmount > 0) || !(firstAmount > 0) || !prizeCurrency.trim()) {
+      setError(t("raffle.workspace.wizard.invalidPrizes"));
+      return;
+    }
     setBusy(true);
     try {
       const prizes = [
         {
           name: t("raffle.operations.secondPlace"),
-          reward: "100 TC",
+          reward: `${secondAmount} ${prizeCurrency.trim().toUpperCase()}`,
           order_index: 1,
           position: "second" as const,
-          amount: 100,
-          currency: "TC",
+          amount: secondAmount,
+          currency: prizeCurrency.trim().toUpperCase(),
         },
         {
           name: t("raffle.operations.firstPlace"),
-          reward: "250 TC",
+          reward: `${firstAmount} ${prizeCurrency.trim().toUpperCase()}`,
           order_index: 2,
           position: "first" as const,
-          amount: 250,
-          currency: "TC",
+          amount: firstAmount,
+          currency: prizeCurrency.trim().toUpperCase(),
         },
       ];
       const created = await raffleApi.create({
@@ -408,13 +415,10 @@ export default function AutomaticRaffleOperations({
           <div className="md:col-span-2 rounded-xl border border-primary/20 p-3 text-sm text-content-secondary">
             {t("raffle.operations.rules")}
           </div>
-          <div className="md:col-span-2 grid gap-2 sm:grid-cols-2">
-            <div className="rounded-lg bg-surface-base p-3">
-              {t("raffle.operations.secondPlace")} — 100 TC
-            </div>
-            <div className="rounded-lg bg-surface-base p-3">
-              {t("raffle.operations.firstPlace")} — 250 TC
-            </div>
+          <div className="md:col-span-2 grid gap-3 sm:grid-cols-[1fr_1fr_8rem]">
+            <label>{t("raffle.operations.secondPlace")}<input type="number" min="0.01" step="0.01" value={secondAmount} onChange={(event)=>setSecondAmount(Number(event.target.value))} required className="mt-1 w-full rounded-lg bg-surface-base p-2" /></label>
+            <label>{t("raffle.operations.firstPlace")}<input type="number" min="0.01" step="0.01" value={firstAmount} onChange={(event)=>setFirstAmount(Number(event.target.value))} required className="mt-1 w-full rounded-lg bg-surface-base p-2" /></label>
+            <label>{t("raffle.workspace.fields.currency")}<input value={prizeCurrency} onChange={(event)=>setPrizeCurrency(event.target.value)} required maxLength={20} className="mt-1 w-full rounded-lg bg-surface-base p-2 uppercase" /></label>
           </div>
           {purpose === "real" && (
             <label className="md:col-span-2 flex gap-2">

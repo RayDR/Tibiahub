@@ -1,13 +1,12 @@
-"""Password Reset endpoints."""
-import hashlib
-import logging
-import secrets
-from datetime import UTC, datetime, timedelta
-from typing import Optional
+"""Neutral, rate-limited password recovery backed by hashed one-time tokens."""
 
-from fastapi import APIRouter, BackgroundTasks, Depends, HTTPException
+from datetime import timedelta
+import logging
+from typing import Literal
+
+from fastapi import APIRouter, BackgroundTasks, Depends, HTTPException, Request
+from pydantic import BaseModel, EmailStr, Field, model_validator
 from sqlalchemy.orm import Session
-from pydantic import BaseModel, EmailStr
 
 from app.api.v1.endpoints.auth import get_current_admin_user
 from app.core import security
@@ -15,164 +14,141 @@ from app.core.config import settings
 from app.db.database import get_db
 from app.models.user import User
 from app.models.user_character import UserCharacter
+from app.services.auth_token_service import AuthTokenService, PASSWORD_RESET
 from app.services.email_service import EmailService
+from app.services.character_ownership_service import normalize_character_name
 
 router = APIRouter()
 logger = logging.getLogger(__name__)
+NEUTRAL_MESSAGE = "If an account with that information exists, reset instructions will be sent"
 
 
 class PasswordResetRequest(BaseModel):
-    email: Optional[EmailStr] = None
-    character_name: Optional[str] = None
+    email: EmailStr | None = None
+    character_name: str | None = Field(None, min_length=2, max_length=100)
+    locale: Literal["en", "es"] = "en"
+
+    @model_validator(mode="after")
+    def exactly_one_identifier(self):
+        if bool(self.email) == bool((self.character_name or "").strip()):
+            raise ValueError("Provide exactly one account identifier")
+        return self
 
 
 class PasswordResetConfirm(BaseModel):
-    token: str
-    new_password: str
+    token: str = Field(..., min_length=32, max_length=256)
+    new_password: str = Field(..., min_length=12, max_length=128)
 
 
 class AdminPasswordResetByEmail(BaseModel):
     user_id: int
+    locale: Literal["en", "es"] = "en"
 
 
 class EmailTestRequest(BaseModel):
     email: EmailStr
+    locale: Literal["en", "es"] = "en"
 
 
-def _token_hash(token: str) -> str:
-    return hashlib.sha256(token.encode("utf-8")).hexdigest()
-
-
-def _store_reset_token(user: User) -> str:
-    raw_token = secrets.token_urlsafe(48)
-    user.reset_token = _token_hash(raw_token)
-    user.reset_token_expires = datetime.now(UTC) + timedelta(hours=1)
-    return raw_token
-
-
-def _queue_reset_email(background_tasks: BackgroundTasks, *, email: str, username: str, raw_token: str) -> None:
+def _queue_reset_email(background_tasks: BackgroundTasks, *, user: User, raw_token: str, locale: str) -> None:
     reset_link = f"{settings.RESET_PASSWORD_URL}?token={raw_token}"
 
     def _send() -> None:
         result = EmailService.send_password_reset_email(
-            to_email=email,
-            username=username,
+            to_email=user.email,
+            username=user.display_name or user.username,
             reset_link=reset_link,
+            locale=locale,
         )
         if not result.ok:
-            logger.error("password_reset_email_failed username=%s email=%s detail=%s", username, email, result.detail)
+            logger.error("password_reset_email_failed user_id=%s", user.id)
 
     background_tasks.add_task(_send)
 
 
+def _find_user(db: Session, payload: PasswordResetRequest) -> User | None:
+    if payload.email:
+        return db.query(User).filter(User.email == str(payload.email).casefold()).first()
+    character = db.query(UserCharacter).filter(
+        UserCharacter.normalized_name == normalize_character_name(payload.character_name or ""),
+        UserCharacter.ownership_status == "verified",
+    ).first()
+    return character.user if character else None
+
+
 @router.post("/request-reset")
-async def request_password_reset(
-    request: PasswordResetRequest,
+def request_password_reset(
+    payload: PasswordResetRequest,
+    request: Request,
     background_tasks: BackgroundTasks,
-    db: Session = Depends(get_db)
+    db: Session = Depends(get_db),
 ):
-    """
-    Request password reset by email or character name
-    Sends an email with reset link
-    """
-    user = None
-    
-    if request.email:
-        user = db.query(User).filter(User.email == request.email).first()
-    elif request.character_name:
-        # Find user by character name
-        character = db.query(UserCharacter).filter(
-            UserCharacter.character_name.ilike(request.character_name)
-        ).first()
-        
-        if character:
-            user = db.query(User).filter(User.id == character.user_id).first()
-    else:
-        raise HTTPException(status_code=400, detail="Provide email or character name")
-    
-    # Always return success even if user not found (security)
-    if not user or not user.email:
-        return {"message": "If an account with that information exists, a reset email will be sent"}
-    
-    token = _store_reset_token(user)
+    subject = str(payload.email or payload.character_name or "").strip()
+    requester = request.client.host if request.client else "unknown"
+    allowed = AuthTokenService.allow_request(
+        db, purpose=PASSWORD_RESET, subject=subject, requester=requester,
+    )
+    user = _find_user(db, payload) if allowed else None
+    if user and user.is_active and user.email:
+        raw_token = AuthTokenService.issue(
+            db,
+            user=user,
+            purpose=PASSWORD_RESET,
+            ttl=timedelta(minutes=settings.PASSWORD_RESET_TTL_MINUTES),
+        )
+        _queue_reset_email(background_tasks, user=user, raw_token=raw_token, locale=payload.locale)
     db.commit()
-    
-    _queue_reset_email(background_tasks, email=user.email, username=user.username, raw_token=token)
-    
-    return {"message": "If an account with that information exists, a reset email will be sent"}
+    return {"message": NEUTRAL_MESSAGE}
 
 
 @router.post("/reset-password")
-def reset_password(
-    reset_data: PasswordResetConfirm,
-    db: Session = Depends(get_db)
-):
-    """
-    Reset password using token from email
-    """
-    token_hash = _token_hash(reset_data.token)
-    user = db.query(User).filter(User.reset_token == token_hash).first()
-    
-    if not user:
-        raise HTTPException(status_code=400, detail="Invalid or expired reset token")
-    
-    # Check if token is expired
-    if user.reset_token_expires < datetime.now(UTC):
-        raise HTTPException(status_code=400, detail="Reset token has expired")
-    
-    # Update password
-    user.hashed_password = security.get_password_hash(reset_data.new_password)
+def reset_password(payload: PasswordResetConfirm, db: Session = Depends(get_db)):
+    user = AuthTokenService.consume(db, purpose=PASSWORD_RESET, raw_token=payload.token)
+    if user is None:
+        db.rollback()
+        raise HTTPException(status_code=400, detail="The reset link is invalid or expired")
+    user.hashed_password = security.get_password_hash(payload.new_password)
+    # Invalidate compatibility tokens as well; they are never accepted here.
     user.reset_token = None
     user.reset_token_expires = None
     db.commit()
-    
     return {"message": "Password reset successfully"}
 
 
 @router.post("/admin/send-reset-email")
 def admin_send_reset_email(
-    request: AdminPasswordResetByEmail,
+    payload: AdminPasswordResetByEmail,
     background_tasks: BackgroundTasks,
-    current_user: User = Depends(get_current_admin_user),
-    db: Session = Depends(get_db)
+    _admin: User = Depends(get_current_admin_user),
+    db: Session = Depends(get_db),
 ):
-    """
-    Admin can send password reset email to any user
-    """
-    user = db.query(User).filter(User.id == request.user_id).first()
-    
-    if not user:
-        raise HTTPException(status_code=404, detail="User not found")
-    
-    if not user.email:
-        raise HTTPException(status_code=400, detail="User has no email address set")
-    
-    token = _store_reset_token(user)
+    user = db.get(User, payload.user_id)
+    if not user or not user.email:
+        raise HTTPException(status_code=404, detail="Eligible account not found")
+    raw_token = AuthTokenService.issue(
+        db,
+        user=user,
+        purpose=PASSWORD_RESET,
+        ttl=timedelta(minutes=settings.PASSWORD_RESET_TTL_MINUTES),
+    )
     db.commit()
-    
-    _queue_reset_email(background_tasks, email=user.email, username=user.username, raw_token=token)
-    
-    return {"message": f"Password reset email sent to {user.email}"}
+    _queue_reset_email(background_tasks, user=user, raw_token=raw_token, locale=payload.locale)
+    return {"message": "Password reset instructions queued"}
 
 
 @router.post("/test-email")
-def send_test_email(
-    payload: EmailTestRequest,
-    current_user: User = Depends(get_current_admin_user),
-):
-    _ = current_user
+def send_test_email(payload: EmailTestRequest, _admin: User = Depends(get_current_admin_user)):
     subject, html_body, text_body = EmailService.build_password_reset_content(
         username="Admin Test",
-        reset_link=f"{settings.RESET_PASSWORD_URL}?token=test-token",
+        reset_link=f"{settings.RESET_PASSWORD_URL}?token=test-token-not-valid",
+        locale=payload.locale,
     )
-    result = EmailService.send_message(
-        EmailService.build_message(
-            to_email=payload.email,
-            subject=f"[Test] {subject}",
-            html_body=html_body,
-            text_body=text_body,
-        )
-    )
+    result = EmailService.send_message(EmailService.build_message(
+        to_email=payload.email,
+        subject=f"[Test] {subject}",
+        html_body=html_body,
+        text_body=text_body,
+    ))
     if not result.ok:
         raise HTTPException(status_code=503, detail=result.detail)
-    return {"message": f"Test email sent to {payload.email}"}
+    return {"message": "Test email queued"}

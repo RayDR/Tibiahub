@@ -210,14 +210,14 @@ def main() -> int:
         cache_detail = f"status1={img1.status_code} src1={src1} status2={img2.status_code} src2={src2}"
     _print("image_cache_local", cache_ok, cache_detail)
 
-    # 10) cleanup script dry-run
+    # 10) unified data-integrity audit (dry-run is the default)
     cleanup = subprocess.run(
-        ["/forge/.venv/bin/python", "/forge/tibiahub/scripts/cleanup_soft_deleted.py", "--dry-run", "--older-than-days", "0"],
+        ["/forge/.venv/bin/python", "/forge/tibiahub/scripts/audit_data_integrity.py", "--json"],
         check=False,
         capture_output=True,
         text=True,
     )
-    dry_ok = cleanup.returncode == 0 and "[DRY-RUN]" in cleanup.stdout
+    dry_ok = cleanup.returncode == 0 and '"mode": "dry-run"' in cleanup.stdout
     _print("cleanup_dry_run", dry_ok, f"exit={cleanup.returncode} out={cleanup.stdout.splitlines()[:3]}")
 
     # 11) Runtime CPU/RAM/status snapshot from PM2 (system monitor evidence)

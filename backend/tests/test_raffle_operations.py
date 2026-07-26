@@ -130,7 +130,7 @@ async def test_transient_failure_uses_bounded_retry(db, monkeypatch):
 def test_test_participants_require_existing_local_guild_account(db, client):
     admin = make_user(db, username="test_fixture_admin", is_superuser=True)
     participant = make_user(db, username="test_fixture_member")
-    db.add(UserCharacter(user_id=participant.id, character_name="Fixture Knight", guild_name="TEST GUILD", guild_rank="Member"))
+    db.add(UserCharacter(user_id=participant.id, character_name="Fixture Knight", normalized_name="fixture knight", ownership_status="verified", ownership_verified_at=datetime.now(UTC), guild_name="TEST GUILD", guild_rank="Member"))
     test_raffle = due_raffle(db, admin, purpose="test")
     real_raffle = due_raffle(db, admin, purpose="real")
     db.commit()

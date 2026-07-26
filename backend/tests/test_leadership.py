@@ -34,7 +34,7 @@ def setup_opening(client, db, *, guild="Leadership One", allow_review=True):
 def setup_applicant(db, *, username="leadership-applicant", guild="Leadership One", character="Applicant Knight"):
     user = make_user(db, username=username, guild_name=guild, guild_rank="Member")
     user.tibia_character_name = character; user.level = 500; user.vocation = "Elite Knight"; user.world_name = "Antica"
-    db.add(UserCharacter(user_id=user.id, character_name=character, guild_name=guild, guild_rank="Member", level=500, vocation="Elite Knight", world_name="Antica")); db.commit()
+    db.add(UserCharacter(user_id=user.id, character_name=character, normalized_name=character.casefold(), ownership_status="verified", ownership_verified_at=user.created_at, guild_name=guild, guild_rank="Member", level=500, vocation="Elite Knight", world_name="Antica")); db.commit()
     return user
 
 
@@ -46,10 +46,39 @@ def test_openings_are_guild_scoped_and_conduct_is_required(client, db):
     assert client.post(f"/api/v1/guild/me/leadership/openings/{opening['id']}/applications", json=application_payload("Other Knight"), headers=auth(other)).status_code == 404
 
 
+def test_drafts_are_manager_only_and_member_openings_do_not_mask_applications(client, db):
+    guild = "Visible Guild"
+    leader = make_user(db, username="visible-leader", guild_name=guild, guild_rank="Leader")
+    vice = make_user(db, username="visible-vice", guild_name=guild, guild_rank="Vice Leader")
+    member = setup_applicant(db, username="visible-member", guild=guild, character="Visible Knight")
+    admin = make_user(db, username="visible-admin", guild_name="Admin Home", is_superuser=True)
+    db.commit()
+    created = client.post("/api/v1/guild/me/leadership/openings", json=opening_payload(), headers=auth(leader))
+    assert created.status_code == 201 and created.json()["status"] == "draft"
+    opening_id = created.json()["id"]
+    assert [row["id"] for row in client.get("/api/v1/guild/me/leadership/openings", headers=auth(leader)).json()] == [opening_id]
+    assert client.get("/api/v1/guild/me/leadership/openings", headers=auth(vice)).json() == []
+    assert client.get("/api/v1/guild/me/leadership/openings", headers=auth(member)).json() == []
+    assert client.get(f"/api/v1/guild/me/leadership/openings/{opening_id}", headers=auth(member)).status_code == 404
+    assisted = client.get("/api/v1/admin/guilds/visible-guild/leadership/openings", headers=auth(admin))
+    assert assisted.status_code == 200 and assisted.json()[0]["status"] == "draft"
+
+    assert client.post(f"/api/v1/guild/me/leadership/openings/{opening_id}/open", headers=auth(leader)).status_code == 200
+    assert [row["id"] for row in client.get("/api/v1/guild/me/leadership/openings", headers=auth(member)).json()] == [opening_id]
+    application = client.post(
+        f"/api/v1/guild/me/leadership/openings/{opening_id}/applications",
+        json=application_payload("Visible Knight"), headers=auth(member),
+    )
+    assert application.status_code == 201
+    assert client.get("/api/v1/guild/me/leadership/openings", headers=auth(member)).json() == []
+    mine = client.get("/api/v1/guild/me/leadership/applications/mine", headers=auth(member)).json()
+    assert [row["id"] for row in mine] == [application.json()["id"]]
+
+
 def test_account_cannot_duplicate_application_using_another_character(client, db):
     _, opening = setup_opening(client, db, guild="Duplicate Guild")
     applicant = setup_applicant(db, guild="Duplicate Guild", character="First Knight")
-    db.add(UserCharacter(user_id=applicant.id, character_name="Second Knight", guild_name="Duplicate Guild", guild_rank="Member")); db.commit()
+    db.add(UserCharacter(user_id=applicant.id, character_name="Second Knight", normalized_name="second knight", ownership_status="verified", ownership_verified_at=applicant.created_at, guild_name="Duplicate Guild", guild_rank="Member")); db.commit()
     assert client.post(f"/api/v1/guild/me/leadership/openings/{opening['id']}/applications", json=application_payload("First Knight"), headers=auth(applicant)).status_code == 201
     assert client.post(f"/api/v1/guild/me/leadership/openings/{opening['id']}/applications", json=application_payload("Second Knight"), headers=auth(applicant)).status_code == 409
 
@@ -72,9 +101,10 @@ def test_viceleader_review_is_explicit_and_cannot_decide(client, db):
     applicant = setup_applicant(db, guild="Review Guild", character="Review Knight")
     db.commit(); created = client.post(f"/api/v1/guild/me/leadership/openings/{opening['id']}/applications", json=application_payload("Review Knight"), headers=auth(applicant)).json()
     assert client.get(f"/api/v1/guild/me/leadership/applications/{created['id']}", headers=auth(vice)).status_code == 200
+    assert client.patch(f"/api/v1/guild/me/leadership/applications/{created['id']}/status", json={"status": "under_review"}, headers=auth(leader)).status_code == 200
+    assert client.patch(f"/api/v1/guild/me/leadership/applications/{created['id']}/status", json={"status": "voting"}, headers=auth(leader)).status_code == 200
     assert client.post(f"/api/v1/guild/me/leadership/applications/{created['id']}/votes", json={"vote": "support"}, headers=auth(vice)).status_code == 200
     assert client.post(f"/api/v1/guild/me/leadership/applications/{created['id']}/decision", json={"decision": "accepted"}, headers=auth(vice)).status_code == 403
-    assert client.patch(f"/api/v1/guild/me/leadership/applications/{created['id']}/status", json={"status": "under_review"}, headers=auth(leader)).status_code == 200
 
 
 def test_acceptance_creates_one_pending_assignment_and_preserves_history(client, db):
@@ -82,12 +112,14 @@ def test_acceptance_creates_one_pending_assignment_and_preserves_history(client,
     applicant = setup_applicant(db, guild="Accepted Guild", character="Accepted Knight")
     created = client.post(f"/api/v1/guild/me/leadership/openings/{opening['id']}/applications", json=application_payload("Accepted Knight"), headers=auth(applicant)).json()
     client.patch(f"/api/v1/guild/me/leadership/applications/{created['id']}/status", json={"status": "under_review"}, headers=auth(leader))
+    client.patch(f"/api/v1/guild/me/leadership/applications/{created['id']}/status", json={"status": "voting"}, headers=auth(leader))
+    client.post(f"/api/v1/guild/me/leadership/applications/{created['id']}/votes", json={"vote": "support"}, headers=auth(leader))
     accepted = client.post(f"/api/v1/guild/me/leadership/applications/{created['id']}/decision", json={"decision": "accepted"}, headers=auth(leader))
     assert accepted.status_code == 200 and accepted.json()["status"] == "accepted"
     assignment = db.query(GuildLeadershipAssignment).filter_by(user_id=applicant.id, is_active=True).one()
     assert assignment.in_game_promotion_status == "pending"
     assert client.post(f"/api/v1/guild/me/leadership/applications/{created['id']}/decision", json={"decision": "accepted"}, headers=auth(leader)).status_code == 409
-    db.refresh(db.get(GuildLeadershipApplication, created["id"])); assert len(db.get(GuildLeadershipApplication, created["id"]).histories) == 3
+    db.refresh(db.get(GuildLeadershipApplication, created["id"])); assert len(db.get(GuildLeadershipApplication, created["id"]).histories) == 4
 
 
 def test_admin_assistance_is_fixed_audited_and_does_not_change_membership(client, db):

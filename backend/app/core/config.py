@@ -70,12 +70,21 @@ class Settings(BaseSettings):
     RAFFLE_SCHEDULER_INITIAL_RETRY_SECONDS: int = Field(60, ge=5, le=3600)
     RAFFLE_SCHEDULER_WORKER_ID: str = "raffle-scheduler-1"
     KNOWLEDGE_WORKER_ENABLED: bool = False
+    CHARACTER_OWNERSHIP_WORKER_ENABLED: bool = True
     KNOWLEDGE_WORKER_ID: str = "knowledge-worker-1"
     KNOWLEDGE_WORKER_POLL_SECONDS: int = Field(5, ge=1, le=300)
     KNOWLEDGE_WORKER_LEASE_SECONDS: int = Field(120, ge=30, le=3600)
     KNOWLEDGE_WORKER_MAX_IDLE_SECONDS: int = Field(30, ge=1, le=3600)
     IMAGE_CACHE_MAX_AGE_SECONDS: int = 86400
     RESET_PASSWORD_URL: str = "https://tibiahub.domoforge.com/reset-password"
+    VERIFY_EMAIL_URL: str = "https://tibiahub.domoforge.com/verify-email"
+    PASSWORD_RESET_TTL_MINUTES: int = Field(60, ge=10, le=1440)
+    EMAIL_VERIFICATION_TTL_HOURS: int = Field(24, ge=1, le=168)
+    AUTH_TOKEN_COOLDOWN_SECONDS: int = Field(60, ge=15, le=3600)
+    AUTH_TOKEN_MAX_PER_SUBJECT_HOUR: int = Field(3, ge=1, le=20)
+    AUTH_TOKEN_MAX_PER_REQUESTER_HOUR: int = Field(20, ge=1, le=200)
+    CHARACTER_CLAIM_TTL_MINUTES: int = Field(30, ge=10, le=1440)
+    CHARACTER_CLAIM_MAX_ATTEMPTS: int = Field(3, ge=1, le=10)
     SMTP_HOST: str = ""
     SMTP_PORT: int = 587
     SMTP_USER: str = ""

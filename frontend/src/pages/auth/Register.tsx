@@ -2,18 +2,17 @@ import React, { useState } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
 import { authApi } from '../../services/auth';
 import { useTranslation } from 'react-i18next';
-import { Users, KeyRound, ShieldAlert, Swords, Mail, CheckCircle2 } from 'lucide-react';
+import { Users, KeyRound, ShieldAlert, Mail } from 'lucide-react';
 import AppCard from '../../components/ui/AppCard';
 import AppButton from '../../components/ui/AppButton';
 
 export default function Register() {
-    const { t } = useTranslation();
+    const { t, i18n } = useTranslation();
     const [formData, setFormData] = useState({
         username: '',
         email: '',
         password: '',
-        confirmPassword: '',
-        tibia_character_name: ''
+        confirmPassword: ''
     });
     const [error, setError] = useState('');
     const [loading, setLoading] = useState(false);
@@ -34,12 +33,12 @@ export default function Register() {
                 username: formData.username,
                 email: formData.email,
                 password: formData.password,
-                tibia_character_name: formData.tibia_character_name
+                locale: i18n.language.startsWith('es') ? 'es' : 'en'
             });
             // Automatically redirect to login
             navigate('/login');
         } catch (err: any) {
-            setError(err.response?.data?.detail || 'Registration failed');
+            setError(err.response?.data?.detail || t('auth.registerFailed'));
         } finally {
             setLoading(false);
         }
@@ -49,8 +48,8 @@ export default function Register() {
         <div className="flex items-center justify-center min-h-[calc(100vh-200px)] py-12">
             <AppCard className="w-full max-w-lg p-8 shadow-xl">
                 <div className="text-center mb-8">
-                    <h2 className="text-3xl font-bold text-primary font-serif tracking-wider">Join the Guild</h2>
-                    <p className="text-content-muted mt-2">Begin your journey with Bloodborne Warhowl</p>
+                    <h2 className="text-3xl font-bold text-primary font-serif tracking-wider">{t('auth.joinGuild')}</h2>
+                    <p className="text-content-muted mt-2">{t('auth.beginJourney')}</p>
                 </div>
 
                 {error && (
@@ -92,25 +91,6 @@ export default function Register() {
                         </div>
                     </div>
 
-                    <div>
-                        <label className="block text-sm font-medium text-content-primary mb-2">{t('auth.characterName')}</label>
-                        <div className="relative">
-                            <Swords className="absolute left-3 top-1/2 -translate-y-1/2 w-5 h-5 text-content-muted" />
-                            <input
-                                type="text"
-                                value={formData.tibia_character_name}
-                                onChange={(e) => setFormData({ ...formData, tibia_character_name: e.target.value })}
-                                className="app-input py-2.5 pl-10 pr-4"
-                                placeholder={t('auth.exactCharacterName')}
-                                required
-                            />
-                        </div>
-                        <p className="text-xs text-content-muted mt-1 flex items-center gap-1">
-                            <CheckCircle2 className="w-3 h-3" />
-                            {t('auth.characterRequired')}
-                        </p>
-                    </div>
-
                     <div className="grid grid-cols-1 md:grid-cols-2 gap-5">
                         <div>
                             <label className="block text-sm font-medium text-content-primary mb-2">{t('auth.password')}</label>
@@ -122,6 +102,7 @@ export default function Register() {
                                     onChange={(e) => setFormData({ ...formData, password: e.target.value })}
                                     className="app-input py-2.5 pl-10 pr-4"
                                     placeholder="••••••••"
+                                    minLength={12}
                                     required
                                 />
                             </div>
@@ -137,6 +118,7 @@ export default function Register() {
                                     onChange={(e) => setFormData({ ...formData, confirmPassword: e.target.value })}
                                     className="app-input py-2.5 pl-10 pr-4"
                                     placeholder="••••••••"
+                                    minLength={12}
                                     required
                                 />
                             </div>

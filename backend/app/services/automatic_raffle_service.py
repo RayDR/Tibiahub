@@ -19,7 +19,6 @@ from app.services.raffle_eligibility_service import RaffleEligibilityError, Raff
 
 ALGORITHM_VERSION = "hmac-sha256-rejection-v1"
 POSITIONS = ("second", "first")
-EXPECTED_PRIZES = {"second": (Decimal("100"), "TC"), "first": (Decimal("250"), "TC")}
 
 
 class AutomaticRaffleError(ValueError):
@@ -37,10 +36,10 @@ def validate_automatic_prizes(raffle: Raffle) -> dict[str, RafflePrize]:
     prizes = {prize.position: prize for prize in raffle.prizes if prize.position in POSITIONS}
     if len(raffle.prizes) != 2 or set(prizes) != set(POSITIONS):
         raise AutomaticRaffleError("invalid_prizes", "Automatic raffles require exactly second and first prizes")
-    for position, (amount, currency) in EXPECTED_PRIZES.items():
+    for position in POSITIONS:
         prize = prizes[position]
-        if Decimal(prize.amount or 0) != amount or (prize.currency or "").upper() != currency:
-            raise AutomaticRaffleError("invalid_prizes", "Automatic raffle prizes must be second 100 TC and first 250 TC")
+        if Decimal(prize.amount or 0) <= 0 or not (prize.currency or "").strip():
+            raise AutomaticRaffleError("invalid_prizes", f"The {position} prize requires a positive amount and currency")
     return prizes
 
 

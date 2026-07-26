@@ -38,13 +38,13 @@ def main() -> int:
         for user in global_admins:
             print(
                 f"  - id={user.id} username={user.username} active={user.is_active} "
-                f"email={user.email or '-'} guild_rank={user.guild_rank or '-'}"
+                f"email_present={bool(user.email)} guild_rank={user.guild_rank or '-'}"
             )
 
         if admin:
             print(
                 f"admin_status=id={admin.id} active={admin.is_active} superuser={admin.is_superuser} "
-                f"email={admin.email or '-'} guild_rank={admin.guild_rank or '-'}"
+                f"email_present={bool(admin.email)} guild_rank={admin.guild_rank or '-'}"
             )
         else:
             print("admin_status=missing")
@@ -53,7 +53,7 @@ def main() -> int:
         if cleanup_marked:
             for user in cleanup_marked:
                 print(
-                    f"  - id={user.id} username={user.username} email={user.email or '-'} "
+                    f"  - id={user.id} username={user.username} email_present={bool(user.email)} "
                     f"tibia_status={user.tibia_status or '-'} reason={user.tibia_last_error or '-'}"
                 )
         else:
@@ -63,7 +63,7 @@ def main() -> int:
         if inactive_users:
             for user in inactive_users:
                 print(
-                    f"  - id={user.id} username={user.username} email={user.email or '-'} "
+                    f"  - id={user.id} username={user.username} email_present={bool(user.email)} "
                     f"superuser={user.is_superuser} tibia_status={user.tibia_status or '-'}"
                 )
         else:

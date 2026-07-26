@@ -50,7 +50,7 @@ def test_test_raffle_near_future_creation_is_audited(db, client):
 def test_test_participant_duplicate_override_and_removal_are_isolated(db, client):
     admin = make_user(db, username="test_workflow_participant_admin", is_superuser=True)
     member = make_user(db, username="test_workflow_member")
-    db.add(UserCharacter(user_id=member.id, character_name="Workflow Knight", guild_name="TEST GUILD", guild_rank="Member"))
+    db.add(UserCharacter(user_id=member.id, character_name="Workflow Knight", normalized_name="workflow knight", ownership_status="verified", ownership_verified_at=datetime.now(UTC), guild_name="TEST GUILD", guild_rank="Member"))
     raffle = make_automatic_raffle(db, admin)
     db.commit()
 
@@ -76,7 +76,7 @@ def test_eligibility_override_is_global_admin_test_only_and_pre_freeze(db, clien
     admin = make_user(db, username="test_workflow_boundary_admin", is_superuser=True)
     manager = make_user(db, username="test_workflow_boundary_manager", guild_rank="Leader")
     member = make_user(db, username="test_workflow_boundary_member")
-    db.add(UserCharacter(user_id=member.id, character_name="Boundary Knight", guild_name="TEST GUILD", guild_rank="Member"))
+    db.add(UserCharacter(user_id=member.id, character_name="Boundary Knight", normalized_name="boundary knight", ownership_status="verified", ownership_verified_at=datetime.now(UTC), guild_name="TEST GUILD", guild_rank="Member"))
     test_raffle = make_automatic_raffle(db, admin)
     real_raffle = make_automatic_raffle(db, admin, purpose="real")
     db.commit()
@@ -97,7 +97,7 @@ def test_eligibility_override_is_global_admin_test_only_and_pre_freeze(db, clien
 def test_cleanup_archives_only_test_associations_and_preserves_audit(db, client):
     admin = make_user(db, username="test_workflow_cleanup_admin", is_superuser=True)
     member = make_user(db, username="test_workflow_cleanup_member")
-    db.add(UserCharacter(user_id=member.id, character_name="Cleanup Knight", guild_name="TEST GUILD", guild_rank="Member"))
+    db.add(UserCharacter(user_id=member.id, character_name="Cleanup Knight", normalized_name="cleanup knight", ownership_status="verified", ownership_verified_at=datetime.now(UTC), guild_name="TEST GUILD", guild_rank="Member"))
     test_raffle = make_automatic_raffle(db, admin)
     real_raffle = make_automatic_raffle(db, admin, purpose="real")
     db.commit()

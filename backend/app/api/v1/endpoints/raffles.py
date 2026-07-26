@@ -6,6 +6,7 @@ from typing import List
 
 from fastapi import APIRouter, Depends, HTTPException, status
 from pydantic import BaseModel, Field
+from sqlalchemy import func
 from sqlalchemy.orm import Session, selectinload
 
 from app.api.v1.endpoints.auth import get_current_active_user, get_current_manager_user, get_current_admin_user
@@ -16,7 +17,6 @@ from app.core.permissions import (
     can_manage_guild, is_global_admin, is_matching_raffle_leader,
 )
 from app.core.scopes import ContentScope, ScopeType, require_scope_creation
-from app.core import security
 from app.db.database import get_db
 from app.models.events import Event
 from app.models.guild import Announcement, AnnouncementType
@@ -58,8 +58,7 @@ from app.services.notification_service import NotificationService
 from app.services.raffle_scheduler_service import RETRYABLE_CODES
 from app.services.raffle_service import RaffleService, normalize_access_mode, normalize_status, sync_legacy_raffle_fields
 from app.services.public_code import generate_unique_code
-from app.services.tibia_api import get_character_info, get_guild_info
-from app.services.text_utils import normalize_search_text, slugify
+from app.services.character_ownership_service import normalize_character_name
 
 router = APIRouter()
 logger = logging.getLogger(__name__)
@@ -156,40 +155,6 @@ def _serialize_public_raffle(db: Session, raffle: Raffle) -> dict:
         } for prize in raffle.prizes],
         "winners": winners,
     }
-
-
-def _get_or_create_public_user(db: Session, character_name: str) -> User:
-    normalized = normalize_search_text(character_name)
-
-    linked_character = (
-        db.query(UserCharacter)
-        .filter(UserCharacter.character_name.ilike(character_name))
-        .first()
-    )
-    if linked_character:
-        return linked_character.user
-
-    linked_user = db.query(User).filter(User.tibia_character_name.ilike(character_name)).first()
-    if linked_user:
-        return linked_user
-
-    guest_username = f"guest_{slugify(character_name)}"
-    existing_guest = db.query(User).filter(User.username == guest_username).first()
-    if existing_guest:
-        return existing_guest
-
-    guest = User(
-        username=guest_username,
-        email=None,
-        hashed_password=security.get_password_hash(f"guest::{normalized}::{datetime.now(UTC).isoformat()}"),
-        guild_rank="Member",
-        is_active=True,
-        is_superuser=False,
-        tibia_character_name=character_name,
-    )
-    db.add(guest)
-    db.flush()
-    return guest
 
 
 @router.get("/", response_model=List[RaffleResponse])
@@ -370,15 +335,16 @@ def create_raffle(
         scheduled_run_at = raffle.scheduled_run_at
         if scheduled_run_at and scheduled_run_at.tzinfo is None:
             scheduled_run_at = scheduled_run_at.replace(tzinfo=UTC)
-        if raffle.purpose == "real" and (not scheduled_run_at or scheduled_run_at <= datetime.now(UTC)):
+        if raffle.purpose == "real" and scheduled_run_at and scheduled_run_at <= datetime.now(UTC):
             db.rollback()
-            raise HTTPException(status_code=400, detail="Real automatic raffles require a future schedule")
+            raise HTTPException(status_code=400, detail="Scheduled real raffles require a future schedule")
         if raffle.purpose == "test":
             now = datetime.now(UTC)
             if not scheduled_run_at or scheduled_run_at <= now or scheduled_run_at > now + timedelta(days=7):
                 db.rollback()
                 raise HTTPException(status_code=400, detail="Test raffles require a schedule within the next seven days")
-        NotificationService.emit(db, raffle, "raffle_scheduled", f"raffle:{raffle.id}:scheduled")
+        if scheduled_run_at:
+            NotificationService.emit(db, raffle, "raffle_scheduled", f"raffle:{raffle.id}:scheduled")
         if raffle.purpose == "test":
             db.add(RaffleTestAudit(
                 raffle_id=raffle.id, actor_id=current_user.id, action="test_raffle_created",
@@ -769,37 +735,36 @@ def get_public_raffle_by_code(
     return _serialize_public_raffle(db, raffle)
 
 
-async def _register_participant_for_raffle(db: Session, raffle: Raffle, character_name: str) -> Raffle:
+async def _register_participant_for_raffle(
+    db: Session,
+    raffle: Raffle,
+    character_name: str,
+    *,
+    actor: User,
+    require_owner: bool = True,
+) -> dict:
     _ensure_raffle_state_for_registration(raffle)
-
-    guild_info = await get_guild_info(raffle.guild_name)
-    if not guild_info:
-        raise HTTPException(status_code=503, detail="Guild data unavailable")
-
-    member_lookup = {
-        (member.get("name") or "").strip().lower(): member
-        for member in (guild_info.get("members") or [])
-        if (member.get("name") or "").strip()
-    }
-
     selected_name = character_name.strip()
-    member = member_lookup.get(selected_name.lower())
     access_mode = normalize_access_mode(getattr(raffle, "access_mode", None), getattr(raffle, "visibility", None))
-
-    character_info = await get_character_info(selected_name)
-    if access_mode != "guild_only" and not character_info:
-        raise HTTPException(status_code=400, detail="Character not found in Tibia")
-
-    if access_mode == "guild_only" and not member:
+    character_query = db.query(UserCharacter).filter(
+        UserCharacter.normalized_name == normalize_character_name(selected_name),
+        UserCharacter.ownership_status == "verified",
+    )
+    if require_owner:
+        character_query = character_query.filter(UserCharacter.user_id == actor.id)
+    character = character_query.first()
+    if character is None:
+        raise HTTPException(status_code=400, detail="A verified character owned by the account is required")
+    user = character.user
+    if not user.is_active:
+        raise HTTPException(status_code=400, detail="The character owner account is inactive")
+    if access_mode == "guild_only" and (character.guild_name or user.guild_name or "").casefold() != raffle.guild_name.casefold():
         raise HTTPException(status_code=400, detail="Only members of this guild can join")
-
-    raffle_world = (guild_info.get("world") or "").strip().lower()
-    character_world = ((character_info or {}).get("world") or raffle_world).strip().lower()
-    if access_mode == "world_only" and raffle_world and character_world != raffle_world:
+    raffle_world = (raffle.world_name or "").strip().casefold()
+    character_world = (character.world_name or user.world_name or "").strip().casefold()
+    if access_mode == "world_only" and (not raffle_world or character_world != raffle_world):
         raise HTTPException(status_code=400, detail="Only characters from the same world can join")
-
-    canonical_name = (member or {}).get("name") or (character_info or {}).get("name") or selected_name
-    user = _get_or_create_public_user(db, canonical_name)
+    canonical_name = character.character_name
 
     existing_user = (
         db.query(RaffleParticipant)
@@ -811,17 +776,17 @@ async def _register_participant_for_raffle(db: Session, raffle: Raffle, characte
 
     existing_character = (
         db.query(RaffleParticipant)
-        .filter(RaffleParticipant.raffle_id == raffle.id, RaffleParticipant.character_name.ilike(selected_name), RaffleParticipant.is_deleted == False)
+        .filter(
+            RaffleParticipant.raffle_id == raffle.id,
+            func.lower(RaffleParticipant.character_name) == canonical_name.casefold(),
+            RaffleParticipant.is_deleted == False,
+        )
         .first()
     )
     if existing_character:
         raise HTTPException(status_code=400, detail="This character is already registered")
 
-    rank = None
-    if member:
-        rank = member.get("rank") or member.get("title") or member.get("position")
-    elif character_info and isinstance(character_info.get("guild"), dict):
-        rank = (character_info.get("guild") or {}).get("rank")
+    rank = character.guild_rank or user.guild_rank
     participant = RaffleParticipant(
         raffle_id=raffle.id,
         user_id=user.id,
@@ -830,35 +795,37 @@ async def _register_participant_for_raffle(db: Session, raffle: Raffle, characte
         weight=1.1 if str(rank or "").strip().lower() == "vice leader" else 1.0,
         weight_multiplier=1.0,
         source="public_register",
-        source_data=member or character_info,
+        source_data={"ownership_status": "verified"},
     )
     db.add(participant)
     db.commit()
     return get_public_raffle(raffle.id, db)
 
 
-@router.post("/public/{raffle_id}/register", response_model=RaffleResponse)
+@router.post("/public/{raffle_id}/register", response_model=PublicRaffleResponse)
 async def register_public_participant(
     raffle_id: int,
     payload: PublicRaffleRegisterRequest,
     db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_active_user),
 ):
     raffle = db.query(Raffle).filter(Raffle.id == raffle_id).first()
     if not raffle:
         raise HTTPException(status_code=404, detail="Raffle not found")
-    return await _register_participant_for_raffle(db, raffle, payload.character_name)
+    return await _register_participant_for_raffle(db, raffle, payload.character_name, actor=current_user)
 
 
-@router.post("/public/code/{public_code}/register", response_model=RaffleResponse)
+@router.post("/public/code/{public_code}/register", response_model=PublicRaffleResponse)
 async def register_public_participant_by_code(
     public_code: str,
     payload: PublicRaffleRegisterRequest,
     db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_active_user),
 ):
     raffle = db.query(Raffle).filter(Raffle.public_code == public_code, Raffle.is_deleted == False).first()
     if not raffle:
         raise HTTPException(status_code=404, detail="Raffle not found")
-    return await _register_participant_for_raffle(db, raffle, payload.character_name)
+    return await _register_participant_for_raffle(db, raffle, payload.character_name, actor=current_user)
 
 
 @router.post("/{raffle_id}/participants/manual", response_model=RaffleResponse)
@@ -876,8 +843,11 @@ async def add_participant_manual(
         if raffle.purpose != "test":
             raise HTTPException(status_code=400, detail="Manual participants are allowed only for test raffles")
         selected_name = payload.character_name.strip()
-        character = db.query(UserCharacter).filter(UserCharacter.character_name.ilike(selected_name)).first()
-        user = character.user if character else db.query(User).filter(User.tibia_character_name.ilike(selected_name)).first()
+        character = db.query(UserCharacter).filter(
+            UserCharacter.normalized_name == normalize_character_name(selected_name),
+            UserCharacter.ownership_status == "verified",
+        ).first()
+        user = character.user if character else None
         if not user or not user.is_active or (user.guild_name or "").casefold() != raffle.guild_name.casefold():
             raise HTTPException(status_code=400, detail="Test participants must be active local accounts in this guild")
         if db.query(RaffleParticipant.id).filter(
@@ -885,10 +855,10 @@ async def add_participant_manual(
             RaffleParticipant.is_deleted.is_(False),
         ).first():
             raise HTTPException(status_code=400, detail="This account is already registered")
-        canonical_name = character.character_name if character else user.tibia_character_name
+        canonical_name = character.character_name
         db.add(RaffleParticipant(
             raffle_id=raffle.id, user_id=user.id, character_name=canonical_name,
-            guild_rank=(character.guild_rank if character else user.guild_rank), weight=1.0,
+            guild_rank=character.guild_rank or user.guild_rank, weight=1.0,
             weight_multiplier=1.0, is_eligible=True, source="test_local_account",
         ))
         db.flush()
@@ -901,7 +871,9 @@ async def add_participant_manual(
     _require_raffle_management(current_user, raffle)
     if raffle.status in {"archived", "deleted"} or raffle.is_deleted:
         raise HTTPException(status_code=400, detail="Raffle does not accept registrations")
-    return await _register_participant_for_raffle(db, raffle, payload.character_name)
+    return await _register_participant_for_raffle(
+        db, raffle, payload.character_name, actor=current_user, require_owner=False,
+    )
 
 
 def _stage1_raffle(db: Session, raffle_id: int) -> Raffle:
