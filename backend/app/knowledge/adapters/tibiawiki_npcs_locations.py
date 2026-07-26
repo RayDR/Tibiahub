@@ -39,6 +39,7 @@ class TibiaWikiNamedEntityClient(Protocol):
 
 class HttpTibiaWikiNamedEntityClient(HttpTibiaWikiCreatureClient):
     def __init__(self, category: str):
+        super().__init__()
         self.category = category
 
     def fetch_catalog(self, *, continuation: str | None, limit: int) -> dict[str, Any]:
