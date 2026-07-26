@@ -29,6 +29,7 @@ from app.knowledge.services.normalization import KnowledgeNormalizationService
 from app.knowledge.workers.knowledge_worker import KnowledgeWorker
 from app.models import TibiaWikiLocation, TibiaWikiNpc
 from app.models.workspace_audit import WorkspaceAudit
+from app.knowledge.adapters.tibiawiki_npcs_locations import HttpTibiaWikiNamedEntityClient
 from tests.conftest import make_user
 
 
@@ -72,6 +73,14 @@ def context(entity_type: str):
         job_id=uuid4(), attempt_id=uuid4(), correlation_id=uuid4(),
         provider_code="tibiawiki", entity_type=entity_type,
     )
+
+
+def test_default_named_entity_client_initializes_shared_http_limits():
+    client = HttpTibiaWikiNamedEntityClient("NPCs")
+
+    assert client.category == "NPCs"
+    assert client.timeout_seconds == 20.0
+    assert client.maximum_bytes > 0
 
 
 @pytest.fixture
