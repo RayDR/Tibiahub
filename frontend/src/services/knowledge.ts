@@ -95,6 +95,9 @@ export interface KnowledgeRelationshipProvenance {
 
 export const knowledgeOperationsApi = {
   providers: async (signal?: AbortSignal) => (await api.get<KnowledgeProvider[]>('/admin/knowledge/providers', { signal })).data,
+  bootstrapTibiaWiki: async (confirmation: string, batch_limit = 50) => (
+    await api.post<{ provider_id: string; enabled: boolean; job_ids: string[]; jobs_created: number }>('/admin/knowledge/bootstrap/tibiawiki', { confirmation, batch_limit })
+  ).data,
   workers: async (signal?: AbortSignal) => (await api.get<KnowledgeWorkerHeartbeat[]>('/admin/knowledge/workers', { signal })).data,
   jobs: async (params: { provider_id?: string; entity_type?: string; state?: string; skip?: number; limit?: number }, signal?: AbortSignal) => (
     await api.get<{ items: KnowledgeJob[]; total: number; skip: number; limit: number }>('/admin/knowledge/jobs', { params, signal })

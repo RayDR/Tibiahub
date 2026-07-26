@@ -9,6 +9,8 @@ from app.knowledge.schemas.admin import (
     KnowledgeJobPage,
     KnowledgeJobResponse,
     KnowledgeProviderResponse,
+    KnowledgeBootstrapRequest,
+    KnowledgeBootstrapResponse,
     KnowledgeWorkerResponse,
 )
 from app.knowledge.schemas.graph import (
@@ -30,6 +32,8 @@ __all__ = [
     "KnowledgeJobPage",
     "KnowledgeJobResponse",
     "KnowledgeProviderResponse",
+    "KnowledgeBootstrapRequest",
+    "KnowledgeBootstrapResponse",
     "KnowledgeWorkerResponse",
     "KnowledgeGraphReviewItem",
     "KnowledgeGraphReviewPage",

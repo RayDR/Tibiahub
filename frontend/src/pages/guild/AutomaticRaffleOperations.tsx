@@ -5,6 +5,7 @@ import TestRunChecklist, {
   TestChecklistKey,
 } from "../../components/raffle/TestRunChecklist";
 import { useAuth } from "../../context/AuthContext";
+import { useConfirmation } from "../../context/ConfirmationContext";
 import {
   AutomaticRun,
   EligibilityPreview,
@@ -57,6 +58,7 @@ export default function AutomaticRaffleOperations({
 }) {
   const { t, i18n } = useTranslation();
   const { user } = useAuth();
+  const confirmation = useConfirmation();
   const [raffles, setRaffles] = useState<Raffle[]>([]);
   const [selectedId, setSelectedId] = useState<number | null>(null);
   const [preview, setPreview] = useState<EligibilityPreview | null>(null);
@@ -267,9 +269,7 @@ export default function AutomaticRaffleOperations({
   };
   const canPublish = Boolean(
     user?.is_superuser ||
-      ["leader", "guild leader"].includes(
-        (user?.guild_rank || "").toLowerCase(),
-      ),
+    ["leader", "guild leader"].includes((user?.guild_rank || "").toLowerCase()),
   );
   const stale =
     preview &&
@@ -280,8 +280,8 @@ export default function AutomaticRaffleOperations({
   const checklist: Record<TestChecklistKey, boolean> = {
     schedulerHealthy: Boolean(
       schedulerHealth?.enabled &&
-        schedulerHealth.heartbeat_at &&
-        Date.now() - new Date(schedulerHealth.heartbeat_at).getTime() < 120000,
+      schedulerHealth.heartbeat_at &&
+      Date.now() - new Date(schedulerHealth.heartbeat_at).getTime() < 120000,
     ),
     snapshotFrozen: Boolean(preview?.persisted),
     participantsEligible: Boolean(preview && preview.eligible_count >= 2),
@@ -294,7 +294,7 @@ export default function AutomaticRaffleOperations({
     ),
     publication: Boolean(
       manualChecklist.publication ||
-        selected?.publication_status === "published",
+      selected?.publication_status === "published",
     ),
     notifications: raffleNotifications.length > 0,
     cleanup: Boolean(cleanupSummary),
@@ -309,7 +309,9 @@ export default function AutomaticRaffleOperations({
           <h1 className="text-2xl font-bold text-content-primary">
             {t("raffle.operations.title")}
           </h1>
-          <p className="text-content-secondary">{t("raffle.operations.subtitle")}</p>
+          <p className="text-content-secondary">
+            {t("raffle.operations.subtitle")}
+          </p>
         </header>
       )}
       {error && (
@@ -416,9 +418,42 @@ export default function AutomaticRaffleOperations({
             {t("raffle.operations.rules")}
           </div>
           <div className="md:col-span-2 grid gap-3 sm:grid-cols-[1fr_1fr_8rem]">
-            <label>{t("raffle.operations.secondPlace")}<input type="number" min="0.01" step="0.01" value={secondAmount} onChange={(event)=>setSecondAmount(Number(event.target.value))} required className="mt-1 w-full rounded-lg bg-surface-base p-2" /></label>
-            <label>{t("raffle.operations.firstPlace")}<input type="number" min="0.01" step="0.01" value={firstAmount} onChange={(event)=>setFirstAmount(Number(event.target.value))} required className="mt-1 w-full rounded-lg bg-surface-base p-2" /></label>
-            <label>{t("raffle.workspace.fields.currency")}<input value={prizeCurrency} onChange={(event)=>setPrizeCurrency(event.target.value)} required maxLength={20} className="mt-1 w-full rounded-lg bg-surface-base p-2 uppercase" /></label>
+            <label>
+              {t("raffle.operations.secondPlace")}
+              <input
+                type="number"
+                min="0.01"
+                step="0.01"
+                value={secondAmount}
+                onChange={(event) =>
+                  setSecondAmount(Number(event.target.value))
+                }
+                required
+                className="mt-1 w-full rounded-lg bg-surface-base p-2"
+              />
+            </label>
+            <label>
+              {t("raffle.operations.firstPlace")}
+              <input
+                type="number"
+                min="0.01"
+                step="0.01"
+                value={firstAmount}
+                onChange={(event) => setFirstAmount(Number(event.target.value))}
+                required
+                className="mt-1 w-full rounded-lg bg-surface-base p-2"
+              />
+            </label>
+            <label>
+              {t("raffle.workspace.fields.currency")}
+              <input
+                value={prizeCurrency}
+                onChange={(event) => setPrizeCurrency(event.target.value)}
+                required
+                maxLength={20}
+                className="mt-1 w-full rounded-lg bg-surface-base p-2 uppercase"
+              />
+            </label>
           </div>
           {purpose === "real" && (
             <label className="md:col-span-2 flex gap-2">
@@ -695,9 +730,10 @@ export default function AutomaticRaffleOperations({
                         <button
                           onClick={async () => {
                             if (
-                              !window.confirm(
+                              !(await confirmation.confirm(
                                 t("raffle.testRun.removeParticipantConfirm"),
-                              )
+                                { danger: true },
+                              ))
                             )
                               return;
                             await raffleApi.removeParticipant(
@@ -800,16 +836,29 @@ export default function AutomaticRaffleOperations({
                               {t("raffle.testRun.note")}: {result.delivery_note}
                             </small>
                           )}
-                          {result.delivery_history && result.delivery_history.length > 0 && (
-                            <details className="mt-2 text-xs text-content-secondary">
-                              <summary className="cursor-pointer">{t("raffle.workspace.deliveryHistory")}</summary>
-                              {result.delivery_history.map((entry, index) => (
-                                <p key={`${entry.created_at}-${index}`} className="mt-1">
-                                  {new Date(entry.created_at).toLocaleString()} · {entry.actor} · {t(`raffle.operations.delivery.${entry.new_status}`)}{entry.note ? ` · ${entry.note}` : ""}
-                                </p>
-                              ))}
-                            </details>
-                          )}
+                          {result.delivery_history &&
+                            result.delivery_history.length > 0 && (
+                              <details className="mt-2 text-xs text-content-secondary">
+                                <summary className="cursor-pointer">
+                                  {t("raffle.workspace.deliveryHistory")}
+                                </summary>
+                                {result.delivery_history.map((entry, index) => (
+                                  <p
+                                    key={`${entry.created_at}-${index}`}
+                                    className="mt-1"
+                                  >
+                                    {new Date(
+                                      entry.created_at,
+                                    ).toLocaleString()}{" "}
+                                    · {entry.actor} ·{" "}
+                                    {t(
+                                      `raffle.operations.delivery.${entry.new_status}`,
+                                    )}
+                                    {entry.note ? ` · ${entry.note}` : ""}
+                                  </p>
+                                ))}
+                              </details>
+                            )}
                         </div>
                         <select
                           value={result.delivery_status}
@@ -1007,7 +1056,10 @@ export default function AutomaticRaffleOperations({
                   onClick={async () => {
                     if (
                       cleanupReason.trim().length < 3 ||
-                      !window.confirm(t("raffle.testRun.cleanupConfirm"))
+                      !(await confirmation.confirm(
+                        t("raffle.testRun.cleanupConfirm"),
+                        { danger: true },
+                      ))
                     )
                       return;
                     const summary = await raffleApi.cleanupTest(

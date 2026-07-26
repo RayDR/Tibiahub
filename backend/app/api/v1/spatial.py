@@ -48,6 +48,7 @@ def _route(row: SpatialRoute) -> dict:
         "bounds": {"min_x": row.min_x, "min_y": row.min_y, "max_x": row.max_x, "max_y": row.max_y,
                    "min_z": row.min_z, "max_z": row.max_z},
         "confidence": row.confidence, "verification_state": row.verification_state,
+        "map_images": list((row.source_metadata or {}).get("map_images") or [])[:100],
     }
 
 

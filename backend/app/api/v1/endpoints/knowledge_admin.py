@@ -32,6 +32,8 @@ from app.knowledge.schemas import (
     KnowledgeJobPage,
     KnowledgeJobResponse,
     KnowledgeProviderResponse,
+    KnowledgeBootstrapRequest,
+    KnowledgeBootstrapResponse,
     KnowledgeWorkerResponse,
     KnowledgeGraphReviewItem,
     KnowledgeGraphReviewPage,
@@ -47,6 +49,7 @@ from app.knowledge.services import (
     KnowledgeGraphService,
     ProviderUnavailableForJobError,
 )
+from app.knowledge.services.bootstrap import KnowledgeBootstrapService
 from app.knowledge.registry import RelationshipTypeRegistry
 from app.models.user import User
 from app.models.workspace_audit import WorkspaceAudit
@@ -413,7 +416,7 @@ def enqueue_job(
         raise HTTPException(status_code=400, detail={"code": "knowledge_adapter_unsupported"}) from exc
     except ValueError as exc:
         raise HTTPException(status_code=400, detail={"code": "knowledge_job_input_invalid"}) from exc
-    if payload.job_type in {"creature_catalog", "item_catalog", "quest_catalog", "npc_catalog", "location_catalog"} and not payload.confirm_catalog_sync:
+    if payload.job_type in {"creature_catalog", "item_catalog", "quest_catalog", "npc_catalog", "location_catalog", "route_catalog"} and not payload.confirm_catalog_sync:
         raise HTTPException(status_code=400, detail={"code": "knowledge_catalog_confirmation_required"})
     try:
         result = KnowledgeJobService.enqueue(
@@ -513,3 +516,29 @@ def list_providers(
         )
         for provider in providers
     ]
+
+
+@router.post("/bootstrap/tibiawiki", response_model=KnowledgeBootstrapResponse)
+def bootstrap_tibiawiki(
+    payload: KnowledgeBootstrapRequest,
+    db: Session = Depends(get_db),
+    admin: User = Depends(get_current_admin_user),
+):
+    try:
+        result = KnowledgeBootstrapService.activate_tibiawiki(
+            db,
+            actor_id=admin.id,
+            confirmation=payload.confirmation,
+            batch_limit=payload.batch_limit,
+            adapters=adapters,
+        )
+    except ValueError as exc:
+        db.rollback()
+        raise HTTPException(status_code=400, detail={"code": str(exc)}) from exc
+    db.commit()
+    return KnowledgeBootstrapResponse(
+        provider_id=result.provider.provider_id,
+        enabled=result.provider.enabled,
+        job_ids=[job.id for job in result.jobs],
+        jobs_created=result.created_count,
+    )

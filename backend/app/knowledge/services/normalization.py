@@ -50,6 +50,21 @@ class KnowledgeNormalizationService:
                 from app.knowledge.services.npc_location_normalization import NpcLocationKnowledgeNormalizationService
 
                 applied = NpcLocationKnowledgeNormalizationService.apply(db, result)
+            elif result.candidate is not None and result.candidate.entity_type == "route":
+                from app.knowledge.dto import RouteDTO, RouteStepDTO
+                from app.knowledge.models import SpatialRoute
+                from app.knowledge.services.spatial import persist_route
+
+                data = dict(result.canonical_data)
+                data["steps"] = tuple(RouteStepDTO(**step) for step in data.get("steps") or [])
+                existing = db.query(SpatialRoute).filter_by(
+                    source_provider_id=result.provider_code,
+                    external_id=result.external_id,
+                    is_current=True,
+                ).first()
+                route = persist_route(db, RouteDTO(**data), provider=result.provider_code)
+                status = "created" if existing is None else "unchanged" if existing.id == route.id else "updated"
+                return AppliedNormalization(status, route.knowledge_entity_id, 0, len(result.warnings), {"route_steps": route.step_count})
             else:
                 raise ValueError("TibiaWiki normalization requires a supported canonical entity type")
             return AppliedNormalization(

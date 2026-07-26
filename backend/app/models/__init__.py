@@ -13,7 +13,7 @@ from app.models.quest import Quest
 from app.models.settings import SystemSettings
 from app.models.user_activity import UserActivity
 from app.models.catalog import Catalog
-from app.models.hunt import HuntCatalog
+from app.models.hunt import GuildHunt, GuildHuntParticipant, HuntCatalog
 from app.models.external_data import (
     APISync, CachedResource, HuntingPlace, Item, SyncJob, SyncJobError,
     QuestMission, TibiaWikiLocation, TibiaWikiNpc, TibiaWikiQuest,
@@ -64,6 +64,8 @@ __all__ = [
     "UserActivity",
     "Catalog",
     "HuntCatalog",
+    "GuildHunt",
+    "GuildHuntParticipant",
     "Item",
     "HuntingPlace",
     "TibiaWikiQuest",

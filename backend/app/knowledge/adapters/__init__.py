@@ -33,6 +33,7 @@ from app.knowledge.adapters.tibiawiki_npcs_locations import (
     HttpTibiaWikiNamedEntityClient, TibiaWikiLocationAdapter, TibiaWikiNamedEntityClient,
     TibiaWikiNpcAdapter,
 )
+from app.knowledge.adapters.tibiawiki_routes import TibiaWikiRouteAdapter
 
 __all__ = [
     "AdapterNotFoundError",
@@ -61,4 +62,5 @@ __all__ = [
     "TibiaWikiNamedEntityClient",
     "TibiaWikiNpcAdapter",
     "TibiaWikiLocationAdapter",
+    "TibiaWikiRouteAdapter",
 ]
