@@ -20,6 +20,7 @@ INITIAL_ENTITY_TYPES = (
     EntityTypeDefinition("creature", "Creature"),
     EntityTypeDefinition("item", "Item"),
     EntityTypeDefinition("quest", "Quest"),
+    EntityTypeDefinition("mission", "Mission"),
     EntityTypeDefinition("npc", "NPC"),
     EntityTypeDefinition("spell", "Spell"),
     EntityTypeDefinition("achievement", "Achievement"),

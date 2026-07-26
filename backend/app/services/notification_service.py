@@ -6,6 +6,7 @@ from sqlalchemy.orm import Session
 
 from app.models.raffle import InternalNotification, Raffle, RaffleManagerGrant
 from app.models.user import User
+from app.core.permissions import is_guild_leader
 
 
 class NotificationService:
@@ -33,7 +34,7 @@ class NotificationService:
             )}
         return [user for user in users if user.is_superuser or (
             (user.guild_name or "").casefold() == raffle.guild_name.casefold()
-            and ((user.guild_rank or "").casefold() in {"leader", "guild leader"} or user.id in manager_ids)
+            and (is_guild_leader(user, raffle.guild_name) or user.id in manager_ids)
         )]
 
     @staticmethod

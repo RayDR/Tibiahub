@@ -109,14 +109,14 @@ def require_guild_management(user: User, guild_id: str | int | None = None) -> N
     raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Insufficient permissions")
 
 
-RAFFLE_LEADER_RANKS = {"leader", "guild leader"}
-
-
 def is_matching_raffle_leader(user: User, guild_name: str) -> bool:
-    """Raffle authority is intentionally narrower than broad guild management."""
-    if not user or (user.guild_rank or "").strip().lower() not in RAFFLE_LEADER_RANKS:
-        return False
-    return (user.guild_name or "").strip().casefold() == (guild_name or "").strip().casefold()
+    """Use the canonical guild-leader policy for raffle ownership checks.
+
+    Raffles used to maintain a second, narrower rank allowlist. That made a
+    valid guild leader fail only on modern raffle operations when a guild used
+    its configured leader title (for example ``Alpha Warbringer``).
+    """
+    return is_guild_leader(user, guild_name)
 
 
 def has_active_raffle_grant(db, user: User, raffle_id: int) -> bool:

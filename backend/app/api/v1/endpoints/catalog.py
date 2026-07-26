@@ -8,11 +8,48 @@ from typing import List, Optional
 from datetime import UTC, datetime
 
 from app.db.database import get_db
+from app.knowledge.models import KnowledgeEntity
 from app.models.catalog import Catalog
+from app.models.creature import Creature
+from app.models.entity_metadata import EntityMetadata
+from app.models.external_data import TibiaWikiQuest
+from app.models.hunt_zone import HuntZone
 from app.models.user import User
 from app.api.v1.endpoints.auth import get_current_user, get_current_admin_user
 
 router = APIRouter()
+
+
+@router.get("/discovery")
+def cyclopedia_discovery(db: Session = Depends(get_db)):
+    """Content-first local Cyclopedia landing data; never calls a provider."""
+    featured_ids = [row.entity_id for row in db.query(EntityMetadata).filter(
+        EntityMetadata.entity_type == "creature", EntityMetadata.is_featured.is_(True),
+        EntityMetadata.entity_id.isnot(None),
+    ).order_by(EntityMetadata.updated_at.desc()).limit(6).all()]
+    featured_query = db.query(Creature).filter(Creature.is_hidden.is_(False), Creature.is_boss.is_(False))
+    featured = featured_query.filter(Creature.id.in_(featured_ids)).all() if featured_ids else featured_query.order_by(Creature.updated_at.desc()).limit(6).all()
+    hunt_ids = [row.entity_id for row in db.query(EntityMetadata).filter(
+        EntityMetadata.entity_type == "hunt_zone", EntityMetadata.entity_id.isnot(None),
+    ).order_by(EntityMetadata.search_count.desc(), EntityMetadata.last_viewed_at.desc()).limit(6).all()]
+    hunts = db.query(HuntZone).filter(HuntZone.id.in_(hunt_ids)).all() if hunt_ids else db.query(HuntZone).order_by(HuntZone.updated_at.desc()).limit(6).all()
+    quests = db.query(TibiaWikiQuest).order_by(TibiaWikiQuest.updated_at.desc()).limit(6).all()
+    latest = db.query(KnowledgeEntity).filter(
+        KnowledgeEntity.visibility == "public", KnowledgeEntity.status == "active",
+    ).order_by(KnowledgeEntity.updated_at.desc()).limit(8).all()
+    trending = db.query(EntityMetadata).filter(EntityMetadata.search_count > 0).order_by(
+        EntityMetadata.search_count.desc(), EntityMetadata.last_viewed_at.desc(),
+    ).limit(8).all()
+    return {
+        "featured_creatures": [{"id": row.id, "name": row.name, "slug": row.slug, "image_url": row.image_url, "experience": row.experience, "hitpoints": row.hitpoints} for row in featured],
+        "popular_hunts": [{"id": row.id, "name": row.name, "slug": row.slug, "city": row.city, "recommended_level": row.recommended_level or row.min_level} for row in hunts],
+        "recent_quests": [{"id": row.external_id or str(row.id), "name": row.name, "slug": row.slug, "summary": row.summary, "updated_at": row.updated_at} for row in quests],
+        "latest_knowledge": [{"id": str(row.uuid), "name": row.canonical_name, "slug": row.slug, "entity_type": row.entity_type, "updated_at": row.updated_at} for row in latest],
+        "trending": [{"id": f"{row.entity_type}:{row.entity_id or row.entity_key}", "entity_type": row.entity_type, "entity_id": row.entity_id, "name": row.display_name, "search_count": row.search_count} for row in trending],
+        "boosted_creature": None,
+        "boosted_boss": None,
+        "boosted_state": "awaiting_official_sync",
+    }
 
 
 @router.get("/", response_model=List[dict])

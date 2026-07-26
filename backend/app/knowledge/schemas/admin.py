@@ -140,3 +140,15 @@ class KnowledgeProviderResponse(BaseModel):
     supports_media: bool
     supports_search: bool
     supported_job_types: list[str]
+
+
+class KnowledgeBootstrapRequest(BaseModel):
+    confirmation: str = Field(min_length=1, max_length=80)
+    batch_limit: int = Field(default=50, ge=1, le=50)
+
+
+class KnowledgeBootstrapResponse(BaseModel):
+    provider_id: str
+    enabled: bool
+    job_ids: list[UUID]
+    jobs_created: int

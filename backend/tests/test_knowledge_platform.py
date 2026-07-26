@@ -63,7 +63,8 @@ def test_initial_and_future_entity_types_need_no_schema_change(db, knowledge_reg
     assert {
         "creature",
         "item",
-        "quest",
+            "quest",
+            "mission",
         "npc",
         "spell",
         "achievement",
