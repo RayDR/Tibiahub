@@ -52,9 +52,51 @@ export interface GuildFeatureFlags {
     guild_contests_enabled: boolean;
 }
 
+
+export interface GuildDashboard {
+    guild_name: string;
+    world_name: string;
+    role: string;
+    member_count: number;
+    announcements: Announcement[];
+    events: Event[];
+}
+
+
+export interface GuildWorkspace {
+    workspace_type: 'guild' | 'personal';
+    status: 'ready' | 'no_guild';
+    guild_name: string | null;
+    world_name: string;
+    role: string;
+    capabilities: {
+        manage_members: boolean;
+        manage_announcements: boolean;
+        manage_events: boolean;
+        change_guild_scope: boolean;
+    };
+}
+
 export const guildApi = {
-    getAnnouncements: async (skip: number = 0, limit: number = 10, guildName?: string): Promise<Announcement[]> => {
-        const response = await api.get('/guild/announcements', { params: { skip, limit, guild_name: guildName || undefined } });
+    getGuildWorkspace: async (): Promise<GuildWorkspace> => {
+        const response = await api.get('/guild/me');
+        return response.data;
+    },
+
+    getDashboard: async (): Promise<GuildDashboard> => {
+        const response = await api.get('/guild/me/dashboard');
+        return response.data;
+    },
+
+    getAnnouncements: async (skip: number = 0, limit: number = 10, guildName?: string, filters?: { type?: string; author?: string; dateFrom?: string; dateTo?: string }): Promise<Announcement[]> => {
+        const params: any = { skip, limit, guild_name: guildName || undefined };
+        if (filters) {
+            if (filters.type) params.type = filters.type;
+            if (filters.author) params.author_name = filters.author;
+            if (filters.dateFrom) params.date_from = filters.dateFrom;
+            if (filters.dateTo) params.date_to = filters.dateTo;
+        }
+        const response = await api.get('/guild/announcements', { params });
         return response.data;
     },
 

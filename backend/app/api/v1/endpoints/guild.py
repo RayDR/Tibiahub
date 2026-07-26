@@ -1,7 +1,7 @@
 from typing import List, Any, Optional
 from fastapi import APIRouter, Depends, HTTPException, status
 from pydantic import BaseModel
-from sqlalchemy.orm import Session
+from sqlalchemy.orm import Session, joinedload
 from sqlalchemy.exc import SQLAlchemyError
 from datetime import UTC, datetime, timedelta
 from collections import OrderedDict
@@ -75,10 +75,10 @@ def get_own_guild_dashboard(
         raise HTTPException(status_code=409, detail="No guild membership is linked to this account")
     announcements = db.query(Announcement).filter(
         Announcement.guild_name.ilike(guild_name), Announcement.is_deleted.is_(False),
-    ).order_by(Announcement.created_at.desc()).limit(3).all()
+    ).options(joinedload(Announcement.author)).order_by(Announcement.created_at.desc()).limit(3).all()
     events = db.query(GuildEvent).filter(
         GuildEvent.guild_name.ilike(guild_name), GuildEvent.is_deleted.is_(False),
-    ).order_by(GuildEvent.start_time.asc()).limit(3).all()
+    ).options(joinedload(GuildEvent.author)).order_by(GuildEvent.start_time.asc()).limit(3).all()
     return {
         "guild_name": guild_name,
         "world_name": current_user.world_name,
@@ -176,6 +176,10 @@ def read_announcements(
     limit: int = 100,
     include_deleted: bool = False,
     guild_name: Optional[str] = None,
+    type: Optional[str] = None,
+    author_name: Optional[str] = None,
+    date_from: Optional[datetime] = None,
+    date_to: Optional[datetime] = None,
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_active_user)
 ) -> Any:
@@ -183,7 +187,15 @@ def read_announcements(
     query = db.query(Announcement).filter(Announcement.guild_name.ilike(scoped_guild))
     if not include_deleted:
         query = query.filter(Announcement.is_deleted == False)
-    announcements = query.order_by(Announcement.created_at.desc()).offset(skip).limit(limit).all()
+    if type:
+        query = query.filter(Announcement.type == type)
+    if author_name:
+        query = query.join(Announcement.author).filter(User.username.ilike(f"%{author_name}%"))
+    if date_from:
+        query = query.filter(Announcement.created_at >= date_from)
+    if date_to:
+        query = query.filter(Announcement.created_at <= date_to)
+    announcements = query.options(joinedload(Announcement.author)).order_by(Announcement.created_at.desc()).offset(skip).limit(limit).all()
     return announcements
 
 
@@ -268,7 +280,7 @@ def read_events(
     query = db.query(GuildEvent).filter(GuildEvent.guild_name.ilike(scoped_guild))
     if not include_deleted:
         query = query.filter(GuildEvent.is_deleted == False)
-    events = query.order_by(GuildEvent.start_time.asc()).offset(skip).limit(limit).all()
+    events = query.options(joinedload(GuildEvent.author)).order_by(GuildEvent.start_time.asc()).offset(skip).limit(limit).all()
     return events
 
 

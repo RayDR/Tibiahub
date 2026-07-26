@@ -1,9 +1,9 @@
 import { useEffect, useState, useRef, useCallback } from 'react';
 import { guildApi, Announcement } from '../../services/guild';
-import { useAuth } from '../../context/AuthContext';
+import { useGuildWorkspace } from '../../context/GuildWorkspaceContext';
 import { useToast } from '../../context/ToastContext';
 import { useTranslation } from 'react-i18next';
-
+import { useAuth } from '../../context/AuthContext';
 import { Plus, Megaphone, Loader2, Filter, X, CalendarClock, User } from 'lucide-react';
 import { useGuildContext } from '../../utils/guildContext';
 
@@ -12,6 +12,7 @@ export default function Announcements() {
     const { t } = useTranslation();
     const toast = useToast();
     const guildName = useGuildContext(user);
+    const { workspace } = useGuildWorkspace();
 
     const [announcements, setAnnouncements] = useState<Announcement[]>([]);
     const [loading, setLoading] = useState(true);
@@ -41,8 +42,7 @@ export default function Announcements() {
         if (node) observer.current.observe(node);
     }, [loadingMore, hasMore]);
 
-    // Check if user is admin or leader (simple check for now, backend enforces security)
-    const canCreate = user?.is_superuser || user?.guild_rank === 'Alpha Warbringer' || user?.guild_rank === 'Bloodhowl Marshal';
+    const canCreate = workspace?.capabilities?.manage_announcements;
 
     const loadData = async (reset = false) => {
         try {
@@ -58,7 +58,7 @@ export default function Announcements() {
                 setAnnouncements([]);
                 return;
             }
-            const data = await guildApi.getAnnouncements(currentSkip, LIMIT, guildName);
+            const data = await guildApi.getAnnouncements(currentSkip, LIMIT, guildName, filters);
 
             if (reset) {
                 setAnnouncements(data);
@@ -104,21 +104,9 @@ export default function Announcements() {
         }
     };
 
-    const applyFilters = (data: Announcement[]) => {
-        return data.filter(ann => {
-            if (filters.type && ann.type !== filters.type) return false;
-            if (filters.author && !ann.author?.username.toLowerCase().includes(filters.author.toLowerCase())) return false;
-            if (filters.dateFrom && new Date(ann.created_at) < new Date(filters.dateFrom)) return false;
-            if (filters.dateTo && new Date(ann.created_at) > new Date(filters.dateTo)) return false;
-            return true;
-        });
-    };
-
     const clearFilters = () => {
         setFilters({ type: '', author: '', dateFrom: '', dateTo: '' });
     };
-
-    const filteredAnnouncements = applyFilters(announcements);
 
     return (
         <div className="space-y-8">
@@ -221,8 +209,8 @@ export default function Announcements() {
                 </div>
             ) : (
                 <div className="space-y-6">
-                    {filteredAnnouncements.map((ann, index) => {
-                        const isLast = index === filteredAnnouncements.length - 1;
+                    {announcements.map((ann, index) => {
+                        const isLast = index === announcements.length - 1;
                         return (
                             <div
                                 key={ann.id}
