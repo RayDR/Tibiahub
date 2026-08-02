@@ -101,7 +101,6 @@ function IconBtn({
 
 function StatusBadge({ status }: { status: string }) {
   const { t } = useTranslation();
-  const [searchParams] = useSearchParams();
   const color = STATUS_COLORS[status] ?? STATUS_COLORS.draft;
   return (
     <span
@@ -135,6 +134,7 @@ export default function RafflePage() {
   const toast = useToast();
   const confirmation = useConfirmation();
   const { t } = useTranslation();
+  const [searchParams] = useSearchParams();
 
   const [raffles, setRaffles] = useState<Raffle[]>([]);
   const [selectedRaffleId, setSelectedRaffleId] = useState<number | null>(null);
