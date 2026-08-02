@@ -19,6 +19,7 @@ import {
   faUsers,
 } from "@fortawesome/free-solid-svg-icons";
 import { useTranslation } from "react-i18next";
+import { useSearchParams } from "react-router-dom";
 
 import { useAuth } from "../../context/AuthContext";
 import { useToast } from "../../context/ToastContext";
@@ -100,6 +101,7 @@ function IconBtn({
 
 function StatusBadge({ status }: { status: string }) {
   const { t } = useTranslation();
+  const [searchParams] = useSearchParams();
   const color = STATUS_COLORS[status] ?? STATUS_COLORS.draft;
   return (
     <span
@@ -176,7 +178,8 @@ export default function RafflePage() {
   const canManage = Boolean(user?.is_superuser || isLeader);
 
   useEffect(() => {
-    void loadRaffles();
+    const requested = Number(searchParams.get("raffle") || "");
+    void loadRaffles(Number.isFinite(requested) && requested > 0 ? requested : undefined);
   }, []);
   useEffect(() => {
     void (async () => {

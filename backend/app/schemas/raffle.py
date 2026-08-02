@@ -44,6 +44,7 @@ class RaffleCreate(BaseModel):
 
 
 class RaffleUpdate(BaseModel):
+    expected_version: Optional[int] = Field(None, ge=1)
     title: Optional[str] = Field(None, min_length=3, max_length=200)
     description: Optional[str] = None
     guild_name: Optional[str] = None
@@ -57,6 +58,8 @@ class RaffleUpdate(BaseModel):
     status: Optional[str] = None
     timezone_name: Optional[str] = None
     eligibility_days: Optional[int] = Field(None, ge=1, le=30)
+    publication_status: Optional[Literal["private", "published"]] = None
+    prizes: Optional[List[RafflePrizeCreate]] = Field(None, max_length=50)
 
     @field_validator("scheduled_run_at")
     @classmethod
