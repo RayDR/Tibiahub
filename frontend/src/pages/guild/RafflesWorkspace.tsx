@@ -52,7 +52,6 @@ function stageFor(item: RaffleWorkspaceItem): number {
 
 function Countdown({ value }: { value?: string }) {
   const { t } = useTranslation();
-  const toast = useToast();
   const [now, setNow] = useState(Date.now());
   useEffect(() => {
     const timer = window.setInterval(() => setNow(Date.now()), 1000);
@@ -83,6 +82,7 @@ export default function RafflesWorkspace({
 }) {
   const { t } = useTranslation();
   const { user } = useAuth();
+  const toast = useToast();
   const [params, setParams] = useSearchParams();
   const navigate = useNavigate();
   const guildName = fixedGuild || user?.guild_name || "";
