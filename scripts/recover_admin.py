@@ -92,6 +92,12 @@ def main() -> None:
                 mark_email_verified=args.mark_email_verified,
                 revoke_one_time_tokens=not args.keep_one_time_tokens,
             )
+            # SessionLocal expires ORM attributes after commit. Capture only
+            # non-sensitive scalar values while the User instance is attached.
+            recovered_user_id = result.user.id
+            recovered_username = result.user.username
+            recovered_created = result.created
+            revoked_one_time_tokens = result.revoked_one_time_tokens
     except AdminRecoveryError as exc:
         raise SystemExit(str(exc)) from exc
     finally:
@@ -99,10 +105,10 @@ def main() -> None:
 
     print(
         "Administrator recovery completed "
-        f"user_id={result.user.id} "
-        f"username={result.user.username} "
-        f"created={str(result.created).lower()} "
-        f"revoked_one_time_tokens={result.revoked_one_time_tokens}"
+        f"user_id={recovered_user_id} "
+        f"username={recovered_username} "
+        f"created={str(recovered_created).lower()} "
+        f"revoked_one_time_tokens={revoked_one_time_tokens}"
     )
 
 
