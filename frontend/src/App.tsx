@@ -40,6 +40,7 @@ import Announcements from "./pages/guild/Announcements";
 import Events from "./pages/guild/Events";
 import GuildHuntPlanner from "./pages/guild/GuildHuntPlanner";
 import RafflesWorkspace from "./pages/guild/RafflesWorkspace";
+import RaffleManagementPage from "./pages/guild/Raffle";
 import GuildDirectory from "./pages/Admin/GuildDirectory";
 import AdminUsers from "./pages/Admin/Users";
 import AdminGuildWorkspace from "./pages/Admin/AdminGuildWorkspace";
@@ -218,6 +219,7 @@ function App() {
                   />
                   <Route path="hunts" element={<GuildHuntPlanner />} />
                   <Route path="raffles" element={<RafflesWorkspace />} />
+                  <Route path="raffles/manage" element={<RaffleManagementPage />} />
                   <Route
                     path="raffle"
                     element={

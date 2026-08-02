@@ -1,11 +1,12 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
-import { Link, useSearchParams } from "react-router-dom";
+import { Link, useNavigate, useSearchParams } from "react-router-dom";
 import {
   AlertCircle,
   CalendarClock,
   CheckCircle2,
   Clock3,
   LockKeyhole,
+  MoreVertical,
   Trophy,
   Users,
 } from "lucide-react";
@@ -20,6 +21,7 @@ import {
 import RaffleCreationWizard from "../../components/raffle/RaffleCreationWizard";
 import { raffleApi, RaffleWorkspaceItem } from "../../services/raffle";
 import AutomaticRaffleOperations from "./AutomaticRaffleOperations";
+import { useToast } from "../../context/ToastContext";
 
 const timeline = [
   "draft",
@@ -50,6 +52,7 @@ function stageFor(item: RaffleWorkspaceItem): number {
 
 function Countdown({ value }: { value?: string }) {
   const { t } = useTranslation();
+  const toast = useToast();
   const [now, setNow] = useState(Date.now());
   useEffect(() => {
     const timer = window.setInterval(() => setNow(Date.now()), 1000);
@@ -81,6 +84,7 @@ export default function RafflesWorkspace({
   const { t } = useTranslation();
   const { user } = useAuth();
   const [params, setParams] = useSearchParams();
+  const navigate = useNavigate();
   const guildName = fixedGuild || user?.guild_name || "";
   const worldName = fixedWorld || user?.world_name || "";
   const [items, setItems] = useState<RaffleWorkspaceItem[]>([]);
@@ -135,6 +139,35 @@ export default function RafflesWorkspace({
   const canManage =
     Boolean(user?.is_superuser && assistance) ||
     modern.some((item) => item.capabilities.manage);
+
+  async function runCardAction(item: RaffleWorkspaceItem, action: "edit" | "cancel" | "delete") {
+    try {
+      if (action === "edit") {
+        navigate(`/guild/raffles/manage?raffle=${item.id}`);
+        return;
+      }
+      if (action === "cancel") {
+        await raffleApi.softDelete(item.id, "Cancelled from workspace action menu");
+        toast.success(t("raffle.workspace.actionArchived", "Raffle archived"));
+      }
+      if (action === "delete") {
+        await raffleApi.permanentDelete(
+          item.id,
+          "Permanent deletion requested from workspace action menu",
+          `DELETE RAFFLE ${item.id}`,
+        );
+        toast.success(t("raffle.workspace.actionDeleted", "Raffle permanently deleted"));
+      }
+      await load();
+    } catch (error: any) {
+      toast.error(error?.response?.data?.detail || error?.message || t("raffle.workspace.actionFailed", "Action failed"));
+    }
+  }
+
+  function disabledReason(item: RaffleWorkspaceItem, key: keyof NonNullable<RaffleWorkspaceItem["actions"]>) {
+    if (!item.actions) return undefined;
+    return item.actions[key]?.enabled ? undefined : item.actions[key]?.reason || t("raffle.workspace.actionUnavailable", "Action unavailable");
+  }
   return (
     <div className="space-y-4">
       <WorkspaceHeader
@@ -305,6 +338,43 @@ export default function RafflesWorkspace({
                       >
                         {t("raffle.workspace.register")}
                       </Link>
+                    )}
+                    {item.capabilities.manage && (
+                      <details className="mt-4">
+                        <summary className="inline-flex min-h-11 cursor-pointer items-center gap-2 rounded-lg border border-line px-3 text-sm text-content-secondary">
+                          <MoreVertical className="h-4 w-4" />
+                          {t("raffle.workspace.actions", "Actions")}
+                        </summary>
+                        <div className="mt-2 grid gap-2 rounded-lg border border-line bg-surface-base p-2 text-sm">
+                          <button
+                            type="button"
+                            className="min-h-11 rounded-md border border-line px-3 text-left"
+                            disabled={!item.actions?.edit?.enabled}
+                            title={disabledReason(item, "edit")}
+                            onClick={() => void runCardAction(item, "edit")}
+                          >
+                            {t("raffle.workspace.edit", "Edit raffle")}
+                          </button>
+                          <button
+                            type="button"
+                            className="min-h-11 rounded-md border border-line px-3 text-left"
+                            disabled={!item.actions?.cancel_archive?.enabled}
+                            title={disabledReason(item, "cancel_archive")}
+                            onClick={() => void runCardAction(item, "cancel")}
+                          >
+                            {t("raffle.workspace.archive", "Cancel / archive")}
+                          </button>
+                          <button
+                            type="button"
+                            className="min-h-11 rounded-md border border-danger/50 px-3 text-left text-danger"
+                            disabled={!item.actions?.permanent_delete?.enabled}
+                            title={disabledReason(item, "permanent_delete")}
+                            onClick={() => void runCardAction(item, "delete")}
+                          >
+                            {t("raffle.workspace.deletePermanent", "Permanent delete")}
+                          </button>
+                        </div>
+                      </details>
                     )}
                   </article>
                 );

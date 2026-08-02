@@ -123,6 +123,13 @@ export interface RaffleWorkspaceItem {
   eligibility?: { candidate_count: number; eligible_count: number; excluded_count: number; cutoff_at: string; frozen: boolean };
   winners: Array<{ prize_position: 'second' | 'first'; prize_name: string; amount: number; currency: string; character_name: string; delivery_status: AutomaticResult['delivery_status']; delivery_deadline_at: string }>;
   capabilities: { manage: boolean; publish: boolean };
+  actions?: {
+    view_detail: { enabled: boolean; reason?: string | null };
+    edit: { enabled: boolean; reason?: string | null };
+    edit_prizes: { enabled: boolean; reason?: string | null };
+    cancel_archive: { enabled: boolean; reason?: string | null };
+    permanent_delete: { enabled: boolean; reason?: string | null };
+  };
 }
 
 export interface RaffleExecution {
@@ -272,6 +279,11 @@ export const raffleApi = {
 
   async softDelete(raffleId: number, reason?: string): Promise<Raffle> {
     const response = await api.delete(`/raffles/${raffleId}`, { params: { reason } });
+    return response.data;
+  },
+
+  async permanentDelete(raffleId: number, reason: string, confirmation: string): Promise<Raffle> {
+    const response = await api.delete(`/raffles/${raffleId}/permanent`, { params: { reason, confirmation } });
     return response.data;
   },
   async previewEligibility(raffleId: number): Promise<EligibilityPreview> {
