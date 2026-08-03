@@ -7,6 +7,7 @@ import httpx
 import pytest
 from fastapi.testclient import TestClient
 from sqlalchemy import create_engine
+from sqlalchemy.exc import DataError
 from sqlalchemy.orm import sessionmaker
 
 from app.core.security import create_access_token
@@ -15,6 +16,7 @@ from app.models.maintenance_sync import MaintenanceHold, SyncJobPhase
 from app.models.raffle import RaffleEligibilitySnapshot, RaffleRun
 from app.models.workspace_audit import WorkspaceAudit
 from app.services.maintenance_mode_service import MaintenanceModeService
+from app.services.bestiary_source import creature_id_for_name
 from app.services.raffle_assistance_service import RaffleAssistanceError, RaffleAssistanceService
 from app.services.sync_service import SyncService
 from tests.conftest import make_user
@@ -247,6 +249,16 @@ def test_full_plan_claim_recovery_cancel_and_retry_classification(db):
     assert (category, retryable, retry_after) == ("rate_limited", True, 17)
     assert SyncService.retry_delay(1, retry_after) == 17
     assert SyncService.classify_provider_error(ValueError("bad payload"))[:2] == ("invalid_payload", False)
+    database_error = DataError("INSERT", {}, OverflowError("integer out of range"))
+    assert SyncService.classify_provider_error(database_error)[:2] == ("invalid_payload", False)
+
+
+def test_generated_creature_ids_fit_postgresql_integer_range():
+    # This production-observed title previously generated unsigned CRC32
+    # 2_717_160_804 and failed against a PostgreSQL INTEGER column.
+    generated = creature_id_for_name("Creatures")
+    assert generated == creature_id_for_name("  creatures  ")
+    assert 0 <= generated <= 2_147_483_647
 
 
 def test_worker_retries_temporary_failure_continues_after_permanent_phase_and_releases_hold(tmp_path, monkeypatch):
