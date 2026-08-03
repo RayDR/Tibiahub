@@ -14,16 +14,20 @@ from app.schemas.hunt import (
 )
 from app.models.user import User
 from app.services.guild_hunt_service import GuildHuntError, GuildHuntPlannerService
+from app.services.guild_authorization_service import GuildAuthorizationService
 
 router = APIRouter()
 
 
-def _guild_for(user: User, requested: str | None = None) -> str:
+def _guild_for(db: Session, user: User, requested: str | None = None) -> str:
     own = (user.guild_name or "").strip()
     selected = (requested or own).strip()
     if not selected:
         raise HTTPException(409, "No guild membership is linked")
-    if not is_global_admin(user) and own.casefold() != selected.casefold():
+    if not is_global_admin(user) and own.casefold() != selected.casefold() and not (
+        GuildAuthorizationService.is_verified_member(db, user, selected)
+        or GuildAuthorizationService.has_grant(db, user, selected, "hunts.manage")
+    ):
         raise HTTPException(403, "Guild workspace access denied")
     return selected
 
@@ -32,12 +36,12 @@ def _hunt_or_404(db: Session, hunt_id: int, user: User, *, lock: bool = False) -
     hunt = GuildHuntPlannerService.get(db, hunt_id, lock=lock)
     if hunt is None:
         raise HTTPException(404, "Guild hunt not found")
-    if not can_view_guild_workspace(user, hunt.guild_name):
+    if not can_view_guild_workspace(user, hunt.guild_name) and not GuildAuthorizationService.has_grant(db, user, hunt.guild_name, "hunts.manage"):
         raise HTTPException(403, "Guild workspace access denied")
     return hunt
 
 
-def _planner_response(hunt: GuildHunt, user: User) -> dict:
+def _planner_response(db: Session, hunt: GuildHunt, user: User) -> dict:
     participants = list(hunt.participants)
     return {
         **{column.name: getattr(hunt, column.name) for column in GuildHunt.__table__.columns},
@@ -45,9 +49,9 @@ def _planner_response(hunt: GuildHunt, user: User) -> dict:
         "registered_count": sum(1 for item in participants if item.attendance_status in GuildHuntPlannerService.ACTIVE_ATTENDANCE),
         "current_user_joined": any(item.user_id == user.id and item.attendance_status == "registered" for item in participants),
         "capabilities": {
-            "manage": can_manage_guild(user, hunt.guild_name),
+            "manage": can_manage_guild(user, hunt.guild_name, db=db, capability="hunts.manage"),
             "join": hunt.status == "scheduled" and can_view_guild_workspace(user, hunt.guild_name),
-            "attendance": hunt.status in {"in_progress", "finished"} and can_manage_guild(user, hunt.guild_name),
+            "attendance": hunt.status in {"in_progress", "finished"} and can_manage_guild(user, hunt.guild_name, db=db, capability="hunts.manage"),
         },
     }
 
@@ -65,26 +69,26 @@ def list_guild_hunts(
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_active_user),
 ):
-    guild = _guild_for(current_user, guild_name)
+    guild = _guild_for(db, current_user, guild_name)
     rows = GuildHuntPlannerService.list_for_guild(db, guild, start=start, end=end, statuses=set(status_filter or []))
-    return [_planner_response(row, current_user) for row in rows]
+    return [_planner_response(db, row, current_user) for row in rows]
 
 
 @router.post("/planner", response_model=GuildHuntResponse, status_code=201)
 def create_guild_hunt(payload: GuildHuntCreate, db: Session = Depends(get_db), current_user: User = Depends(get_current_active_user)):
-    guild = _guild_for(current_user, payload.guild_name)
+    guild = _guild_for(db, current_user, payload.guild_name)
     try:
         hunt = GuildHuntPlannerService.create(db, current_user, guild, payload.model_dump())
         db.commit()
     except (GuildHuntError, PermissionError) as exc:
         db.rollback()
         raise _domain_error(exc) from exc
-    return _planner_response(GuildHuntPlannerService.get(db, hunt.id), current_user)
+    return _planner_response(db, GuildHuntPlannerService.get(db, hunt.id), current_user)
 
 
 @router.get("/planner/{hunt_id}", response_model=GuildHuntResponse)
 def get_guild_hunt(hunt_id: int, db: Session = Depends(get_db), current_user: User = Depends(get_current_active_user)):
-    return _planner_response(_hunt_or_404(db, hunt_id, current_user), current_user)
+    return _planner_response(db, _hunt_or_404(db, hunt_id, current_user), current_user)
 
 
 @router.patch("/planner/{hunt_id}", response_model=GuildHuntResponse)
@@ -96,7 +100,7 @@ def update_guild_hunt(hunt_id: int, payload: GuildHuntUpdate, db: Session = Depe
     except (GuildHuntError, PermissionError) as exc:
         db.rollback()
         raise _domain_error(exc) from exc
-    return _planner_response(GuildHuntPlannerService.get(db, hunt_id), current_user)
+    return _planner_response(db, GuildHuntPlannerService.get(db, hunt_id), current_user)
 
 
 @router.post("/planner/{hunt_id}/join", response_model=GuildHuntResponse)
@@ -108,7 +112,7 @@ def join_guild_hunt(hunt_id: int, db: Session = Depends(get_db), current_user: U
     except (GuildHuntError, PermissionError) as exc:
         db.rollback()
         raise _domain_error(exc) from exc
-    return _planner_response(GuildHuntPlannerService.get(db, hunt_id), current_user)
+    return _planner_response(db, GuildHuntPlannerService.get(db, hunt_id), current_user)
 
 
 @router.post("/planner/{hunt_id}/leave", response_model=GuildHuntResponse)
@@ -120,7 +124,7 @@ def leave_guild_hunt(hunt_id: int, db: Session = Depends(get_db), current_user: 
     except (GuildHuntError, PermissionError) as exc:
         db.rollback()
         raise _domain_error(exc) from exc
-    return _planner_response(GuildHuntPlannerService.get(db, hunt_id), current_user)
+    return _planner_response(db, GuildHuntPlannerService.get(db, hunt_id), current_user)
 
 
 @router.post("/planner/{hunt_id}/cancel", response_model=GuildHuntResponse)
@@ -132,7 +136,7 @@ def cancel_guild_hunt(hunt_id: int, payload: GuildHuntCancel, db: Session = Depe
     except (GuildHuntError, PermissionError) as exc:
         db.rollback()
         raise _domain_error(exc) from exc
-    return _planner_response(GuildHuntPlannerService.get(db, hunt_id), current_user)
+    return _planner_response(db, GuildHuntPlannerService.get(db, hunt_id), current_user)
 
 
 @router.post("/planner/{hunt_id}/{action}", response_model=GuildHuntResponse)
@@ -146,7 +150,7 @@ def transition_guild_hunt(hunt_id: int, action: str, db: Session = Depends(get_d
     except (GuildHuntError, PermissionError) as exc:
         db.rollback()
         raise _domain_error(exc) from exc
-    return _planner_response(GuildHuntPlannerService.get(db, hunt_id), current_user)
+    return _planner_response(db, GuildHuntPlannerService.get(db, hunt_id), current_user)
 
 
 @router.patch("/planner/{hunt_id}/participants/{participant_id}", response_model=GuildHuntResponse)
@@ -161,7 +165,7 @@ def mark_guild_hunt_attendance(hunt_id: int, participant_id: int, payload: Guild
     except (GuildHuntError, PermissionError) as exc:
         db.rollback()
         raise _domain_error(exc) from exc
-    return _planner_response(GuildHuntPlannerService.get(db, hunt_id), current_user)
+    return _planner_response(db, GuildHuntPlannerService.get(db, hunt_id), current_user)
 
 @router.get("/", response_model=List[Hunt])
 async def get_hunts(

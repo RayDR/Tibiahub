@@ -26,6 +26,7 @@ from app.core.permissions import (
     require_guild_management, resolve_guild_role,
 )
 from app.services.tibia_api import get_active_guild_members, get_guild_info
+from app.services.guild_authorization_service import GuildAuthorizationService
 
 router = APIRouter()
 
@@ -48,7 +49,10 @@ def _audit_admin_change(db: Session, actor: User, guild_name: str, action: str, 
 
 
 @router.get("/me")
-def get_own_guild_workspace(current_user: User = Depends(get_current_active_user)):
+def get_own_guild_workspace(
+    current_user: User = Depends(get_current_active_user),
+    db: Session = Depends(get_db),
+):
     guild_name = (current_user.guild_name or "").strip()
     return {
         "workspace_type": "guild" if guild_name else "personal",
@@ -57,9 +61,13 @@ def get_own_guild_workspace(current_user: User = Depends(get_current_active_user
         "world_name": current_user.world_name,
         "role": resolve_guild_role(current_user).value,
         "capabilities": {
-            "manage_members": bool(guild_name and not current_user.is_superuser and resolve_guild_role(current_user).value == "guild_leader"),
-            "manage_announcements": bool(guild_name and can_manage_announcements(current_user, guild_name)),
-            "manage_events": bool(guild_name and can_manage_events(current_user, guild_name)),
+            "manage_members": bool(guild_name and can_manage_guild_members(current_user, guild_name, db)),
+            "manage_announcements": bool(guild_name and can_manage_announcements(current_user, guild_name, db)),
+            "manage_events": bool(guild_name and can_manage_events(current_user, guild_name, db)),
+            "guilds": {
+                capability: GuildAuthorizationService.manageable_guilds(db, current_user, capability)
+                for capability in ("raffles.manage", "events.manage", "hunts.manage", "announcements.manage")
+            },
             "change_guild_scope": False,
         },
     }
@@ -89,13 +97,18 @@ def get_own_guild_dashboard(
     }
 
 
-def _resolve_guild_scope(current_user: User, requested_guild: str | None) -> str:
+def _resolve_guild_scope(current_user: User, requested_guild: str | None, db: Session | None = None) -> str:
     guild_name = (requested_guild or current_user.guild_name or "").strip()
     if not guild_name:
         raise HTTPException(status_code=400, detail="A guild name is required")
     if not is_global_admin(current_user):
         own_guild = (current_user.guild_name or "").strip()
-        if not own_guild or own_guild.casefold() != guild_name.casefold():
+        verified_member = bool(db and GuildAuthorizationService.is_verified_member(db, current_user, guild_name))
+        granted = bool(db and any(
+            GuildAuthorizationService.has_grant(db, current_user, guild_name, capability)
+            for capability in ("raffles.manage", "events.manage", "hunts.manage", "announcements.manage")
+        ))
+        if (not own_guild or own_guild.casefold() != guild_name.casefold()) and not verified_member and not granted:
             raise HTTPException(status_code=403, detail="You can only access your own guild")
     return guild_name
 
@@ -154,8 +167,8 @@ def create_announcement(
     guild_name: Optional[str] = None,
     current_user: User = Depends(get_current_active_user),
 ) -> Any:
-    scoped_guild = _resolve_guild_scope(current_user, guild_name)
-    _require_capability(can_manage_announcements(current_user, scoped_guild))
+    scoped_guild = _resolve_guild_scope(current_user, guild_name, db)
+    _require_capability(can_manage_announcements(current_user, scoped_guild, db))
     announcement = Announcement(
         title=announcement_in.title,
         content=announcement_in.content,
@@ -179,7 +192,7 @@ def read_announcements(
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_active_user)
 ) -> Any:
-    scoped_guild = _resolve_guild_scope(current_user, guild_name)
+    scoped_guild = _resolve_guild_scope(current_user, guild_name, db)
     query = db.query(Announcement).filter(Announcement.guild_name.ilike(scoped_guild))
     if not include_deleted:
         query = query.filter(Announcement.is_deleted == False)
@@ -197,7 +210,7 @@ def soft_delete_announcement(
     announcement = db.query(Announcement).filter(Announcement.id == announcement_id).first()
     if not announcement:
         raise HTTPException(status_code=404, detail="Announcement not found")
-    _require_capability(can_manage_announcements(current_user, announcement.guild_name))
+    _require_capability(can_manage_announcements(current_user, announcement.guild_name, db))
     announcement.is_deleted = True
     announcement.deleted_at = datetime.now(UTC)
     announcement.deleted_by_user_id = current_user.id
@@ -217,7 +230,7 @@ def restore_announcement(
     announcement = db.query(Announcement).filter(Announcement.id == announcement_id).first()
     if not announcement:
         raise HTTPException(status_code=404, detail="Announcement not found")
-    _require_capability(can_manage_announcements(current_user, announcement.guild_name))
+    _require_capability(can_manage_announcements(current_user, announcement.guild_name, db))
     announcement.is_deleted = False
     announcement.deleted_at = None
     announcement.deleted_by_user_id = None
@@ -237,8 +250,8 @@ def create_event(
     guild_name: Optional[str] = None,
     current_user: User = Depends(get_current_active_user)
 ) -> Any:
-    scoped_guild = _resolve_guild_scope(current_user, guild_name)
-    _require_capability(can_manage_events(current_user, scoped_guild))
+    scoped_guild = _resolve_guild_scope(current_user, guild_name, db)
+    _require_capability(can_manage_events(current_user, scoped_guild, db))
     event = GuildEvent(
         title=event_in.title,
         description=event_in.description,
@@ -264,7 +277,7 @@ def read_events(
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_active_user)
 ) -> Any:
-    scoped_guild = _resolve_guild_scope(current_user, guild_name)
+    scoped_guild = _resolve_guild_scope(current_user, guild_name, db)
     query = db.query(GuildEvent).filter(GuildEvent.guild_name.ilike(scoped_guild))
     if not include_deleted:
         query = query.filter(GuildEvent.is_deleted == False)
@@ -282,7 +295,7 @@ def soft_delete_guild_event(
     event = db.query(GuildEvent).filter(GuildEvent.id == event_id).first()
     if not event:
         raise HTTPException(status_code=404, detail="Event not found")
-    _require_capability(can_manage_events(current_user, event.guild_name))
+    _require_capability(can_manage_events(current_user, event.guild_name, db))
     event.is_deleted = True
     event.deleted_at = datetime.now(UTC)
     event.deleted_by_user_id = current_user.id
@@ -302,7 +315,7 @@ def restore_guild_event(
     event = db.query(GuildEvent).filter(GuildEvent.id == event_id).first()
     if not event:
         raise HTTPException(status_code=404, detail="Event not found")
-    _require_capability(can_manage_events(current_user, event.guild_name))
+    _require_capability(can_manage_events(current_user, event.guild_name, db))
     event.is_deleted = False
     event.deleted_at = None
     event.deleted_by_user_id = None
@@ -322,7 +335,7 @@ def attend_event(
     event = db.query(GuildEvent).filter(GuildEvent.id == event_id).first()
     if not event:
         raise HTTPException(status_code=404, detail="Event not found")
-    _resolve_guild_scope(current_user, event.guild_name)
+    _resolve_guild_scope(current_user, event.guild_name, db)
     
     attendance = db.query(EventAttendance).filter(
         EventAttendance.event_id == event_id,
@@ -381,7 +394,7 @@ async def get_raffle_participants(
     """
     Get active guild members for raffle
     """
-    scoped_guild = _resolve_guild_scope(current_user, guild_name)
+    scoped_guild = _resolve_guild_scope(current_user, guild_name, db)
     members = await get_active_guild_members(scoped_guild, days)
     return members
 
@@ -422,10 +435,10 @@ async def get_guild_members_snapshot(
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_active_user),
 ) -> Any:
-    guild_name = _resolve_guild_scope(current_user, guild_name)
+    guild_name = _resolve_guild_scope(current_user, guild_name, db)
     source = "snapshot"
     if refresh:
-        if not can_manage_guild_members(current_user, guild_name):
+        if not can_manage_guild_members(current_user, guild_name, db):
             raise HTTPException(status_code=403, detail="Only guild leaders can force sync")
 
         latest = (
@@ -475,7 +488,7 @@ async def sync_guild_members_snapshot(
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_manager_user),
 ) -> Any:
-    require_guild_management(current_user, guild_name)
+    require_guild_management(current_user, guild_name, db=db, capability="announcements.manage")
     latest = (
         db.query(GuildMemberSnapshot)
         .filter(GuildMemberSnapshot.guild_name.ilike(guild_name))

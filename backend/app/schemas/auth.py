@@ -1,6 +1,7 @@
-from pydantic import BaseModel, ConfigDict, EmailStr, Field
+from pydantic import BaseModel, EmailStr, Field, field_validator
 from typing import Literal, Optional
 from datetime import datetime
+from app.core.password_policy import validate_password
 
 class Token(BaseModel):
     access_token: str
@@ -12,12 +13,26 @@ class TokenData(BaseModel):
 class UserBase(BaseModel):
     username: str = Field(..., min_length=3, max_length=50)
     email: Optional[EmailStr] = None
-    model_config = ConfigDict(str_strip_whitespace=True)
+
+    @field_validator("username", mode="before")
+    @classmethod
+    def normalize_username(cls, value: str) -> str:
+        return value.strip() if isinstance(value, str) else value
+
+    @field_validator("email", mode="before")
+    @classmethod
+    def normalize_email(cls, value):
+        return value.strip() if isinstance(value, str) else value
 
 class UserCreate(UserBase):
-    password: str = Field(..., min_length=12, max_length=128)
+    password: str
     tibia_character_name: Optional[str] = Field(None, min_length=2, max_length=100)
     locale: Literal["en", "es"] = "en"
+
+    @field_validator("password")
+    @classmethod
+    def password_policy(cls, value: str) -> str:
+        return validate_password(value)
 
 class UserLogin(BaseModel):
     username: str

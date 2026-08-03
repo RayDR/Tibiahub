@@ -38,9 +38,8 @@ export default function APIMonitor() {
     const [refreshing, setRefreshing] = useState(false);
     const [syncingUp, setSyncingUp] = useState(false);
 
-    // Check permissions
     useEffect(() => {
-        if (!user?.is_superuser && user?.guild_rank !== 'Alpha Warbringer' && user?.guild_rank !== 'Bloodhowl Marshal') {
+        if (user && !user.is_superuser) {
             navigate('/guild');
         }
     }, [user, navigate]);

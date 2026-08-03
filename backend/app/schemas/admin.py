@@ -1,9 +1,10 @@
 """
 Schemas for admin endpoints
 """
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, Field, field_validator
 from typing import List, Optional
 from datetime import datetime
+from app.core.password_policy import validate_password
 
 
 class TibiaAPIStatus(BaseModel):
@@ -122,7 +123,12 @@ class UserUpdate(BaseModel):
     is_superuser: Optional[bool] = None
     is_moderator: Optional[bool] = None
     is_writer: Optional[bool] = None
-    password: Optional[str] = Field(None, min_length=6)
+    password: Optional[str] = None
+
+    @field_validator("password")
+    @classmethod
+    def password_policy(cls, value: Optional[str]) -> Optional[str]:
+        return validate_password(value) if value is not None else None
 
 
 class InvalidUser(BaseModel):

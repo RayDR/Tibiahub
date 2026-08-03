@@ -28,6 +28,7 @@ from app.models.raffle import (
     RaffleSchedulerAttempt, RaffleSchedulerState, RaffleTestAudit, InternalNotification,
 )
 from app.models.guild_member_snapshot import GuildMemberSnapshot
+from app.models.guild_management import GuildManagementGrant, GuildRosterCharacter
 from app.models.workspace_audit import WorkspaceAudit
 from app.models.leadership import (
     GuildLeadershipRole, GuildLeadershipOpening, GuildLeadershipApplication,
@@ -101,6 +102,8 @@ __all__ = [
     "RaffleTestAudit",
     "InternalNotification",
     "GuildMemberSnapshot",
+    "GuildManagementGrant",
+    "GuildRosterCharacter",
     "MediaAsset",
     "WorkspaceAudit",
     "GuildLeadershipRole", "GuildLeadershipOpening", "GuildLeadershipApplication",

@@ -29,7 +29,7 @@ def values(**overrides):
     return payload
 
 
-def verified_character(db, user, name, *, guild="Bald Dwarfs", vocation="Elite Knight"):
+def verified_character(db, user, name, *, guild="Bald Dwarfs", vocation="Elite Knight", guild_rank="Member"):
     row = UserCharacter(
         user_id=user.id,
         character_name=name,
@@ -37,6 +37,7 @@ def verified_character(db, user, name, *, guild="Bald Dwarfs", vocation="Elite K
         ownership_status="verified",
         ownership_verified_at=datetime.now(UTC),
         guild_name=guild,
+        guild_rank=guild_rank,
         vocation=vocation,
     )
     db.add(row)
@@ -46,6 +47,7 @@ def verified_character(db, user, name, *, guild="Bald Dwarfs", vocation="Elite K
 
 def test_leader_creates_and_member_joins_and_leaves(db):
     leader = make_user(db, username="hunt_leader", guild_name="Bald Dwarfs", guild_rank="Alpha Warbringer")
+    verified_character(db, leader, "Planner Leader", guild_rank="Alpha Warbringer")
     member = make_user(db, username="hunt_member", guild_name="Bald Dwarfs")
     verified_character(db, member, "Planner Knight")
 
@@ -61,6 +63,7 @@ def test_leader_creates_and_member_joins_and_leaves(db):
 
 def test_non_leader_cannot_create_or_operate_hunt(db):
     leader = make_user(db, username="authorized_hunt_leader", guild_name="Bald Dwarfs", guild_rank="Leader")
+    verified_character(db, leader, "Authorized Leader", guild_rank="Leader")
     member = make_user(db, username="unauthorized_hunt_member", guild_name="Bald Dwarfs")
     hunt = GuildHuntPlannerService.create(db, leader, "Bald Dwarfs", values())
 
@@ -72,6 +75,7 @@ def test_non_leader_cannot_create_or_operate_hunt(db):
 
 def test_capacity_and_verified_guild_character_are_enforced(db):
     leader = make_user(db, username="capacity_leader", guild_name="Bald Dwarfs", guild_rank="Leader")
+    verified_character(db, leader, "Capacity Leader", guild_rank="Leader")
     first = make_user(db, username="capacity_first", guild_name="Bald Dwarfs")
     second = make_user(db, username="capacity_second", guild_name="Bald Dwarfs")
     verified_character(db, first, "Capacity One")
@@ -85,6 +89,7 @@ def test_capacity_and_verified_guild_character_are_enforced(db):
 
 def test_lifecycle_and_attendance_are_recorded(db):
     leader = make_user(db, username="attendance_leader", guild_name="Bald Dwarfs", guild_rank="Leader")
+    verified_character(db, leader, "Attendance Leader", guild_rank="Leader")
     member = make_user(db, username="attendance_member", guild_name="Bald Dwarfs")
     verified_character(db, member, "Attendance Knight")
     hunt = GuildHuntPlannerService.create(db, leader, "Bald Dwarfs", values())
@@ -101,6 +106,7 @@ def test_lifecycle_and_attendance_are_recorded(db):
 
 def test_invalid_role_capacity_and_past_schedule_are_rejected(db):
     leader = make_user(db, username="validation_leader", guild_name="Bald Dwarfs", guild_rank="Leader")
+    verified_character(db, leader, "Validation Leader", guild_rank="Leader")
     with pytest.raises(GuildHuntError, match="slots"):
         GuildHuntPlannerService.create(db, leader, "Bald Dwarfs", values(maximum_participants=1, required_ek=1, required_ed=1))
     with pytest.raises(GuildHuntError, match="future"):

@@ -17,6 +17,7 @@ import {
   notificationApi,
   SchedulerHealth,
 } from "../../services/notifications";
+import { useGuildCapability } from "../../hooks/useGuildCapability";
 
 export function wallTimeToUtc(value: string, timeZone: string): string {
   if (!value) return "";
@@ -59,13 +60,16 @@ export default function AutomaticRaffleOperations({
   const { t, i18n } = useTranslation();
   const { user } = useAuth();
   const confirmation = useConfirmation();
+  const { canManageGuild } = useGuildCapability("raffles.manage");
   const [raffles, setRaffles] = useState<Raffle[]>([]);
   const [selectedId, setSelectedId] = useState<number | null>(null);
   const [preview, setPreview] = useState<EligibilityPreview | null>(null);
   const [runs, setRuns] = useState<AutomaticRun[]>([]);
   const [error, setError] = useState("");
   const [busy, setBusy] = useState(false);
-  const [purpose, setPurpose] = useState<"test" | "real">("test");
+  const [purpose, setPurpose] = useState<"test" | "real">(
+    user?.is_superuser ? "test" : "real",
+  );
   const [title, setTitle] = useState("");
   const guild = (guildName || user?.guild_name || "").trim();
   const [timezone, setTimezone] = useState("America/Chicago");
@@ -267,10 +271,7 @@ export default function AutomaticRaffleOperations({
       setBusy(false);
     }
   };
-  const canPublish = Boolean(
-    user?.is_superuser ||
-    ["leader", "guild leader"].includes((user?.guild_rank || "").toLowerCase()),
-  );
+  const canPublish = canManageGuild(selected?.guild_name);
   const stale =
     preview &&
     Date.now() - new Date(preview.cutoff_at).getTime() > 60 * 60 * 1000;
@@ -304,7 +305,7 @@ export default function AutomaticRaffleOperations({
 
   return (
     <div className="space-y-6">
-      {!compact && (
+      {!compact && canManageGuild(guild) && (
         <header>
           <h1 className="text-2xl font-bold text-content-primary">
             {t("raffle.operations.title")}
@@ -335,26 +336,28 @@ export default function AutomaticRaffleOperations({
               </span>
             )}
           </h2>
-          <label>
-            {t("raffle.operations.purpose")}
-            <select
-              value={purpose}
-              onChange={(e) => setPurpose(e.target.value as "test" | "real")}
-              className="mt-1 w-full rounded-lg bg-surface-base p-2"
-            >
-              <option value="test">{t("raffle.operations.test")}</option>
-              <option value="real">{t("raffle.operations.real")}</option>
-            </select>
-          </label>
-          <label>
-            {t("raffle.operations.guild")}
-            <input
-              value={guild}
-              readOnly
-              aria-readonly="true"
-              className="mt-1 w-full rounded-lg border border-line bg-surface-base/60 p-2 text-content-secondary"
-            />
-          </label>
+          {user?.is_superuser ? (
+            <label>
+              {t("raffle.operations.purpose")}
+              <select
+                value={purpose}
+                onChange={(e) => setPurpose(e.target.value as "test" | "real")}
+                className="mt-1 w-full rounded-lg bg-surface-base p-2"
+              >
+                <option value="test">{t("raffle.operations.test")}</option>
+                <option value="real">{t("raffle.operations.real")}</option>
+              </select>
+            </label>
+          ) : (
+            <dl className="rounded-lg border border-line p-3">
+              <dt className="text-xs text-content-muted">{t("raffle.operations.purpose")}</dt>
+              <dd className="font-medium">{t("raffle.operations.real")}</dd>
+            </dl>
+          )}
+          <dl className="rounded-lg border border-line p-3">
+            <dt className="text-xs text-content-muted">{t("raffle.operations.guild")}</dt>
+            <dd className="font-medium">{guild}</dd>
+          </dl>
           <label>
             {t("raffle.operations.name")}
             <input

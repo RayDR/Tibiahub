@@ -34,6 +34,7 @@ import {
   huntPlannerApi,
 } from "../../services/huntPlanner";
 import { useGuildContext } from "../../utils/guildContext";
+import { useGuildCapability } from "../../hooks/useGuildCapability";
 
 const vocations: VocationCode[] = ["EK", "ED", "RP", "MS"];
 
@@ -42,10 +43,8 @@ export default function GuildHuntPlanner() {
   const { user } = useAuth();
   const toast = useToast();
   const guildName = useGuildContext(user);
-  const rank = (user?.guild_rank || "").toLocaleLowerCase();
-  const canCreate = Boolean(
-    user?.is_superuser || rank.includes("leader") || rank.includes("alpha"),
-  );
+  const { canManageGuild } = useGuildCapability("hunts.manage");
+  const canCreate = canManageGuild(guildName);
   const [hunts, setHunts] = useState<GuildHunt[]>([]);
   const [view, setView] = useState<HuntView>("upcoming");
   const [anchor, setAnchor] = useState(() => new Date());

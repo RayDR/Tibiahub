@@ -69,11 +69,7 @@ export default function GuildManagementDashboard() {
   const [syncResult, setSyncResult] = useState<GuildSyncResult | null>(null);
 
   useEffect(() => {
-    if (
-      !user?.is_superuser &&
-      user?.guild_rank !== "Alpha Warbringer" &&
-      user?.guild_rank !== "Bloodhowl Marshal"
-    ) {
+    if (user && !user.is_superuser) {
       navigate("/guild");
     }
   }, [user, navigate]);

@@ -7,6 +7,7 @@ from typing import List
 from fastapi import APIRouter, Depends, HTTPException, status
 from pydantic import BaseModel, Field
 from sqlalchemy import func
+from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session, selectinload
 
 from app.api.v1.endpoints.auth import get_current_active_user, get_current_manager_user, get_current_admin_user
@@ -27,6 +28,7 @@ from app.models.raffle import (
 )
 from app.models.user import User
 from app.models.user_character import UserCharacter
+from app.models.guild_management import GuildRosterCharacter
 from app.models.workspace_audit import WorkspaceAudit
 from app.schemas.raffle import (
     RaffleCreate,
@@ -36,7 +38,6 @@ from app.schemas.raffle import (
     RaffleResponse,
     RaffleRerunRequest,
     RaffleUpdate,
-    RaffleWeightUpdateRequest,
     AutomaticExecutionRequest,
     AutomaticRerunRequest,
     AutomaticRunResponse,
@@ -59,6 +60,11 @@ from app.services.raffle_scheduler_service import RETRYABLE_CODES
 from app.services.raffle_service import RaffleService, normalize_access_mode, normalize_status, sync_legacy_raffle_fields
 from app.services.public_code import generate_unique_code
 from app.services.character_ownership_service import normalize_character_name
+from app.services.guild_roster_service import normalize_guild_identity
+from app.services.raffle_participant_service import (
+    RaffleParticipantError, RaffleParticipantService,
+)
+from app.services.guild_authorization_service import GuildAuthorizationService
 
 router = APIRouter()
 logger = logging.getLogger(__name__)
@@ -75,6 +81,21 @@ def _ensure_public_code(db: Session, raffle: Raffle) -> None:
     db.add(raffle)
 
 
+def _canonical_guild_world(db: Session, guild_name: str) -> str | None:
+    roster = db.query(GuildRosterCharacter.world_name).filter(
+        GuildRosterCharacter.normalized_guild_name == normalize_guild_identity(guild_name),
+        GuildRosterCharacter.is_current.is_(True),
+    ).order_by(GuildRosterCharacter.id).first()
+    if roster:
+        return roster[0]
+    character = db.query(UserCharacter.world_name).filter(
+        UserCharacter.guild_name.ilike(guild_name),
+        UserCharacter.ownership_status == "verified",
+        UserCharacter.world_name.isnot(None),
+    ).order_by(UserCharacter.id).first()
+    return character[0] if character else None
+
+
 def _audit_admin_action(db: Session, user: User, raffle: Raffle, action: str, metadata: dict | None = None) -> None:
     if not is_global_admin(user):
         return
@@ -88,6 +109,8 @@ def _audit_admin_action(db: Session, user: User, raffle: Raffle, action: str, me
 
 
 def _require_raffle_management(db: Session, current_user: User, raffle: Raffle) -> None:
+    if raffle.purpose == "test" and not current_user.is_superuser:
+        raise HTTPException(status_code=403, detail="Test raffles are available only to global administrators")
     if can_administer_raffle(db, current_user, raffle):
         return
     raise HTTPException(status_code=403, detail="Insufficient permissions for this guild raffle")
@@ -140,23 +163,28 @@ def _can_archive(raffle: Raffle) -> tuple[bool, str | None]:
 def _can_permanently_delete(db: Session, raffle: Raffle) -> tuple[bool, str | None]:
     if raffle.is_deleted:
         return False, "Raffle is already permanently deleted"
-    if _raffle_has_executed_history(raffle):
-        return False, "Executed raffles must remain auditable"
+    if raffle.purpose != "test":
+        return False, "Only Test raffles can be permanently deleted; archive Real raffles"
+    successful_run = db.query(RaffleRun.id).filter(RaffleRun.raffle_id == raffle.id, RaffleRun.state == "succeeded").first()
+    if successful_run:
+        return False, "A successful immutable draw result exists"
     has_results = db.query(RaffleRunResult.id).join(RaffleRun).filter(RaffleRun.raffle_id == raffle.id).first()
     if has_results:
         return False, "Immutable draw results exist"
-    has_deliveries = db.query(RafflePrizeDelivery.id).filter(RafflePrizeDelivery.raffle_id == raffle.id).first()
+    if db.query(RaffleWinner.id).filter(RaffleWinner.raffle_id == raffle.id).first():
+        return False, "Immutable draw results exist"
+    has_deliveries = db.query(RafflePrizeDelivery.id).filter(
+        RafflePrizeDelivery.raffle_id == raffle.id,
+        RafflePrizeDelivery.status == "delivered",
+    ).first()
     if has_deliveries:
-        return False, "Delivery records exist"
+        return False, "A fulfilled prize delivery exists"
     has_delivery_audit = db.query(RaffleDeliveryAudit.id).join(RafflePrizeDelivery).filter(RafflePrizeDelivery.raffle_id == raffle.id).first()
     if has_delivery_audit:
         return False, "Delivery audits exist"
     has_rerun_audit = db.query(RaffleRerunAudit.id).filter(RaffleRerunAudit.raffle_id == raffle.id).first()
     if has_rerun_audit:
         return False, "Rerun audits exist"
-    has_test_audit = db.query(RaffleTestAudit.id).filter(RaffleTestAudit.raffle_id == raffle.id).first()
-    if has_test_audit:
-        return False, "Raffle audits exist"
     return True, None
 
 
@@ -171,7 +199,7 @@ def _action_capabilities(db: Session, current_user: User, raffle: Raffle) -> dic
         "edit": {"enabled": bool(can_manage and edit_allowed), "reason": None if can_manage and edit_allowed else ("Insufficient permissions" if not can_manage else edit_reason)},
         "edit_prizes": {"enabled": bool(can_manage and prize_allowed), "reason": None if can_manage and prize_allowed else ("Insufficient permissions" if not can_manage else prize_reason)},
         "cancel_archive": {"enabled": bool(can_manage and archive_allowed), "reason": None if can_manage and archive_allowed else ("Insufficient permissions" if not can_manage else archive_reason)},
-        "permanent_delete": {"enabled": bool(can_manage and delete_allowed), "reason": None if can_manage and delete_allowed else ("Insufficient permissions" if not can_manage else delete_reason)},
+        "permanent_delete": {"enabled": bool(current_user.is_superuser and raffle.purpose == "test" and delete_allowed), "reason": None if current_user.is_superuser and raffle.purpose == "test" and delete_allowed else ("Permanent deletion is limited to global administrators and Test raffles" if not current_user.is_superuser or raffle.purpose != "test" else delete_reason)},
     }
 
 
@@ -257,7 +285,7 @@ def list_raffles(
         .order_by(Raffle.created_at.desc())
         .all()
     )
-    visible = [raffle for raffle in raffles if can_administer_raffle(db, current_user, raffle)]
+    visible = [raffle for raffle in raffles if (raffle.purpose != "test" or current_user.is_superuser) and can_administer_raffle(db, current_user, raffle)]
 
     updated = False
     for raffle in visible:
@@ -279,9 +307,19 @@ def raffle_workspace(
     raffles = query.order_by(Raffle.created_at.desc()).all()
     visible = []
     for raffle in raffles:
-        same_guild = bool(current_user.guild_name and raffle.guild_name.casefold() == current_user.guild_name.casefold())
-        same_world = bool(current_user.world_name and raffle.world_name and raffle.world_name.casefold() == current_user.world_name.casefold())
-        if not (is_global_admin(current_user) or same_guild or raffle.scope_type == "global" or (raffle.scope_type == "server" and same_world)):
+        if raffle.purpose == "test" and not current_user.is_superuser:
+            continue
+        if not (
+            is_global_admin(current_user)
+            or (
+                raffle.scope_type == "guild"
+                and (
+                    GuildAuthorizationService.is_verified_member(db, current_user, raffle.guild_name)
+                    or can_administer_raffle(db, current_user, raffle)
+                )
+            )
+            or raffle.scope_type == "global"
+        ):
             continue
         snapshot = max(raffle.eligibility_snapshots, key=lambda row: row.snapshot_number) if raffle.eligibility_snapshots else None
         public = _serialize_public_raffle(db, raffle)
@@ -294,7 +332,7 @@ def raffle_workspace(
             "participant_count": len([p for p in raffle.participants if not p.is_deleted]),
             "eligibility": None if not snapshot else {"candidate_count": snapshot.candidate_count, "eligible_count": snapshot.eligible_count, "excluded_count": snapshot.excluded_count, "cutoff_at": snapshot.cutoff_at, "frozen": True},
             "winners": public["winners"],
-            "capabilities": {"manage": can_administer_raffle(db, current_user, raffle), "publish": can_publish_raffle(current_user, raffle)},
+            "capabilities": {"manage": can_administer_raffle(db, current_user, raffle), "publish": can_publish_raffle(current_user, raffle, db)},
             "actions": _action_capabilities(db, current_user, raffle),
         })
     return visible
@@ -320,6 +358,8 @@ def get_raffle(
     )
     if not raffle:
         raise HTTPException(status_code=404, detail="Raffle not found")
+    if raffle.purpose == "test" and not current_user.is_superuser:
+        raise HTTPException(status_code=404, detail="Raffle not found")
     _require_capability(can_view_private_raffle_results(db, current_user, raffle))
     if raffle.is_deleted:
         raise HTTPException(status_code=404, detail="Raffle not found")
@@ -336,13 +376,15 @@ def create_raffle(
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_manager_user),
 ):
+    if payload.purpose == "test" and not is_global_admin(current_user):
+        raise HTTPException(status_code=403, detail="Test raffles are available only to global administrators")
+    if not is_global_admin(current_user) and (payload.scope_type != "guild" or payload.purpose != "real"):
+        raise HTTPException(status_code=403, detail="Guild managers can create only Real guild raffles")
     automatic_stage1 = payload.run_mode == "automatic" or payload.purpose in {"test", "real"}
-    scope = ContentScope(ScopeType(payload.scope_type), guild_name=payload.guild_name, world_name=payload.world_name or current_user.world_name)
-    require_scope_creation(current_user, scope)
-    allowed = (
-        is_global_admin(current_user) or is_matching_raffle_leader(current_user, payload.guild_name)
-        if automatic_stage1 else can_manage_guild(current_user, payload.guild_name)
-    )
+    if is_global_admin(current_user):
+        scope = ContentScope(ScopeType(payload.scope_type), guild_name=payload.guild_name, world_name=payload.world_name or current_user.world_name)
+        require_scope_creation(current_user, scope)
+    allowed = is_global_admin(current_user) or GuildAuthorizationService.can_manage(db, current_user, payload.guild_name, "raffles.manage")
     if not allowed:
         raise HTTPException(status_code=403, detail="You can only manage raffles for your guild")
     access_mode = {"guild": "guild_only", "server": "world_only", "global": "public"}[payload.scope_type]
@@ -352,7 +394,12 @@ def create_raffle(
         public_code=generate_unique_code(db, Raffle),
         guild_name=payload.guild_name,
         scope_type=payload.scope_type,
-        world_name=(payload.world_name or current_user.world_name) if payload.scope_type in {"guild", "server"} else None,
+        world_name=(
+            (_canonical_guild_world(db, payload.guild_name) or payload.world_name or current_user.world_name)
+            if payload.scope_type == "guild"
+            else (payload.world_name or current_user.world_name) if payload.scope_type == "server"
+            else None
+        ),
         access_mode=access_mode,
         show_participants=payload.show_participants,
         visibility="private" if access_mode == "guild_only" else "public",
@@ -363,6 +410,8 @@ def create_raffle(
         timezone_name=payload.timezone_name,
         eligibility_days=payload.eligibility_days,
         eligibility_cutoff_at=payload.eligibility_cutoff_at,
+        unique_account_participation=payload.unique_account_participation,
+        weighting_mode=payload.weighting_mode,
         archive_after_days=max(1, min(365, payload.archive_after_days or 7)),
         created_by_id=current_user.id,
         status="draft",
@@ -384,7 +433,7 @@ def create_raffle(
         db.flush()
         db.add(Event(
             type="raffle", title=payload.title, description=payload.description or "Guild raffle event",
-            rules="One participant per account. Vice leaders get +10% weight.",
+            rules="Participant identity and draw weighting follow the raffle's manager-controlled settings.",
             reward=", ".join([f"{prize.name}: {prize.reward}" for prize in (payload.prizes or [])]) or "Guild rewards",
             start_date=datetime.now(UTC), draw_date=datetime.now(UTC) + timedelta(days=1), status="active",
             is_active=True, is_public=True, participant_mode="manual", guild_name=payload.guild_name,
@@ -405,9 +454,11 @@ def create_raffle(
             )
         )
 
-    if raffle.run_mode == "automatic" or raffle.purpose in {"test", "real"}:
-        if raffle.run_mode != "automatic" or raffle.scope_type != "guild":
-            raise HTTPException(status_code=400, detail="Test and real automatic raffles must be guild-only and automatic")
+    if raffle.purpose == "test" and (raffle.run_mode != "automatic" or raffle.scope_type != "guild"):
+        raise HTTPException(status_code=400, detail="Test raffles must be guild-only and automatic")
+    if raffle.run_mode == "automatic":
+        if raffle.scope_type != "guild" or raffle.purpose not in {"test", "real"}:
+            raise HTTPException(status_code=400, detail="Automatic raffles must be Test or Real guild raffles")
         try:
             db.flush()
             db.refresh(raffle)
@@ -431,6 +482,7 @@ def create_raffle(
         if raffle.purpose == "test":
             db.add(RaffleTestAudit(
                 raffle_id=raffle.id, actor_id=current_user.id, action="test_raffle_created",
+                raffle_id_snapshot=raffle.id, raffle_title_snapshot=raffle.title, guild_name_snapshot=raffle.guild_name,
                 details={"scheduled_run_at": raffle.scheduled_run_at.isoformat(), "timezone_name": raffle.timezone_name},
             ))
 
@@ -451,18 +503,14 @@ def update_raffle(
     if not raffle:
         raise HTTPException(status_code=404, detail="Raffle not found")
     automatic_stage1 = raffle.run_mode == "automatic" or raffle.purpose in {"test", "real"}
-    _require_capability(can_administer_raffle(db, current_user, raffle) if automatic_stage1 else can_manage_guild(current_user, raffle.guild_name))
+    _require_capability(can_administer_raffle(db, current_user, raffle))
     allowed_edit, denied_reason = _can_edit_configuration(raffle)
     if not allowed_edit:
         raise HTTPException(status_code=409, detail=denied_reason)
     if payload.expected_version is not None and payload.expected_version != (raffle.version or 1):
         raise HTTPException(status_code=409, detail="Raffle was modified by another operation; refresh and retry")
     if payload.guild_name is not None and payload.guild_name != raffle.guild_name:
-        automatic_stage1 = raffle.run_mode == "automatic" or raffle.purpose in {"test", "real"}
-        allowed = (
-            is_global_admin(current_user) or is_matching_raffle_leader(current_user, payload.guild_name)
-            if automatic_stage1 else can_manage_guild(current_user, payload.guild_name)
-        )
+        allowed = is_global_admin(current_user) or GuildAuthorizationService.can_manage(db, current_user, payload.guild_name, "raffles.manage")
         if not allowed:
             raise HTTPException(status_code=403, detail="Cannot move raffle outside your guild scope")
         raffle.guild_name = payload.guild_name
@@ -499,6 +547,16 @@ def update_raffle(
     if payload.publication_status is not None:
         raffle.publication_status = payload.publication_status
 
+    if payload.unique_account_participation is not None or payload.weighting_mode is not None:
+        try:
+            RaffleParticipantService.update_settings(
+                db, raffle, current_user,
+                unique_account_participation=payload.unique_account_participation,
+                weighting_mode=payload.weighting_mode,
+            )
+        except RaffleParticipantError as exc:
+            raise HTTPException(status_code=409, detail={"code": exc.code, "message": exc.summary}) from exc
+
     if payload.prizes is not None:
         prize_allowed, prize_reason = _can_edit_prizes(raffle)
         if not prize_allowed:
@@ -516,8 +574,10 @@ def update_raffle(
             ))
 
     _apply_raffle_defaults(raffle)
-    if raffle.purpose in {"test", "real"} and (raffle.run_mode != "automatic" or raffle.access_mode != "guild_only"):
-        raise HTTPException(status_code=400, detail="Test and real raffles must remain guild-only and automatic")
+    if raffle.purpose == "test" and (raffle.run_mode != "automatic" or raffle.access_mode != "guild_only"):
+        raise HTTPException(status_code=400, detail="Test raffles must remain guild-only and automatic")
+    if raffle.run_mode == "automatic" and raffle.access_mode != "guild_only":
+        raise HTTPException(status_code=400, detail="Automatic raffles must remain guild-only")
 
     raffle.version = (raffle.version or 1) + 1
 
@@ -560,23 +620,6 @@ def add_prize(
     order_index = payload.order_index or ((current_max[0] + 1) if current_max else 1)
     db.add(RafflePrize(raffle_id=raffle_id, name=payload.name, reward=payload.reward, order_index=order_index))
     db.commit()
-    return get_raffle(raffle_id, db, current_user)
-
-
-@router.post("/{raffle_id}/participants/sync", response_model=RaffleResponse)
-async def sync_raffle_participants(
-    raffle_id: int,
-    db: Session = Depends(get_db),
-    current_user: User = Depends(get_current_manager_user),
-):
-    raffle = db.query(Raffle).filter(Raffle.id == raffle_id).first()
-    if not raffle:
-        raise HTTPException(status_code=404, detail="Raffle not found")
-    _require_raffle_management(db, current_user, raffle)
-    try:
-        await RaffleService.sync_participants(db, raffle)
-    except ValueError as exc:
-        raise HTTPException(status_code=400, detail=str(exc)) from exc
     return get_raffle(raffle_id, db, current_user)
 
 
@@ -684,71 +727,6 @@ def rerun_raffle(
     }
 
 
-@router.delete("/{raffle_id}/participants/{participant_id}", response_model=RaffleResponse)
-def remove_participant(
-    raffle_id: int,
-    participant_id: int,
-    db: Session = Depends(get_db),
-    current_user: User = Depends(get_current_active_user),
-):
-    raffle = db.query(Raffle).filter(Raffle.id == raffle_id).first()
-    if not raffle:
-        raise HTTPException(status_code=404, detail="Raffle not found")
-    automatic = raffle.run_mode == "automatic" or raffle.purpose in {"test", "real"}
-    _require_capability(can_administer_raffle(db, current_user, raffle)) if automatic else _require_raffle_management(db, current_user, raffle)
-    if automatic and raffle.purpose != "test":
-        raise HTTPException(status_code=400, detail="Manual participant removal is allowed only for test raffles")
-
-    participant = (
-        db.query(RaffleParticipant)
-        .filter(RaffleParticipant.id == participant_id, RaffleParticipant.raffle_id == raffle_id)
-        .first()
-    )
-    if not participant:
-        raise HTTPException(status_code=404, detail="Participant not found")
-    participant.is_deleted = True
-    participant.deleted_at = datetime.now(UTC)
-    participant.deleted_by_user_id = current_user.id
-    participant.is_eligible = False
-    participant.delete_reason = "removed by manager"
-    if raffle.purpose == "test":
-        db.add(RaffleTestAudit(
-            raffle_id=raffle.id, actor_id=current_user.id, action="test_participant_removed",
-            details={"participant_id": participant.id, "character_name": participant.character_name},
-        ))
-    db.commit()
-    return get_raffle(raffle_id, db, current_user)
-
-
-@router.patch("/{raffle_id}/participants/{participant_id}/weight", response_model=RaffleResponse)
-def update_participant_weight(
-    raffle_id: int,
-    participant_id: int,
-    payload: RaffleWeightUpdateRequest,
-    db: Session = Depends(get_db),
-    current_user: User = Depends(get_current_manager_user),
-):
-    raffle = db.query(Raffle).filter(Raffle.id == raffle_id).first()
-    if not raffle:
-        raise HTTPException(status_code=404, detail="Raffle not found")
-    _require_raffle_management(db, current_user, raffle)
-    if raffle.run_mode == "automatic" or raffle.purpose in {"test", "real"}:
-        raise HTTPException(status_code=400, detail="Automatic raffles use equal probability and do not support weight overrides")
-    participant = (
-        db.query(RaffleParticipant)
-        .filter(RaffleParticipant.id == participant_id, RaffleParticipant.raffle_id == raffle_id, RaffleParticipant.is_deleted == False)
-        .first()
-    )
-    if not participant:
-        raise HTTPException(status_code=404, detail="Participant not found")
-    participant.weight_multiplier = max(1.0, min(5.0, payload.weight_multiplier))
-    base_weight = 1.1 if (participant.guild_rank or "").strip().lower() == "vice leader" else 1.0
-    participant.weight = base_weight * participant.weight_multiplier
-    participant.source = "manual_override"
-    db.commit()
-    return get_raffle(raffle_id, db, current_user)
-
-
 @router.delete("/{raffle_id}", response_model=RaffleResponse)
 def soft_delete_raffle(
     raffle_id: int,
@@ -774,7 +752,7 @@ def soft_delete_raffle(
     return RaffleService.serialize_raffle(raffle)
 
 
-@router.delete("/{raffle_id}/permanent", response_model=RaffleResponse)
+@router.delete("/{raffle_id}/permanent")
 def permanent_delete_raffle(
     raffle_id: int,
     reason: str,
@@ -785,7 +763,8 @@ def permanent_delete_raffle(
     raffle = db.query(Raffle).filter(Raffle.id == raffle_id).first()
     if not raffle:
         raise HTTPException(status_code=404, detail="Raffle not found")
-    _require_raffle_management(db, current_user, raffle)
+    if not current_user.is_superuser:
+        raise HTTPException(status_code=403, detail="Permanent Test raffle deletion requires a global administrator")
     expected_confirmation = f"DELETE RAFFLE {raffle.id}"
     if confirmation.strip() != expected_confirmation:
         raise HTTPException(status_code=409, detail="Confirmation text does not match")
@@ -794,17 +773,49 @@ def permanent_delete_raffle(
     allowed, denied_reason = _can_permanently_delete(db, raffle)
     if not allowed:
         raise HTTPException(status_code=409, detail=denied_reason)
-    raffle.is_deleted = True
-    raffle.deleted_at = datetime.now(UTC)
-    raffle.deleted_by_user_id = current_user.id
-    raffle.delete_reason = reason.strip()
-    raffle.status = "deleted"
-    raffle.is_active = False
-    raffle.registration_enabled = False
-    _audit_admin_action(db, current_user, raffle, "raffle_permanently_deleted")
-    db.commit()
-    db.refresh(raffle)
-    return RaffleService.serialize_raffle(raffle)
+    raffle_snapshot = {"id": raffle.id, "title": raffle.title, "guild_name": raffle.guild_name}
+    try:
+        audits = db.query(RaffleTestAudit).filter(RaffleTestAudit.raffle_id == raffle.id).all()
+        db.add(RaffleTestAudit(
+            raffle_id=raffle.id, raffle_id_snapshot=raffle.id,
+            raffle_title_snapshot=raffle.title, guild_name_snapshot=raffle.guild_name,
+            actor_id=current_user.id, action="test_raffle_permanently_deleted",
+            reason=reason.strip(), details={"preserved_as_tombstone": True},
+        ))
+        db.flush()
+        for audit in [*audits, db.query(RaffleTestAudit).filter(
+            RaffleTestAudit.raffle_id == raffle.id,
+            RaffleTestAudit.action == "test_raffle_permanently_deleted",
+        ).order_by(RaffleTestAudit.id.desc()).first()]:
+            if audit:
+                audit.raffle_id_snapshot = raffle.id
+                audit.raffle_title_snapshot = raffle.title
+                audit.guild_name_snapshot = raffle.guild_name
+                audit.raffle_id = None
+
+        from app.models.raffle import InternalNotification, RaffleSchedulerAttempt
+        db.query(InternalNotification).filter(InternalNotification.raffle_id == raffle.id).update({InternalNotification.raffle_id: None}, synchronize_session=False)
+        db.query(RaffleSchedulerAttempt).filter(RaffleSchedulerAttempt.raffle_id == raffle.id).delete(synchronize_session=False)
+        snapshot_ids = [row[0] for row in db.query(RaffleEligibilitySnapshot.id).filter(RaffleEligibilitySnapshot.raffle_id == raffle.id).all()]
+        if snapshot_ids:
+            from app.models.raffle import RaffleEligibilityEntry
+            db.query(RaffleRun).filter(RaffleRun.raffle_id == raffle.id).delete(synchronize_session=False)
+            db.query(RaffleEligibilityEntry).filter(RaffleEligibilityEntry.snapshot_id.in_(snapshot_ids)).delete(synchronize_session=False)
+            db.query(RaffleEligibilitySnapshot).filter(RaffleEligibilitySnapshot.id.in_(snapshot_ids)).delete(synchronize_session=False)
+        db.query(RaffleParticipant).filter(RaffleParticipant.raffle_id == raffle.id).delete(synchronize_session=False)
+        db.query(RaffleManagerGrant).filter(RaffleManagerGrant.raffle_id == raffle.id).delete(synchronize_session=False)
+        db.query(RafflePrize).filter(RafflePrize.raffle_id == raffle.id).delete(synchronize_session=False)
+        db.add(WorkspaceAudit(
+            actor_id=current_user.id, workspace_type="admin", guild_name=raffle.guild_name,
+            action="raffle_permanently_deleted", target_type="raffle_tombstone", target_id=str(raffle.id),
+            assisted=True, safe_metadata={"purpose": "test", "reason_supplied": True},
+        ))
+        db.delete(raffle)
+        db.commit()
+    except Exception:
+        db.rollback()
+        raise
+    return {**raffle_snapshot, "deleted": True, "audit_preserved": True}
 
 
 @router.post("/{raffle_id}/restore", response_model=RaffleResponse)
@@ -919,7 +930,7 @@ async def _register_participant_for_raffle(
         .filter(RaffleParticipant.raffle_id == raffle.id, RaffleParticipant.user_id == user.id, RaffleParticipant.is_deleted == False)
         .first()
     )
-    if existing_user:
+    if existing_user and raffle.unique_account_participation:
         raise HTTPException(status_code=400, detail="This account is already registered")
 
     existing_character = (
@@ -935,18 +946,35 @@ async def _register_participant_for_raffle(
         raise HTTPException(status_code=400, detail="This character is already registered")
 
     rank = character.guild_rank or user.guild_rank
+    normalized_name = normalize_character_name(canonical_name)
+    roster_character = db.query(GuildRosterCharacter).filter(
+        GuildRosterCharacter.normalized_character_name == normalized_name,
+        GuildRosterCharacter.normalized_guild_name == normalize_guild_identity(raffle.guild_name),
+        GuildRosterCharacter.is_current.is_(True),
+    ).first()
+    known_account_key = f"user:{user.id}"
     participant = RaffleParticipant(
         raffle_id=raffle.id,
         user_id=user.id,
+        guild_roster_character_id=roster_character.id if roster_character else None,
         character_name=canonical_name,
+        normalized_character_name=normalized_name,
+        known_account_identity_key=known_account_key,
+        enforced_account_identity_key=known_account_key if raffle.unique_account_participation else None,
+        guild_name_snapshot=raffle.guild_name,
+        world_name_snapshot=character.world_name or user.world_name,
         guild_rank=rank,
-        weight=1.1 if str(rank or "").strip().lower() == "vice leader" else 1.0,
+        weight=1,
         weight_multiplier=1.0,
         source="public_register",
         source_data={"ownership_status": "verified"},
     )
     db.add(participant)
-    db.commit()
+    try:
+        db.commit()
+    except IntegrityError as exc:
+        db.rollback()
+        raise HTTPException(status_code=409, detail="The character or known account is already registered") from exc
     return get_public_raffle(raffle.id, db)
 
 
@@ -1006,12 +1034,19 @@ async def add_participant_manual(
         canonical_name = character.character_name
         db.add(RaffleParticipant(
             raffle_id=raffle.id, user_id=user.id, character_name=canonical_name,
+            normalized_character_name=normalize_character_name(canonical_name),
+            known_account_identity_key=f"user:{user.id}",
+            enforced_account_identity_key=f"user:{user.id}" if raffle.unique_account_participation else None,
+            guild_name_snapshot=raffle.guild_name,
+            world_name_snapshot=character.world_name or raffle.world_name,
             guild_rank=character.guild_rank or user.guild_rank, weight=1.0,
             weight_multiplier=1.0, is_eligible=True, source="test_local_account",
         ))
         db.flush()
         db.add(RaffleTestAudit(
             raffle_id=raffle.id, actor_id=current_user.id, action="test_participant_added",
+            raffle_id_snapshot=raffle.id, raffle_title_snapshot=raffle.title,
+            guild_name_snapshot=raffle.guild_name,
             details={"user_id": user.id, "character_name": canonical_name},
         ))
         db.commit()
@@ -1039,6 +1074,12 @@ def _require_capability(allowed: bool) -> None:
         raise HTTPException(status_code=403, detail="Insufficient raffle permissions")
 
 
+def _require_raffle_control(db: Session, user: User, raffle: Raffle) -> None:
+    if raffle.purpose == "test" and not user.is_superuser:
+        raise HTTPException(status_code=403, detail="Test raffle controls require a global administrator")
+    _require_capability(can_execute_raffle(db, user, raffle))
+
+
 @router.post("/{raffle_id}/eligibility/preview", response_model=EligibilityPreviewResponse)
 async def preview_automatic_eligibility(
     raffle_id: int,
@@ -1046,7 +1087,7 @@ async def preview_automatic_eligibility(
     current_user: User = Depends(get_current_active_user),
 ):
     raffle = _stage1_raffle(db, raffle_id)
-    _require_capability(can_execute_raffle(db, current_user, raffle))
+    _require_raffle_control(db, current_user, raffle)
     try:
         return await RaffleEligibilityService.preview(db, raffle)
     except RaffleEligibilityError as exc:
@@ -1060,7 +1101,7 @@ async def freeze_automatic_eligibility(
     current_user: User = Depends(get_current_active_user),
 ):
     raffle = _stage1_raffle(db, raffle_id)
-    _require_capability(can_execute_raffle(db, current_user, raffle))
+    _require_raffle_control(db, current_user, raffle)
     try:
         snapshot = await RaffleEligibilityService.freeze(db, raffle, current_user)
         _audit_admin_action(db, current_user, raffle, "raffle_eligibility_frozen")
@@ -1101,6 +1142,7 @@ def override_test_eligibility(
     participant.eligibility_override_reason = payload.reason.strip()
     db.add(RaffleTestAudit(
         raffle_id=raffle.id, actor_id=current_user.id, action="test_eligibility_override",
+        raffle_id_snapshot=raffle.id, raffle_title_snapshot=raffle.title, guild_name_snapshot=raffle.guild_name,
         reason=payload.reason.strip(), details={"participant_id": participant.id, "eligible": payload.eligible},
     ))
     db.commit()
@@ -1133,6 +1175,7 @@ def retry_test_raffle(
     raffle.next_retry_at = now
     db.add(RaffleTestAudit(
         raffle_id=raffle.id, actor_id=current_user.id, action="test_scheduler_retry",
+        raffle_id_snapshot=raffle.id, raffle_title_snapshot=raffle.title, guild_name_snapshot=raffle.guild_name,
         reason=payload.reason.strip(), details={"failure_code": raffle.last_error_code, "retry_count": raffle.retry_count},
     ))
     db.commit()
@@ -1144,10 +1187,9 @@ def cleanup_test_raffle(
     raffle_id: int,
     payload: TestCleanupRequest,
     db: Session = Depends(get_db),
-    current_user: User = Depends(get_current_active_user),
+    current_user: User = Depends(get_current_admin_user),
 ):
     raffle = _stage1_raffle(db, raffle_id)
-    _require_capability(can_administer_raffle(db, current_user, raffle))
     if raffle.purpose != "test":
         raise HTTPException(status_code=400, detail="Cleanup is restricted to test raffles")
     now = datetime.now(UTC)
@@ -1166,6 +1208,7 @@ def cleanup_test_raffle(
     raffle.status = "cancelled"
     db.add(RaffleTestAudit(
         raffle_id=raffle.id, actor_id=current_user.id, action="test_cleanup",
+        raffle_id_snapshot=raffle.id, raffle_title_snapshot=raffle.title, guild_name_snapshot=raffle.guild_name,
         reason=payload.reason.strip(), details={"participant_associations_removed": len(participants)},
     ))
     db.commit()
@@ -1184,7 +1227,7 @@ async def execute_automatic_raffle(
     current_user: User = Depends(get_current_active_user),
 ):
     raffle = _stage1_raffle(db, raffle_id)
-    _require_capability(can_execute_raffle(db, current_user, raffle))
+    _require_raffle_control(db, current_user, raffle)
     try:
         run = await AutomaticRaffleService.execute(db, raffle, current_user, trigger=payload.trigger)
         _audit_admin_action(db, current_user, raffle, "raffle_executed")
@@ -1214,7 +1257,7 @@ def rerun_automatic_raffle(
     current_user: User = Depends(get_current_active_user),
 ):
     raffle = _stage1_raffle(db, raffle_id)
-    _require_capability(can_execute_raffle(db, current_user, raffle))
+    _require_raffle_control(db, current_user, raffle)
     try:
         run = AutomaticRaffleService.rerun(
             db, raffle, current_user, positions=payload.positions, reason=payload.reason,
@@ -1285,7 +1328,10 @@ def publish_raffle_results(
     current_user: User = Depends(get_current_active_user),
 ):
     raffle = _stage1_raffle(db, raffle_id)
-    _require_capability(can_publish_raffle(current_user, raffle))
+    _require_capability(can_publish_raffle(current_user, raffle, db))
+    representative = GuildAuthorizationService.representative_character(db, current_user, raffle.guild_name)
+    if not current_user.is_superuser and representative is None:
+        raise HTTPException(status_code=403, detail="A verified character in this guild is required to publish")
     active_count = db.query(RaffleRunResult.id).join(RaffleRun).filter(
         RaffleRun.raffle_id == raffle.id, RaffleRunResult.is_active.is_(True),
     ).count()
@@ -1294,6 +1340,7 @@ def publish_raffle_results(
     raffle.publication_status = "published"
     raffle.published_at = datetime.now(UTC)
     raffle.published_by_id = current_user.id
+    raffle.published_by_character_name = representative.character_name if representative else None
     NotificationService.emit(db, raffle, "raffle_result_published", f"raffle:{raffle.id}:published:{raffle.current_run_number}")
     _audit_admin_action(db, current_user, raffle, "raffle_published")
     db.commit()
@@ -1307,10 +1354,11 @@ def unpublish_raffle_results(
     current_user: User = Depends(get_current_active_user),
 ):
     raffle = _stage1_raffle(db, raffle_id)
-    _require_capability(can_publish_raffle(current_user, raffle))
+    _require_capability(can_publish_raffle(current_user, raffle, db))
     raffle.publication_status = "private"
     raffle.published_at = None
     raffle.published_by_id = None
+    raffle.published_by_character_name = None
     NotificationService.emit(db, raffle, "raffle_result_unpublished", f"raffle:{raffle.id}:unpublished:{raffle.current_run_number}:{int(datetime.now(UTC).timestamp())}")
     _audit_admin_action(db, current_user, raffle, "raffle_unpublished")
     db.commit()
@@ -1327,12 +1375,12 @@ def grant_raffle_manager(
     current_user: User = Depends(get_current_active_user),
 ):
     raffle = _stage1_raffle(db, raffle_id)
-    _require_capability(can_publish_raffle(current_user, raffle))
+    _require_capability(can_publish_raffle(current_user, raffle, db))
     target = db.query(User).filter(User.id == payload.user_id, User.is_active.is_(True)).first()
     if not target:
         raise HTTPException(status_code=404, detail="User not found")
-    if (target.guild_name or "").casefold() != raffle.guild_name.casefold():
-        raise HTTPException(status_code=400, detail="Raffle managers must belong to the raffle guild")
+    if not GuildAuthorizationService.is_verified_member(db, target, raffle.guild_name):
+        raise HTTPException(status_code=400, detail="Raffle managers must own a verified character in the raffle guild")
     grant = db.query(RaffleManagerGrant).filter(RaffleManagerGrant.raffle_id == raffle.id, RaffleManagerGrant.user_id == target.id).first()
     if grant:
         grant.revoked_at = None
@@ -1354,7 +1402,7 @@ def revoke_raffle_manager(
     current_user: User = Depends(get_current_active_user),
 ):
     raffle = _stage1_raffle(db, raffle_id)
-    _require_capability(can_publish_raffle(current_user, raffle))
+    _require_capability(can_publish_raffle(current_user, raffle, db))
     grant = db.query(RaffleManagerGrant).filter(
         RaffleManagerGrant.raffle_id == raffle.id, RaffleManagerGrant.user_id == user_id,
         RaffleManagerGrant.revoked_at.is_(None),

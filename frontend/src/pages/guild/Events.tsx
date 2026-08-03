@@ -17,6 +17,7 @@ import { useToast } from "../../context/ToastContext";
 import { useConfirmation } from "../../context/ConfirmationContext";
 import { useSearchParams } from "react-router-dom";
 import { useGuildContext } from "../../utils/guildContext";
+import { useGuildCapability } from "../../hooks/useGuildCapability";
 
 export const Events: React.FC = () => {
   useTranslation();
@@ -42,17 +43,9 @@ export const Events: React.FC = () => {
     guild_raffles_enabled: true,
     guild_contests_enabled: true,
   });
-  const canManageEvents = Boolean(
-    user?.is_superuser ||
-    [
-      "leader",
-      "vice leader",
-      "guild leader",
-      "alpha warbringer",
-      "bloodhowl marshal",
-    ].includes((user?.guild_rank || "").toLowerCase()),
-  );
   const scopedGuild = useGuildContext(user);
+  const { canManageGuild } = useGuildCapability("events.manage");
+  const canManageEvents = canManageGuild(scopedGuild);
 
   useEffect(() => {
     const queryType =
@@ -468,7 +461,7 @@ export const Events: React.FC = () => {
           winnerNumber={winnerNumber}
           winnerName={winnerName}
           hasUserJoined={hasUserJoined(selectedEvent)}
-          currentUser={user}
+          canManage={canManageEvents}
         />
       )}
     </div>
@@ -871,7 +864,7 @@ interface EventDetailModalProps {
   winnerNumber: number | null;
   winnerName: string | null;
   hasUserJoined: boolean;
-  currentUser: any;
+  canManage: boolean;
 }
 
 const EventDetailModal: React.FC<EventDetailModalProps> = ({
@@ -882,7 +875,7 @@ const EventDetailModal: React.FC<EventDetailModalProps> = ({
   isDrawing,
   winnerNumber,
   winnerName,
-  currentUser,
+  canManage,
 }) => {
   const toast = useToast();
   const confirmation = useConfirmation();
@@ -892,16 +885,7 @@ const EventDetailModal: React.FC<EventDetailModalProps> = ({
   const [showLog, setShowLog] = useState(false);
   const [manualCharName, setManualCharName] = useState("");
   const [addingManual, setAddingManual] = useState(false);
-  const canManageEvent = Boolean(
-    currentUser?.is_superuser ||
-    [
-      "leader",
-      "vice leader",
-      "guild leader",
-      "alpha warbringer",
-      "bloodhowl marshal",
-    ].includes((currentUser?.guild_rank || "").toLowerCase()),
-  );
+  const canManageEvent = canManage;
   const publicUrl =
     event.type === "contest" && event.public_code
       ? `https://tibiahub.domoforge.com/contests/${event.public_code}`

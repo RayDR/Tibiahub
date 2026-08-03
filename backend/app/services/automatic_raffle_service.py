@@ -10,14 +10,14 @@ from sqlalchemy import func
 from sqlalchemy.orm import Session, selectinload
 
 from app.models.raffle import (
-    Raffle, RaffleEligibilityEntry, RaffleEligibilitySnapshot, RafflePrize,
+    Raffle, RaffleDeliveryAudit, RaffleEligibilityEntry, RaffleEligibilitySnapshot, RafflePrize,
     RafflePrizeDelivery, RaffleRerunAudit, RaffleRun, RaffleRunResult,
 )
 from app.models.user import User
 from app.services.raffle_eligibility_service import RaffleEligibilityError, RaffleEligibilityService
 
 
-ALGORITHM_VERSION = "hmac-sha256-rejection-v1"
+ALGORITHM_VERSION = "hmac-sha256-rejection-v2"
 POSITIONS = ("second", "first")
 
 
@@ -57,6 +57,27 @@ def _derive_index(entropy: bytes, *, snapshot_hash: str, position: str, candidat
         counter += 1
 
 
+def _derive_weighted_index(entropy: bytes, *, snapshot_hash: str, position: str, weights: list[Decimal]) -> tuple[int, str]:
+    units = [int((weight * Decimal("10000")).to_integral_value()) for weight in weights]
+    if not units or any(unit <= 0 for unit in units):
+        raise AutomaticRaffleError("invalid_weight", "Every eligible participant must have a positive frozen weight")
+    total = sum(units)
+    limit = (1 << 256) - ((1 << 256) % total)
+    counter = 0
+    while True:
+        message = f"{ALGORITHM_VERSION}|{snapshot_hash}|{position}|{counter}".encode()
+        digest = hmac.new(entropy, message, hashlib.sha256).digest()
+        value = int.from_bytes(digest, "big")
+        if value < limit:
+            target = value % total
+            cumulative = 0
+            for index, unit in enumerate(units):
+                cumulative += unit
+                if target < cumulative:
+                    return index, hashlib.sha256(digest).hexdigest()
+        counter += 1
+
+
 def _serialize_result(result: RaffleRunResult) -> dict:
     delivery = result.delivery
     return {
@@ -76,6 +97,18 @@ def _serialize_result(result: RaffleRunResult) -> dict:
         "delivery_note": delivery.note,
         "delivery_history": [{"previous_status": item.previous_status, "new_status": item.new_status, "actor": item.actor.username, "note": item.note, "admin_override": item.admin_override, "created_at": item.created_at} for item in delivery.history],
     }
+
+
+def _entry_identity(raffle: Raffle, entry: RaffleEligibilityEntry) -> str:
+    if raffle.unique_account_participation and entry.known_account_identity_key:
+        return entry.known_account_identity_key
+    return f"character:{entry.normalized_character_name}"
+
+
+def _result_identity(raffle: Raffle, result: RaffleRunResult) -> str:
+    if raffle.unique_account_participation and result.participant_account_identity_key:
+        return result.participant_account_identity_key
+    return f"character:{result.participant_normalized_character_name}"
 
 
 def serialize_run(run: RaffleRun) -> dict:
@@ -130,21 +163,36 @@ class AutomaticRaffleService:
 
     @staticmethod
     def _eligible(snapshot: RaffleEligibilitySnapshot) -> list[RaffleEligibilityEntry]:
-        return sorted((entry for entry in snapshot.entries if entry.is_eligible), key=lambda row: (row.user_id, (row.character_name or "").casefold()))
+        return sorted((entry for entry in snapshot.entries if entry.is_eligible), key=lambda row: ((row.normalized_character_name or ""), row.user_id or 0))
 
     @staticmethod
-    def _select(db: Session, *, raffle: Raffle, run: RaffleRun, snapshot: RaffleEligibilitySnapshot, entropy: bytes, positions: list[str], excluded_user_ids: set[int]) -> list[RaffleRunResult]:
+    def _select(db: Session, *, raffle: Raffle, run: RaffleRun, snapshot: RaffleEligibilitySnapshot, entropy: bytes, positions: list[str], excluded_identity_keys: set[str]) -> list[RaffleRunResult]:
         prizes = validate_automatic_prizes(raffle)
-        candidates = [entry for entry in AutomaticRaffleService._eligible(snapshot) if entry.user_id not in excluded_user_ids]
+        candidates = [
+            entry for entry in AutomaticRaffleService._eligible(snapshot)
+            if _entry_identity(raffle, entry) not in excluded_identity_keys
+        ]
         results = []
         for position in POSITIONS:
             if position not in positions:
                 continue
-            index, entropy_hash = _derive_index(entropy, snapshot_hash=snapshot.snapshot_hash, position=position, candidate_count=len(candidates))
+            if raffle.weighting_mode == "weighted":
+                index, entropy_hash = _derive_weighted_index(
+                    entropy, snapshot_hash=snapshot.snapshot_hash, position=position,
+                    weights=[Decimal(entry.weight_snapshot) for entry in candidates],
+                )
+            else:
+                index, entropy_hash = _derive_index(entropy, snapshot_hash=snapshot.snapshot_hash, position=position, candidate_count=len(candidates))
             selected = candidates.pop(index)
             result = RaffleRunResult(
                 run_id=run.id, prize_id=prizes[position].id, prize_position=position,
                 participant_user_id=selected.user_id, participant_character_name=selected.character_name,
+                participant_roster_character_id=selected.guild_roster_character_id,
+                participant_normalized_character_name=selected.normalized_character_name,
+                participant_account_identity_key=selected.known_account_identity_key,
+                participant_guild_name=selected.guild_name or raffle.guild_name,
+                participant_world_name=selected.world_name,
+                participant_weight=selected.weight_snapshot,
                 selection_index=index, candidate_count=len(candidates) + 1,
                 derived_entropy_hash=entropy_hash, is_active=True,
             )
@@ -182,7 +230,7 @@ class AutomaticRaffleService:
             raffle = db.query(Raffle).options(selectinload(Raffle.prizes)).filter(Raffle.id == raffle_id).one()
             snapshot = db.query(RaffleEligibilitySnapshot).options(selectinload(RaffleEligibilitySnapshot.entries)).filter(RaffleEligibilitySnapshot.id == snapshot_id).one()
             run, entropy = AutomaticRaffleService._create_run(db, raffle, snapshot, actor, trigger)
-            results = AutomaticRaffleService._select(db, raffle=raffle, run=run, snapshot=snapshot, entropy=entropy, positions=list(POSITIONS), excluded_user_ids=set())
+            results = AutomaticRaffleService._select(db, raffle=raffle, run=run, snapshot=snapshot, entropy=entropy, positions=list(POSITIONS), excluded_identity_keys=set())
             completed_at = now_utc()
             for result in results:
                 result.delivery.delivery_deadline_at = completed_at + timedelta(hours=24)
@@ -245,6 +293,7 @@ class AutomaticRaffleService:
             selectinload(RaffleRun.results).selectinload(RaffleRunResult.prize),
             selectinload(RaffleRun.results).selectinload(RaffleRunResult.delivery),
             selectinload(RaffleRun.results).selectinload(RaffleRunResult.delivery).selectinload(RafflePrizeDelivery.delivered_by),
+            selectinload(RaffleRun.results).selectinload(RaffleRunResult.delivery).selectinload(RafflePrizeDelivery.history).selectinload(RaffleDeliveryAudit.actor),
         ).filter(RaffleRun.id == run_id).one()
 
     @staticmethod
@@ -268,8 +317,11 @@ class AutomaticRaffleService:
             source_run = max((result.run for result in active), key=lambda row: row.run_number)
             snapshot = source_run.snapshot
             run, entropy = AutomaticRaffleService._create_run(db, raffle, snapshot, actor, "rerun", source_run.id)
-            excluded = {result.participant_user_id for position, result in active_by_position.items() if position not in unique_positions}
-            replacements = AutomaticRaffleService._select(db, raffle=raffle, run=run, snapshot=snapshot, entropy=entropy, positions=unique_positions, excluded_user_ids=excluded)
+            excluded = {
+                _result_identity(raffle, result)
+                for position, result in active_by_position.items() if position not in unique_positions
+            }
+            replacements = AutomaticRaffleService._select(db, raffle=raffle, run=run, snapshot=snapshot, entropy=entropy, positions=unique_positions, excluded_identity_keys=excluded)
             replacement_by_position = {result.prize_position: result for result in replacements}
             for position in unique_positions:
                 previous = active_by_position[position]

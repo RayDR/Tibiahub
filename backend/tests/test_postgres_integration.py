@@ -1,13 +1,15 @@
 """PostgreSQL-only integration coverage for the foundation baseline.
 
 Set TEST_DATABASE_URL to a disposable database whose name visibly contains
-``test``. The fixture destroys only that database's public schema.
+``test``. The fixture resets only test-role-owned application objects in that
+database's public schema and preserves administrator-provisioned extensions.
 """
 from __future__ import annotations
 
 import os
 import json
 import subprocess
+import sys
 from concurrent.futures import ThreadPoolExecutor
 from datetime import UTC, datetime, timedelta
 from pathlib import Path
@@ -34,7 +36,8 @@ from app.models.external_data import Item, QuestMission, TibiaWikiLocation, Tibi
 from app.models.creature import Creature
 from app.models.guild_member_snapshot import GuildMemberSnapshot
 from app.models.leadership import GuildLeadershipApplication, GuildLeadershipOpening, GuildLeadershipRole
-from app.models.raffle import InternalNotification, Raffle
+from app.models.guild_management import GuildRosterCharacter
+from app.models.raffle import InternalNotification, Raffle, RaffleParticipant
 from app.models.user import User
 from app.models.user_character import UserCharacter
 from app.models.auth_security import AuthOneTimeToken, AuthRequestEvent
@@ -73,19 +76,100 @@ def _test_url() -> str:
     return value
 
 
+def _reset_disposable_public_objects(connection) -> None:
+    """Remove test-role application objects while preserving PostGIS.
+
+    PostGIS is intentionally provisioned by the PostgreSQL administrator and
+    is not owned by the least-privileged test role. Dropping the extension (or
+    its public schema) would incorrectly require superuser/extension-owner
+    privileges. Every object removed here must be owned by the connected test
+    role and must not belong to any extension.
+    """
+    connection.execute(text("""
+        DO $reset$
+        DECLARE item record;
+        BEGIN
+          FOR item IN
+            SELECT c.relkind, n.nspname, c.relname
+            FROM pg_class c
+            JOIN pg_namespace n ON n.oid = c.relnamespace
+            WHERE n.nspname = 'public'
+              AND c.relowner = (SELECT oid FROM pg_roles WHERE rolname = current_user)
+              AND c.relkind IN ('r', 'p', 'v', 'm', 'S')
+              AND NOT EXISTS (
+                SELECT 1 FROM pg_depend d
+                JOIN pg_extension e ON e.oid = d.refobjid
+                WHERE d.classid = 'pg_class'::regclass
+                  AND d.objid = c.oid
+                  AND d.deptype = 'e'
+              )
+            ORDER BY CASE c.relkind WHEN 'v' THEN 1 WHEN 'm' THEN 2 WHEN 'r' THEN 3 WHEN 'p' THEN 3 ELSE 4 END
+          LOOP
+            EXECUTE format(
+              'DROP %s IF EXISTS %I.%I CASCADE',
+              CASE item.relkind
+                WHEN 'v' THEN 'VIEW'
+                WHEN 'm' THEN 'MATERIALIZED VIEW'
+                WHEN 'S' THEN 'SEQUENCE'
+                ELSE 'TABLE'
+              END,
+              item.nspname,
+              item.relname
+            );
+          END LOOP;
+          FOR item IN
+            SELECT n.nspname, p.proname, pg_get_function_identity_arguments(p.oid) AS arguments
+            FROM pg_proc p
+            JOIN pg_namespace n ON n.oid = p.pronamespace
+            WHERE n.nspname = 'public'
+              AND p.proowner = (SELECT oid FROM pg_roles WHERE rolname = current_user)
+              AND NOT EXISTS (
+                SELECT 1 FROM pg_depend d
+                JOIN pg_extension e ON e.oid = d.refobjid
+                WHERE d.classid = 'pg_proc'::regclass
+                  AND d.objid = p.oid
+                  AND d.deptype = 'e'
+              )
+          LOOP
+            EXECUTE format(
+              'DROP FUNCTION IF EXISTS %I.%I(%s) CASCADE',
+              item.nspname,
+              item.proname,
+              item.arguments
+            );
+          END LOOP;
+          FOR item IN
+            SELECT n.nspname, t.typname
+            FROM pg_type t
+            JOIN pg_namespace n ON n.oid = t.typnamespace
+            WHERE n.nspname = 'public'
+              AND t.typtype IN ('e', 'd')
+              AND t.typowner = (SELECT oid FROM pg_roles WHERE rolname = current_user)
+              AND NOT EXISTS (
+                SELECT 1 FROM pg_depend d
+                JOIN pg_extension e ON e.oid = d.refobjid
+                WHERE d.classid = 'pg_type'::regclass
+                  AND d.objid = t.oid
+                  AND d.deptype = 'e'
+              )
+          LOOP
+            EXECUTE format('DROP TYPE IF EXISTS %I.%I CASCADE', item.nspname, item.typname);
+          END LOOP;
+        END
+        $reset$;
+    """))
+
+
 @pytest.fixture(scope="session")
 def pg_engine():
     test_url = _test_url()
     engine = create_engine(test_url, pool_pre_ping=True)
     with engine.begin() as connection:
         if not connection.execute(text(
-            "SELECT EXISTS (SELECT 1 FROM pg_available_extensions WHERE name='postgis')"
+            "SELECT EXISTS (SELECT 1 FROM pg_extension WHERE extname='postgis')"
         )).scalar_one():
-            pytest.skip("The disposable PostgreSQL server does not provide PostGIS")
-        connection.execute(text("DROP EXTENSION IF EXISTS postgis CASCADE"))
-        connection.execute(text("DROP SCHEMA public CASCADE"))
-        connection.execute(text("CREATE SCHEMA public"))
-        connection.execute(text("CREATE EXTENSION postgis"))
+            pytest.fail("The disposable PostgreSQL database must have PostGIS pre-provisioned")
+        _reset_disposable_public_objects(connection)
     environment = os.environ.copy()
     environment.update(APP_ENV="test", DATABASE_URL=test_url)
     subprocess.run(
@@ -106,10 +190,26 @@ def pg_session(pg_engine):
     session = factory()
     yield session
     session.close()
-    names = [name for name in inspect(pg_engine).get_table_names() if name != "alembic_version"]
-    quoted = ", ".join(f'"{name}"' for name in names)
-    if quoted:
-        with pg_engine.begin() as connection:
+    with pg_engine.begin() as connection:
+        names = list(connection.execute(text("""
+            SELECT c.relname
+            FROM pg_class c
+            JOIN pg_namespace n ON n.oid = c.relnamespace
+            WHERE n.nspname = 'public'
+              AND c.relkind IN ('r', 'p')
+              AND c.relname != 'alembic_version'
+              AND c.relowner = (SELECT oid FROM pg_roles WHERE rolname = current_user)
+              AND NOT EXISTS (
+                SELECT 1 FROM pg_depend d
+                JOIN pg_extension e ON e.oid = d.refobjid
+                WHERE d.classid = 'pg_class'::regclass
+                  AND d.objid = c.oid
+                  AND d.deptype = 'e'
+              )
+            ORDER BY c.relname
+        """)).scalars())
+        quoted = ", ".join(connection.dialect.identifier_preparer.quote(name) for name in names)
+        if quoted:
             connection.execute(text(f"TRUNCATE TABLE {quoted} RESTART IDENTITY CASCADE"))
 
 
@@ -198,7 +298,7 @@ def test_empty_database_upgrades_to_complete_postgresql_schema(pg_engine):
         "raffles", "raffle_scheduler_attempts", "internal_notifications", "sync_jobs",
         "workspace_audits", "guild_leadership_openings", "media_assets", "creatures",
         "auth_one_time_tokens", "auth_request_events", "character_ownership_claims",
-        "character_ownership_history",
+        "character_ownership_history", "guild_roster_characters", "guild_management_grants",
         "knowledge_external_mappings",
         "knowledge_creature_item_drops", "tibiawiki_items",
         "quest_missions", "knowledge_accesses", "knowledge_quest_relations",
@@ -219,7 +319,7 @@ def test_empty_database_upgrades_to_complete_postgresql_schema(pg_engine):
         constraints = set(connection.execute(text(
             "SELECT conname FROM pg_constraint WHERE connamespace = 'public'::regnamespace"
         )).scalars())
-        assert {"uq_event_participant_user", "uq_raffle_participant_user", "fk_leadership_application_assignment"}.issubset(constraints)
+        assert {"uq_event_participant_user", "uq_guild_roster_identity", "fk_leadership_application_assignment"}.issubset(constraints)
         assert {
             "ck_auth_token_purpose", "ck_auth_token_hash_length", "ck_auth_request_purpose",
             "ck_character_claim_status", "ck_character_claim_hash_length",
@@ -241,6 +341,8 @@ def test_empty_database_upgrades_to_complete_postgresql_schema(pg_engine):
         assert "ix_spatial_routes_geom" in index_definitions
         assert "uq_user_characters_verified_normalized_name" in index_definitions
         assert "uq_character_active_claim_user_name" in index_definitions
+        assert "uq_raffle_active_participant_character" in index_definitions
+        assert "uq_raffle_active_known_account" in index_definitions
         user_columns = {column["name"]: column for column in inspect(pg_engine).get_columns("users")}
         assert {"is_superuser", "is_moderator", "is_writer"}.issubset(user_columns)
         assert all(user_columns[name]["nullable"] is False for name in ("is_superuser", "is_moderator", "is_writer"))
@@ -252,7 +354,21 @@ def test_empty_database_upgrades_to_complete_postgresql_schema(pg_engine):
             text("SELECT enabled, health, supports_entities FROM knowledge_providers WHERE provider_id='tibiawiki'")
         ).one()
         assert provider_enabled is False and provider_health == "disabled"
-        assert supported_entities == ["creature", "item", "quest", "npc", "location", "area", "town"]
+        assert supported_entities == [
+            "creature",
+            "boss",
+            "item",
+            "quest",
+            "mission",
+            "access",
+            "npc",
+            "location",
+            "area",
+            "town",
+            "map_point",
+            "map_region",
+            "route",
+        ]
 
 
 def test_auth_token_consumption_and_request_cooldown_are_atomic_on_postgresql(pg_engine, pg_session):
@@ -766,14 +882,14 @@ def test_auth_profile_guild_membership_event_and_join_flow(pg_client, pg_session
         json={
             "username": "postgres-auth",
             "email": "postgres-auth@example.com",
-            "password": "postgres-password",
+            "password": "postgres-password-7",
             "tibia_character_name": "Postgres Knight",
         },
     )
     assert registered.status_code == 200
     login = pg_client.post(
         "/api/v1/auth/login",
-        data={"username": "postgres-auth", "password": "postgres-password"},
+        data={"username": "postgres-auth", "password": "postgres-password-7"},
     )
     assert login.status_code == 200
     headers = {"Authorization": f"Bearer {login.json()['access_token']}"}
@@ -1290,3 +1406,102 @@ def test_readiness_schema_mismatch_unavailable_database_and_rollback(pg_engine):
             verify_connection_and_schema(unavailable)
     finally:
         unavailable.dispose()
+
+
+def test_postgresql_external_participant_partial_uniqueness(pg_session):
+    creator = _user(pg_session, "external-participant-admin")
+    raffle = Raffle(
+        title="External participant constraints", public_code="PX1001",
+        guild_name="Postgres Guild", scope_type="guild", world_name="Antica",
+        access_mode="guild_only", run_mode="manual", purpose="real",
+        status="open", created_by_id=creator.id,
+        unique_account_participation=True, weighting_mode="equal",
+    )
+    pg_session.add(raffle)
+    pg_session.flush()
+    external = RaffleParticipant(
+        raffle_id=raffle.id, character_name="External Knight",
+        normalized_character_name="external knight", guild_name_snapshot=raffle.guild_name,
+        user_id=None, known_account_identity_key=None, enforced_account_identity_key=None,
+        weight=1, weight_multiplier=1, source="guild_roster",
+    )
+    another_unknown = RaffleParticipant(
+        raffle_id=raffle.id, character_name="External Druid",
+        normalized_character_name="external druid", guild_name_snapshot=raffle.guild_name,
+        user_id=None, known_account_identity_key=None, enforced_account_identity_key=None,
+        weight=1, weight_multiplier=1, source="guild_roster",
+    )
+    pg_session.add_all([external, another_unknown])
+    pg_session.flush()
+    assert external.user_id is None and another_unknown.user_id is None
+
+    with pytest.raises(IntegrityError):
+        with pg_session.begin_nested():
+            pg_session.add(RaffleParticipant(
+                raffle_id=raffle.id, character_name="EXTERNAL KNIGHT",
+                normalized_character_name="external knight", guild_name_snapshot=raffle.guild_name,
+                weight=1, weight_multiplier=1, source="guild_roster",
+            ))
+            pg_session.flush()
+
+    external.is_deleted = True
+    external.is_eligible = False
+    pg_session.flush()
+    pg_session.add(RaffleParticipant(
+        raffle_id=raffle.id, character_name="External Knight",
+        normalized_character_name="external knight", guild_name_snapshot=raffle.guild_name,
+        weight=1, weight_multiplier=1, source="guild_roster",
+    ))
+    pg_session.flush()
+
+    known_key = f"user:{creator.id}"
+    pg_session.add(RaffleParticipant(
+        raffle_id=raffle.id, user_id=creator.id, character_name="Known Main",
+        normalized_character_name="known main", known_account_identity_key=known_key,
+        enforced_account_identity_key=known_key, guild_name_snapshot=raffle.guild_name,
+        weight=1, weight_multiplier=1, source="guild_roster",
+    ))
+    pg_session.flush()
+    with pytest.raises(IntegrityError):
+        with pg_session.begin_nested():
+            pg_session.add(RaffleParticipant(
+                raffle_id=raffle.id, user_id=creator.id, character_name="Known Alt",
+                normalized_character_name="known alt", known_account_identity_key=known_key,
+                enforced_account_identity_key=known_key, guild_name_snapshot=raffle.guild_name,
+                weight=1, weight_multiplier=1, source="guild_roster",
+            ))
+            pg_session.flush()
+
+
+def test_recover_admin_cli_verifies_fresh_post_commit_session(pg_session, tmp_path):
+    user = _user(pg_session, "cli-recovery-admin")
+    user.is_active = False
+    user.is_superuser = False
+    pg_session.commit()
+    password = "  CLI recovered password 2026!  "
+    password_file = tmp_path / "admin-password"
+    password_file.write_text(password + "\n", encoding="utf-8")
+    password_file.chmod(0o600)
+    environment = os.environ.copy()
+    environment.update(APP_ENV="test", DATABASE_URL=_test_url())
+    completed = subprocess.run(
+        [
+            sys.executable, str(BACKEND_ROOT.parent / "scripts" / "recover_admin.py"),
+            "--identifier", user.username,
+            "--password-file", str(password_file.resolve()),
+            "--confirm", "RECOVER TIBIAHUB ADMIN",
+        ],
+        cwd=BACKEND_ROOT.parent,
+        env=environment,
+        check=False,
+        capture_output=True,
+        text=True,
+    )
+    assert completed.returncode == 0, completed.stderr
+    assert "post_commit_verified=true" in completed.stdout
+    assert password not in completed.stdout + completed.stderr
+    pg_session.expire_all()
+    persisted = pg_session.get(User, user.id)
+    from app.core.security import verify_password
+    assert persisted.is_active is True and persisted.is_superuser is True
+    assert verify_password(password, persisted.hashed_password)

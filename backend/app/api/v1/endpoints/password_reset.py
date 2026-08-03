@@ -5,11 +5,12 @@ import logging
 from typing import Literal
 
 from fastapi import APIRouter, BackgroundTasks, Depends, HTTPException, Request
-from pydantic import BaseModel, EmailStr, Field, model_validator
+from pydantic import BaseModel, EmailStr, Field, field_validator, model_validator
 from sqlalchemy.orm import Session
 
 from app.api.v1.endpoints.auth import get_current_admin_user
 from app.core import security
+from app.core.password_policy import validate_password
 from app.core.config import settings
 from app.db.database import get_db
 from app.models.user import User
@@ -37,7 +38,12 @@ class PasswordResetRequest(BaseModel):
 
 class PasswordResetConfirm(BaseModel):
     token: str = Field(..., min_length=32, max_length=256)
-    new_password: str = Field(..., min_length=12, max_length=128)
+    new_password: str
+
+    @field_validator("new_password")
+    @classmethod
+    def password_policy(cls, value: str) -> str:
+        return validate_password(value)
 
 
 class AdminPasswordResetByEmail(BaseModel):

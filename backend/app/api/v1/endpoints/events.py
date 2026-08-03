@@ -23,6 +23,7 @@ from app.schemas.events import (
 from app.api.v1.endpoints.auth import get_current_user, get_current_admin_user
 from app.api.v1.endpoints.auth import get_current_manager_user
 from app.core.permissions import can_manage_guild, is_global_admin
+from app.services.guild_authorization_service import GuildAuthorizationService
 
 from app.services.tibia_api import get_active_guild_members, get_character_info, get_guild_info
 from app.services.public_code import generate_unique_code
@@ -31,8 +32,8 @@ import asyncio
 router = APIRouter()
 
 
-def _require_event_management(current_user: User, event: Event) -> None:
-    if can_manage_guild(current_user, event.guild_name):
+def _require_event_management(db: Session, current_user: User, event: Event) -> None:
+    if can_manage_guild(current_user, event.guild_name, db=db, capability="events.manage"):
         return
     raise HTTPException(status_code=403, detail="Insufficient permissions for this guild event")
 
@@ -71,10 +72,15 @@ def get_events(
         if requested_guild:
             query = query.filter(func.lower(Event.guild_name) == requested_guild.lower())
     else:
-        own_guild = (current_user.guild_name or "").strip()
-        if not own_guild:
+        selected_guild = requested_guild or (current_user.guild_name or "").strip()
+        if not selected_guild:
             return []
-        query = query.filter(func.lower(Event.guild_name) == own_guild.lower())
+        if not (
+            GuildAuthorizationService.is_verified_member(db, current_user, selected_guild)
+            or GuildAuthorizationService.has_grant(db, current_user, selected_guild, "events.manage")
+        ):
+            raise HTTPException(status_code=403, detail="Guild workspace access denied")
+        query = query.filter(func.lower(Event.guild_name) == selected_guild.lower())
     
     events = query.order_by(desc(Event.created_at)).offset(skip).limit(limit).all()
     
@@ -182,7 +188,7 @@ def update_event(
     event = db.query(Event).filter(Event.id == event_id).first()
     if not event:
         raise HTTPException(status_code=404, detail="Event not found")
-    _require_event_management(current_user, event)
+    _require_event_management(db, current_user, event)
     
     update_data = event_update.dict(exclude_unset=True)
     if "status" in update_data and update_data["status"] not in {"active", "disabled", "completed", "archived", "cancelled"}:
@@ -210,7 +216,7 @@ def delete_event(
     event = db.query(Event).filter(Event.id == event_id).first()
     if not event:
         raise HTTPException(status_code=404, detail="Event not found")
-    _require_event_management(current_user, event)
+    _require_event_management(db, current_user, event)
     
     event.is_active = False
     event.is_deleted = True
@@ -231,7 +237,7 @@ def restore_event(
     event = db.query(Event).filter(Event.id == event_id).first()
     if not event:
         raise HTTPException(status_code=404, detail="Event not found")
-    _require_event_management(current_user, event)
+    _require_event_management(db, current_user, event)
     event.is_active = True
     event.is_deleted = False
     event.deleted_at = None
@@ -315,7 +321,7 @@ def draw_winner(
     event = db.query(Event).filter(Event.id == event_id).first()
     if not event:
         raise HTTPException(status_code=404, detail="Event not found")
-    _require_event_management(current_user, event)
+    _require_event_management(db, current_user, event)
     
     if event.is_drawn:
         raise HTTPException(status_code=400, detail="Winner already drawn")
@@ -384,7 +390,7 @@ async def add_manual_participant(
     event = db.query(Event).filter(Event.id == event_id, Event.is_active == True).first()
     if not event:
         raise HTTPException(status_code=404, detail="Event not found")
-    _require_event_management(current_user, event)
+    _require_event_management(db, current_user, event)
     
     if not event.is_public:
         raise HTTPException(status_code=400, detail="Can only add manual participants to public events")
@@ -466,7 +472,7 @@ async def load_guild_participants(
     event = db.query(Event).filter(Event.id == event_id, Event.is_active == True).first()
     if not event:
         raise HTTPException(status_code=404, detail="Event not found")
-    _require_event_management(current_user, event)
+    _require_event_management(db, current_user, event)
     
     if not event.is_public:
         raise HTTPException(status_code=400, detail="Can only load guild participants for public events")
@@ -648,7 +654,7 @@ def share_event(
     event = db.query(Event).filter(Event.id == event_id).first()
     if not event:
         raise HTTPException(status_code=404, detail="Event not found")
-    _require_event_management(current_user, event)
+    _require_event_management(db, current_user, event)
     if event.type == "contest":
         return {"public_code": event.public_code, "url": f"https://tibiahub.domoforge.com/contests/{event.public_code}"}
     return {"public_code": event.public_code, "url": f"https://tibiahub.domoforge.com/public/event/{event.uuid}"}
@@ -804,7 +810,7 @@ async def auto_draw_raffle(
     event = db.query(Event).filter(Event.uuid == uuid).first()
     if not event:
         raise HTTPException(status_code=404, detail="Event not found")
-    _require_event_management(current_user, event)
+    _require_event_management(db, current_user, event)
         
     if event.is_drawn:
         # Get winner info
@@ -919,7 +925,7 @@ async def delete_participant(
     event = db.query(Event).filter(Event.id == event_id, Event.is_active == True).first()
     if not event:
         raise HTTPException(status_code=404, detail="Event not found")
-    _require_event_management(current_user, event)
+    _require_event_management(db, current_user, event)
     
     if not event.is_public:
         raise HTTPException(status_code=400, detail="Can only delete participants from public events")
@@ -955,7 +961,7 @@ async def exclude_participant(
     event = db.query(Event).filter(Event.id == event_id, Event.is_active == True).first()
     if not event:
         raise HTTPException(status_code=404, detail="Event not found")
-    _require_event_management(current_user, event)
+    _require_event_management(db, current_user, event)
     
     if not event.is_public:
         raise HTTPException(status_code=400, detail="Can only exclude participants from public events")

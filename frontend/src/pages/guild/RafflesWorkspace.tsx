@@ -15,13 +15,13 @@ import { useAuth } from "../../context/AuthContext";
 import {
   EmptyState,
   MobileSectionTabs,
-  RoleBadge,
   WorkspaceHeader,
 } from "../../components/workspace/WorkspacePrimitives";
 import RaffleCreationWizard from "../../components/raffle/RaffleCreationWizard";
 import { raffleApi, RaffleWorkspaceItem } from "../../services/raffle";
 import AutomaticRaffleOperations from "./AutomaticRaffleOperations";
 import { useToast } from "../../context/ToastContext";
+import { useConfirmation } from "../../context/ConfirmationContext";
 
 const timeline = [
   "draft",
@@ -35,6 +35,18 @@ const timeline = [
   "delivery",
   "completed",
 ];
+
+function getErrorMessage(error: unknown): string | undefined {
+  if (!error || typeof error !== "object") return undefined;
+  const candidate = error as { message?: unknown; response?: { data?: { detail?: unknown } } };
+  const detail = candidate.response?.data?.detail;
+  if (typeof detail === "string") return detail;
+  if (detail && typeof detail === "object" && "message" in detail) {
+    const message = (detail as { message?: unknown }).message;
+    if (typeof message === "string") return message;
+  }
+  return typeof candidate.message === "string" ? candidate.message : undefined;
+}
 
 function stageFor(item: RaffleWorkspaceItem): number {
   if (item.status === "completed") return 9;
@@ -83,9 +95,12 @@ export default function RafflesWorkspace({
   const { t } = useTranslation();
   const { user } = useAuth();
   const toast = useToast();
+  const confirmation = useConfirmation();
   const [params, setParams] = useSearchParams();
   const navigate = useNavigate();
-  const guildName = fixedGuild || user?.guild_name || "";
+  const [authorizedGuilds, setAuthorizedGuilds] = useState<string[]>(fixedGuild ? [fixedGuild] : []);
+  const [selectedGuild, setSelectedGuild] = useState(fixedGuild || "");
+  const guildName = fixedGuild || selectedGuild || user?.guild_name || "";
   const worldName = fixedWorld || user?.world_name || "";
   const [items, setItems] = useState<RaffleWorkspaceItem[]>([]);
   const [loading, setLoading] = useState(true);
@@ -104,6 +119,13 @@ export default function RafflesWorkspace({
   useEffect(() => {
     void load();
   }, [load]);
+  useEffect(() => {
+    void raffleApi.manageableGuilds().then(names => {
+      const options = fixedGuild ? [fixedGuild] : names;
+      setAuthorizedGuilds(options);
+      setSelectedGuild(current => current || options[0] || "");
+    }).catch(() => setAuthorizedGuilds(fixedGuild ? [fixedGuild] : []));
+  }, [fixedGuild]);
   const guildItems = useMemo(
     () =>
       items.filter(
@@ -133,9 +155,7 @@ export default function RafflesWorkspace({
     "results",
     "history",
   ].map((id) => ({ id, label: t(`workspace.raffles.tabs.${id}`) }));
-  const rank = (user?.guild_rank || "").toLocaleLowerCase();
-  const leader = rank.includes("leader") || rank.includes("alpha");
-  const canCreate = assistance ? Boolean(user?.is_superuser) : leader;
+  const canCreate = Boolean(user?.is_superuser || authorizedGuilds.length);
   const canManage =
     Boolean(user?.is_superuser && assistance) ||
     modern.some((item) => item.capabilities.manage);
@@ -151,6 +171,7 @@ export default function RafflesWorkspace({
         toast.success(t("raffle.workspace.actionArchived", "Raffle archived"));
       }
       if (action === "delete") {
+        if (!(await confirmation.confirm(t("raffle.workspace.permanentDeleteConfirm", { title: item.title }), { danger: true, confirmLabel: t("raffle.workspace.permanentDelete") }))) return;
         await raffleApi.permanentDelete(
           item.id,
           "Permanent deletion requested from workspace action menu",
@@ -159,8 +180,8 @@ export default function RafflesWorkspace({
         toast.success(t("raffle.workspace.actionDeleted", "Raffle permanently deleted"));
       }
       await load();
-    } catch (error: any) {
-      toast.error(error?.response?.data?.detail || error?.message || t("raffle.workspace.actionFailed", "Action failed"));
+    } catch (error: unknown) {
+      toast.error(getErrorMessage(error) || t("raffle.workspace.actionFailed", "Action failed"));
     }
   }
 
@@ -176,17 +197,8 @@ export default function RafflesWorkspace({
         badge={assistance ? t("workspace.assistance.badge") : undefined}
         action={
           <div className="flex items-center gap-2">
-            {user?.guild_rank && (
-              <RoleBadge
-                role={
-                  leader
-                    ? "guild_leader"
-                    : rank.includes("vice")
-                      ? "guild_viceleader"
-                      : "guild_member"
-                }
-              />
-            )}
+            {!fixedGuild && authorizedGuilds.length > 1 ? <label className="sr-only" htmlFor="raffle-guild-selector">{t("raffle.workspace.fields.guild")}</label> : null}
+            {!fixedGuild && authorizedGuilds.length > 1 ? <select id="raffle-guild-selector" value={guildName} onChange={event => setSelectedGuild(event.target.value)} className="min-h-11 rounded-lg border border-line bg-surface px-3">{authorizedGuilds.map(name => <option key={name}>{name}</option>)}</select> : null}
             {canCreate && (
               <button
                 type="button"

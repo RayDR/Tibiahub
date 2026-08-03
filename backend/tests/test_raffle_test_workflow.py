@@ -1,6 +1,9 @@
 from datetime import UTC, datetime, timedelta
 
-from app.models.raffle import RaffleParticipant, RaffleTestAudit
+from app.models.raffle import (
+    Raffle, RaffleEligibilitySnapshot, RaffleParticipant, RaffleRun,
+    RaffleSchedulerAttempt, RaffleTestAudit,
+)
 from app.models.user import User
 from app.models.user_character import UserCharacter
 from tests.conftest import make_user
@@ -135,3 +138,65 @@ def test_safe_retry_is_global_admin_and_test_only(db, client):
     assert retried.status_code == 200, retried.text
     assert retried.json()["execution_state"] == "pending"
     assert db.query(RaffleTestAudit).filter_by(raffle_id=test_raffle.id, action="test_scheduler_retry").count() == 1
+
+
+def test_failed_test_raffle_with_manager_review_and_audits_can_be_permanently_deleted(db, client):
+    admin = make_user(db, username="test_delete_admin", is_superuser=True)
+    unrelated_user = make_user(db, username="test_delete_unrelated")
+    test_raffle = make_automatic_raffle(db, admin)
+    real_raffle = make_automatic_raffle(db, admin, purpose="real")
+    test_raffle.execution_state = "failed"
+    test_raffle.last_error_code = "manager_review_required"
+    test_raffle.last_error_summary = "Manager review error"
+    snapshot = RaffleEligibilitySnapshot(
+        raffle=test_raffle, snapshot_number=1, cutoff_at=datetime.now(UTC), timezone_name="UTC",
+        eligibility_days=7, source="persisted_raffle_participants", candidate_count=0,
+        eligible_count=0, excluded_count=0, snapshot_hash="a" * 64, created_by_id=admin.id,
+    )
+    db.add(snapshot)
+    db.flush()
+    db.add_all([
+        RaffleRun(
+            raffle_id=test_raffle.id, run_number=1, snapshot_id=snapshot.id,
+            trigger="scheduler", state="failed", requested_by_id=admin.id,
+            failure_code="manager_review_required", failure_summary="Manager review error",
+            algorithm_version="hmac-sha256-rejection-v2",
+        ),
+        RaffleSchedulerAttempt(
+            raffle_id=test_raffle.id, job_id="failed-test-delete-job", worker_id="test-worker",
+            trigger="scheduler", attempt_number=1, state="failed", retryable=False,
+            failure_code="manager_review_required", failure_summary="Manager review error",
+            claimed_at=datetime.now(UTC), completed_at=datetime.now(UTC),
+        ),
+        RaffleTestAudit(
+            raffle_id=test_raffle.id, raffle_id_snapshot=test_raffle.id,
+            raffle_title_snapshot=test_raffle.title, guild_name_snapshot=test_raffle.guild_name,
+            actor_id=admin.id, action="manager_review_error",
+            details={"failure_code": "manager_review_required"},
+        ),
+    ])
+    db.commit()
+    deleted_id = test_raffle.id
+    real_id = real_raffle.id
+    unrelated_id = unrelated_user.id
+
+    protected_real = client.delete(
+        f"/api/v1/raffles/{real_id}/permanent",
+        params={"reason": "Must remain protected", "confirmation": f"DELETE RAFFLE {real_id}"},
+        headers=auth(admin),
+    )
+    assert protected_real.status_code == 409
+
+    response = client.delete(
+        f"/api/v1/raffles/{deleted_id}/permanent",
+        params={"reason": "Remove failed isolated test", "confirmation": f"DELETE RAFFLE {deleted_id}"},
+        headers=auth(admin),
+    )
+    assert response.status_code == 200, response.text
+    assert response.json()["deleted"] is True and response.json()["audit_preserved"] is True
+    assert db.get(Raffle, deleted_id) is None
+    preserved = db.query(RaffleTestAudit).filter_by(raffle_id_snapshot=deleted_id).all()
+    assert {row.action for row in preserved} >= {"manager_review_error", "test_raffle_permanently_deleted"}
+    assert all(row.raffle_id is None for row in preserved)
+    assert db.get(Raffle, real_id) is not None
+    assert db.get(User, unrelated_id) is not None

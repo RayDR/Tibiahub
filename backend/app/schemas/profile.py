@@ -1,6 +1,7 @@
-from pydantic import BaseModel, Field, ConfigDict, EmailStr
+from pydantic import BaseModel, Field, ConfigDict, EmailStr, field_validator
 from typing import List, Optional
 from datetime import datetime
+from app.core.password_policy import validate_password
 
 class ProfileResponse(BaseModel):
     username: str
@@ -32,5 +33,10 @@ class ProfileUpdate(BaseModel):
     email: Optional[EmailStr] = Field(None, description="New email address")
     avatar_url: Optional[str] = Field(None, description="Avatar image URL")
     current_password: Optional[str] = Field(None, min_length=6, description="Current password")
-    new_password: Optional[str] = Field(None, min_length=12, max_length=128, description="New password")
+    new_password: Optional[str] = Field(None, description="New password")
     model_config = ConfigDict(from_attributes=True, extra="forbid")
+
+    @field_validator("new_password")
+    @classmethod
+    def password_policy(cls, value: Optional[str]) -> Optional[str]:
+        return validate_password(value) if value is not None else None

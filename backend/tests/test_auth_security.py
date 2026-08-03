@@ -24,7 +24,7 @@ def test_registration_does_not_claim_character_and_verification_is_single_use(cl
     response = client.post("/api/v1/auth/register", json={
         "username": "secure-register",
         "email": "secure-register@example.com",
-        "password": "correct horse battery staple",
+        "password": "correct horse battery staple 7",
         "tibia_character_name": "Name Is Not Proof",
         "locale": "es",
     })
@@ -75,7 +75,7 @@ def test_password_recovery_is_neutral_rate_limited_hashed_and_replay_safe(client
     db.refresh(user)
     assert verify_password("new secure password 2026", user.hashed_password)
     assert client.post("/api/v1/password/reset-password", json={
-        "token": raw, "new_password": "another secure password",
+        "token": raw, "new_password": "another secure password 2",
     }).status_code == 400
 
 
@@ -134,11 +134,11 @@ def test_registration_rejects_casefolded_account_duplicates(client, db):
     db.commit()
     username = client.post("/api/v1/auth/register", json={
         "username": "casefoldeduser", "email": "another@example.com",
-        "password": "a sufficiently long password",
+        "password": "a sufficiently long password 4",
     })
     email = client.post("/api/v1/auth/register", json={
         "username": "another-user", "email": "CASEFOLDED@example.com",
-        "password": "a sufficiently long password",
+        "password": "a sufficiently long password 4",
     })
     assert username.status_code == email.status_code == 400
 

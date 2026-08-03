@@ -1,15 +1,15 @@
 import type { User } from '../services/auth';
+import type { GuildAccessContext } from '../services/guildManagement';
 import { useOutletContext } from 'react-router-dom';
 
 export interface GuildLayoutContext {
     selectedGuild: string;
+    guildContext: GuildAccessContext;
 }
 
 export function resolveGuildContext(user: User | null | undefined, selectedGuild?: string): string | undefined {
-    const ownGuild = (user?.guild_name || '').trim();
-    if (!user?.is_superuser) return ownGuild || undefined;
-
     const selected = (selectedGuild || '').trim();
+    const ownGuild = (user?.guild_name || '').trim();
     return selected || ownGuild || undefined;
 }
 
