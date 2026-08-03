@@ -7,6 +7,7 @@ interface AuthContextType {
     loading: boolean;
     login: (token: string) => Promise<void>;
     logout: () => void;
+    refreshUser: () => Promise<User | null>;
     updateUser: (user: Partial<User>) => void;
     isAuthenticated: boolean;
 }
@@ -45,7 +46,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
     const login = async (token: string) => {
         localStorage.setItem('token', token);
         const profile = await fetchUser();
-        if (profile?.is_superuser && !profile.guild_name) {
+        if (profile?.is_superuser) {
             navigate('/admin', { replace: true });
             return;
         }
@@ -54,8 +55,15 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
 
     const logout = () => {
         localStorage.removeItem('token');
+        Object.keys(localStorage).forEach((key) => {
+            if (key.startsWith('tibiahub:user:') || key.startsWith('tibiahub:selectedGuild')) localStorage.removeItem(key);
+        });
+        Object.keys(sessionStorage).forEach((key) => {
+            if (key.startsWith('tibiahub:user:') || key.startsWith('tibiahub:selectedGuild')) sessionStorage.removeItem(key);
+        });
+        window.dispatchEvent(new Event('tibiahub:logout'));
         setUser(null);
-        navigate('/');
+        navigate('/login', { replace: true });
     };
 
     const updateUser = (nextUser: Partial<User>) => {
@@ -68,6 +76,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
             loading,
             login,
             logout,
+            refreshUser: fetchUser,
             updateUser,
             isAuthenticated: !!user
         }}>

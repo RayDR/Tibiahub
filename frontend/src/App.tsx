@@ -21,6 +21,7 @@ import DataTools from "./pages/Admin/DataTools";
 import Overview from "./pages/Admin/Overview";
 import GuildView from "./pages/Admin/GuildView";
 import Profile from "./pages/Profile";
+import MemberProfile from "./pages/MemberProfile";
 import PasswordReset from "./pages/PasswordReset";
 import VerifyEmail from "./pages/VerifyEmail";
 import { lazy, Suspense, useEffect, useState } from "react";
@@ -175,6 +176,7 @@ function App() {
                 <Route path="/reset-password" element={<PasswordReset />} />
                 <Route path="/verify-email" element={<VerifyEmail />} />
                 <Route path="/profile" element={<Profile />} />
+                <Route path="/members/:username" element={<MemberProfile />} />
                 <Route
                   path="/settings"
                   element={<Navigate to="/profile" replace />}

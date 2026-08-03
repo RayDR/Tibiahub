@@ -39,6 +39,10 @@ export interface GuildMember {
     last_login?: string;
     world?: string;
     snapshot_at: string;
+    linked_user_id?: number;
+    linked_username?: string;
+    public_profile_url?: string;
+    account_identity_known: boolean;
 }
 
 export interface GuildMembersPayload {

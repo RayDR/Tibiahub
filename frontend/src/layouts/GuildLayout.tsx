@@ -40,14 +40,18 @@ export default function GuildLayout() {
         setGuilds(contexts);
         setSelectedGuild(current => {
           if (contexts.some(item => item.guild_name === current)) return current;
-          const own = contexts.find(item => item.guild_name.toLocaleLowerCase() === (user?.guild_name || '').trim().toLocaleLowerCase());
-          return own?.guild_name || contexts[0]?.guild_name || '';
+          const stored = user ? localStorage.getItem(`tibiahub:selectedGuild:${user.id}`) : null;
+          return contexts.find(item => item.guild_name === stored)?.guild_name || contexts[0]?.guild_name || '';
         });
       })
       .catch(() => active && setGuilds([]))
       .finally(() => active && setLoadingGuilds(false));
     return () => { active = false; };
-  }, [isAuthenticated, user?.guild_name]);
+  }, [isAuthenticated, user?.id]);
+
+  useEffect(() => {
+    if (user && selectedGuild) localStorage.setItem(`tibiahub:selectedGuild:${user.id}`, selectedGuild);
+  }, [selectedGuild, user]);
 
   if (loading || loadingGuilds) return <LoadingState className="my-8 rounded-xl border border-line" title={t('workspace.common.loading')} />;
   if (!isAuthenticated) return <Navigate to="/login" replace />;
