@@ -2,6 +2,7 @@ import React, { useState } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
 import { authApi } from '../../services/auth';
 import { useTranslation } from 'react-i18next';
+import { isValidPassword } from '../../utils/passwordPolicy';
 import { Users, KeyRound, ShieldAlert, Mail } from 'lucide-react';
 import AppCard from '../../components/ui/AppCard';
 import AppButton from '../../components/ui/AppButton';
@@ -22,6 +23,10 @@ export default function Register() {
         e.preventDefault();
         if (formData.password !== formData.confirmPassword) {
             setError(t('auth.passwordsMustMatch'));
+            return;
+        }
+        if (!isValidPassword(formData.password)) {
+            setError(t('auth.passwordPolicy'));
             return;
         }
 
@@ -102,7 +107,8 @@ export default function Register() {
                                     onChange={(e) => setFormData({ ...formData, password: e.target.value })}
                                     className="app-input py-2.5 pl-10 pr-4"
                                     placeholder="••••••••"
-                                    minLength={12}
+                                    minLength={8}
+                                    maxLength={128}
                                     required
                                 />
                             </div>
@@ -118,7 +124,8 @@ export default function Register() {
                                     onChange={(e) => setFormData({ ...formData, confirmPassword: e.target.value })}
                                     className="app-input py-2.5 pl-10 pr-4"
                                     placeholder="••••••••"
-                                    minLength={12}
+                                    minLength={8}
+                                    maxLength={128}
                                     required
                                 />
                             </div>

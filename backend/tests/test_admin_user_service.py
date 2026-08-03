@@ -84,8 +84,8 @@ def test_creates_admin_only_when_explicitly_requested(db):
     assert result.user.email_verified_at is not None
 
 
-def test_rejects_short_admin_password(db):
-    with pytest.raises(AdminRecoveryError, match="at least 12"):
+def test_rejects_invalid_admin_password(db):
+    with pytest.raises(AdminRecoveryError, match="8–128"):
         recover_administrator(
             db,
             identifier="admin@example.com",

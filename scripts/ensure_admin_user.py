@@ -14,19 +14,27 @@ os.chdir(BACKEND_ROOT)
 sys.path.insert(0, str(BACKEND_ROOT))
 
 from app.core.security import get_password_hash
+from app.core.password_policy import PasswordPolicyError, validate_password
 from app.db.database import SessionLocal, init_db
 from app.models.user import User
 
 
 def _read_admin_env() -> tuple[str, str | None, str | None]:
     username = (os.environ.get("ADMIN_USERNAME") or "admin").strip() or "admin"
-    password = (os.environ.get("ADMIN_PASSWORD") or "").strip() or None
+    password_value = os.environ.get("ADMIN_PASSWORD")
+    password = password_value if password_value not in {None, ""} else None
     email = (os.environ.get("ADMIN_EMAIL") or "").strip() or None
     return username, password, email
 
 
 def main() -> int:
     username, password, email = _read_admin_env()
+    if password:
+        try:
+            validate_password(password)
+        except PasswordPolicyError as exc:
+            print(f"error: {exc}", file=sys.stderr)
+            return 1
     init_db()
 
     db = SessionLocal()

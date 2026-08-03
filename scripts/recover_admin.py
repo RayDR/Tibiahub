@@ -4,7 +4,6 @@
 from __future__ import annotations
 
 import argparse
-import os
 import stat
 import sys
 from pathlib import Path
@@ -16,7 +15,10 @@ if str(BACKEND_ROOT) not in sys.path:
     sys.path.insert(0, str(BACKEND_ROOT))
 
 from app.core.config import settings  # noqa: E402
+from app.core.password_policy import PasswordPolicyError, validate_password  # noqa: E402
+from app.core.security import verify_password  # noqa: E402
 from app.db.database import SessionLocal, verify_connection_and_schema  # noqa: E402
+from app.models.user import User  # noqa: E402
 from app.services.admin_user_service import (  # noqa: E402
     AdminRecoveryError,
     recover_administrator,
@@ -63,11 +65,10 @@ def read_password_file(raw_path: str) -> str:
     password = value.rstrip("\r\n")
     if "\n" in password or "\r" in password:
         raise AdminRecoveryError("Password file must contain exactly one line")
-    if len(password) < 12:
-        raise AdminRecoveryError("Administrator passwords must contain at least 12 characters")
-    if len(password) > 256:
-        raise AdminRecoveryError("Password is unexpectedly long")
-    return password
+    try:
+        return validate_password(password)
+    except PasswordPolicyError as exc:
+        raise AdminRecoveryError(str(exc)) from exc
 
 
 def main() -> None:
@@ -75,8 +76,19 @@ def main() -> None:
     if args.confirm != CONFIRMATION:
         raise SystemExit(f"Confirmation must exactly match: {CONFIRMATION}")
 
-    if settings.database_name != "tibiahub":
+    isolated_test_target = (
+        settings.APP_ENV == "test"
+        and "test" in settings.database_name.casefold()
+        and settings.database_name.casefold() != "tibiahub"
+    )
+    if settings.database_name != "tibiahub" and not isolated_test_target:
         raise SystemExit("Refusing recovery because the configured database is not tibiahub")
+
+    database_url = settings.database_url
+    print(
+        "Administrator recovery target "
+        f"host={database_url.host or 'local'} database={settings.database_name}"
+    )
 
     try:
         password = read_password_file(args.password_file)
@@ -98,6 +110,16 @@ def main() -> None:
             recovered_username = result.user.username
             recovered_created = result.created
             revoked_one_time_tokens = result.revoked_one_time_tokens
+
+        with SessionLocal() as verification_db:
+            persisted = verification_db.get(User, recovered_user_id)
+            if not (
+                persisted
+                and persisted.is_active
+                and persisted.is_superuser
+                and verify_password(password, persisted.hashed_password)
+            ):
+                raise AdminRecoveryError("Post-commit administrator verification failed")
     except AdminRecoveryError as exc:
         raise SystemExit(str(exc)) from exc
     finally:
@@ -108,7 +130,8 @@ def main() -> None:
         f"user_id={recovered_user_id} "
         f"username={recovered_username} "
         f"created={str(recovered_created).lower()} "
-        f"revoked_one_time_tokens={revoked_one_time_tokens}"
+        f"revoked_one_time_tokens={revoked_one_time_tokens} "
+        "post_commit_verified=true"
     )
 
 

@@ -5,6 +5,7 @@ import { useTranslation } from 'react-i18next';
 
 import { AppButton, Card, FormField, Input, Page } from '../components/ui';
 import api from '../services/api';
+import { isValidPassword } from '../utils/passwordPolicy';
 
 export default function PasswordReset() {
   const { t, i18n } = useTranslation();
@@ -33,7 +34,7 @@ export default function PasswordReset() {
   const reset = async (event: FormEvent) => {
     event.preventDefault(); setError('');
     if (password !== confirm) { setError(t('passwordRecovery.errors.match')); return; }
-    if (password.length < 12) { setError(t('passwordRecovery.errors.length')); return; }
+    if (!isValidPassword(password)) { setError(t('passwordRecovery.errors.policy')); return; }
     setBusy(true);
     try {
       await api.post('/password/reset-password', { token, new_password: password });
@@ -53,8 +54,8 @@ export default function PasswordReset() {
       <AppButton className="w-full" type="submit" disabled={busy}>{busy?<Loader2 className="size-4 animate-spin"/>:<Mail className="size-4"/>}{t('passwordRecovery.request.action')}</AppButton>
     </form> : null}
     {step === 'reset' ? <form onSubmit={reset} className="mt-6 space-y-4">
-      <FormField label={t('passwordRecovery.newPassword')} helpText={t('passwordRecovery.passwordHelp')}><Input type="password" minLength={12} maxLength={128} autoComplete="new-password" value={password} onChange={event=>setPassword(event.target.value)} required /></FormField>
-      <FormField label={t('passwordRecovery.confirmPassword')}><Input type="password" minLength={12} maxLength={128} autoComplete="new-password" value={confirm} onChange={event=>setConfirm(event.target.value)} required /></FormField>
+      <FormField label={t('passwordRecovery.newPassword')} helpText={t('passwordRecovery.passwordHelp')}><Input type="password" minLength={8} maxLength={128} autoComplete="new-password" value={password} onChange={event=>setPassword(event.target.value)} required /></FormField>
+      <FormField label={t('passwordRecovery.confirmPassword')}><Input type="password" minLength={8} maxLength={128} autoComplete="new-password" value={confirm} onChange={event=>setConfirm(event.target.value)} required /></FormField>
       <AppButton className="w-full" type="submit" disabled={busy}>{busy?<Loader2 className="size-4 animate-spin"/>:null}{t('passwordRecovery.reset.action')}</AppButton>
     </form> : null}
     {step === 'success' ? <div className="mt-6 text-center"><CheckCircle className="mx-auto size-12 text-success"/><p className="mt-3 text-content-secondary">{t(token?'passwordRecovery.success.reset':'passwordRecovery.success.request')}</p></div> : null}

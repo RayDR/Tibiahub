@@ -56,11 +56,8 @@ def get_current_admin_user(current_user: User = Depends(get_current_active_user)
 
 
 def get_current_manager_user(current_user: User = Depends(get_current_active_user)):
-    if not (is_global_admin(current_user) or is_guild_leader(current_user)):
-        raise HTTPException(
-            status_code=403,
-            detail="Manager privileges required",
-        )
+    # Guild/module authorization is resource-scoped and therefore belongs in
+    # the endpoint policy entry, not this context-free authentication guard.
     return current_user
 
 @router.post("/login", response_model=Token)

@@ -9,6 +9,7 @@ from sqlalchemy import func, or_
 from sqlalchemy.orm import Session
 
 from app.core.security import get_password_hash
+from app.core.password_policy import PasswordPolicyError, validate_password
 from app.models.auth_security import AuthOneTimeToken
 from app.models.user import User
 from app.models.workspace_audit import WorkspaceAudit
@@ -93,8 +94,10 @@ def recover_administrator(
 ) -> AdminRecoveryResult:
     """Recover one administrator without committing or exposing credentials."""
 
-    if len(password) < 12:
-        raise AdminRecoveryError("Administrator passwords must contain at least 12 characters")
+    try:
+        validate_password(password)
+    except PasswordPolicyError as exc:
+        raise AdminRecoveryError(str(exc)) from exc
 
     user = find_user_by_identifier(db, identifier)
     created = False
