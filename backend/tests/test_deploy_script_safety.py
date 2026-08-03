@@ -43,7 +43,7 @@ def test_deploy_requires_lock_clean_exact_develop_and_expected_head():
         "git status --porcelain --untracked-files=all",
         "refs/remotes/origin/develop",
         'target_commit" == "$remote_commit',
-        'EXPECTED_REVISION="maintenance_sync_20260804"',
+        'EXPECTED_REVISION="sync_errors_20260803"',
         "migration_heads",
         "require_local_tibiahub_target",
         "TIBIAHUB_DATABASE_NAME=tibiahub",

@@ -6,7 +6,7 @@ ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)"
 # shellcheck source=../../scripts/postgres-common.sh
 source "$ROOT/scripts/postgres-common.sh"
 
-EXPECTED_REVISION="maintenance_sync_20260804"
+EXPECTED_REVISION="sync_errors_20260803"
 DEPLOY_ROOT="${TIBIAHUB_DEPLOY_ROOT:-/forge/tibiahub-backups/deployments}"
 LOCK_FILE="${TIBIAHUB_DEPLOY_LOCK_FILE:-$DEPLOY_ROOT/.deploy.lock}"
 SERVICES=(
