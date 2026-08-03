@@ -8,8 +8,11 @@ repository has the expected single Alembic head.
 The workflow acquires a deployment lock, loads credentials only from the
 existing external secure environment, creates and validates a mode-0600 custom
 PostgreSQL snapshot, records Git and Alembic metadata, backs up `frontend/dist`,
-and captures sanitized PM2 state. It builds the frontend into the evidence
-directory before stopping only these applications:
+and captures sanitized PM2 state. Because validation can already have rebuilt
+the ignored live `dist`, it also checks out the recorded previous commit in a
+temporary Git worktree and creates a reproducible previous-commit frontend
+build for rollback. It builds the target frontend into the evidence directory
+before stopping only these applications:
 
 - `tibiahub-api`
 - `tibiahub-frontend`

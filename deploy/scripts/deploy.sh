@@ -162,10 +162,10 @@ sha256sum "$snapshot" >"$evidence_dir/tibiahub.dump.sha256"
 chmod 600 "$evidence_dir/tibiahub.dump.sha256"
 
 if [[ -d "$ROOT/frontend/dist" ]]; then
-  cp -a "$ROOT/frontend/dist" "$evidence_dir/frontend-dist"
-  touch "$evidence_dir/frontend-dist.present"
+  cp -a "$ROOT/frontend/dist" "$evidence_dir/frontend-dist-current"
+  touch "$evidence_dir/frontend-dist-current.present"
 else
-  touch "$evidence_dir/frontend-dist.absent"
+  touch "$evidence_dir/frontend-dist-current.absent"
 fi
 
 allowed_services_json="$(printf '%s\n' "${SERVICES[@]}" | jq -R . | jq -s .)"
@@ -185,6 +185,28 @@ pm2 jlist | jq --argjson allowed "$allowed_services_json" '
   ]' >"$evidence_dir/pm2-state.json"
 jq -r '.[] | [.name, .status] | @tsv' "$evidence_dir/pm2-state.json" >"$evidence_dir/pm2-state.tsv"
 chmod 600 "$evidence_dir/pm2-state.json" "$evidence_dir/pm2-state.tsv"
+
+previous_worktree=""
+cleanup_previous_worktree() {
+  if [[ -n "$previous_worktree" && -d "$previous_worktree" ]]; then
+    git worktree remove --force "$previous_worktree" >/dev/null 2>&1 || true
+  fi
+}
+trap cleanup_previous_worktree EXIT
+previous_worktree="$evidence_dir/previous-worktree"
+git worktree add --quiet --detach "$previous_worktree" "$previous_commit"
+[[ -d "$ROOT/frontend/node_modules" ]] || {
+  echo "Frontend dependencies are required to construct the rollback build." >&2
+  exit 1
+}
+ln -s "$ROOT/frontend/node_modules" "$previous_worktree/frontend/node_modules"
+(cd "$previous_worktree/frontend" && npm run build -- --outDir "$evidence_dir/frontend-dist-previous")
+[[ -f "$evidence_dir/frontend-dist-previous/index.html" ]] || {
+  echo "The previous-commit frontend rollback build is incomplete." >&2
+  exit 1
+}
+git worktree remove --force "$previous_worktree"
+previous_worktree=""
 
 staged_dist="$evidence_dir/frontend-dist-new"
 (cd "$ROOT/frontend" && npm run build -- --outDir "$staged_dist")
@@ -276,6 +298,7 @@ mv "$state_tmp" "$state_file"
 printf 'completed_at=%s\n' "$completed_at" >>"$metadata"
 touch "$evidence_dir/SUCCEEDED"
 trap - ERR
+trap - EXIT
 
 snapshot_sha256="$(awk '{print $1}' "$evidence_dir/tibiahub.dump.sha256")"
 echo "Deployment succeeded."

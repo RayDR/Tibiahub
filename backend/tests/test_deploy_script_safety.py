@@ -59,6 +59,8 @@ def test_snapshot_frontend_pm2_health_and_rollback_guards_are_present():
         'pg_restore --list "$snapshot"',
         'sha256sum "$snapshot"',
         'cp -a "$ROOT/frontend/dist"',
+        'git worktree add --quiet --detach "$previous_worktree" "$previous_commit"',
+        "frontend-dist-previous",
         "pm2-state.json",
         "rollback_armed=1",
         "ROLLBACK_SUCCEEDED",
@@ -74,7 +76,7 @@ def test_snapshot_frontend_pm2_health_and_rollback_guards_are_present():
         "postgres_admin_createdb --owner",
         "--exit-on-error --no-owner --no-acl",
         'git switch --detach "$previous_commit"',
-        "frontend-dist.present",
+        "frontend-dist-previous",
         "pm2-state.tsv",
     ):
         assert required in rollback

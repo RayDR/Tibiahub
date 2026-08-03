@@ -146,13 +146,11 @@ if [[ -e "$ROOT/frontend/dist" && ! -d "$ROOT/frontend/dist" ]]; then
   exit 1
 fi
 rm -rf -- "$ROOT/frontend/dist"
-if [[ -f "$evidence_dir/frontend-dist.present" ]]; then
-  [[ -d "$evidence_dir/frontend-dist" ]] || {
-    echo "Recorded frontend backup is missing." >&2
-    exit 1
-  }
-  cp -a "$evidence_dir/frontend-dist" "$ROOT/frontend/dist"
-fi
+[[ -d "$evidence_dir/frontend-dist-previous" ]] || {
+  echo "The previous-commit frontend rollback build is missing." >&2
+  exit 1
+}
+cp -a "$evidence_dir/frontend-dist-previous" "$ROOT/frontend/dist"
 
 declare -A previous_status=()
 while IFS=$'\t' read -r service status; do
