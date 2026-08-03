@@ -1,10 +1,14 @@
 """MediaAsset service — deduplicating local media cache."""
+import asyncio
 import hashlib
 import io
 import ipaddress
 import logging
+import os
 import re
 import socket
+import tempfile
+from dataclasses import dataclass
 from datetime import UTC, datetime
 from pathlib import Path
 from typing import Optional
@@ -16,6 +20,7 @@ from sqlalchemy.orm import Session
 
 from app.core.config import settings
 from app.models.media_asset import MediaAsset
+from app.services.sync_error_service import SAFE_MESSAGES, classify_exception, sanitize_url
 
 logger = logging.getLogger(__name__)
 
@@ -25,11 +30,16 @@ _RETRY_COOLDOWN_SECONDS = 3600
 _MAX_IMAGE_BYTES = 5 * 1024 * 1024
 _MAX_IMAGE_PIXELS = 16_000_000
 _ALLOWED_CONTENT_TYPES = {
+    "image/gif": ("GIF", ".gif"),
     "image/png": ("PNG", ".png"),
     "image/jpeg": ("JPEG", ".jpg"),
     "image/webp": ("WEBP", ".webp"),
 }
 _MAX_REDIRECTS = 4
+_ALLOWED_MEDIA_HOSTS = frozenset({
+    "tibia.fandom.com", "static.wikia.nocookie.net", "tibiamaps.github.io",
+})
+_MAX_FETCH_ATTEMPTS = 3
 
 
 class UnsafeMediaError(ValueError):
@@ -77,6 +87,9 @@ def validate_raster_image(content: bytes, declared_content_type: str | None = No
     elif actual_format == "JPEG":
         marker = content.rfind(b"\xff\xd9")
         logical_size = marker + 2 if marker >= 0 else -1
+    elif actual_format == "GIF":
+        marker = content.rfind(b"\x3b")
+        logical_size = marker + 1 if marker >= 0 else -1
     else:  # WebP RIFF length includes bytes after the first eight-byte header.
         logical_size = int.from_bytes(content[4:8], "little") + 8 if len(content) >= 12 and content[:4] == b"RIFF" else -1
     if logical_size != len(content):
@@ -88,10 +101,12 @@ def validate_raster_image(content: bytes, declared_content_type: str | None = No
 
 def validate_remote_url(url: str) -> None:
     parsed = urlparse(url)
-    if parsed.scheme not in {"http", "https"} or not parsed.hostname:
-        raise UnsafeMediaError("Only public HTTP and HTTPS image URLs are allowed")
+    if parsed.scheme != "https" or not parsed.hostname:
+        raise UnsafeMediaError("Only allowlisted HTTPS image URLs are allowed")
     if parsed.username or parsed.password:
         raise UnsafeMediaError("Authenticated image URLs are not allowed")
+    if parsed.hostname.lower() not in _ALLOWED_MEDIA_HOSTS:
+        raise UnsafeMediaError("The image provider host is not allowed")
     try:
         addresses = socket.getaddrinfo(parsed.hostname, parsed.port or (443 if parsed.scheme == "https" else 80), type=socket.SOCK_STREAM)
     except socket.gaierror as exc:
@@ -194,6 +209,7 @@ async def _resolve_wiki_special_path(url: str, client: httpx.AsyncClient) -> Opt
         return None
     file_title = asset_name[0].upper() + asset_name[1:]
     try:
+        validate_remote_url(settings.TIBIAWIKI_API_URL)
         resp = await client.get(
             settings.TIBIAWIKI_API_URL,
             params={
@@ -204,7 +220,10 @@ async def _resolve_wiki_special_path(url: str, client: httpx.AsyncClient) -> Opt
                 "format": "json",
             },
         )
+        _validate_connected_peer(resp)
         resp.raise_for_status()
+        if len(resp.content) > 1024 * 1024:
+            raise UnsafeMediaError("The provider metadata response is too large")
         pages = ((resp.json() or {}).get("query") or {}).get("pages") or {}
         for page in pages.values():
             info = (page.get("imageinfo") or [])
@@ -215,7 +234,7 @@ async def _resolve_wiki_special_path(url: str, client: httpx.AsyncClient) -> Opt
     return None
 
 
-async def _fetch_image(source_url: str) -> tuple[bytes, str, str]:
+async def _fetch_image_once(source_url: str) -> tuple[bytes, str, str]:
     """Fetch image bytes. Resolves Special:FilePath via wiki API if needed.
     Returns (content_bytes, content_type, resolved_url).
     Raises httpx.HTTPStatusError or httpx.RequestError on failure.
@@ -223,6 +242,7 @@ async def _fetch_image(source_url: str) -> tuple[bytes, str, str]:
     headers = {
         "User-Agent": settings.TIBIAWIKI_USER_AGENT,
         "Referer": settings.TIBIAWIKI_BASE_PAGE_URL,
+        "Accept": "image/avif,image/webp,image/png,image/jpeg,image/gif",
     }
     timeout = httpx.Timeout(connect=5.0, read=10.0, write=5.0, pool=5.0)
     async with httpx.AsyncClient(
@@ -231,6 +251,12 @@ async def _fetch_image(source_url: str) -> tuple[bytes, str, str]:
         headers=headers,
     ) as client:
         current_url = source_url
+        parsed_source = urlparse(source_url)
+        if parsed_source.hostname == "tibia.fandom.com" and "/Special:FilePath/" in parsed_source.path:
+            resolved = await _resolve_wiki_special_path(source_url, client)
+            if not resolved:
+                raise UnsafeMediaError("The provider could not resolve the image resource")
+            current_url = resolved
         for _ in range(_MAX_REDIRECTS + 1):
             validate_remote_url(current_url)
             async with client.stream("GET", current_url) as resp:
@@ -259,7 +285,130 @@ async def _fetch_image(source_url: str) -> tuple[bytes, str, str]:
         raise UnsafeMediaError("Too many image redirects")
 
 
+async def _fetch_image(source_url: str) -> tuple[bytes, str, str]:
+    """Fetch with bounded backoff for rate limits and provider server errors."""
+    for attempt in range(_MAX_FETCH_ATTEMPTS):
+        try:
+            return await _fetch_image_once(source_url)
+        except httpx.HTTPStatusError as exc:
+            status = exc.response.status_code
+            retryable = status == 429 or 500 <= status < 600
+            if not retryable or attempt + 1 >= _MAX_FETCH_ATTEMPTS:
+                raise
+            retry_after = exc.response.headers.get("Retry-After")
+            delay = min(60, max(1, int(retry_after))) if retry_after and retry_after.isdigit() else 2 ** attempt
+            await asyncio.sleep(delay)
+        except (httpx.TimeoutException, httpx.NetworkError):
+            if attempt + 1 >= _MAX_FETCH_ATTEMPTS:
+                raise
+            await asyncio.sleep(2 ** attempt)
+    raise UnsafeMediaError("Image download attempts exhausted")
+
+
 # ── public API ────────────────────────────────────────────────────────────────
+
+
+@dataclass(frozen=True)
+class MediaFetchOutcome:
+    asset: MediaAsset | None
+    result: str
+    error_category: str | None = None
+    safe_message: str | None = None
+    http_status: int | None = None
+    retryable: bool | None = None
+    safe_url: str | None = None
+
+
+def _atomic_image_write(destination: Path, content: bytes) -> None:
+    destination.parent.mkdir(parents=True, exist_ok=True)
+    temporary_name: str | None = None
+    try:
+        with tempfile.NamedTemporaryFile(prefix=".media-", dir=destination.parent, delete=False) as temporary:
+            temporary_name = temporary.name
+            temporary.write(content)
+            temporary.flush()
+            os.fsync(temporary.fileno())
+        os.replace(temporary_name, destination)
+        temporary_name = None
+    finally:
+        if temporary_name:
+            Path(temporary_name).unlink(missing_ok=True)
+
+
+async def cache_media_asset(
+    db: Session,
+    *,
+    asset_key: str,
+    source_url: str,
+    force_refetch: bool = False,
+    retry_failed: bool = False,
+) -> MediaFetchOutcome:
+    """Use the canonical downloader and atomically update one served media asset."""
+    asset = db.query(MediaAsset).filter(MediaAsset.asset_key == asset_key).first()
+    if asset and asset.status == "cached" and asset.file_exists() and not force_refetch:
+        return MediaFetchOutcome(asset=asset, result="cached")
+    if asset and asset.status == "failed" and not (force_refetch or retry_failed):
+        if asset.last_fetched_at:
+            fetched_at = asset.last_fetched_at
+            if fetched_at.tzinfo is None:
+                fetched_at = fetched_at.replace(tzinfo=UTC)
+            if (datetime.now(UTC) - fetched_at).total_seconds() < _RETRY_COOLDOWN_SECONDS:
+                return MediaFetchOutcome(asset=asset, result="failed", error_category="download_failed", safe_message=asset.error_message)
+
+    database_mutated = False
+    try:
+        content, content_type, resolved_url = await _fetch_image(source_url)
+        _, extension = validate_raster_image(content, content_type)
+        safe_key = re.sub(r"[^a-z0-9_]", "_", asset_key).strip("_")
+        destination = _MEDIA_DIR / f"{safe_key}{extension}"
+        _atomic_image_write(destination, content)
+        created = asset is None
+        if asset is None:
+            asset = MediaAsset(asset_key=asset_key)
+            db.add(asset)
+        database_mutated = True
+        asset.source_url = sanitize_url(source_url)
+        asset.resolved_url = sanitize_url(resolved_url)
+        asset.local_path = str(destination)
+        asset.content_type = content_type
+        asset.size_bytes = len(content)
+        asset.sha256_hash = hashlib.sha256(content).hexdigest()
+        asset.status = "cached"
+        asset.last_fetched_at = datetime.now(UTC)
+        asset.error_message = None
+        db.commit()
+        logger.info("media_asset_cached key=%s size=%d", asset_key, len(content))
+        return MediaFetchOutcome(asset=asset, result="created" if created else "updated")
+    except Exception as exc:
+        if database_mutated:
+            db.rollback()
+        asset = db.query(MediaAsset).filter(MediaAsset.asset_key == asset_key).first()
+        if isinstance(exc, UnsafeMediaError):
+            category, status, retryable, safe_message = "unsupported_resource", None, False, SAFE_MESSAGES["unsupported_resource"]
+        else:
+            category, status, retryable, safe_message = classify_exception(exc)
+        request_url = None
+        if isinstance(exc, httpx.HTTPStatusError) and exc.request:
+            request_url = str(exc.request.url)
+        safe_url = sanitize_url(request_url or source_url)
+        # A failed refresh never invalidates or replaces a working local file.
+        if not (asset and asset.status == "cached" and asset.file_exists()):
+            if asset is None:
+                asset = MediaAsset(asset_key=asset_key, source_url=sanitize_url(source_url))
+                db.add(asset)
+            asset.status = "failed"
+            asset.error_message = safe_message
+            asset.last_fetched_at = datetime.now(UTC)
+            db.commit()
+        parsed = urlparse(safe_url or "")
+        logger.warning(
+            "media_asset_fetch_failed key=%s category=%s http_status=%s provider=%s path=%s",
+            asset_key, category, status, parsed.hostname or "unknown", parsed.path or "/",
+        )
+        return MediaFetchOutcome(
+            asset=asset, result="failed", error_category=category, safe_message=safe_message,
+            http_status=status, retryable=retryable, safe_url=safe_url,
+        )
 
 def get_asset(db: Session, asset_key: str) -> Optional[MediaAsset]:
     """Return MediaAsset by key if already in DB (no fetch)."""
@@ -316,47 +465,11 @@ async def get_or_fetch_asset(
     if not autofetch_enabled and not force_refetch:
         return asset  # None or stale asset
 
-    # ── attempt fetch ────────────────────────────────────────────────────────
-    if not asset:
-        asset = MediaAsset(asset_key=asset_key, source_url=source_url, status="pending")
-        db.add(asset)
-        db.flush()
-
-    try:
-        content, content_type, resolved_url = await _fetch_image(source_url)
-        _, ext = validate_raster_image(content, content_type)
-        safe_key = re.sub(r"[^a-z0-9_]", "_", asset_key).strip("_")
-        _MEDIA_DIR.mkdir(parents=True, exist_ok=True)
-        local_path = _MEDIA_DIR / f"{safe_key}{ext}"
-        local_path.write_bytes(content)
-
-        asset.resolved_url = resolved_url
-        asset.local_path = str(local_path)
-        asset.content_type = content_type
-        asset.size_bytes = len(content)
-        asset.sha256_hash = hashlib.sha256(content).hexdigest()
-        asset.status = "cached"
-        asset.last_fetched_at = datetime.now(UTC)
-        asset.error_message = None
-        db.commit()
-        logger.info("media_asset_cached key=%s path=%s size=%d", asset_key, local_path, len(content))
-    except Exception as exc:
-        db.rollback()
-        # Re-query after rollback; asset may or may not exist now
-        asset = db.query(MediaAsset).filter(MediaAsset.asset_key == asset_key).first()
-        if not asset:
-            asset = MediaAsset(asset_key=asset_key, source_url=source_url)
-            db.add(asset)
-        asset.status = "failed"
-        asset.error_message = "Image download failed validation" if isinstance(exc, UnsafeMediaError) else "Image download failed"
-        asset.last_fetched_at = datetime.now(UTC)
-        try:
-            db.commit()
-        except Exception:
-            db.rollback()
-        logger.warning("media_asset_fetch_failed key=%s error=%s", asset_key, exc)
-
-    return asset
+    outcome = await cache_media_asset(
+        db, asset_key=asset_key, source_url=source_url,
+        force_refetch=force_refetch, retry_failed=force_refetch,
+    )
+    return outcome.asset
 
 
 async def refresh_asset(

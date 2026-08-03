@@ -18,6 +18,7 @@ from collections import defaultdict
 from datetime import UTC, datetime, timedelta
 from pathlib import Path
 from typing import Any
+from urllib.parse import urlparse
 
 import httpx
 from sqlalchemy import desc, or_, select
@@ -39,6 +40,7 @@ from app.knowledge.models import ACTIVE_KNOWLEDGE_JOB_STATES, KnowledgeJob
 from app.knowledge.services.bootstrap import KnowledgeBootstrapService, TIBIAWIKI_BOOTSTRAP_CONFIRMATION
 from app.services.guild_roster_service import GuildRosterService, GuildRosterSyncError
 from app.services.maintenance_mode_service import MaintenanceModeService, TERMINAL_SYNC_STATES
+from app.services import media_asset_service
 from app.services.sync_error_service import SAFE_MESSAGES, classify_exception, record_sync_error
 from app.services.bestiary_source import (
     get_category_members,
@@ -246,6 +248,13 @@ class SyncService:
                     job.claimed_at = None; job.lease_expires_at = None; job.next_retry_at = now
                     for phase in db.query(SyncJobPhase).filter(SyncJobPhase.job_id == job.id, SyncJobPhase.status == "running").all():
                         phase.status = "retrying"; phase.error_category = "worker_interrupted"; phase.safe_error = "The prior worker lease expired."
+                        record_sync_error(
+                            db, job_id=job.id, phase_key=phase.phase_key, entity_type="phase",
+                            external_id=phase.current_entity, entity_name=phase.current_entity,
+                            category="worker_interrupted", message=SAFE_MESSAGES["worker_interrupted"],
+                            provider=phase.provider, retryable=True,
+                            checkpoint_offset=phase.current_offset, attempt=phase.attempt_count,
+                        )
             if stale_ids:
                 db.commit()
         except Exception:
@@ -802,11 +811,12 @@ class SyncService:
         timeout_seconds: int,
     ) -> dict[str, Any]:
         if target == "images":
-            result = await SyncService.sync_images(db, limit=limit)
+            result = await SyncService.sync_images(db, limit=limit, job=job)
             return {
                 "processed": int(result.get("total") or 0),
+                "failed": int(result.get("errors") or 0),
                 "summary": {
-                    "images_cached": int(result.get("created") or 0) + int(result.get("updated") or 0),
+                    "images_cached": int(result.get("succeeded") or 0),
                     "images_failed": int(result.get("errors") or 0),
                 },
             }
@@ -839,6 +849,7 @@ class SyncService:
                 limit=limit,
                 recursive=True,
                 timeout_seconds=timeout_seconds,
+                job=job,
             )
             return {
                 "processed": int(result.get("total") or 0),
@@ -850,7 +861,7 @@ class SyncService:
             }
 
         if target == "hunt-zones":
-            result = await SyncService.sync_hunt_zones_from_tibiamaps(db, limit=limit)
+            result = await SyncService.sync_hunt_zones_from_tibiamaps(db, limit=limit, job=job)
             return {
                 "processed": int(result.get("total") or 0),
                 "summary": {
@@ -1160,6 +1171,7 @@ class SyncService:
         limit: int | None = None,
         recursive: bool = True,
         timeout_seconds: int = 15,
+        job: SyncJob | None = None,
     ) -> dict[str, Any]:
         """Sync quests from TibiaWiki with group/hub detection and recursive child extraction.
 
@@ -1238,14 +1250,33 @@ class SyncService:
                         processed += 1
                     except Exception as child_exc:
                         errors += 1
-                        logger.warning(
-                            "sync_quests_child_failed parent=%s child=%s error=%s",
-                            page_name, child_name, child_exc,
-                        )
+                        category, retryable, _ = SyncService.classify_provider_error(child_exc)
+                        response = child_exc.response if isinstance(child_exc, httpx.HTTPStatusError) else None
+                        if job:
+                            record_sync_error(
+                                db, job_id=job.id, phase_key="quests", entity_type="quest",
+                                external_id=child_name, entity_name=child_name, category=category,
+                                message=SAFE_MESSAGES.get(category), provider="tibiawiki",
+                                source_url=str(response.request.url) if response is not None and response.request else None,
+                                http_status=response.status_code if response is not None else None,
+                                retryable=retryable, checkpoint_offset=processed, attempt=1,
+                            )
+                        logger.warning("sync_quests_child_failed parent=%s child=%s category=%s", page_name, child_name, category)
                         continue
             except Exception as exc:
                 errors += 1
-                logger.warning("sync_quests_page_failed page=%s error=%s", page_name, exc)
+                category, retryable, _ = SyncService.classify_provider_error(exc)
+                response = exc.response if isinstance(exc, httpx.HTTPStatusError) else None
+                if job:
+                    record_sync_error(
+                        db, job_id=job.id, phase_key="quests", entity_type="quest",
+                        external_id=page_name, entity_name=page_name, category=category,
+                        message=SAFE_MESSAGES.get(category), provider="tibiawiki",
+                        source_url=str(response.request.url) if response is not None and response.request else None,
+                        http_status=response.status_code if response is not None else None,
+                        retryable=retryable, checkpoint_offset=processed, attempt=1,
+                    )
+                logger.warning("sync_quests_page_failed page=%s category=%s", page_name, category)
                 continue
 
         db.commit()
@@ -1263,6 +1294,7 @@ class SyncService:
         db: Session,
         *,
         limit: int | None = None,
+        job: SyncJob | None = None,
     ) -> dict[str, Any]:
         """Seed/refresh hunt-zone map infrastructure from tibiamaps metadata.
 
@@ -1326,7 +1358,18 @@ class SyncService:
                 db.add(zone)
             except Exception as exc:
                 errors += 1
-                logger.warning("sync_hunt_zones_tibiamaps_failed zone=%s error=%s", zone.name, exc)
+                category, retryable, _ = SyncService.classify_provider_error(exc)
+                response = exc.response if isinstance(exc, httpx.HTTPStatusError) else None
+                if job:
+                    record_sync_error(
+                        db, job_id=job.id, phase_key="hunt-zones", entity_type="hunt_zone",
+                        external_id=str(zone.id), entity_name=zone.name, category=category,
+                        message=SAFE_MESSAGES.get(category), provider="tibiamaps",
+                        source_url=str(response.request.url) if response is not None and response.request else None,
+                        http_status=response.status_code if response is not None else None,
+                        retryable=retryable, checkpoint_offset=updated + created + errors, attempt=1,
+                    )
+                logger.warning("sync_hunt_zones_tibiamaps_failed zone=%s category=%s", zone.name, category)
 
         db.commit()
         return {
@@ -1346,42 +1389,84 @@ class SyncService:
         return {"status": "deprecated", "processed": 0, "total": 0}
 
     @staticmethod
-    async def sync_images(db: Session, *, limit: int | None = None) -> dict[str, Any]:
-        _IMAGE_DIR.mkdir(parents=True, exist_ok=True)
-        queued: list[tuple[str, str, int, str]] = []
+    async def sync_images(
+        db: Session,
+        *,
+        limit: int | None = None,
+        job: SyncJob | None = None,
+        representative: bool = False,
+        force_refetch: bool = False,
+    ) -> dict[str, Any]:
+        groups: list[list[tuple[str, str, Any, str, str, str]]] = [[], [], []]
+        for creature in db.query(Creature).filter(Creature.image_url.isnot(None)).order_by(Creature.id).all():
+            source = media_asset_service.build_creature_source_url(creature)
+            if source:
+                groups[0].append(("creature_image", "creature", creature, creature.name, media_asset_service.build_creature_asset_key(creature), source))
+        for loot in db.query(Loot).filter(Loot.item_image_url.isnot(None)).order_by(Loot.id).all():
+            source = media_asset_service.build_loot_source_url(loot)
+            if source:
+                groups[1].append(("item_image", "item", loot, loot.item_name, media_asset_service.build_loot_asset_key(loot), source))
+        for zone in db.query(HuntZone).filter(HuntZone.map_image_url.isnot(None)).order_by(HuntZone.id).all():
+            source = media_asset_service.build_zone_source_url(zone)
+            if source:
+                groups[2].append(("hunt_zone_map", "hunt_zone", zone, zone.name, media_asset_service.build_zone_asset_key(zone), source))
 
-        for creature in db.query(Creature).filter(Creature.image_url.isnot(None)).all():
-            queued.append(("creature_image", "creature", creature.id, creature.image_url))
-        for loot in db.query(Loot).filter(Loot.item_image_url.isnot(None)).all():
-            queued.append(("item_image", "item", loot.id, loot.item_image_url))
-        for zone in db.query(HuntZone).filter(HuntZone.map_image_url.isnot(None)).all():
-            queued.append(("hunt_zone_map", "hunt_zone", zone.id, zone.map_image_url))
+        if representative:
+            queued: list[tuple[str, str, Any, str, str, str]] = []
+            cursor = 0
+            requested = max(20, min(50, int(limit or 30)))
+            while len(queued) < requested and any(cursor < len(group) for group in groups):
+                for group in groups:
+                    if cursor < len(group) and len(queued) < requested:
+                        queued.append(group[cursor])
+                cursor += 1
+        else:
+            queued = [entry for group in groups for entry in group]
+            if limit is not None and limit > 0:
+                queued = queued[:limit]
 
-        if limit is not None and limit > 0:
-            queued = queued[:limit]
-
-        created = 0
-        updated = 0
-        errors = 0
-        async with httpx.AsyncClient(timeout=20.0, follow_redirects=True, headers={"User-Agent": settings.TIBIAWIKI_USER_AGENT}) as client:
-            for resource_type, entity_type, entity_id, url in queued:
-                ok = await SyncService._cache_remote_resource(
-                    db,
-                    client=client,
-                    resource_type=resource_type,
-                    entity_type=entity_type,
-                    entity_id=entity_id,
-                    source_url=url,
-                )
-                if ok == "created":
-                    created += 1
-                elif ok == "updated":
-                    updated += 1
-                else:
-                    errors += 1
-
+        counters = {"created": 0, "updated": 0, "cached": 0, "errors": 0}
+        categories: dict[str, int] = defaultdict(int)
+        samples: list[dict[str, Any]] = []
+        phase = db.query(SyncJobPhase).filter_by(job_id=job.id, phase_key="images").one_or_none() if job else None
+        for index, (_resource_type, entity_type, entity, entity_name, asset_key, source_url) in enumerate(queued):
+            outcome = await media_asset_service.cache_media_asset(
+                db, asset_key=asset_key, source_url=source_url,
+                force_refetch=force_refetch, retry_failed=True,
+            )
+            if outcome.result == "failed":
+                counters["errors"] += 1
+                category = outcome.error_category or "download_failed"
+                categories[category] += 1
+                if job:
+                    record_sync_error(
+                        db, job_id=job.id, phase_key="images", entity_type=entity_type,
+                        external_id=str(entity.id), entity_name=entity_name, category=category,
+                        message=outcome.safe_message, provider=None, source_url=outcome.safe_url or source_url,
+                        http_status=outcome.http_status, retryable=outcome.retryable,
+                        checkpoint_offset=index, attempt=phase.attempt_count if phase else 1,
+                    )
+            else:
+                counters[outcome.result] += 1
+                if outcome.asset:
+                    entity.image_asset_id = outcome.asset.id
+                    db.add(entity)
+            if len(samples) < 10:
+                safe_url = outcome.safe_url or (outcome.asset.resolved_url if outcome.asset else None) or source_url
+                parsed = urlparse(media_asset_service.sanitize_url(safe_url) or "")
+                samples.append({
+                    "entity_type": entity_type, "entity_name": entity_name,
+                    "provider": parsed.hostname, "path": parsed.path or None,
+                    "result": outcome.result, "category": outcome.error_category,
+                    "http_status": outcome.http_status,
+                })
         db.commit()
-        return {"status": "success", "created": created, "updated": updated, "errors": errors, "total": len(queued)}
+        succeeded = counters["created"] + counters["updated"] + counters["cached"]
+        return {
+            "status": "success" if not counters["errors"] else "completed_with_errors",
+            **counters, "succeeded": succeeded, "total": len(queued),
+            "failure_categories": dict(sorted(categories.items())), "samples": samples,
+        }
 
     @staticmethod
     async def _cache_remote_resource(

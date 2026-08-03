@@ -28,6 +28,7 @@ export interface SyncPhase {
     safe_message: string;
     affected_count: number;
   } | null;
+  canary_validated: boolean;
 }
 
 export interface SyncPhaseError {
@@ -105,4 +106,5 @@ export const fullSyncApi = {
   resumePhase: async (id: string, phase: string): Promise<SyncJob> => (await api.post(`/admin/sync/jobs/${id}/phases/${encodeURIComponent(phase)}/resume`)).data,
   skipPhase: async (id: string, phase: string, reason: string): Promise<SyncJob> => (await api.post(`/admin/sync/jobs/${id}/phases/${encodeURIComponent(phase)}/skip`, undefined, { params: { reason } })).data,
   phaseErrors: async (id: string, phase: string, offset = 0, limit = 25): Promise<SyncPhaseErrors> => (await api.get(`/admin/sync/jobs/${id}/phases/${encodeURIComponent(phase)}/errors`, { params: { offset, limit } })).data,
+  runImageCanary: async (limit = 30): Promise<{ passed: boolean; total: number; succeeded: number; failed: number }> => (await api.post('/admin/sync/images/canary', { limit })).data,
 };

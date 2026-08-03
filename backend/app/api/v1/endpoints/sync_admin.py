@@ -1,7 +1,8 @@
 """Admin sync endpoints backed by centralized SyncService."""
 from __future__ import annotations
 
-from datetime import UTC, datetime
+from datetime import UTC, datetime, timedelta
+import json
 from typing import Any, Optional
 
 from fastapi import APIRouter, Depends, HTTPException, Query
@@ -103,6 +104,10 @@ class SyncRuntimeSettingsUpdate(BaseModel):
     sync_notify_email_enabled: Optional[bool] = None
 
 
+class ImageCanaryRequest(BaseModel):
+    limit: int = Field(30, ge=20, le=50)
+
+
 def _get_setting(db: Session, key: str, default: str = "") -> str:
     value = db.query(SettingsModel).filter(SettingsModel.key == key).first()
     return value.value if value and value.value is not None else default
@@ -116,6 +121,19 @@ def _set_setting(db: Session, key: str, value: str, description: str = "") -> No
             setting.description = description
     else:
         db.add(SettingsModel(key=key, value=value, description=description, is_active=True))
+
+
+def _image_canary_status(db: Session) -> dict[str, Any]:
+    raw = _get_setting(db, "sync_images_canary", "")
+    try:
+        result = json.loads(raw) if raw else {}
+        checked_at = datetime.fromisoformat(result["checked_at"])
+        if checked_at.tzinfo is None:
+            checked_at = checked_at.replace(tzinfo=UTC)
+        result["valid"] = bool(result.get("passed")) and checked_at >= datetime.now(UTC) - timedelta(hours=2)
+        return result
+    except (ValueError, TypeError, KeyError, json.JSONDecodeError):
+        return {"valid": False}
 
 
 def _to_job_response(job, db: Session | None = None) -> SyncJobResponse:
@@ -139,6 +157,7 @@ def _to_job_response(job, db: Session | None = None) -> SyncJobResponse:
                     SyncJobError.external_id, SyncJobError.entity_name,
                 )))).scalar() or 0,
             )
+    canary = _image_canary_status(db) if db is not None else {"valid": False}
     phases = [
         {
             "id": row.id, "phase_key": row.phase_key, "order_index": row.order_index,
@@ -149,6 +168,7 @@ def _to_job_response(job, db: Session | None = None) -> SyncJobResponse:
             "checkpoint": row.checkpoint or {}, "next_retry_at": row.next_retry_at,
             "started_at": row.started_at, "updated_at": row.updated_at, "finished_at": row.finished_at,
             "error_category": row.error_category, "safe_error": row.safe_error,
+            "canary_validated": bool(canary.get("valid")) if row.phase_key == "images" else False,
             "last_error": ({
                 "occurred_at": (latest_errors[row.phase_key][0].last_seen_at or latest_errors[row.phase_key][0].created_at),
                 "entity_name": latest_errors[row.phase_key][0].entity_name,
@@ -611,6 +631,31 @@ def get_sync_phase_errors(
     }
 
 
+@router.post("/images/canary")
+async def run_image_canary(
+    request: ImageCanaryRequest,
+    db: Session = Depends(get_db),
+    admin: User = Depends(get_current_admin_user),
+):
+    result = await SyncService.sync_images(
+        db, limit=request.limit, representative=True, force_refetch=True,
+    )
+    passed = result["total"] >= 20 and result["errors"] == 0 and result["succeeded"] == result["total"]
+    checked_at = datetime.now(UTC)
+    stored = {
+        "checked_at": checked_at.isoformat(), "passed": passed,
+        "total": result["total"], "succeeded": result["succeeded"], "failed": result["errors"],
+    }
+    _set_setting(db, "sync_images_canary", json.dumps(stored, separators=(",", ":")), "Latest production-safe image downloader canary")
+    db.add(WorkspaceAudit(
+        actor_id=admin.id, workspace_type="admin", action="sync_images_canary",
+        target_type="sync_images", target_id=checked_at.isoformat(), assisted=False,
+        safe_metadata={**stored, "failure_categories": result["failure_categories"]},
+    ))
+    db.commit()
+    return {**stored, "failure_categories": result["failure_categories"], "samples": result["samples"]}
+
+
 @router.post("/jobs/{job_id}/phases/{phase_key}/resume", response_model=SyncJobResponse)
 def resume_sync_phase(job_id: str, phase_key: str, db: Session = Depends(get_db), admin: User = Depends(get_current_admin_user)):
     job = SyncService.get_job(db, job_id)
@@ -621,7 +666,16 @@ def resume_sync_phase(job_id: str, phase_key: str, db: Session = Depends(get_db)
         raise HTTPException(409, "A single phase can be resumed only from a partially completed operation")
     if phase.status not in {"failed", "cancelled", "skipped"}:
         raise HTTPException(409, "Only incomplete phases can be resumed")
+    failure_ratio = (phase.failed_count / phase.processed_count) if phase.processed_count else 0
+    if phase_key == "images" and failure_ratio > 0.8 and not _image_canary_status(db).get("valid"):
+        raise HTTPException(409, "Image retry requires a successful recent production canary")
     phase.status = "pending"; phase.finished_at = None; phase.error_category = None; phase.safe_error = None
+    if phase_key == "images":
+        # A targeted image retry is a fresh measurement over the image queue;
+        # durable error rows remain available, but phase counters must not make
+        # a successful retry inherit the prior 95% failure ratio.
+        phase.processed_count = 0; phase.failed_count = 0; phase.current_offset = 0
+        phase.current_entity = None; phase.checkpoint = {}
     job.status = "pending"; job.finished_at = None; job.cancel_requested = False; job.message = f"Phase resume requested: {phase_key}"
     if job.maintenance_requested:
         from app.services.maintenance_mode_service import MaintenanceModeService
