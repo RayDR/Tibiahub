@@ -66,7 +66,78 @@ export interface GuildSyncResult {
     message: string;
 }
 
+export type GuildManagementCapability =
+    | 'raffles.manage'
+    | 'events.manage'
+    | 'hunts.manage'
+    | 'announcements.manage';
+
+export interface ManageableGuildContext {
+    capability: GuildManagementCapability;
+    guilds: string[];
+    guild_worlds: Record<string, string | null>;
+}
+
+export interface GuildManagementGrant {
+    id: number;
+    user_id: number;
+    guild_name: string;
+    capability: GuildManagementCapability;
+    granted_by_id: number;
+    granted_at: string;
+    revoked_at: string | null;
+}
+
+export interface GuildAccessContext {
+    guild_name: string;
+    world_name: string | null;
+    role: 'global_admin' | 'guild_leader' | 'guild_member' | 'delegated_manager';
+    capabilities: Record<GuildManagementCapability, boolean>;
+    can_grant_permissions: boolean;
+    representative_character_name: string | null;
+}
+
 export const guildManagementApi = {
+    getGuildContext: async (): Promise<GuildAccessContext[]> => {
+        const response = await api.get('/guild-management/context');
+        return response.data.guilds;
+    },
+
+    getManageableGuilds: async (
+        capability: GuildManagementCapability = 'raffles.manage'
+    ): Promise<ManageableGuildContext> => {
+        const response = await api.get('/guild-management/manageable-guilds', { params: { capability } });
+        return response.data;
+    },
+
+    getGuildPermissions: async (guildName: string): Promise<GuildManagementGrant[]> => {
+        const response = await api.get(`/guild-management/guilds/${encodeURIComponent(guildName)}/grants`);
+        return response.data;
+    },
+
+    grantAllGuildPermissions: async (
+        guildName: string,
+        userId: number,
+        reason?: string
+    ): Promise<GuildManagementGrant[]> => {
+        const response = await api.post(
+            `/guild-management/guilds/${encodeURIComponent(guildName)}/grants`,
+            { user_id: userId, grant_all: true, reason: reason || null }
+        );
+        return response.data;
+    },
+
+    revokeAllGuildPermissions: async (
+        guildName: string,
+        userId: number
+    ): Promise<{ revoked: number }> => {
+        const response = await api.post(
+            `/guild-management/guilds/${encodeURIComponent(guildName)}/grants/${userId}/revoke`,
+            { capabilities: null }
+        );
+        return response.data;
+    },
+
     getGuilds: async (): Promise<string[]> => {
         const response = await api.get('/guild-management/guilds');
         return response.data;

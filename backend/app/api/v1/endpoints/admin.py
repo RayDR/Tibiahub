@@ -24,6 +24,8 @@ from app.core.permissions import can_manage_guild, is_global_admin
 from app.services.media_asset_service import UnsafeMediaError, validate_raster_image
 from app.services.tibia_validation_service import TibiaValidationService
 from app.services.tibia_api import TibiaAPIError, get_guild_info
+from app.services.guild_roster_service import GuildRosterService, GuildRosterSyncError
+from app.services.guild_authorization_service import GuildAuthorizationService
 from app.core import config, security
 from app.schemas.admin import (
     TibiaAPIStatus, 
@@ -714,93 +716,32 @@ async def sync_guild_members(
     Fetches guild data and updates character information
     Requires admin privileges
     """
-    if not can_manage_guild(current_user, guild_name):
+    if not GuildAuthorizationService.can_manage(db, current_user, guild_name, "raffles.manage"):
         raise HTTPException(status_code=403, detail="You can only manage your own guild")
 
     try:
-        guild_data = await get_guild_info(guild_name)
-        if not guild_data:
-            raise HTTPException(status_code=404, detail="Guild not found in TibiaData")
-        members = guild_data.get("members") or []
-        member_by_name = {
-            str(member.get("name") or "").strip().casefold(): member
-            for member in members if str(member.get("name") or "").strip()
-        }
-        synced_count = 0
-        new_characters = 0
-        updated_characters = 0
-        invalid_users = []
-        linked_user_ids: set[int] = set()
-
-        for char in db.query(UserCharacter).all():
-            member = member_by_name.get((char.character_name or "").strip().casefold())
-            if not member:
-                continue
-            char.level = member.get("level")
-            char.vocation = member.get("vocation")
-            char.guild_name = guild_name
-            char.guild_rank = member.get("rank")
-            char.world_name = guild_data.get("world") or char.world_name
-            char.last_seen = datetime.now(UTC)
-            updated_characters += 1
-            if char.user:
-                linked_user_ids.add(char.user.id)
-                char.user.guild_name = guild_name
-                char.user.world_name = char.world_name
-                if not char.user.tibia_character_name or (char.user.tibia_character_name or "").casefold() == char.character_name.casefold():
-                    char.user.guild_rank = char.guild_rank or "Member"
-
-        existing_names = {
-            (name or "").strip().casefold()
-            for (name,) in db.query(UserCharacter.character_name).all()
-        }
-        new_characters = sum(1 for name in member_by_name if name not in existing_names)
-        synced_count = len(linked_user_ids)
-        unlinked_users = 0
-
-        scoped_users = db.query(User).filter(func.lower(User.guild_name) == guild_name.strip().lower()).all()
-        for user in scoped_users:
-            matching = [char for char in user.characters if (char.character_name or "").strip().casefold() in member_by_name]
-            if matching:
-                continue
-            for char in user.characters:
-                if (char.guild_name or "").strip().casefold() == guild_name.strip().casefold():
-                    char.guild_name = None
-                    char.guild_rank = None
-            invalid_users.append({"user_id": user.id, "username": user.username,
-                                  "character_name": user.tibia_character_name or "",
-                                  "reason": "No linked character remains in the TibiaData guild roster"})
-            user.guild_name = None
-            user.guild_rank = "Unranked"
-            unlinked_users += 1
-
+        result = await GuildRosterService.synchronize(db, guild_name, guild_fetcher=get_guild_info)
         if is_global_admin(current_user):
-            db.add(WorkspaceAudit(actor_id=current_user.id, workspace_type="admin_guild_assist",
-                                  guild_name=guild_name, action="guild_membership_synchronized",
-                                  target_type="guild", target_id=guild_name, assisted=True,
-                                  safe_metadata={"actor_context": "system", "source": "tibiadata",
-                                                 "synced_users": synced_count, "unlinked_users": unlinked_users}))
+            db.add(WorkspaceAudit(
+                actor_id=current_user.id, workspace_type="admin_guild_assist",
+                guild_name=result.guild_name, action="guild_membership_synchronized",
+                target_type="guild", target_id=result.guild_name, assisted=True,
+                safe_metadata={
+                    "actor_context": "system", "source": "tibiadata",
+                    **{key: value for key, value in result.to_dict().items() if key != "synchronized_at"},
+                    "synchronized_at": result.synchronized_at.isoformat(),
+                },
+            ))
         db.commit()
         return GuildSyncResult(
-            success=True,
-            guild_name=guild_name,
-            total_members=len(members),
-            synced_users=synced_count,
-            updated_characters=updated_characters,
-            new_characters=new_characters,
-            invalid_users=invalid_users,
-            unlinked_users=unlinked_users,
-            message=f"Successfully synchronized {synced_count} linked users with {guild_name}"
+            success=True, guild_name=result.guild_name, total_members=result.total,
+            synced_users=result.linked, updated_characters=result.updated,
+            new_characters=result.inserted, invalid_users=[], unlinked_users=result.unlinked,
+            message=f"Successfully synchronized {result.total} roster characters with {result.guild_name}",
         )
-    except HTTPException:
-        raise
-    except TibiaAPIError as exc:
+    except GuildRosterSyncError as exc:
         db.rollback()
-        raise HTTPException(status_code=503, detail="TibiaData is temporarily unavailable") from exc
-    except Exception as exc:
-        db.rollback()
-        raise HTTPException(status_code=500, detail="Unable to synchronize guild membership") from exc
-
+        raise HTTPException(status_code=503, detail=str(exc)) from exc
 
 @router.get("/api-monitor")
 def get_external_apis_status(

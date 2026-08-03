@@ -6,11 +6,13 @@ import { AppButton, Badge, Card, EmptyState, Input, LoadingState, PageHeader, Ta
 import { useAuth } from '../../context/AuthContext';
 import { GuildMember, guildApi } from '../../services/guild';
 import { useGuildContext } from '../../utils/guildContext';
+import { useGuildCapability } from '../../hooks/useGuildCapability';
 
 export default function GuildMembersPage() {
   const { t } = useTranslation();
   const { user } = useAuth();
   const guildName = useGuildContext(user);
+  const { canManageGuild } = useGuildCapability('announcements.manage');
   const [members, setMembers] = useState<GuildMember[]>([]);
   const [source, setSource] = useState<'live' | 'snapshot'>('snapshot');
   const [loading, setLoading] = useState(true);
@@ -18,7 +20,7 @@ export default function GuildMembersPage() {
   const [error, setError] = useState(false);
   const [query, setQuery] = useState('');
   const [sort, setSort] = useState<'level' | 'name'>('level');
-  const canSync = user?.is_superuser || ['leader', 'vice leader'].includes((user?.guild_rank || '').toLowerCase());
+  const canSync = canManageGuild(guildName);
 
   const load = async (force = false) => {
     if (!guildName) return;

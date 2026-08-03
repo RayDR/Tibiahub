@@ -25,8 +25,8 @@ class GuildHuntPlannerService:
     ACTIVE_ATTENDANCE = {"registered", "attended"}
 
     @staticmethod
-    def can_manage(user: User, hunt: GuildHunt) -> bool:
-        return can_manage_guild(user, hunt.guild_name)
+    def can_manage(db: Session, user: User, hunt: GuildHunt) -> bool:
+        return can_manage_guild(user, hunt.guild_name, db=db, capability="hunts.manage")
 
     @staticmethod
     def can_view(user: User, hunt: GuildHunt) -> bool:
@@ -67,7 +67,7 @@ class GuildHuntPlannerService:
 
     @staticmethod
     def create(db: Session, actor: User, guild_name: str, values: dict) -> GuildHunt:
-        if not can_manage_guild(actor, guild_name):
+        if not can_manage_guild(actor, guild_name, db=db, capability="hunts.manage"):
             raise PermissionError("Guild leader permission required")
         values = dict(values)
         values.pop("guild_name", None)
@@ -81,7 +81,7 @@ class GuildHuntPlannerService:
 
     @staticmethod
     def update(db: Session, actor: User, hunt: GuildHunt, values: dict) -> GuildHunt:
-        if not GuildHuntPlannerService.can_manage(actor, hunt):
+        if not GuildHuntPlannerService.can_manage(db, actor, hunt):
             raise PermissionError("Guild leader permission required")
         if hunt.status != "scheduled":
             raise GuildHuntError("Only scheduled hunts can be edited")
@@ -101,7 +101,7 @@ class GuildHuntPlannerService:
 
     @staticmethod
     def transition(db: Session, actor: User, hunt: GuildHunt, action: str, *, reason: str | None = None) -> GuildHunt:
-        if not GuildHuntPlannerService.can_manage(actor, hunt):
+        if not GuildHuntPlannerService.can_manage(db, actor, hunt):
             raise PermissionError("Guild leader permission required")
         allowed = {("scheduled", "cancel"), ("scheduled", "start"), ("in_progress", "finish")}
         if (hunt.status, action) not in allowed:
@@ -169,7 +169,7 @@ class GuildHuntPlannerService:
 
     @staticmethod
     def mark_attendance(db: Session, actor: User, hunt: GuildHunt, participant: GuildHuntParticipant, status: str) -> GuildHuntParticipant:
-        if not GuildHuntPlannerService.can_manage(actor, hunt):
+        if not GuildHuntPlannerService.can_manage(db, actor, hunt):
             raise PermissionError("Guild leader permission required")
         if hunt.status not in {"in_progress", "finished"} or status not in {"attended", "absent"}:
             raise GuildHuntError("Attendance can be recorded only after a hunt starts")

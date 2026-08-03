@@ -14,12 +14,14 @@ import {
   User,
 } from "lucide-react";
 import { useGuildContext } from "../../utils/guildContext";
+import { useGuildCapability } from "../../hooks/useGuildCapability";
 
 export default function Announcements() {
   const { user } = useAuth();
   const { t } = useTranslation();
   const toast = useToast();
   const guildName = useGuildContext(user);
+  const { canManageGuild } = useGuildCapability("announcements.manage");
 
   const [announcements, setAnnouncements] = useState<Announcement[]>([]);
   const [loading, setLoading] = useState(true);
@@ -61,11 +63,7 @@ export default function Announcements() {
     [loadingMore, hasMore],
   );
 
-  // Check if user is admin or leader (simple check for now, backend enforces security)
-  const canCreate =
-    user?.is_superuser ||
-    user?.guild_rank === "Alpha Warbringer" ||
-    user?.guild_rank === "Bloodhowl Marshal";
+  const canCreate = canManageGuild(guildName);
 
   const loadData = async (reset = false) => {
     try {

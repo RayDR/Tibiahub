@@ -5,6 +5,10 @@ from enum import Enum
 from fastapi import HTTPException, status
 
 from app.models.user import User
+from app.services.guild_authorization_service import (
+    GuildAuthorizationService,
+    LEADER_RANKS,
+)
 
 class GuildRole(str, Enum):
     GLOBAL_ADMIN = "global_admin"
@@ -14,11 +18,6 @@ class GuildRole(str, Enum):
     DELEGATED_MANAGER = "delegated_manager"
 
 
-LEADER_RANKS = {
-    "leader",
-    "guild leader",
-    "alpha warbringer",
-}
 VICELEADER_RANKS = {
     "vice leader",
     "viceleader",
@@ -30,9 +29,11 @@ def is_global_admin(user: User) -> bool:
     return bool(user and user.is_superuser)
 
 
-def is_guild_leader(user: User, guild_id: str | int | None = None) -> bool:
+def is_guild_leader(user: User, guild_id: str | int | None = None, db=None) -> bool:
     if not user:
         return False
+    if db is not None and guild_id is not None:
+        return GuildAuthorizationService.is_verified_leader(db, user, str(guild_id))
     rank = (user.guild_rank or "").strip().lower()
     if rank not in LEADER_RANKS:
         return False
@@ -72,15 +73,21 @@ def can_assist_guild(user: User, _guild_name: str) -> bool:
     return is_global_admin(user)
 
 
-def can_manage_guild_members(user: User, guild_name: str) -> bool:
+def can_manage_guild_members(user: User, guild_name: str, db=None) -> bool:
+    if db is not None:
+        return GuildAuthorizationService.can_manage(db, user, guild_name, "announcements.manage")
     return is_global_admin(user) or is_guild_leader(user, guild_name)
 
 
-def can_manage_announcements(user: User, guild_name: str) -> bool:
+def can_manage_announcements(user: User, guild_name: str, db=None) -> bool:
+    if db is not None:
+        return GuildAuthorizationService.can_manage(db, user, guild_name, "announcements.manage")
     return can_manage_guild_members(user, guild_name) or is_guild_viceleader(user, guild_name)
 
 
-def can_manage_events(user: User, guild_name: str) -> bool:
+def can_manage_events(user: User, guild_name: str, db=None) -> bool:
+    if db is not None:
+        return GuildAuthorizationService.can_manage(db, user, guild_name, "events.manage")
     return can_manage_announcements(user, guild_name)
 
 
@@ -93,18 +100,20 @@ def can_create_global_content(user: User) -> bool:
     return is_global_admin(user)
 
 
-def can_grant_delegated_permissions(user: User, guild_name: str) -> bool:
-    return is_global_admin(user) or is_guild_leader(user, guild_name)
+def can_grant_delegated_permissions(user: User, guild_name: str, db=None) -> bool:
+    return is_global_admin(user) or is_guild_leader(user, guild_name, db=db)
 
 
-def can_manage_guild(user: User, guild_id: str | int | None = None) -> bool:
+def can_manage_guild(user: User, guild_id: str | int | None = None, db=None, capability: str = "raffles.manage") -> bool:
+    if db is not None and guild_id is not None:
+        return GuildAuthorizationService.can_manage(db, user, str(guild_id), capability)
     if is_global_admin(user):
         return True
     return is_guild_leader(user, guild_id)
 
 
-def require_guild_management(user: User, guild_id: str | int | None = None) -> None:
-    if can_manage_guild(user, guild_id):
+def require_guild_management(user: User, guild_id: str | int | None = None, db=None, capability: str = "raffles.manage") -> None:
+    if can_manage_guild(user, guild_id, db=db, capability=capability):
         return
     raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Insufficient permissions")
 
@@ -130,8 +139,7 @@ def has_active_raffle_grant(db, user: User, raffle_id: int) -> bool:
 
 def can_administer_raffle(db, user: User, raffle) -> bool:
     return bool(
-        is_global_admin(user)
-        or is_matching_raffle_leader(user, raffle.guild_name)
+        GuildAuthorizationService.can_manage(db, user, raffle.guild_name, "raffles.manage")
         or has_active_raffle_grant(db, user, raffle.id)
     )
 
@@ -148,5 +156,15 @@ def can_view_private_raffle_results(db, user: User, raffle) -> bool:
     return can_administer_raffle(db, user, raffle)
 
 
-def can_publish_raffle(user: User, raffle) -> bool:
+def can_publish_raffle(user: User, raffle, db=None) -> bool:
+    if db is not None:
+        if is_global_admin(user) or GuildAuthorizationService.is_verified_leader(db, user, raffle.guild_name):
+            return True
+        # A guild-wide raffle manager may publish only while the grant is
+        # active and their verified in-guild publication identity still
+        # exists. A compatibility per-raffle grant does not confer publishing.
+        return bool(
+            GuildAuthorizationService.has_grant(db, user, raffle.guild_name, "raffles.manage")
+            and GuildAuthorizationService.representative_character(db, user, raffle.guild_name)
+        )
     return is_global_admin(user) or is_matching_raffle_leader(user, raffle.guild_name)
