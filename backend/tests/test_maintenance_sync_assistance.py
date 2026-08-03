@@ -246,11 +246,11 @@ def test_full_plan_claim_recovery_cancel_and_retry_classification(db):
 
     response = httpx.Response(429, headers={"Retry-After": "17"}, request=httpx.Request("GET", "https://provider.invalid"))
     category, retryable, retry_after = SyncService.classify_provider_error(httpx.HTTPStatusError("rate", request=response.request, response=response))
-    assert (category, retryable, retry_after) == ("rate_limited", True, 17)
+    assert (category, retryable, retry_after) == ("provider_rate_limited", True, 17)
     assert SyncService.retry_delay(1, retry_after) == 17
     assert SyncService.classify_provider_error(ValueError("bad payload"))[:2] == ("invalid_payload", False)
     database_error = DataError("INSERT", {}, OverflowError("integer out of range"))
-    assert SyncService.classify_provider_error(database_error)[:2] == ("invalid_payload", False)
+    assert SyncService.classify_provider_error(database_error)[:2] == ("database_constraint", False)
 
 
 def test_generated_creature_ids_fit_postgresql_integer_range():

@@ -6,12 +6,13 @@ from typing import Any, Optional
 
 from fastapi import APIRouter, Depends, HTTPException, Query
 from pydantic import BaseModel, Field
+from sqlalchemy import func, or_
 from sqlalchemy.orm import Session
 
 from app.api.v1.endpoints.auth import get_current_admin_user
 from app.db.database import get_db
 from app.models.creature import Creature
-from app.models.external_data import SyncJob
+from app.models.external_data import SyncJob, SyncJobError
 from app.models.maintenance_sync import MaintenanceHold, SyncJobPhase, SyncWorkerHeartbeat
 from app.models.workspace_audit import WorkspaceAudit
 from app.models.hunt_zone import HuntZone
@@ -123,7 +124,22 @@ def _to_job_response(job, db: Session | None = None) -> SyncJobResponse:
         "completed": "success",
         "failed": "error",
     }
-    phases = [] if db is None else [
+    phase_rows = [] if db is None else db.query(SyncJobPhase).filter(
+        SyncJobPhase.job_id == job.id,
+    ).order_by(SyncJobPhase.order_index).all()
+    latest_errors: dict[str, tuple[SyncJobError | None, int]] = {}
+    if db is not None:
+        for phase_row in phase_rows:
+            error_query = db.query(SyncJobError).filter(
+                SyncJobError.job_id == job.id, SyncJobError.phase_key == phase_row.phase_key,
+            )
+            latest_errors[phase_row.phase_key] = (
+                error_query.order_by(func.coalesce(SyncJobError.last_seen_at, SyncJobError.created_at).desc()).first(),
+                error_query.with_entities(func.count(func.distinct(func.coalesce(
+                    SyncJobError.external_id, SyncJobError.entity_name,
+                )))).scalar() or 0,
+            )
+    phases = [
         {
             "id": row.id, "phase_key": row.phase_key, "order_index": row.order_index,
             "provider": row.provider, "required": row.required, "status": row.status,
@@ -133,8 +149,21 @@ def _to_job_response(job, db: Session | None = None) -> SyncJobResponse:
             "checkpoint": row.checkpoint or {}, "next_retry_at": row.next_retry_at,
             "started_at": row.started_at, "updated_at": row.updated_at, "finished_at": row.finished_at,
             "error_category": row.error_category, "safe_error": row.safe_error,
+            "last_error": ({
+                "occurred_at": (latest_errors[row.phase_key][0].last_seen_at or latest_errors[row.phase_key][0].created_at),
+                "entity_name": latest_errors[row.phase_key][0].entity_name,
+                "category": latest_errors[row.phase_key][0].error_category,
+                "http_status": latest_errors[row.phase_key][0].http_status,
+                "safe_message": latest_errors[row.phase_key][0].error_message,
+                "affected_count": latest_errors[row.phase_key][1],
+            } if latest_errors[row.phase_key][0] else ({
+                "occurred_at": row.finished_at, "entity_name": None,
+                "category": row.error_category, "http_status": None,
+                "safe_message": "Detailed information was not recorded for this earlier failure.",
+                "affected_count": row.failed_count,
+            } if row.failed_count else None)),
         }
-        for row in db.query(SyncJobPhase).filter(SyncJobPhase.job_id == job.id).order_by(SyncJobPhase.order_index).all()
+        for row in phase_rows
     ]
     maintenance_active = bool(db and db.query(MaintenanceHold.id).filter(
         MaintenanceHold.owner_job_id == job.id, MaintenanceHold.released_at.is_(None),
@@ -502,6 +531,84 @@ def resume_sync_job(
     db.add(WorkspaceAudit(actor_id=current_user.id, workspace_type="admin", action="full_sync_resumed", target_type="sync_job", target_id=job.id, assisted=False, safe_metadata={}))
     db.commit()
     return _to_job_response(job, db)
+
+
+@router.get("/jobs/{job_id}/phases/{phase_key}/errors")
+def get_sync_phase_errors(
+    job_id: str,
+    phase_key: str,
+    limit: int = Query(25, ge=1, le=100),
+    offset: int = Query(0, ge=0),
+    category: str | None = Query(None, max_length=80),
+    http_status: int | None = Query(None, ge=100, le=599),
+    retryable: bool | None = Query(None),
+    search: str | None = Query(None, min_length=1, max_length=100),
+    db: Session = Depends(get_db),
+    _admin: User = Depends(get_current_admin_user),
+):
+    job = SyncService.get_job(db, job_id)
+    phase = db.query(SyncJobPhase).filter_by(job_id=job_id, phase_key=phase_key).one_or_none()
+    if not job or not phase:
+        raise HTTPException(404, "Job phase not found")
+
+    query = db.query(SyncJobError).filter(
+        SyncJobError.job_id == job_id, SyncJobError.phase_key == phase_key,
+    )
+    if category:
+        query = query.filter(SyncJobError.error_category == category)
+    if http_status is not None:
+        query = query.filter(SyncJobError.http_status == http_status)
+    if retryable is not None:
+        query = query.filter(SyncJobError.retryable.is_(retryable))
+    if search:
+        escaped = search.replace("\\", "\\\\").replace("%", "\\%").replace("_", "\\_")
+        pattern = f"%{escaped}%"
+        query = query.filter(or_(
+            SyncJobError.entity_name.ilike(pattern, escape="\\"),
+            SyncJobError.external_id.ilike(pattern, escape="\\"),
+        ))
+
+    total = query.count()
+    affected = query.with_entities(func.count(func.distinct(func.coalesce(
+        SyncJobError.external_id, SyncJobError.entity_name,
+    )))).scalar() or 0
+    latest = query.with_entities(func.max(func.coalesce(
+        SyncJobError.last_seen_at, SyncJobError.created_at,
+    ))).scalar()
+
+    def grouped(column):
+        return [
+            {"value": value or "unknown", "count": count}
+            for value, count in query.with_entities(column, func.sum(SyncJobError.occurrence_count))
+            .group_by(column).order_by(func.sum(SyncJobError.occurrence_count).desc()).limit(10).all()
+        ]
+
+    rows = query.order_by(func.coalesce(
+        SyncJobError.last_seen_at, SyncJobError.created_at,
+    ).desc(), SyncJobError.id.desc()).offset(offset).limit(limit).all()
+    return {
+        "job_id": job_id, "phase": phase_key, "total_error_records": total,
+        "total_affected_entities": affected, "latest_failure_timestamp": latest,
+        "top_error_categories": grouped(SyncJobError.error_category),
+        "top_http_statuses": grouped(SyncJobError.http_status),
+        "top_provider_hosts": grouped(SyncJobError.provider),
+        "detail_recorded": bool(total),
+        "historical_message": None if total else (
+            "Detailed information was not recorded for this earlier failure." if phase.failed_count else None
+        ),
+        "rows": [{
+            "occurred_at": row.first_occurred_at or row.created_at,
+            "last_seen_at": row.last_seen_at or row.created_at,
+            "occurrence_count": row.occurrence_count or 1,
+            "provider": row.provider, "phase": row.phase_key,
+            "entity_name": row.entity_name, "external_id": row.external_id,
+            "checkpoint_offset": row.checkpoint_offset, "attempt": row.attempt,
+            "error_category": row.error_category or "item_failure",
+            "safe_message": row.error_message,
+            "http_status": row.http_status, "retryable": row.retryable,
+            "url": row.safe_url,
+        } for row in rows],
+    }
 
 
 @router.post("/jobs/{job_id}/phases/{phase_key}/resume", response_model=SyncJobResponse)

@@ -39,6 +39,7 @@ from app.knowledge.models import ACTIVE_KNOWLEDGE_JOB_STATES, KnowledgeJob
 from app.knowledge.services.bootstrap import KnowledgeBootstrapService, TIBIAWIKI_BOOTSTRAP_CONFIRMATION
 from app.services.guild_roster_service import GuildRosterService, GuildRosterSyncError
 from app.services.maintenance_mode_service import MaintenanceModeService, TERMINAL_SYNC_STATES
+from app.services.sync_error_service import SAFE_MESSAGES, classify_exception, record_sync_error
 from app.services.bestiary_source import (
     get_category_members,
     get_creature_detail_by_name,
@@ -423,6 +424,16 @@ class SyncService:
                             SyncService._terminalize(db, job, "cancelled", "Sync cancelled by administrator")
                             return
                         category, retryable, retry_after = SyncService.classify_provider_error(exc)
+                        response = exc.response if isinstance(exc, httpx.HTTPStatusError) else None
+                        request_url = str(response.request.url) if response is not None and response.request else None
+                        record_sync_error(
+                            db, job_id=job.id, phase_key=phase.phase_key, entity_type="phase",
+                            external_id=phase.current_entity, entity_name=phase.current_entity,
+                            category=category, message=SAFE_MESSAGES.get(category), provider=phase.provider,
+                            source_url=request_url, http_status=response.status_code if response is not None else None,
+                            retryable=retryable, checkpoint_offset=phase.current_offset,
+                            attempt=phase.attempt_count,
+                        )
                         if retryable and phase.attempt_count < phase.max_attempts:
                             phase.status = "retrying"; phase.error_category = category
                             phase.safe_error = "The provider is temporarily unavailable; retrying safely."
@@ -512,15 +523,21 @@ class SyncService:
             retry_after = exc.response.headers.get("Retry-After")
             parsed = int(retry_after) if retry_after and retry_after.isdigit() else None
             if status == 429:
-                return "rate_limited", True, parsed
+                return "provider_rate_limited", True, parsed
+            if status == 403:
+                return "provider_forbidden", False, None
+            if status == 404:
+                return "provider_not_found", False, None
             if 500 <= status < 600:
-                return "provider_5xx", True, parsed
-            return "provider_rejected", False, None
+                return "provider_server_error", True, parsed
+            return "download_failed", False, None
         if isinstance(exc, (httpx.TimeoutException, TimeoutError, OSError)):
             return "provider_timeout", True, None
-        if isinstance(exc, (ValueError, TypeError, SQLAlchemyError)):
+        if isinstance(exc, SQLAlchemyError):
+            return "database_constraint", False, None
+        if isinstance(exc, (ValueError, TypeError)):
             return "invalid_payload", False, None
-        return "temporary_provider_failure", True, None
+        return "item_failure", False, None
 
     @staticmethod
     def retry_delay(attempt: int, retry_after: int | None = None) -> float:
@@ -567,6 +584,16 @@ class SyncService:
             phase.checkpoint = {**(phase.checkpoint or {}), "job_count": len(rows), "active_count": len(active)}
             db.commit(); SyncService._heartbeat(db, job, message=f"Knowledge jobs active: {len(active)}")
             if not active:
+                for failed_row in (row for row in rows if row.state in {"failed", "cancelled", "partially_succeeded"}):
+                    record_sync_error(
+                        db, job_id=job.id, phase_key="knowledge", entity_type="knowledge_job",
+                        external_id=str(failed_row.id), entity_name=failed_row.entity_type_id,
+                        category=failed_row.last_error_code or "item_failure",
+                        message=failed_row.safe_last_error or SAFE_MESSAGES["item_failure"],
+                        provider=failed_row.provider_id, retryable=False,
+                        checkpoint_offset=phase.processed_count, attempt=failed_row.attempt_count,
+                    )
+                db.commit()
                 return {"processed": len(rows), "failed": phase.failed_count, "summary": {"knowledge_jobs": len(rows), "knowledge_failed": phase.failed_count}}
             await asyncio.sleep(settings.SYNC_WORKER_POLL_SECONDS)
 
@@ -582,11 +609,18 @@ class SyncService:
             directory = rows[offset]
             try:
                 await GuildRosterService.synchronize(db, directory.guild_name)
-            except GuildRosterSyncError:
+            except GuildRosterSyncError as exc:
                 db.rollback()
                 job = SyncService.get_job(db, job.id)
                 phase = db.get(SyncJobPhase, phase.id)
                 failed += 1
+                record_sync_error(
+                    db, job_id=job.id, phase_key="guild-rosters", entity_type="guild",
+                    external_id=str(directory.id), entity_name=directory.guild_name,
+                    category="item_failure", message=SAFE_MESSAGES["item_failure"],
+                    provider="tibiadata", retryable=False, checkpoint_offset=offset,
+                    attempt=phase.attempt_count,
+                )
             offset += 1
             phase.current_offset = offset; phase.current_entity = directory.guild_name
             phase.processed_count = offset; phase.failed_count = failed
@@ -912,17 +946,16 @@ class SyncService:
                     counters[f"{key_prefix}_failed"] += 1
                     job.failed_count = int(job.failed_count or 0) + 1
                     error_category = SyncService.classify_provider_error(last_error)[0] if last_error else "unknown_failure"
-                    db.add(
-                        SyncJobError(
-                            job_id=job.id,
-                            entity_type="boss" if only_bosses else "creature",
-                            external_id=name,
-                            entity_name=name,
-                            error_message="The provider record could not be synchronized safely.",
-                            error_category=error_category,
-                            retry_count=retry_count,
-                            status="failed",
-                        )
+                    response = last_error.response if isinstance(last_error, httpx.HTTPStatusError) else None
+                    record_sync_error(
+                        db, job_id=job.id, phase_key="bosses" if only_bosses else "creatures",
+                        entity_type="boss" if only_bosses else "creature", external_id=name,
+                        entity_name=name, category=error_category, message=SAFE_MESSAGES.get(error_category),
+                        provider="tibiawiki",
+                        source_url=str(response.request.url) if response is not None and response.request else None,
+                        http_status=response.status_code if response is not None else None,
+                        retryable=SyncService.classify_provider_error(last_error)[1] if last_error else False,
+                        checkpoint_offset=offset + processed, attempt=retry_count + 1,
                     )
 
                 db.add(job)
@@ -1049,17 +1082,15 @@ class SyncService:
                     counters[f"{summary_prefix}_failed"] += 1
                     job.failed_count = int(job.failed_count or 0) + 1
                     error_category = SyncService.classify_provider_error(last_error)[0] if last_error else "unknown_failure"
-                    db.add(
-                        SyncJobError(
-                            job_id=job.id,
-                            entity_type=target,
-                            external_id=name,
-                            entity_name=name,
-                            error_message="The provider record could not be synchronized safely.",
-                            error_category=error_category,
-                            retry_count=retry_count,
-                            status="failed",
-                        )
+                    response = last_error.response if isinstance(last_error, httpx.HTTPStatusError) else None
+                    record_sync_error(
+                        db, job_id=job.id, phase_key=target, entity_type=target,
+                        external_id=name, entity_name=name, category=error_category,
+                        message=SAFE_MESSAGES.get(error_category), provider="tibiawiki",
+                        source_url=str(response.request.url) if response is not None and response.request else None,
+                        http_status=response.status_code if response is not None else None,
+                        retryable=SyncService.classify_provider_error(last_error)[1] if last_error else False,
+                        checkpoint_offset=offset + processed, attempt=retry_count + 1,
                     )
 
                 db.add(job)

@@ -20,6 +20,45 @@ export interface SyncPhase {
   finished_at: string | null;
   error_category: string | null;
   safe_error: string | null;
+  last_error: {
+    occurred_at: string | null;
+    entity_name: string | null;
+    category: string | null;
+    http_status: number | null;
+    safe_message: string;
+    affected_count: number;
+  } | null;
+}
+
+export interface SyncPhaseError {
+  occurred_at: string;
+  last_seen_at: string;
+  occurrence_count: number;
+  provider: string | null;
+  phase: string;
+  entity_name: string | null;
+  external_id: string | null;
+  checkpoint_offset: number | null;
+  attempt: number | null;
+  error_category: string;
+  safe_message: string;
+  http_status: number | null;
+  retryable: boolean | null;
+  url: string | null;
+}
+
+export interface SyncPhaseErrors {
+  job_id: string;
+  phase: string;
+  total_error_records: number;
+  total_affected_entities: number;
+  latest_failure_timestamp: string | null;
+  top_error_categories: Array<{ value: string; count: number }>;
+  top_http_statuses: Array<{ value: string | number; count: number }>;
+  top_provider_hosts: Array<{ value: string; count: number }>;
+  detail_recorded: boolean;
+  historical_message: string | null;
+  rows: SyncPhaseError[];
 }
 
 export interface SyncJob {
@@ -65,4 +104,5 @@ export const fullSyncApi = {
   resume: async (id: string): Promise<SyncJob> => (await api.post(`/admin/sync/jobs/${id}/resume`)).data,
   resumePhase: async (id: string, phase: string): Promise<SyncJob> => (await api.post(`/admin/sync/jobs/${id}/phases/${encodeURIComponent(phase)}/resume`)).data,
   skipPhase: async (id: string, phase: string, reason: string): Promise<SyncJob> => (await api.post(`/admin/sync/jobs/${id}/phases/${encodeURIComponent(phase)}/skip`, undefined, { params: { reason } })).data,
+  phaseErrors: async (id: string, phase: string, offset = 0, limit = 25): Promise<SyncPhaseErrors> => (await api.get(`/admin/sync/jobs/${id}/phases/${encodeURIComponent(phase)}/errors`, { params: { offset, limit } })).data,
 };
