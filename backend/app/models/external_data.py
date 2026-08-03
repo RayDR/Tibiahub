@@ -3,7 +3,7 @@ Extended models for Tibia items, quests, and hunting places
 Stores complete data from external APIs locally
 Note: Quest and Quest models already exist - these are for API synced data
 """
-from sqlalchemy import Column, Integer, String, Text, Float, DateTime, Boolean, ForeignKey, Index, UniqueConstraint, Uuid
+from sqlalchemy import Column, Integer, String, Text, Float, DateTime, Boolean, ForeignKey, Index, UniqueConstraint, Uuid, text
 from sqlalchemy.orm import relationship
 from sqlalchemy.sql import func
 from uuid import uuid4
@@ -318,6 +318,13 @@ class APISync(Base):
 class SyncJob(Base):
     """Persistent async sync job status."""
     __tablename__ = "sync_jobs"
+    __table_args__ = (
+        Index(
+            "uq_sync_jobs_one_active_full", "job_type", unique=True,
+            postgresql_where=text("job_type = 'full' AND status IN ('pending','running')"),
+            sqlite_where=text("job_type = 'full' AND status IN ('pending','running')"),
+        ),
+    )
 
     id = Column(String(64), primary_key=True, index=True)
     job_type = Column(String(100), nullable=False, index=True)
@@ -344,6 +351,18 @@ class SyncJob(Base):
     batch_size = Column(Integer, nullable=False, default=100)
     max_retries = Column(Integer, nullable=False, default=3)
     external_timeout_seconds = Column(Integer, nullable=False, default=15)
+    force_refresh = Column(Boolean, nullable=False, default=False)
+    skip_images = Column(Boolean, nullable=False, default=False)
+    include_knowledge = Column(Boolean, nullable=False, default=False)
+    include_guild_rosters = Column(Boolean, nullable=False, default=False)
+    continue_on_error = Column(Boolean, nullable=False, default=True)
+    maintenance_requested = Column(Boolean, nullable=False, default=False)
+    operation_label = Column(String(255), nullable=True)
+    worker_id = Column(String(128), nullable=True, index=True)
+    claimed_at = Column(DateTime(timezone=True), nullable=True)
+    lease_expires_at = Column(DateTime(timezone=True), nullable=True, index=True)
+    next_retry_at = Column(DateTime(timezone=True), nullable=True, index=True)
+    terminal_reason = Column(String(255), nullable=True)
     started_at = Column(DateTime(timezone=True), nullable=True)
     finished_at = Column(DateTime(timezone=True), nullable=True)
     created_at = Column(DateTime(timezone=True), server_default=func.now())
@@ -361,6 +380,7 @@ class SyncJobError(Base):
     external_id = Column(String(255), nullable=True, index=True)
     entity_name = Column(String(255), nullable=True)
     error_message = Column(Text, nullable=False)
+    error_category = Column(String(80), nullable=True)
     retry_count = Column(Integer, nullable=False, default=0)
     status = Column(String(30), nullable=False, default="failed")
     created_at = Column(DateTime(timezone=True), server_default=func.now())

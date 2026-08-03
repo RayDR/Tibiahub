@@ -165,6 +165,7 @@ class RaffleResponse(BaseModel):
     next_retry_at: Optional[datetime] = None
     unique_account_participation: bool = True
     weighting_mode: Literal["equal", "weighted"] = "equal"
+    version: int = 1
 
 
 class RaffleExecutionResponse(BaseModel):

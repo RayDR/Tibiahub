@@ -99,6 +99,11 @@ class Settings(BaseSettings):
     EMAIL_WORKER_POLL_SECONDS: int = Field(5, ge=1, le=300)
     EMAIL_WORKER_LEASE_SECONDS: int = Field(120, ge=30, le=3600)
     EMAIL_WORKER_MAX_ATTEMPTS: int = Field(5, ge=1, le=20)
+    SYNC_WORKER_ENABLED: bool = True
+    SYNC_WORKER_ID: str = "sync-worker-1"
+    SYNC_WORKER_POLL_SECONDS: int = Field(5, ge=1, le=300)
+    SYNC_WORKER_LEASE_SECONDS: int = Field(900, ge=60, le=3600)
+    SYNC_WORKER_MAX_IDLE_SECONDS: int = Field(30, ge=1, le=3600)
 
     @model_validator(mode="after")
     def validate_database(self) -> "Settings":

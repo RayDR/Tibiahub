@@ -207,10 +207,14 @@ class RaffleEligibilitySnapshot(Base):
     snapshot_hash = Column(String(64), nullable=False)
     created_by_id = Column(Integer, ForeignKey("users.id"), nullable=False)
     created_at = Column(DateTime(timezone=True), server_default=func.now(), nullable=False)
+    invalidated_at = Column(DateTime(timezone=True), nullable=True)
+    invalidated_by_id = Column(Integer, ForeignKey("users.id", ondelete="SET NULL"), nullable=True)
+    invalidation_reason = Column(Text, nullable=True)
 
     raffle = relationship("Raffle", back_populates="eligibility_snapshots")
     entries = relationship("RaffleEligibilityEntry", back_populates="snapshot", cascade="all, delete-orphan")
     created_by = relationship("User", foreign_keys=[created_by_id])
+    invalidated_by = relationship("User", foreign_keys=[invalidated_by_id])
 
 
 class RaffleEligibilityEntry(Base):

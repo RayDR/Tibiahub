@@ -228,7 +228,10 @@ class AutomaticRaffleService:
             db.commit()
             snapshot_id = snapshot.id
             raffle = db.query(Raffle).options(selectinload(Raffle.prizes)).filter(Raffle.id == raffle_id).one()
-            snapshot = db.query(RaffleEligibilitySnapshot).options(selectinload(RaffleEligibilitySnapshot.entries)).filter(RaffleEligibilitySnapshot.id == snapshot_id).one()
+            snapshot = db.query(RaffleEligibilitySnapshot).options(selectinload(RaffleEligibilitySnapshot.entries)).filter(
+                RaffleEligibilitySnapshot.id == snapshot_id,
+                RaffleEligibilitySnapshot.invalidated_at.is_(None),
+            ).one()
             run, entropy = AutomaticRaffleService._create_run(db, raffle, snapshot, actor, trigger)
             results = AutomaticRaffleService._select(db, raffle=raffle, run=run, snapshot=snapshot, entropy=entropy, positions=list(POSITIONS), excluded_identity_keys=set())
             completed_at = now_utc()
