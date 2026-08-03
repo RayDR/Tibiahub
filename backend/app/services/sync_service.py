@@ -10,17 +10,18 @@ from __future__ import annotations
 
 import asyncio
 import hashlib
-import json
 import logging
 import os
+import random
+from uuid import UUID
 from collections import defaultdict
-from concurrent.futures import ThreadPoolExecutor
-from datetime import UTC, datetime
+from datetime import UTC, datetime, timedelta
 from pathlib import Path
 from typing import Any
 
 import httpx
-from sqlalchemy import desc, text
+from sqlalchemy import desc, or_, select
+from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 
 from app.core.config import settings
@@ -31,6 +32,13 @@ from app.models.hunt_zone import HuntZone
 from app.models.loot import Loot
 from app.models.settings import SystemSettings
 from app.models.user import User
+from app.models.guild_management import GuildDirectory
+from app.models.maintenance_sync import SyncJobPhase, SyncWorkerHeartbeat
+from app.models.workspace_audit import WorkspaceAudit
+from app.knowledge.models import ACTIVE_KNOWLEDGE_JOB_STATES, KnowledgeJob
+from app.knowledge.services.bootstrap import KnowledgeBootstrapService, TIBIAWIKI_BOOTSTRAP_CONFIRMATION
+from app.services.guild_roster_service import GuildRosterService, GuildRosterSyncError
+from app.services.maintenance_mode_service import MaintenanceModeService, TERMINAL_SYNC_STATES
 from app.services.bestiary_source import (
     get_category_members,
     get_creature_detail_by_name,
@@ -40,13 +48,12 @@ from app.services.bestiary_source import (
     get_tibiamaps_markers,
 )
 from app.services.creature_storage_service import upsert_creature_payload
-from app.services.email_service import EmailService
+from app.services.email_outbox_service import EmailOutboxService
 from app.services.text_utils import normalize_search_text
 
 logger = logging.getLogger(__name__)
 _CACHE_DIR = Path("backend/storage/cache")
 _IMAGE_DIR = _CACHE_DIR / "images"
-_EXECUTOR = ThreadPoolExecutor(max_workers=2, thread_name_prefix="tibiahub-sync")
 _FORCE_FAIL_NAME = (os.getenv("SYNC_FORCE_FAIL_NAME") or "").strip().lower()
 _FORCE_FATAL_AFTER = int(os.getenv("SYNC_FORCE_FATAL_AFTER") or "0")
 _SYNC_STALE_RUNNING_MINUTES = int(os.getenv("SYNC_STALE_RUNNING_MINUTES") or "45")
@@ -54,7 +61,14 @@ _SYNC_HEARTBEAT_EVERY_ITEMS = max(1, int(os.getenv("SYNC_HEARTBEAT_EVERY_ITEMS")
 
 
 class SyncService:
-    SYNC_TARGETS = {"full", "creatures", "bosses", "items", "quests", "hunt-zones", "images"}
+    SYNC_TARGETS = {"full", "creatures", "bosses", "items", "quests", "hunt-zones", "images", "knowledge", "guild-rosters"}
+    FULL_PLAN = (
+        ("creatures", "tibiawiki", False), ("bosses", "tibiawiki", False),
+        ("items", "tibiawiki", False), ("quests", "tibiawiki", False),
+        ("hunt-zones", "tibiamaps", False), ("images", "resources", False),
+        ("knowledge", "knowledge-platform", False), ("guild-rosters", "tibiadata", False),
+    )
+    WORKER_VERSION = "sync-worker-v1"
 
     SUMMARY_KEYS = [
         "creatures_created",
@@ -120,6 +134,13 @@ class SyncService:
         batch_size: int = 100,
         max_retries: int = 3,
         external_timeout_seconds: int = 15,
+        force_refresh: bool = False,
+        skip_images: bool = False,
+        include_knowledge: bool = False,
+        include_guild_rosters: bool = False,
+        continue_on_error: bool = True,
+        maintenance_requested: bool = False,
+        operation_label: str | None = None,
     ) -> SyncJob:
         SyncService.ensure_default_settings(db)
         SyncService.recover_stale_running_jobs(db, reason="stale after backend recovery")
@@ -157,8 +178,40 @@ class SyncService:
             batch_size=max(10, min(batch_size, 500)),
             max_retries=max(0, min(max_retries, 10)),
             external_timeout_seconds=max(5, min(external_timeout_seconds, 120)),
+            force_refresh=force_refresh, skip_images=skip_images,
+            include_knowledge=include_knowledge, include_guild_rosters=include_guild_rosters,
+            continue_on_error=continue_on_error, maintenance_requested=maintenance_requested,
+            operation_label=(operation_label or "").strip()[:255] or None,
         )
         db.add(job)
+        try:
+            db.flush()
+        except IntegrityError as exc:
+            db.rollback()
+            raise RuntimeError("A full sync job is already running") from exc
+        plan = [(job_type, "external", False)] if job_type != "full" else list(SyncService.FULL_PLAN)
+        if skip_images:
+            plan = [row for row in plan if row[0] != "images"]
+        if job_type == "full" and not include_knowledge:
+            plan = [row for row in plan if row[0] != "knowledge"]
+        if job_type == "full" and not include_guild_rosters:
+            plan = [row for row in plan if row[0] != "guild-rosters"]
+        for index, (phase_key, provider, required) in enumerate(plan):
+            db.add(SyncJobPhase(
+                job_id=job.id, phase_key=phase_key, order_index=index,
+                provider=provider, required=required, max_attempts=max(1, max_retries + 1),
+            ))
+        if maintenance_requested:
+            MaintenanceModeService.acquire_sync(
+                db, job=job, actor_id=requested_by_user_id,
+                reason=operation_label or "Full synchronization in progress",
+            )
+        if requested_by_user_id:
+            db.add(WorkspaceAudit(
+                actor_id=requested_by_user_id, workspace_type="admin", action="full_sync_started" if job_type == "full" else "sync_started",
+                target_type="sync_job", target_id=job.id, assisted=False,
+                safe_metadata={"job_type": job_type, "maintenance": maintenance_requested, "continue_on_error": continue_on_error},
+            ))
         db.commit()
         db.refresh(job)
         return job
@@ -172,56 +225,26 @@ class SyncService:
     ) -> list[str]:
         threshold_minutes = stale_minutes if stale_minutes is not None else _SYNC_STALE_RUNNING_MINUTES
         now = datetime.now(UTC)
-        now_str = now.strftime("%Y-%m-%d %H:%M:%S")
         stale_ids: list[str] = []
-
         try:
-            rows = db.execute(
-                text(
-                    """
-                    SELECT id, COALESCE(updated_at, started_at, created_at) AS heartbeat_at
-                    FROM sync_jobs
-                    WHERE status = 'running'
-                    """
-                )
-            ).mappings().all()
-
-            for row in rows:
-                heartbeat_raw = row.get("heartbeat_at")
-                if heartbeat_raw is None:
+            rows = db.query(SyncJob).filter(SyncJob.status == "running").all()
+            for job in rows:
+                heartbeat = job.lease_expires_at or job.updated_at or job.started_at or job.created_at
+                if heartbeat is None:
                     continue
-
-                if isinstance(heartbeat_raw, datetime):
-                    heartbeat = heartbeat_raw
+                heartbeat = heartbeat.replace(tzinfo=UTC) if heartbeat.tzinfo is None else heartbeat.astimezone(UTC)
+                expired = heartbeat <= now if job.lease_expires_at else (now - heartbeat).total_seconds() >= threshold_minutes * 60
+                if not expired:
+                    continue
+                stale_ids.append(job.id)
+                if job.cancel_requested:
+                    job.status = "cancelled"; job.finished_at = now; job.terminal_reason = "cancelled_after_stale_worker"
+                    MaintenanceModeService.release_sync(db, job=job, reason="sync_terminal:cancelled")
                 else:
-                    heartbeat_text = str(heartbeat_raw).replace("T", " ").replace("Z", "")
-                    try:
-                        heartbeat = datetime.fromisoformat(heartbeat_text)
-                    except ValueError:
-                        continue
-
-                elapsed_minutes = (now - heartbeat).total_seconds() / 60
-                if elapsed_minutes < threshold_minutes:
-                    continue
-
-                db.execute(
-                    text(
-                        """
-                        UPDATE sync_jobs
-                        SET status = 'failed',
-                            cancel_requested = 1,
-                            message = :reason,
-                            error = :reason,
-                            error_message = :reason,
-                            finished_at = :now,
-                            updated_at = :now
-                        WHERE id = :job_id
-                        """
-                    ),
-                    {"reason": reason, "now": now_str, "job_id": row["id"]},
-                )
-                stale_ids.append(row["id"])
-
+                    job.status = "pending"; job.message = reason; job.worker_id = None
+                    job.claimed_at = None; job.lease_expires_at = None; job.next_retry_at = now
+                    for phase in db.query(SyncJobPhase).filter(SyncJobPhase.job_id == job.id, SyncJobPhase.status == "running").all():
+                        phase.status = "retrying"; phase.error_category = "worker_interrupted"; phase.safe_error = "The prior worker lease expired."
             if stale_ids:
                 db.commit()
         except Exception:
@@ -231,7 +254,18 @@ class SyncService:
 
     @staticmethod
     def _heartbeat(db: Session, job: SyncJob, *, message: str | None = None) -> None:
-        job.updated_at = datetime.now(UTC)
+        now = datetime.now(UTC)
+        job.updated_at = now
+        if job.worker_id:
+            from datetime import timedelta
+            job.lease_expires_at = now + timedelta(seconds=settings.SYNC_WORKER_LEASE_SECONDS)
+            heartbeat = db.get(SyncWorkerHeartbeat, job.worker_id)
+            if heartbeat is None:
+                heartbeat = SyncWorkerHeartbeat(worker_id=job.worker_id, state="running", last_seen_at=now, version=SyncService.WORKER_VERSION)
+                db.add(heartbeat)
+            heartbeat.state = "running"; heartbeat.last_seen_at = now; heartbeat.current_job_id = job.id
+            heartbeat.version = SyncService.WORKER_VERSION; heartbeat.enabled = settings.SYNC_WORKER_ENABLED
+        MaintenanceModeService.heartbeat_sync(db, job.id)
         if message is not None:
             job.message = message
         db.add(job)
@@ -246,24 +280,33 @@ class SyncService:
         limit: int | None = None,
         resume: bool = False,
     ) -> None:
-        _EXECUTOR.submit(SyncService._run_job_sync, job_id, force, skip_images, limit, resume)
+        # Durable workers poll pending rows. This compatibility method no longer
+        # starts request-process threads.
+        _ = (job_id, force, skip_images, limit, resume)
 
     @staticmethod
     def resume_job(db: Session, job_id: str) -> SyncJob | None:
         job = SyncService.get_job(db, job_id)
         if not job:
             return None
-        if job.status not in {"failed", "cancelled"}:
-            raise RuntimeError("Only failed/cancelled jobs can be resumed")
+        if job.status not in {"failed", "cancelled", "completed_with_errors"}:
+            raise RuntimeError("Only failed, cancelled, or partially completed jobs can be resumed")
         job.status = "pending"
         job.cancel_requested = False
         job.error = None
         job.error_message = None
         job.message = "Resume requested"
+        job.finished_at = None; job.worker_id = None; job.claimed_at = None; job.lease_expires_at = None
+        for phase in db.query(SyncJobPhase).filter(
+            SyncJobPhase.job_id == job.id,
+            SyncJobPhase.status.in_(["failed", "cancelled", "retrying", "running"]),
+        ).all():
+            phase.status = "pending"; phase.error_category = None; phase.safe_error = None; phase.finished_at = None
+        if job.maintenance_requested:
+            MaintenanceModeService.acquire_sync(db, job=job, actor_id=job.requested_by_user_id, reason=job.operation_label or "Synchronization resumed")
         db.add(job)
         db.commit()
         db.refresh(job)
-        SyncService.queue_job(job.id, limit=job.job_limit, resume=True)
         return job
 
     @staticmethod
@@ -279,113 +322,273 @@ class SyncService:
         job = SyncService.get_job(db, job_id)
         if not job:
             return None
-        if job.status in {"completed", "failed", "cancelled"}:
+        if job.status in TERMINAL_SYNC_STATES:
             return job
         job.cancel_requested = True
         job.message = "Cancellation requested"
+        if job.status == "pending":
+            job.status = "cancelled"; job.finished_at = datetime.now(UTC); job.terminal_reason = "cancelled_before_claim"
+            for phase in db.query(SyncJobPhase).filter(SyncJobPhase.job_id == job.id, SyncJobPhase.status.in_(["pending", "retrying"])).all():
+                phase.status = "cancelled"; phase.finished_at = job.finished_at
+            MaintenanceModeService.release_sync(db, job=job, reason="sync_terminal:cancelled")
         db.add(job)
         db.commit()
         db.refresh(job)
         return job
 
     @staticmethod
-    def _run_job_sync(job_id: str, force: bool, skip_images: bool, limit: int | None, resume: bool = False) -> None:
-        asyncio.run(SyncService._run_job_async(job_id, force=force, skip_images=skip_images, limit=limit, resume=resume))
+    def worker_heartbeat(db: Session, worker_id: str, state: str, current_job_id: str | None = None, failure_category: str | None = None) -> None:
+        now = datetime.now(UTC)
+        row = db.get(SyncWorkerHeartbeat, worker_id)
+        if row is None:
+            row = SyncWorkerHeartbeat(worker_id=worker_id, state=state, last_seen_at=now, version=SyncService.WORKER_VERSION)
+            db.add(row)
+        row.state = state; row.last_seen_at = now; row.current_job_id = current_job_id
+        row.version = SyncService.WORKER_VERSION; row.enabled = settings.SYNC_WORKER_ENABLED
+        if failure_category:
+            row.last_failure_category = failure_category
 
     @staticmethod
-    async def _run_job_async(job_id: str, *, force: bool, skip_images: bool, limit: int | None, resume: bool) -> None:
+    def claim_next(db: Session, worker_id: str) -> str | None:
+        SyncService.recover_stale_running_jobs(db)
+        now = datetime.now(UTC)
+        statement = select(SyncJob).where(
+            SyncJob.status == "pending",
+            or_(SyncJob.next_retry_at.is_(None), SyncJob.next_retry_at <= now),
+        ).order_by(SyncJob.created_at, SyncJob.id).with_for_update(skip_locked=True).limit(1)
+        job = db.execute(statement).scalars().first()
+        if job is None:
+            SyncService.worker_heartbeat(db, worker_id, "idle")
+            return None
+        job.status = "running"; job.worker_id = worker_id; job.claimed_at = now
+        job.started_at = job.started_at or now; job.lease_expires_at = now + timedelta(seconds=settings.SYNC_WORKER_LEASE_SECONDS)
+        job.message = "Claimed by durable sync worker"
+        SyncService.worker_heartbeat(db, worker_id, "running", job.id)
+        return job.id
+
+    @staticmethod
+    def _run_job_sync(job_id: str, worker_id: str) -> None:
+        asyncio.run(SyncService._run_job_async(job_id, worker_id=worker_id))
+
+    @staticmethod
+    async def _run_job_async(job_id: str, *, worker_id: str) -> None:
         db = SessionLocal()
         try:
             job = SyncService.get_job(db, job_id)
-            if not job:
+            if not job or job.status != "running" or job.worker_id != worker_id:
                 return
-
             timeout_seconds = job.external_timeout_seconds or int(SyncService._get_setting(db, "sync_request_timeout_seconds", "30") or "30")
             retry_count = job.max_retries if job.max_retries is not None else max(0, int(SyncService._get_setting(db, "sync_retry_count", "2") or "2"))
-
-            job.status = "running"
-            job.started_at = datetime.now(UTC)
-            job.updated_at = datetime.now(UTC)
-            if not resume:
+            if job.result_summary is None:
                 job.current_step = "starting"
                 job.message = "Sync started"
                 job.result_summary = SyncService._empty_summary()
-                job.current_offset = 0
-                job.processed_count = 0
-                job.failed_count = 0
-                job.last_successful_external_id = None
-                job.checkpoint = {}
             db.commit()
-
-            plan = [job.job_type] if job.job_type != "full" else ["creatures", "bosses", "items", "quests", "hunt-zones", "images"]
-            if skip_images:
-                plan = [step for step in plan if step != "images"]
-
-            checkpoint = job.checkpoint or {}
-            resume_step = checkpoint.get("current_entity_type") if resume else None
-            step_start_index = plan.index(resume_step) if resume_step in plan else 0
             summary = dict(job.result_summary or SyncService._empty_summary())
-
-            for step in plan[step_start_index:]:
-                db.refresh(job)
-                if job.cancel_requested:
-                    SyncService._save_checkpoint(
-                        db,
-                        job,
-                        entity_type=step,
-                        offset=job.current_offset or 0,
-                        message="Sync cancelled by user",
-                    )
-                    job.status = "cancelled"
-                    job.finished_at = datetime.now(UTC)
-                    job.message = "Sync cancelled by user"
-                    db.commit()
-                    return
-
-                SyncService._heartbeat(db, job, message=f"Running {step}")
-
-                result = await SyncService._run_segment(
-                    db,
-                    job,
-                    step,
-                    force=force,
-                    limit=limit,
-                    retry_count=retry_count,
-                    timeout_seconds=timeout_seconds,
-                )
+            phases = db.query(SyncJobPhase).filter(SyncJobPhase.job_id == job.id).order_by(SyncJobPhase.order_index).all()
+            for phase_index, phase in enumerate(phases):
+                if phase.status in {"completed", "skipped", "failed", "cancelled"}:
+                    continue
+                result: dict[str, Any] | None = None
+                while result is None:
+                    db.refresh(job)
+                    if job.cancel_requested:
+                        phase.status = "cancelled"; phase.finished_at = datetime.now(UTC)
+                        phase.checkpoint = job.checkpoint or phase.checkpoint
+                        SyncService._terminalize(db, job, "cancelled", "Sync cancelled by administrator")
+                        return
+                    if job.current_entity_type == phase.phase_key and job.checkpoint:
+                        phase.checkpoint = job.checkpoint
+                    job.checkpoint = phase.checkpoint or {}
+                    job.current_entity_type = phase.phase_key
+                    phase.status = "running"; phase.started_at = phase.started_at or datetime.now(UTC)
+                    phase.attempt_count += 1; phase.error_category = None; phase.safe_error = None
+                    phase.next_retry_at = None
+                    SyncService._heartbeat(db, job, message=f"Running {phase.phase_key}")
+                    try:
+                        if phase.phase_key == "knowledge":
+                            result = await SyncService._run_knowledge_phase(db, job, phase)
+                        elif phase.phase_key == "guild-rosters":
+                            result = await SyncService._run_guild_rosters_phase(db, job, phase)
+                        else:
+                            result = await SyncService._run_segment(
+                                db, job, phase.phase_key, force=bool(job.force_refresh), limit=job.job_limit,
+                                retry_count=retry_count, timeout_seconds=timeout_seconds,
+                            )
+                    except Exception as exc:
+                        db.refresh(job)
+                        phase.checkpoint = job.checkpoint or phase.checkpoint or {}
+                        if job.cancel_requested or str(exc) == "sync_cancelled":
+                            phase.status = "cancelled"; phase.finished_at = datetime.now(UTC)
+                            SyncService._terminalize(db, job, "cancelled", "Sync cancelled by administrator")
+                            return
+                        category, retryable, retry_after = SyncService.classify_provider_error(exc)
+                        if retryable and phase.attempt_count < phase.max_attempts:
+                            phase.status = "retrying"; phase.error_category = category
+                            phase.safe_error = "The provider is temporarily unavailable; retrying safely."
+                            delay = SyncService.retry_delay(phase.attempt_count, retry_after)
+                            phase.next_retry_at = datetime.now(UTC) + timedelta(seconds=delay)
+                            job.next_retry_at = phase.next_retry_at
+                            db.commit(); SyncService._heartbeat(db, job, message=f"Retrying {phase.phase_key}")
+                            await SyncService._sleep_with_heartbeat(db, job, delay)
+                            continue
+                        phase.status = "failed"; phase.error_category = category
+                        phase.safe_error = "The synchronization phase exhausted its safe retries."
+                        phase.failed_count = max(1, phase.failed_count); phase.finished_at = datetime.now(UTC)
+                        job.failed_count = int(job.failed_count or 0) + 1
+                        job.next_retry_at = None
+                        db.commit()
+                        if phase.required or not job.continue_on_error:
+                            SyncService._terminalize(db, job, "failed", f"Required phase failed: {phase.phase_key}")
+                            return
+                        break
+                if result is None:
+                    continue
                 summary = SyncService._merge_summary(summary, result.get("summary") or {})
                 summary["total_processed"] = int(summary.get("total_processed") or 0) + int(result.get("processed") or 0)
                 job.result_summary = summary
-                job.current_step = f"completed:{step}"
-                job.message = f"Completed {step}"
-                db.add(job)
+                phase.processed_count += int(result.get("processed") or 0)
+                phase.failed_count += int(result.get("failed") or sum(
+                    int(value or 0) for key, value in (result.get("summary") or {}).items() if key.endswith("_failed")
+                ))
+                phase.current_offset = int(job.current_offset or 0); phase.current_entity = job.last_successful_external_id
+                phase.checkpoint = job.checkpoint or {}; phase.finished_at = datetime.now(UTC)
+                phase.status = "failed" if phase.failed_count else "completed"
+                phase.error_category = "item_failures" if phase.failed_count else None
+                phase.safe_error = "Some records could not be synchronized and remain resumable." if phase.failed_count else None
+                job.current_step = f"completed:{phase.phase_key}"
+                job.message = f"Completed {phase.phase_key}"
+                job.progress_current = phase_index + 1; job.progress_total = len(phases)
+                job.progress_percent = int(((phase_index + 1) / max(len(phases), 1)) * 100); job.progress = job.progress_percent
+                job.checkpoint = {}; job.current_offset = 0
                 db.commit()
-
             finished_at = datetime.now(UTC)
-            job.status = "completed"
-            job.finished_at = finished_at
-            job.current_step = "done"
-            job.message = "Sync completed successfully"
-            job.checkpoint = {}
-            job.progress = 100
-            job.progress_percent = 100
-            SyncService._set_setting(db, "sync_last_success_at", finished_at.isoformat(), "Last successful sync timestamp")
+            failed_phases = db.query(SyncJobPhase).filter(SyncJobPhase.job_id == job.id, SyncJobPhase.status == "failed").count()
+            terminal = "completed_with_errors" if failed_phases else "completed"
+            if terminal == "completed":
+                SyncService._set_setting(db, "sync_last_success_at", finished_at.isoformat(), "Last successful sync timestamp")
             SyncService._set_setting(db, "tibia_latest_update_version", finished_at.strftime("Synced %Y-%m-%d"), "Latest synchronized data version label")
-            db.commit()
-            await SyncService._maybe_send_notification(db, job, success=True)
+            SyncService._terminalize(db, job, terminal, "Sync completed with resumable errors" if failed_phases else "Sync completed successfully")
+            await SyncService._maybe_send_notification(db, job, success=terminal == "completed")
         except Exception as exc:
             job = SyncService.get_job(db, job_id)
             if job:
-                job.status = "failed"
-                job.finished_at = datetime.now(UTC)
-                job.error = str(exc)
-                job.error_message = str(exc)
-                job.message = "Sync failed"
-                db.commit()
+                category, _, _ = SyncService.classify_provider_error(exc)
+                job.error = category; job.error_message = "The synchronization worker stopped safely."
+                SyncService._terminalize(db, job, "failed", "Sync worker stopped safely")
                 await SyncService._maybe_send_notification(db, job, success=False)
-            logger.exception("sync_job_failed job_id=%s error=%s", job_id, exc)
+            logger.exception("sync_job_failed job_id=%s error_type=%s", job_id, type(exc).__name__)
         finally:
             db.close()
+
+    @staticmethod
+    def _terminalize(db: Session, job: SyncJob, status: str, message: str) -> None:
+        now = datetime.now(UTC)
+        job.status = status; job.finished_at = now; job.current_step = "done"; job.message = message
+        job.terminal_reason = message; job.lease_expires_at = None; job.next_retry_at = None
+        job.progress = 100; job.progress_percent = 100
+        MaintenanceModeService.release_sync(db, job=job, reason=f"sync_terminal:{status}")
+        if job.requested_by_user_id:
+            db.add(WorkspaceAudit(
+                actor_id=job.requested_by_user_id, workspace_type="admin", action="full_sync_terminal" if job.job_type == "full" else "sync_terminal",
+                target_type="sync_job", target_id=job.id, assisted=False,
+                safe_metadata={"status": status},
+            ))
+        if job.worker_id:
+            SyncService.worker_heartbeat(db, job.worker_id, "idle", failure_category="sync_failed" if status == "failed" else None)
+            heartbeat = db.get(SyncWorkerHeartbeat, job.worker_id)
+            if heartbeat and status in {"completed", "completed_with_errors"}:
+                heartbeat.last_success_at = now
+        db.commit()
+
+    @staticmethod
+    def classify_provider_error(exc: Exception) -> tuple[str, bool, int | None]:
+        if isinstance(exc, httpx.HTTPStatusError):
+            status = exc.response.status_code
+            retry_after = exc.response.headers.get("Retry-After")
+            parsed = int(retry_after) if retry_after and retry_after.isdigit() else None
+            if status == 429:
+                return "rate_limited", True, parsed
+            if 500 <= status < 600:
+                return "provider_5xx", True, parsed
+            return "provider_rejected", False, None
+        if isinstance(exc, (httpx.TimeoutException, TimeoutError, OSError)):
+            return "provider_timeout", True, None
+        if isinstance(exc, (ValueError, TypeError)):
+            return "invalid_payload", False, None
+        return "temporary_provider_failure", True, None
+
+    @staticmethod
+    def retry_delay(attempt: int, retry_after: int | None = None) -> float:
+        if retry_after is not None:
+            return float(max(1, min(retry_after, 3600)))
+        return min(60.0, float(2 ** max(0, attempt - 1)) + random.uniform(0.1, 0.9))
+
+    @staticmethod
+    async def _sleep_with_heartbeat(db: Session, job: SyncJob, seconds: float) -> None:
+        remaining = max(0.0, seconds)
+        while remaining > 0:
+            interval = min(30.0, remaining)
+            await asyncio.sleep(interval)
+            remaining -= interval
+            SyncService._heartbeat(db, job)
+
+    @staticmethod
+    async def _run_knowledge_phase(db: Session, job: SyncJob, phase: SyncJobPhase) -> dict[str, Any]:
+        checkpoint = phase.checkpoint or {}
+        correlation_texts = list(checkpoint.get("correlation_ids") or [])
+        if not correlation_texts and checkpoint.get("correlation_id"):
+            correlation_texts = [checkpoint["correlation_id"]]
+        if not correlation_texts:
+            if job.requested_by_user_id is None:
+                raise ValueError("Knowledge synchronization requires an administrator owner")
+            result = KnowledgeBootstrapService.activate_tibiawiki(
+                db, actor_id=job.requested_by_user_id,
+                confirmation=TIBIAWIKI_BOOTSTRAP_CONFIRMATION,
+                batch_limit=min(50, max(1, int(job.batch_size or 50))),
+            )
+            correlation_texts = sorted({str(row.correlation_id) for row in result.jobs})
+            phase.checkpoint = {"correlation_ids": correlation_texts, "root_job_ids": [str(row.id) for row in result.jobs]}
+            db.commit()
+        correlations = [UUID(value) for value in correlation_texts]
+        while True:
+            db.refresh(job)
+            if job.cancel_requested:
+                raise RuntimeError("sync_cancelled")
+            rows = db.query(KnowledgeJob).filter(KnowledgeJob.correlation_id.in_(correlations)).all()
+            active = [row for row in rows if row.state in ACTIVE_KNOWLEDGE_JOB_STATES]
+            phase.processed_count = len([row for row in rows if row.state not in ACTIVE_KNOWLEDGE_JOB_STATES])
+            phase.failed_count = len([row for row in rows if row.state in {"failed", "cancelled", "partially_succeeded"}])
+            phase.current_entity = active[0].entity_type_id if active else None
+            phase.checkpoint = {**(phase.checkpoint or {}), "job_count": len(rows), "active_count": len(active)}
+            db.commit(); SyncService._heartbeat(db, job, message=f"Knowledge jobs active: {len(active)}")
+            if not active:
+                return {"processed": len(rows), "failed": phase.failed_count, "summary": {"knowledge_jobs": len(rows), "knowledge_failed": phase.failed_count}}
+            await asyncio.sleep(settings.SYNC_WORKER_POLL_SECONDS)
+
+    @staticmethod
+    async def _run_guild_rosters_phase(db: Session, job: SyncJob, phase: SyncJobPhase) -> dict[str, Any]:
+        rows = db.query(GuildDirectory).filter(GuildDirectory.is_active.is_(True)).order_by(GuildDirectory.id).all()
+        offset = int((phase.checkpoint or {}).get("current_offset") or 0)
+        failed = 0
+        while offset < len(rows):
+            db.refresh(job)
+            if job.cancel_requested:
+                raise RuntimeError("sync_cancelled")
+            directory = rows[offset]
+            try:
+                await GuildRosterService.synchronize(db, directory.guild_name)
+            except GuildRosterSyncError:
+                db.rollback()
+                job = SyncService.get_job(db, job.id)
+                phase = db.get(SyncJobPhase, phase.id)
+                failed += 1
+            offset += 1
+            phase.current_offset = offset; phase.current_entity = directory.guild_name
+            phase.processed_count = offset; phase.failed_count = failed
+            phase.checkpoint = {"current_offset": offset, "last_guild_id": directory.id}
+            db.commit(); SyncService._heartbeat(db, job, message=f"Guild rosters {offset}/{len(rows)}")
+        return {"processed": len(rows), "failed": failed, "summary": {"guild_rosters": len(rows), "guild_rosters_failed": failed}}
 
     @staticmethod
     def _update_job_progress(
@@ -690,20 +893,25 @@ class SyncService:
                         last_error = exc
                         if attempt >= retry_count:
                             break
-                        await asyncio.sleep(min(2 ** attempt, 4))
+                        _category, retryable, retry_after = SyncService.classify_provider_error(exc)
+                        if not retryable:
+                            break
+                        await SyncService._sleep_with_heartbeat(db, job, SyncService.retry_delay(attempt + 1, retry_after))
 
                 processed += 1
                 job.processed_count = int(job.processed_count or 0) + 1
                 if not success:
                     counters[f"{key_prefix}_failed"] += 1
                     job.failed_count = int(job.failed_count or 0) + 1
+                    error_category = SyncService.classify_provider_error(last_error)[0] if last_error else "unknown_failure"
                     db.add(
                         SyncJobError(
                             job_id=job.id,
                             entity_type="boss" if only_bosses else "creature",
                             external_id=name,
                             entity_name=name,
-                            error_message=str(last_error) if last_error else "Unknown sync failure",
+                            error_message="The provider record could not be synchronized safely.",
+                            error_category=error_category,
                             retry_count=retry_count,
                             status="failed",
                         )
@@ -822,20 +1030,25 @@ class SyncService:
                         last_error = exc
                         if attempt >= retry_count:
                             break
-                        await asyncio.sleep(min(2 ** attempt, 4))
+                        _category, retryable, retry_after = SyncService.classify_provider_error(exc)
+                        if not retryable:
+                            break
+                        await SyncService._sleep_with_heartbeat(db, job, SyncService.retry_delay(attempt + 1, retry_after))
 
                 processed += 1
                 job.processed_count = int(job.processed_count or 0) + 1
                 if not success:
                     counters[f"{summary_prefix}_failed"] += 1
                     job.failed_count = int(job.failed_count or 0) + 1
+                    error_category = SyncService.classify_provider_error(last_error)[0] if last_error else "unknown_failure"
                     db.add(
                         SyncJobError(
                             job_id=job.id,
                             entity_type=target,
                             external_id=name,
                             entity_name=name,
-                            error_message=str(last_error) if last_error else "Unknown sync failure",
+                            error_message="The provider record could not be synchronized safely.",
+                            error_category=error_category,
                             retry_count=retry_count,
                             status="failed",
                         )
@@ -1204,32 +1417,13 @@ class SyncService:
         if not user or not user.email:
             return
 
-        title = "TibiaHub Sync Completed" if success else "TibiaHub Sync Failed"
-        summary_json = json.dumps(job.result_summary or {}, ensure_ascii=True, indent=2)
-        text_body = (
-            f"Hello {user.username},\n\n"
-            f"Job: {job.id}\n"
-            f"Target: {job.job_type}\n"
-            f"Status: {job.status}\n"
-            f"Message: {job.message or ''}\n"
-            f"Summary:\n{summary_json}\n"
+        title = "TibiaHub synchronization completed" if success else "TibiaHub synchronization needs attention"
+        EmailOutboxService.enqueue_notification(
+            db, user=user, subject=title,
+            message=f"Operation {job.id} finished with status {job.status}. {job.message or ''}",
+            event_key=f"sync:{job.id}:{job.status}", locale="en",
         )
-        html_body = (
-            "<h2>TibiaHub Sync Report</h2>"
-            f"<p><strong>Job:</strong> {job.id}</p>"
-            f"<p><strong>Target:</strong> {job.job_type}</p>"
-            f"<p><strong>Status:</strong> {job.status}</p>"
-            f"<p><strong>Message:</strong> {job.message or ''}</p>"
-            f"<pre>{summary_json}</pre>"
-        )
-        EmailService.send_message(
-            EmailService.build_message(
-                to_email=user.email,
-                subject=title,
-                html_body=html_body,
-                text_body=text_body,
-            )
-        )
+        db.commit()
 
 
 class DatabaseSyncService:

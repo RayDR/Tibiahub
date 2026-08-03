@@ -32,7 +32,8 @@ from app.db.database import (
     verify_connection_and_schema,
 )
 from app.models.events import Event, EventParticipant
-from app.models.external_data import Item, QuestMission, TibiaWikiLocation, TibiaWikiNpc, TibiaWikiQuest
+from app.models.external_data import Item, QuestMission, SyncJob, TibiaWikiLocation, TibiaWikiNpc, TibiaWikiQuest
+from app.models.maintenance_sync import MaintenanceHold, SyncJobPhase, SyncWorkerHeartbeat
 from app.models.creature import Creature
 from app.models.guild_member_snapshot import GuildMemberSnapshot
 from app.models.leadership import GuildLeadershipApplication, GuildLeadershipOpening, GuildLeadershipRole
@@ -61,6 +62,7 @@ from app.services.raffle_scheduler_service import RaffleSchedulerService
 from app.services.auth_token_service import AuthTokenService, PASSWORD_RESET
 from app.services.account_identity_service import AccountIdentityService
 from app.services.email_outbox_service import EmailOutboxService
+from app.services.sync_service import SyncService
 
 
 BACKEND_ROOT = Path(__file__).resolve().parents[1]
@@ -303,6 +305,7 @@ def test_empty_database_upgrades_to_complete_postgresql_schema(pg_engine):
         "auth_one_time_tokens", "auth_request_events", "character_ownership_claims",
         "character_ownership_history", "guild_roster_characters", "guild_management_grants",
         "guild_directory", "email_outbox", "email_worker_heartbeats",
+        "maintenance_holds", "sync_job_phases", "sync_worker_heartbeats",
         "knowledge_external_mappings",
         "knowledge_creature_item_drops", "tibiawiki_items",
         "quest_missions", "knowledge_accesses", "knowledge_quest_relations",
@@ -1551,3 +1554,39 @@ def test_recover_admin_cli_verifies_fresh_post_commit_session(pg_session, tmp_pa
     from app.core.security import verify_password
     assert persisted.is_active is True and persisted.is_superuser is True
     assert verify_password(password, persisted.hashed_password)
+
+
+def test_postgresql_sync_job_claim_is_atomic_and_hold_is_durable(pg_engine, pg_session):
+    requester = _user(pg_session, "postgres-sync-admin")
+    requester.is_superuser = True
+    pg_session.commit()
+    job = SyncService.create_job(
+        pg_session, job_type="full", requester=requester.username, requested_by_user_id=requester.id,
+        maintenance_requested=True, include_knowledge=True, include_guild_rosters=True,
+        operation_label="PostgreSQL atomic claim integration",
+    )
+    assert pg_session.query(SyncJobPhase).filter_by(job_id=job.id).count() == 8
+    assert pg_session.query(MaintenanceHold).filter_by(owner_job_id=job.id, released_at=None).count() == 1
+
+    factory = sessionmaker(bind=pg_engine, expire_on_commit=False)
+
+    def claim(worker_id: str):
+        with factory() as session:
+            claimed = SyncService.claim_next(session, worker_id)
+            session.commit()
+            return claimed
+
+    with ThreadPoolExecutor(max_workers=2) as pool:
+        results = list(pool.map(claim, ["pg-worker-a", "pg-worker-b"]))
+    assert results.count(job.id) == 1
+    assert results.count(None) == 1
+    pg_session.expire_all()
+    persisted = pg_session.get(SyncJob, job.id)
+    assert persisted.status == "running" and persisted.worker_id in {"pg-worker-a", "pg-worker-b"}
+    assert pg_session.query(SyncWorkerHeartbeat).count() == 2
+
+    persisted.lease_expires_at = datetime.now(UTC) - timedelta(seconds=1)
+    pg_session.commit()
+    assert SyncService.recover_stale_running_jobs(pg_session) == [job.id]
+    pg_session.refresh(persisted)
+    assert persisted.status == "pending" and persisted.worker_id is None

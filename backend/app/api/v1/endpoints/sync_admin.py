@@ -5,13 +5,15 @@ from datetime import UTC, datetime
 from typing import Any, Optional
 
 from fastapi import APIRouter, Depends, HTTPException, Query
-from pydantic import BaseModel
+from pydantic import BaseModel, Field
 from sqlalchemy.orm import Session
 
 from app.api.v1.endpoints.auth import get_current_admin_user
 from app.db.database import get_db
 from app.models.creature import Creature
 from app.models.external_data import SyncJob
+from app.models.maintenance_sync import MaintenanceHold, SyncJobPhase, SyncWorkerHeartbeat
+from app.models.workspace_audit import WorkspaceAudit
 from app.models.hunt_zone import HuntZone
 from app.models.loot import Loot
 from app.models.settings import SystemSettings as SettingsModel
@@ -26,6 +28,7 @@ class SyncJobResponse(BaseModel):
     job_id: str
     job_type: str
     status: str
+    operation_status: str
     progress_current: int
     progress_total: int
     progress_percent: int
@@ -35,6 +38,7 @@ class SyncJobResponse(BaseModel):
     started_at: Optional[str] = None
     finished_at: Optional[str] = None
     created_at: Optional[str] = None
+    updated_at: Optional[str] = None
     error: Optional[str] = None
     summary: Optional[dict[str, Any]] = None
     checkpoint: Optional[dict[str, Any]] = None
@@ -43,6 +47,27 @@ class SyncJobResponse(BaseModel):
     processed_count: int = 0
     failed_count: int = 0
     last_successful_external_id: Optional[str] = None
+    operation_label: Optional[str] = None
+    worker_id: Optional[str] = None
+    lease_expires_at: Optional[str] = None
+    maintenance_requested: bool = False
+    maintenance_active: bool = False
+    continue_on_error: bool = True
+    phases: list[dict[str, Any]] = Field(default_factory=list)
+
+
+class FullSyncRequest(BaseModel):
+    maintenance_enabled: bool = True
+    continue_on_error: bool = True
+    include_images: bool = True
+    include_knowledge: bool = True
+    include_guild_rosters: bool = True
+    force_refresh: bool = False
+    batch_size: int = Field(100, ge=10, le=500)
+    max_retries: int = Field(3, ge=0, le=10)
+    external_timeout_seconds: int = Field(30, ge=5, le=120)
+    operation_label: str = Field(min_length=5, max_length=255)
+    confirmation: str
 
 
 class SyncRuntimeSettings(BaseModel):
@@ -92,16 +117,33 @@ def _set_setting(db: Session, key: str, value: str, description: str = "") -> No
         db.add(SettingsModel(key=key, value=value, description=description, is_active=True))
 
 
-def _to_job_response(job) -> SyncJobResponse:
+def _to_job_response(job, db: Session | None = None) -> SyncJobResponse:
     # Keep legacy status names expected by frontend polling logic.
     status_map = {
         "completed": "success",
         "failed": "error",
     }
+    phases = [] if db is None else [
+        {
+            "id": row.id, "phase_key": row.phase_key, "order_index": row.order_index,
+            "provider": row.provider, "required": row.required, "status": row.status,
+            "attempt_count": row.attempt_count, "max_attempts": row.max_attempts,
+            "processed_count": row.processed_count, "failed_count": row.failed_count,
+            "current_entity": row.current_entity, "current_offset": row.current_offset,
+            "checkpoint": row.checkpoint or {}, "next_retry_at": row.next_retry_at,
+            "started_at": row.started_at, "updated_at": row.updated_at, "finished_at": row.finished_at,
+            "error_category": row.error_category, "safe_error": row.safe_error,
+        }
+        for row in db.query(SyncJobPhase).filter(SyncJobPhase.job_id == job.id).order_by(SyncJobPhase.order_index).all()
+    ]
+    maintenance_active = bool(db and db.query(MaintenanceHold.id).filter(
+        MaintenanceHold.owner_job_id == job.id, MaintenanceHold.released_at.is_(None),
+    ).first())
     return SyncJobResponse(
         job_id=job.id,
         job_type=job.job_type,
         status=status_map.get(job.status, job.status),
+        operation_status=job.status,
         progress_current=job.progress_current or 0,
         progress_total=job.progress_total or 0,
         progress_percent=job.progress_percent or job.progress or 0,
@@ -111,6 +153,7 @@ def _to_job_response(job) -> SyncJobResponse:
         started_at=job.started_at.isoformat() if job.started_at else None,
         finished_at=job.finished_at.isoformat() if job.finished_at else None,
         created_at=job.created_at.isoformat() if job.created_at else None,
+        updated_at=job.updated_at.isoformat() if job.updated_at else None,
         error=job.error_message or job.error,
         summary=job.result_summary,
         checkpoint=job.checkpoint,
@@ -119,6 +162,10 @@ def _to_job_response(job) -> SyncJobResponse:
         processed_count=job.processed_count or 0,
         failed_count=job.failed_count or 0,
         last_successful_external_id=job.last_successful_external_id,
+        operation_label=job.operation_label, worker_id=job.worker_id,
+        lease_expires_at=job.lease_expires_at.isoformat() if job.lease_expires_at else None,
+        maintenance_requested=bool(job.maintenance_requested), maintenance_active=maintenance_active,
+        continue_on_error=bool(job.continue_on_error), phases=phases,
     )
 
 
@@ -175,6 +222,11 @@ def _start_job(
     batch_size: int,
     max_retries: int,
     external_timeout_seconds: int,
+    maintenance_requested: bool = False,
+    continue_on_error: bool = True,
+    include_knowledge: bool = False,
+    include_guild_rosters: bool = False,
+    operation_label: str | None = None,
 ) -> dict[str, Any]:
     try:
         job = SyncService.create_job(
@@ -186,10 +238,13 @@ def _start_job(
             batch_size=batch_size,
             max_retries=max_retries,
             external_timeout_seconds=external_timeout_seconds,
+            force_refresh=force, skip_images=skip_images,
+            include_knowledge=include_knowledge, include_guild_rosters=include_guild_rosters,
+            continue_on_error=continue_on_error, maintenance_requested=maintenance_requested,
+            operation_label=operation_label,
         )
     except RuntimeError as exc:
         raise HTTPException(status_code=409, detail=str(exc)) from exc
-    SyncService.queue_job(job.id, force=force, skip_images=skip_images, limit=limit)
     return {
         "status": "queued",
         "job_id": job.id,
@@ -200,25 +255,22 @@ def _start_job(
 
 @router.post("/full")
 def start_full_sync(
-    force: bool = Query(False),
-    skip_images: bool = Query(False),
-    limit: Optional[int] = Query(None, ge=1),
-    batch_size: int = Query(100, ge=10, le=500),
-    max_retries: int = Query(3, ge=0, le=10),
-    external_timeout_seconds: int = Query(15, ge=5, le=120),
+    payload: FullSyncRequest,
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_admin_user),
 ):
+    if payload.confirmation != "SYNC EVERYTHING":
+        raise HTTPException(status_code=422, detail="Explicit full synchronization confirmation is required")
     return _start_job(
         db,
         target="full",
         requester=current_user,
-        force=force,
-        skip_images=skip_images,
-        limit=limit,
-        batch_size=batch_size,
-        max_retries=max_retries,
-        external_timeout_seconds=external_timeout_seconds,
+        force=payload.force_refresh, skip_images=not payload.include_images, limit=None,
+        batch_size=payload.batch_size, max_retries=payload.max_retries,
+        external_timeout_seconds=payload.external_timeout_seconds,
+        maintenance_requested=payload.maintenance_enabled, continue_on_error=payload.continue_on_error,
+        include_knowledge=payload.include_knowledge, include_guild_rosters=payload.include_guild_rosters,
+        operation_label=payload.operation_label,
     )
 
 
@@ -368,7 +420,7 @@ def list_sync_jobs(
 ):
     _ = current_user
     jobs = SyncService.list_jobs(db, limit=limit)
-    return [_to_job_response(job) for job in jobs]
+    return [_to_job_response(job, db) for job in jobs]
 
 
 @router.get("/logs")
@@ -418,7 +470,7 @@ def get_sync_job(
     job = SyncService.get_job(db, job_id)
     if not job:
         raise HTTPException(status_code=404, detail="Job not found")
-    return _to_job_response(job)
+    return _to_job_response(job, db)
 
 
 @router.post("/jobs/{job_id}/cancel")
@@ -427,11 +479,12 @@ def cancel_sync_job(
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_admin_user),
 ):
-    _ = current_user
     job = SyncService.request_cancel(db, job_id)
     if not job:
         raise HTTPException(status_code=404, detail="Job not found")
-    return _to_job_response(job)
+    db.add(WorkspaceAudit(actor_id=current_user.id, workspace_type="admin", action="full_sync_cancel_requested", target_type="sync_job", target_id=job.id, assisted=False, safe_metadata={}))
+    db.commit()
+    return _to_job_response(job, db)
 
 
 @router.post("/jobs/{job_id}/resume", response_model=SyncJobResponse)
@@ -440,14 +493,54 @@ def resume_sync_job(
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_admin_user),
 ):
-    _ = current_user
     try:
         job = SyncService.resume_job(db, job_id)
     except RuntimeError as exc:
         raise HTTPException(status_code=409, detail=str(exc)) from exc
     if not job:
         raise HTTPException(status_code=404, detail="Job not found")
-    return _to_job_response(job)
+    db.add(WorkspaceAudit(actor_id=current_user.id, workspace_type="admin", action="full_sync_resumed", target_type="sync_job", target_id=job.id, assisted=False, safe_metadata={}))
+    db.commit()
+    return _to_job_response(job, db)
+
+
+@router.post("/jobs/{job_id}/phases/{phase_key}/resume", response_model=SyncJobResponse)
+def resume_sync_phase(job_id: str, phase_key: str, db: Session = Depends(get_db), admin: User = Depends(get_current_admin_user)):
+    job = SyncService.get_job(db, job_id)
+    phase = db.query(SyncJobPhase).filter_by(job_id=job_id, phase_key=phase_key).one_or_none()
+    if not job or not phase:
+        raise HTTPException(404, "Job phase not found")
+    if job.status != "completed_with_errors":
+        raise HTTPException(409, "A single phase can be resumed only from a partially completed operation")
+    if phase.status not in {"failed", "cancelled", "skipped"}:
+        raise HTTPException(409, "Only incomplete phases can be resumed")
+    phase.status = "pending"; phase.finished_at = None; phase.error_category = None; phase.safe_error = None
+    job.status = "pending"; job.finished_at = None; job.cancel_requested = False; job.message = f"Phase resume requested: {phase_key}"
+    if job.maintenance_requested:
+        from app.services.maintenance_mode_service import MaintenanceModeService
+        MaintenanceModeService.acquire_sync(db, job=job, actor_id=admin.id, reason=job.operation_label or "Synchronization phase resumed")
+    db.add(WorkspaceAudit(actor_id=admin.id, workspace_type="admin", action="full_sync_phase_resumed", target_type="sync_job_phase", target_id=str(phase.id), assisted=False, safe_metadata={"phase": phase_key}))
+    db.commit()
+    return _to_job_response(job, db)
+
+
+@router.post("/jobs/{job_id}/phases/{phase_key}/skip", response_model=SyncJobResponse)
+def skip_sync_phase(job_id: str, phase_key: str, reason: str = Query(min_length=5, max_length=500), db: Session = Depends(get_db), admin: User = Depends(get_current_admin_user)):
+    job = SyncService.get_job(db, job_id)
+    phase = db.query(SyncJobPhase).filter_by(job_id=job_id, phase_key=phase_key).one_or_none()
+    if not job or not phase:
+        raise HTTPException(404, "Job phase not found")
+    if phase.required or phase.status not in {"failed", "pending", "retrying"}:
+        raise HTTPException(409, "This phase cannot be skipped")
+    phase.status = "skipped"; phase.finished_at = datetime.now(UTC); phase.safe_error = reason
+    db.add(WorkspaceAudit(actor_id=admin.id, workspace_type="admin", action="full_sync_phase_skipped", target_type="sync_job_phase", target_id=str(phase.id), assisted=False, safe_metadata={"phase": phase_key, "reason": reason}))
+    db.commit()
+    return _to_job_response(job, db)
+
+
+@router.get("/workers")
+def sync_workers(db: Session = Depends(get_db), _admin: User = Depends(get_current_admin_user)):
+    return [{"worker_id": row.worker_id, "state": row.state, "last_seen_at": row.last_seen_at, "current_job_id": row.current_job_id, "version": row.version, "enabled": row.enabled} for row in db.query(SyncWorkerHeartbeat).order_by(SyncWorkerHeartbeat.worker_id).all()]
 
 
 @router.get("/settings", response_model=SyncRuntimeSettings)

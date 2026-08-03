@@ -31,6 +31,7 @@ from app.models.guild_member_snapshot import GuildMemberSnapshot
 from app.models.guild_management import GuildDirectory, GuildManagementGrant, GuildRosterCharacter
 from app.models.email_delivery import EmailOutbox, EmailWorkerHeartbeat
 from app.models.workspace_audit import WorkspaceAudit
+from app.models.maintenance_sync import MaintenanceHold, SyncJobPhase, SyncWorkerHeartbeat
 from app.models.leadership import (
     GuildLeadershipRole, GuildLeadershipOpening, GuildLeadershipApplication,
     GuildLeadershipAssignment, GuildLeadershipApplicationHistory,
@@ -107,6 +108,7 @@ __all__ = [
     "GuildRosterCharacter",
     "MediaAsset",
     "WorkspaceAudit",
+    "MaintenanceHold", "SyncJobPhase", "SyncWorkerHeartbeat",
     "GuildLeadershipRole", "GuildLeadershipOpening", "GuildLeadershipApplication",
     "GuildLeadershipAssignment", "GuildLeadershipApplicationHistory",
     "GuildLeadershipApplicationMessage", "GuildLeadershipInterview", "GuildLeadershipVote",

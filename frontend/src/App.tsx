@@ -56,7 +56,10 @@ import ThemePlayground from "./pages/Admin/ThemePlayground";
 import AppShell from "./components/shell/AppShell";
 import AssistanceHub from "./pages/Admin/AssistanceHub";
 import AuditHub from "./pages/Admin/AuditHub";
-import Maintenance from "./pages/Admin/Maintenance";
+import DataMaintenance from "./pages/Admin/Maintenance";
+import MaintenanceControl from "./pages/Admin/MaintenanceControl";
+import RaffleAssistance from "./pages/Admin/RaffleAssistance";
+import MaintenanceGate from "./components/maintenance/MaintenanceGate";
 
 const Leadership = lazy(() => import("./pages/guild/Leadership"));
 const LeadershipRecruitment = lazy(
@@ -118,7 +121,8 @@ function App() {
       <WorkspaceProvider>
         <ToastProvider>
           <ConfirmationProvider>
-            <AppShell dataVersion={latestDataVersion}>
+            <MaintenanceGate>
+              <AppShell dataVersion={latestDataVersion}>
               <Routes location={location} key={location.pathname}>
                 <Route path="/" element={<HomePage />} />
                 <Route path="/cyclopedia" element={<CreaturesPage />} />
@@ -241,6 +245,7 @@ function App() {
                   <Route path="overview" element={<Overview />} />
                   <Route path="guilds" element={<GuildDirectory />} />
                   <Route path="assistance" element={<AssistanceHub />} />
+                  <Route path="assistance/raffles" element={<RaffleAssistance />} />
                   <Route path="users" element={<AdminUsers />} />
                   <Route
                     path="guilds/:guildKey"
@@ -287,7 +292,8 @@ function App() {
                     element={<DataTools initialTab="knowledge" />}
                   />
                   <Route path="audits" element={<AuditHub />} />
-                  <Route path="maintenance" element={<Maintenance />} />
+                  <Route path="maintenance" element={<MaintenanceControl />} />
+                  <Route path="maintenance/data" element={<DataMaintenance />} />
                   <Route
                     path="theme-playground"
                     element={<ThemePlayground />}
@@ -311,7 +317,8 @@ function App() {
                 {/* Catch-All */}
                 <Route path="*" element={<NotFound />} />
               </Routes>
-            </AppShell>
+              </AppShell>
+            </MaintenanceGate>
           </ConfirmationProvider>
         </ToastProvider>
       </WorkspaceProvider>

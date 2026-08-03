@@ -8,11 +8,12 @@ import axios from 'axios';
 import { useToast } from '../../context/ToastContext';
 import {
     CheckCircle, XCircle, AlertCircle, Loader2,
-    RefreshCw, Database, Globe, BookOpen, Code, Clock,
+    RefreshCw, Database, Globe, BookOpen, Code,
     GitBranch, Download, Eye,
     Workflow,
 } from 'lucide-react';
 import KnowledgeOperations from './KnowledgeOperations';
+import FullSyncDashboard from './FullSyncDashboard';
 
 type Tab = 'api-monitor' | 'db-sync' | 'admin-sync' | 'knowledge';
 
@@ -55,28 +56,6 @@ interface SyncPreview {
     pending_approvals: number;
     changes: SyncChange[];
     action_required: boolean;
-}
-
-// ── Admin Sync types ───────────────────────────────────────────────────────────
-interface SyncLog {
-    id: number;
-    api_name: string;
-    endpoint: string;
-    status: 'pending' | 'running' | 'success' | 'error';
-    source?: string;
-    total_items?: number;
-    processed_items: number;
-    error_count: number;
-    message?: string;
-    started_at: string;
-    completed_at?: string;
-}
-interface SyncStats {
-    creatures: number;
-    items: number;
-    hunting_places: number;
-    quests: number;
-    sync_logs: number;
 }
 
 const API_BASE = import.meta.env.VITE_API_URL || '/api/v1';
@@ -283,145 +262,8 @@ function DBSyncTab() {
     );
 }
 
-// ── Admin Sync tab ─────────────────────────────────────────────────────────────
-const SYNC_APIS = [
-    { name: 'creatures', icon: '🐉', label: 'Creatures', description: 'Sync beasts and monsters' },
-    { name: 'items', icon: '⚔️', label: 'Items', description: 'Sync weapons, armors and objects' },
-    { name: 'hunting-places', icon: '🗺️', label: 'Hunt Zones', description: 'Sync hunting locations' },
-    { name: 'quests', icon: '📜', label: 'Quests', description: 'Sync missions and rewards' },
-];
-
 function AdminSyncTab() {
-    const toast = useToast();
-    const [syncLogs, setSyncLogs] = useState<SyncLog[]>([]);
-    const [stats, setStats] = useState<SyncStats | null>(null);
-    const [loading, setLoading] = useState(false);
-    const [syncingApis, setSyncingApis] = useState<Set<string>>(new Set());
-
-    const loadData = async () => {
-        setLoading(true);
-        try {
-            const [logsRes, statsRes] = await Promise.allSettled([
-                axios.get<SyncLog[]>(`${API_BASE}/admin/sync/bestiary/logs?limit=20`, { headers: authHeader() }),
-                axios.get<SyncStats>(`${API_BASE}/admin/sync/bestiary/stats`, { headers: authHeader() }),
-            ]);
-            if (logsRes.status === 'fulfilled') setSyncLogs(logsRes.value.data);
-            if (statsRes.status === 'fulfilled') setStats(statsRes.value.data);
-        } catch { /* ignore */ }
-        finally { setLoading(false); }
-    };
-
-    useEffect(() => { void loadData(); }, []);
-
-    const triggerSync = async (apiName: string) => {
-        setSyncingApis((prev) => new Set([...prev, apiName]));
-        try {
-            await axios.post(
-                `${API_BASE}/admin/sync/bestiary/start?source=${apiName}&mode=auto`,
-                {},
-                { headers: authHeader() }
-            );
-            toast.success(`Sync started for ${apiName}`);
-            setTimeout(() => void loadData(), 3000);
-        } catch (error: any) {
-            toast.error(error.response?.data?.detail || `Failed to start sync for ${apiName}`);
-        } finally {
-            setSyncingApis((prev) => { const n = new Set(prev); n.delete(apiName); return n; });
-        }
-    };
-
-    return (
-        <div className="space-y-6">
-            {/* Stats */}
-            {stats && (
-                <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
-                    {[
-                        { label: 'Creatures', value: stats.creatures },
-                        { label: 'Items', value: stats.items },
-                        { label: 'Hunt Zones', value: stats.hunting_places },
-                        { label: 'Quests', value: stats.quests },
-                    ].map(({ label, value }) => (
-                        <div key={label} className="bg-surface-base/50 border border-line rounded-lg p-4 text-center">
-                            <div className="text-2xl font-bold text-content-primary">{value.toLocaleString()}</div>
-                            <div className="text-xs text-content-secondary mt-1">{label}</div>
-                        </div>
-                    ))}
-                </div>
-            )}
-
-            {/* Sync triggers */}
-            <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
-                {SYNC_APIS.map(({ name, icon, label, description }) => {
-                    const busy = syncingApis.has(name);
-                    return (
-                        <button
-                            key={name}
-                            onClick={() => void triggerSync(name)}
-                            disabled={busy}
-                            className="flex flex-col items-center gap-2 rounded-lg border border-line bg-surface-base/50 p-4 text-center hover:border-primary/50 hover:bg-primary/5 transition-colors disabled:opacity-50"
-                        >
-                            <span className="text-2xl">{icon}</span>
-                            <span className="text-sm font-medium text-content-primary">{label}</span>
-                            <span className="text-xs text-content-muted">{description}</span>
-                            {busy && <Loader2 className="w-4 h-4 animate-spin text-primary" />}
-                        </button>
-                    );
-                })}
-            </div>
-
-            {/* Logs */}
-            <div>
-                <div className="flex items-center justify-between mb-3">
-                    <h3 className="text-sm font-medium text-content-secondary flex items-center gap-2">
-                        <Clock className="w-4 h-4 text-content-secondary" /> Recent sync logs
-                    </h3>
-                    <button onClick={loadData} disabled={loading} className="flex items-center gap-1 text-xs text-content-secondary hover:text-content-primary border border-line rounded px-2 py-1">
-                        <RefreshCw className={`w-3 h-3 ${loading ? 'animate-spin' : ''}`} /> Refresh
-                    </button>
-                </div>
-                {syncLogs.length === 0 ? (
-                    <div className="text-center py-8 text-content-muted bg-surface-base/50 rounded-lg border border-line">No sync logs yet.</div>
-                ) : (
-                    <div className="bg-surface-base/50 border border-line rounded-lg overflow-hidden">
-                        <table className="w-full text-sm">
-                            <thead className="bg-surface-base/50">
-                                <tr>
-                                    <th className="p-3 text-left text-xs uppercase text-content-secondary">API</th>
-                                    <th className="p-3 text-left text-xs uppercase text-content-secondary">Status</th>
-                                    <th className="p-3 text-left text-xs uppercase text-content-secondary">Items</th>
-                                    <th className="p-3 text-left text-xs uppercase text-content-secondary">Errors</th>
-                                    <th className="p-3 text-left text-xs uppercase text-content-secondary">Started</th>
-                                </tr>
-                            </thead>
-                            <tbody>
-                                {syncLogs.map((log) => (
-                                    <tr key={log.id} className="border-t border-line">
-                                        <td className="p-3 text-content-primary">{log.api_name}</td>
-                                        <td className="p-3">
-                                            <span className="flex items-center gap-1">
-                                                {getStatusIcon(log.status)}
-                                                <span className={`text-xs ${log.status === 'success' ? 'text-success' : log.status === 'error' ? 'text-danger' : 'text-content-secondary'}`}>
-                                                    {log.status}
-                                                </span>
-                                            </span>
-                                        </td>
-                                        <td className="p-3 text-content-secondary">{log.processed_items}{log.total_items ? `/${log.total_items}` : ''}</td>
-                                        <td className="p-3">
-                                            {log.error_count > 0
-                                                ? <span className="text-danger">{log.error_count}</span>
-                                                : <span className="text-content-muted">0</span>
-                                            }
-                                        </td>
-                                        <td className="p-3 text-content-muted text-xs">{new Date(log.started_at).toLocaleString()}</td>
-                                    </tr>
-                                ))}
-                            </tbody>
-                        </table>
-                    </div>
-                )}
-            </div>
-        </div>
-    );
+    return <FullSyncDashboard />;
 }
 
 // ── Main DataTools component ───────────────────────────────────────────────────

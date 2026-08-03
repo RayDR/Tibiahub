@@ -20,6 +20,7 @@ before stopping only these applications:
 - `tibiahub-raffle-scheduler`
 - `tibiahub-knowledge-worker`
 - `tibiahub-email-worker`
+- `tibiahub-sync-worker`
 
 It then migrates, installs the staged frontend build, starts or reloads only
 those services, and requires all local and public health checks to pass. Any
