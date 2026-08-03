@@ -95,6 +95,8 @@ class PublicEventParticipant(Base):
 
     id = Column(Integer, primary_key=True, index=True)
     event_id = Column(Integer, ForeignKey('events.id', ondelete="CASCADE"), nullable=False)
+    guild_roster_character_id = Column(Integer, ForeignKey('guild_roster_characters.id', ondelete="SET NULL"), nullable=True, index=True)
+    user_character_id = Column(Integer, ForeignKey('user_characters.id', ondelete="SET NULL"), nullable=True, index=True)
     
     # Tibia character data
     character_name = Column(String(100), nullable=False)
@@ -116,3 +118,5 @@ class PublicEventParticipant(Base):
     
     # Relationships
     event = relationship("Event", backref="public_participants")
+    guild_roster_character = relationship("GuildRosterCharacter")
+    user_character = relationship("UserCharacter")

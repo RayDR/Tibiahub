@@ -5,7 +5,7 @@ from sqlalchemy.orm import Session
 from typing import List, Optional
 
 from app.api.v1.endpoints.auth import get_current_active_user, get_current_admin_user
-from app.core.permissions import can_manage_guild, can_view_guild_workspace, is_global_admin
+from app.core.permissions import can_manage_guild, is_global_admin
 from app.db.database import get_db
 from app.models.hunt import GuildHunt, GuildHuntParticipant, HuntCatalog
 from app.schemas.hunt import (
@@ -20,11 +20,11 @@ router = APIRouter()
 
 
 def _guild_for(db: Session, user: User, requested: str | None = None) -> str:
-    own = (user.guild_name or "").strip()
-    selected = (requested or own).strip()
+    contexts = GuildAuthorizationService.guild_contexts(db, user)
+    selected = (requested or (contexts[0]["guild_name"] if contexts else "")).strip()
     if not selected:
         raise HTTPException(409, "No guild membership is linked")
-    if not is_global_admin(user) and own.casefold() != selected.casefold() and not (
+    if not is_global_admin(user) and not (
         GuildAuthorizationService.is_verified_member(db, user, selected)
         or GuildAuthorizationService.has_grant(db, user, selected, "hunts.manage")
     ):
@@ -36,7 +36,7 @@ def _hunt_or_404(db: Session, hunt_id: int, user: User, *, lock: bool = False) -
     hunt = GuildHuntPlannerService.get(db, hunt_id, lock=lock)
     if hunt is None:
         raise HTTPException(404, "Guild hunt not found")
-    if not can_view_guild_workspace(user, hunt.guild_name) and not GuildAuthorizationService.has_grant(db, user, hunt.guild_name, "hunts.manage"):
+    if not is_global_admin(user) and not GuildAuthorizationService.is_verified_member(db, user, hunt.guild_name) and not GuildAuthorizationService.has_grant(db, user, hunt.guild_name, "hunts.manage"):
         raise HTTPException(403, "Guild workspace access denied")
     return hunt
 
@@ -50,7 +50,7 @@ def _planner_response(db: Session, hunt: GuildHunt, user: User) -> dict:
         "current_user_joined": any(item.user_id == user.id and item.attendance_status == "registered" for item in participants),
         "capabilities": {
             "manage": can_manage_guild(user, hunt.guild_name, db=db, capability="hunts.manage"),
-            "join": hunt.status == "scheduled" and can_view_guild_workspace(user, hunt.guild_name),
+            "join": hunt.status == "scheduled" and GuildAuthorizationService.is_verified_member(db, user, hunt.guild_name),
             "attendance": hunt.status in {"in_progress", "finished"} and can_manage_guild(user, hunt.guild_name, db=db, capability="hunts.manage"),
         },
     }

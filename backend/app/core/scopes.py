@@ -43,9 +43,13 @@ def require_scope_creation(user: User, scope: ContentScope) -> None:
     if scope.scope_type is ScopeType.COALITION:
         raise HTTPException(status_code=422, detail="Coalition scope is not available")
     if scope.scope_type is ScopeType.GUILD:
-        own = (user.guild_name or "").strip().casefold()
         target = (scope.guild_name or "").strip().casefold()
-        if not target or (not user.is_superuser and own != target):
+        verified_membership = any(
+            row.ownership_status == "verified"
+            and (row.guild_name or "").strip().casefold() == target
+            for row in getattr(user, "characters", [])
+        )
+        if not target or (not user.is_superuser and not verified_membership):
             raise HTTPException(status_code=403, detail="Guild scope is limited to your own guild")
         return
     if scope.scope_type is ScopeType.SERVER:

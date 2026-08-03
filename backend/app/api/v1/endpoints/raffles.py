@@ -99,7 +99,7 @@ def _canonical_guild_world(db: Session, guild_name: str) -> str | None:
 def _audit_admin_action(db: Session, user: User, raffle: Raffle, action: str, metadata: dict | None = None) -> None:
     if not is_global_admin(user):
         return
-    assisted = raffle.scope_type == "guild" and (user.guild_name or "").strip().casefold() != raffle.guild_name.strip().casefold()
+    assisted = raffle.scope_type == "guild" and not GuildAuthorizationService.is_verified_member(db, user, raffle.guild_name)
     db.add(WorkspaceAudit(
         actor_id=user.id, workspace_type="admin_guild_assist" if assisted else "admin",
         guild_name=raffle.guild_name if raffle.scope_type == "guild" else None,
@@ -382,7 +382,7 @@ def create_raffle(
         raise HTTPException(status_code=403, detail="Guild managers can create only Real guild raffles")
     automatic_stage1 = payload.run_mode == "automatic" or payload.purpose in {"test", "real"}
     if is_global_admin(current_user):
-        scope = ContentScope(ScopeType(payload.scope_type), guild_name=payload.guild_name, world_name=payload.world_name or current_user.world_name)
+        scope = ContentScope(ScopeType(payload.scope_type), guild_name=payload.guild_name, world_name=payload.world_name)
         require_scope_creation(current_user, scope)
     allowed = is_global_admin(current_user) or GuildAuthorizationService.can_manage(db, current_user, payload.guild_name, "raffles.manage")
     if not allowed:
@@ -395,9 +395,9 @@ def create_raffle(
         guild_name=payload.guild_name,
         scope_type=payload.scope_type,
         world_name=(
-            (_canonical_guild_world(db, payload.guild_name) or payload.world_name or current_user.world_name)
+            (_canonical_guild_world(db, payload.guild_name) or payload.world_name)
             if payload.scope_type == "guild"
-            else (payload.world_name or current_user.world_name) if payload.scope_type == "server"
+            else payload.world_name if payload.scope_type == "server"
             else None
         ),
         access_mode=access_mode,
@@ -917,10 +917,10 @@ async def _register_participant_for_raffle(
     user = character.user
     if not user.is_active:
         raise HTTPException(status_code=400, detail="The character owner account is inactive")
-    if access_mode == "guild_only" and (character.guild_name or user.guild_name or "").casefold() != raffle.guild_name.casefold():
+    if access_mode == "guild_only" and (character.guild_name or "").casefold() != raffle.guild_name.casefold():
         raise HTTPException(status_code=400, detail="Only members of this guild can join")
     raffle_world = (raffle.world_name or "").strip().casefold()
-    character_world = (character.world_name or user.world_name or "").strip().casefold()
+    character_world = (character.world_name or "").strip().casefold()
     if access_mode == "world_only" and (not raffle_world or character_world != raffle_world):
         raise HTTPException(status_code=400, detail="Only characters from the same world can join")
     canonical_name = character.character_name
@@ -945,7 +945,7 @@ async def _register_participant_for_raffle(
     if existing_character:
         raise HTTPException(status_code=400, detail="This character is already registered")
 
-    rank = character.guild_rank or user.guild_rank
+    rank = character.guild_rank
     normalized_name = normalize_character_name(canonical_name)
     roster_character = db.query(GuildRosterCharacter).filter(
         GuildRosterCharacter.normalized_character_name == normalized_name,
@@ -962,7 +962,7 @@ async def _register_participant_for_raffle(
         known_account_identity_key=known_account_key,
         enforced_account_identity_key=known_account_key if raffle.unique_account_participation else None,
         guild_name_snapshot=raffle.guild_name,
-        world_name_snapshot=character.world_name or user.world_name,
+        world_name_snapshot=character.world_name,
         guild_rank=rank,
         weight=1,
         weight_multiplier=1.0,
@@ -1024,7 +1024,7 @@ async def add_participant_manual(
             UserCharacter.ownership_status == "verified",
         ).first()
         user = character.user if character else None
-        if not user or not user.is_active or (user.guild_name or "").casefold() != raffle.guild_name.casefold():
+        if not user or not user.is_active or (character.guild_name or "").casefold() != raffle.guild_name.casefold():
             raise HTTPException(status_code=400, detail="Test participants must be active local accounts in this guild")
         if db.query(RaffleParticipant.id).filter(
             RaffleParticipant.raffle_id == raffle.id, RaffleParticipant.user_id == user.id,
@@ -1039,7 +1039,7 @@ async def add_participant_manual(
             enforced_account_identity_key=f"user:{user.id}" if raffle.unique_account_participation else None,
             guild_name_snapshot=raffle.guild_name,
             world_name_snapshot=character.world_name or raffle.world_name,
-            guild_rank=character.guild_rank or user.guild_rank, weight=1.0,
+            guild_rank=character.guild_rank, weight=1.0,
             weight_multiplier=1.0, is_eligible=True, source="test_local_account",
         ))
         db.flush()

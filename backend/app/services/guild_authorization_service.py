@@ -6,7 +6,7 @@ from datetime import UTC, datetime
 
 from sqlalchemy.orm import Session
 
-from app.models.guild_management import GuildManagementGrant, GuildRosterCharacter
+from app.models.guild_management import GuildDirectory, GuildManagementGrant, GuildRosterCharacter
 from app.models.user import User
 from app.models.user_character import UserCharacter
 from app.models.workspace_audit import WorkspaceAudit
@@ -64,14 +64,9 @@ class GuildAuthorizationService:
             ).order_by(GuildRosterCharacter.id).all():
                 names.setdefault(row.normalized_guild_name, row.guild_name)
                 worlds.setdefault(row.normalized_guild_name, row.world_name)
-            for row in db.query(UserCharacter).filter(
-                UserCharacter.guild_name.isnot(None),
-            ).order_by(UserCharacter.id).all():
-                key = normalize_guild_identity(row.guild_name or "")
-                if key:
-                    names.setdefault(key, (row.guild_name or "").strip())
-                    if row.world_name:
-                        worlds.setdefault(key, row.world_name)
+            for row in db.query(GuildDirectory).filter(GuildDirectory.is_active.is_(True)).order_by(GuildDirectory.id).all():
+                names.setdefault(row.normalized_guild_name, row.guild_name)
+                worlds.setdefault(row.normalized_guild_name, row.world_name)
 
         result = []
         for key, name in sorted(names.items(), key=lambda item: item[1].casefold()):
@@ -165,8 +160,8 @@ class GuildAuthorizationService:
         if user.is_superuser:
             for (name,) in db.query(GuildRosterCharacter.guild_name).distinct().all():
                 names[normalize_guild_identity(name)] = name
-            for (name,) in db.query(UserCharacter.guild_name).filter(UserCharacter.guild_name.isnot(None)).distinct().all():
-                names[normalize_guild_identity(name)] = name
+            for row in db.query(GuildDirectory).filter(GuildDirectory.is_active.is_(True)).all():
+                names[row.normalized_guild_name] = row.guild_name
         return sorted(names.values(), key=str.casefold)
 
 

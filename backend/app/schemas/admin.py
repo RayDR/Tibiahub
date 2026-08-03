@@ -30,6 +30,10 @@ class UserWithCharacters(BaseModel):
     username: str
     display_name: Optional[str] = None
     email: Optional[str] = None
+    avatar_url: Optional[str] = None
+    primary_character_id: Optional[int] = None
+    tibia_character_name: Optional[str] = None
+    world_name: Optional[str] = None
     guild_name: Optional[str] = None
     guild_rank: Optional[str] = None
     discord_id: Optional[str] = None

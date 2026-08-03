@@ -1,7 +1,7 @@
 from typing import List, Any, Optional
 from fastapi import APIRouter, Depends, HTTPException, status
 from pydantic import BaseModel
-from sqlalchemy.orm import Session
+from sqlalchemy.orm import Session, selectinload
 from sqlalchemy.exc import SQLAlchemyError
 from datetime import UTC, datetime, timedelta
 from collections import OrderedDict
@@ -11,6 +11,7 @@ from app.models.guild import Announcement, GuildEvent, EventAttendance, Recruitm
 from app.models.guild_member_snapshot import GuildMemberSnapshot
 from app.models.settings import SystemSettings
 from app.models.user import User
+from app.models.guild_management import GuildRosterCharacter
 from app.models.workspace_audit import WorkspaceAudit
 from app.schemas.guild import (
     AnnouncementCreate, AnnouncementResponse,
@@ -23,7 +24,7 @@ from app.schemas.guild import (
 from app.api.v1.endpoints.auth import get_current_user, get_current_active_user, get_current_admin_user, get_current_manager_user
 from app.core.permissions import (
     can_manage_announcements, can_manage_events, can_manage_guild_members, is_global_admin,
-    require_guild_management, resolve_guild_role,
+    require_guild_management,
 )
 from app.services.tibia_api import get_active_guild_members, get_guild_info
 from app.services.guild_authorization_service import GuildAuthorizationService
@@ -53,13 +54,15 @@ def get_own_guild_workspace(
     current_user: User = Depends(get_current_active_user),
     db: Session = Depends(get_db),
 ):
-    guild_name = (current_user.guild_name or "").strip()
+    contexts = GuildAuthorizationService.guild_contexts(db, current_user)
+    selected = contexts[0] if contexts else None
+    guild_name = selected["guild_name"] if selected else ""
     return {
         "workspace_type": "guild" if guild_name else "personal",
         "status": "ready" if guild_name else "no_guild",
         "guild_name": guild_name or None,
-        "world_name": current_user.world_name,
-        "role": resolve_guild_role(current_user).value,
+        "world_name": selected.get("world_name") if selected else None,
+        "role": selected.get("role") if selected else "guild_member",
         "capabilities": {
             "manage_members": bool(guild_name and can_manage_guild_members(current_user, guild_name, db)),
             "manage_announcements": bool(guild_name and can_manage_announcements(current_user, guild_name, db)),
@@ -68,8 +71,9 @@ def get_own_guild_workspace(
                 capability: GuildAuthorizationService.manageable_guilds(db, current_user, capability)
                 for capability in ("raffles.manage", "events.manage", "hunts.manage", "announcements.manage")
             },
-            "change_guild_scope": False,
+            "change_guild_scope": len(contexts) > 1,
         },
+        "guilds": contexts,
     }
 
 
@@ -78,9 +82,11 @@ def get_own_guild_dashboard(
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_active_user),
 ):
-    guild_name = (current_user.guild_name or "").strip()
-    if not guild_name:
+    contexts = GuildAuthorizationService.guild_contexts(db, current_user)
+    if not contexts:
         raise HTTPException(status_code=409, detail="No guild membership is linked to this account")
+    selected = contexts[0]
+    guild_name = selected["guild_name"]
     announcements = db.query(Announcement).filter(
         Announcement.guild_name.ilike(guild_name), Announcement.is_deleted.is_(False),
     ).order_by(Announcement.created_at.desc()).limit(3).all()
@@ -89,27 +95,32 @@ def get_own_guild_dashboard(
     ).order_by(GuildEvent.start_time.asc()).limit(3).all()
     return {
         "guild_name": guild_name,
-        "world_name": current_user.world_name,
-        "role": resolve_guild_role(current_user).value,
-        "member_count": db.query(User.id).filter(User.guild_name.ilike(guild_name), User.is_active.is_(True)).count(),
+        "world_name": selected.get("world_name"),
+        "role": selected["role"],
+        "member_count": db.query(GuildRosterCharacter.id).filter(
+            GuildRosterCharacter.normalized_guild_name == " ".join(guild_name.split()).casefold(),
+            GuildRosterCharacter.is_current.is_(True),
+        ).count(),
         "announcements": announcements,
         "events": events,
     }
 
 
 def _resolve_guild_scope(current_user: User, requested_guild: str | None, db: Session | None = None) -> str:
-    guild_name = (requested_guild or current_user.guild_name or "").strip()
+    if db is None:
+        raise HTTPException(status_code=503, detail="Canonical guild authorization is unavailable")
+    contexts = GuildAuthorizationService.guild_contexts(db, current_user)
+    guild_name = (requested_guild or (contexts[0]["guild_name"] if contexts else "")).strip()
     if not guild_name:
         raise HTTPException(status_code=400, detail="A guild name is required")
     if not is_global_admin(current_user):
-        own_guild = (current_user.guild_name or "").strip()
-        verified_member = bool(db and GuildAuthorizationService.is_verified_member(db, current_user, guild_name))
-        granted = bool(db and any(
+        verified_member = GuildAuthorizationService.is_verified_member(db, current_user, guild_name)
+        granted = any(
             GuildAuthorizationService.has_grant(db, current_user, guild_name, capability)
             for capability in ("raffles.manage", "events.manage", "hunts.manage", "announcements.manage")
-        ))
-        if (not own_guild or own_guild.casefold() != guild_name.casefold()) and not verified_member and not granted:
-            raise HTTPException(status_code=403, detail="You can only access your own guild")
+        )
+        if not verified_member and not granted:
+            raise HTTPException(status_code=403, detail="Verified character ownership or an active guild grant is required")
     return guild_name
 
 
@@ -129,6 +140,28 @@ def _latest_snapshot_rows(db: Session, guild_name: str, limit: int = 400) -> lis
             continue
         deduped[key] = row
     return list(deduped.values())
+
+
+def _member_identity_map(db: Session, guild_name: str) -> dict[str, GuildRosterCharacter]:
+    rows = db.query(GuildRosterCharacter).filter(
+        GuildRosterCharacter.normalized_guild_name == " ".join(guild_name.split()).casefold(),
+        GuildRosterCharacter.is_current.is_(True),
+    ).options(selectinload(GuildRosterCharacter.linked_user)).all()
+    return {row.normalized_character_name: row for row in rows}
+
+
+def _snapshot_response(row: GuildMemberSnapshot, identities: dict[str, GuildRosterCharacter]) -> GuildMemberSnapshotResponse:
+    identity = identities.get(" ".join(row.character_name.split()).casefold())
+    linked = identity.linked_user if identity and identity.linked_user and identity.linked_user.is_active else None
+    return GuildMemberSnapshotResponse(
+        character_name=row.character_name, level=row.level, vocation=row.vocation,
+        rank=row.rank, role=row.role, last_login=row.last_login, world=row.world,
+        snapshot_at=row.snapshot_at,
+        linked_user_id=linked.id if linked else None,
+        linked_username=linked.username if linked else None,
+        public_profile_url=f"/members/{linked.username}" if linked else None,
+        account_identity_known=linked is not None,
+    )
 
 
 async def _sync_guild_snapshot(db: Session, guild_name: str) -> list[GuildMemberSnapshot]:
@@ -466,19 +499,8 @@ async def get_guild_members_snapshot(
         except Exception as exc:
             raise HTTPException(status_code=503, detail=f"Guild members unavailable: {str(exc)}") from exc
 
-    members = [
-        GuildMemberSnapshotResponse(
-            character_name=row.character_name,
-            level=row.level,
-            vocation=row.vocation,
-            rank=row.rank,
-            role=row.role,
-            last_login=row.last_login,
-            world=row.world,
-            snapshot_at=row.snapshot_at,
-        )
-        for row in rows
-    ]
+    identities = _member_identity_map(db, guild_name)
+    members = [_snapshot_response(row, identities) for row in rows]
     return GuildMemberSnapshotPayload(guild_name=guild_name, source=source, members=members)
 
 
@@ -505,17 +527,6 @@ async def sync_guild_members_snapshot(
         raise HTTPException(status_code=503, detail=f"Guild sync failed: {str(exc)}") from exc
 
     rows = _latest_snapshot_rows(db, guild_name)
-    members = [
-        GuildMemberSnapshotResponse(
-            character_name=row.character_name,
-            level=row.level,
-            vocation=row.vocation,
-            rank=row.rank,
-            role=row.role,
-            last_login=row.last_login,
-            world=row.world,
-            snapshot_at=row.snapshot_at,
-        )
-        for row in rows
-    ]
+    identities = _member_identity_map(db, guild_name)
+    members = [_snapshot_response(row, identities) for row in rows]
     return GuildMemberSnapshotPayload(guild_name=guild_name, source="live", members=members)

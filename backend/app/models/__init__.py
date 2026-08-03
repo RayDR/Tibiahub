@@ -28,7 +28,8 @@ from app.models.raffle import (
     RaffleSchedulerAttempt, RaffleSchedulerState, RaffleTestAudit, InternalNotification,
 )
 from app.models.guild_member_snapshot import GuildMemberSnapshot
-from app.models.guild_management import GuildManagementGrant, GuildRosterCharacter
+from app.models.guild_management import GuildDirectory, GuildManagementGrant, GuildRosterCharacter
+from app.models.email_delivery import EmailOutbox, EmailWorkerHeartbeat
 from app.models.workspace_audit import WorkspaceAudit
 from app.models.leadership import (
     GuildLeadershipRole, GuildLeadershipOpening, GuildLeadershipApplication,

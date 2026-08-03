@@ -15,17 +15,20 @@ from datetime import UTC, datetime
 from app.db.database import get_db
 from app.models.user import User
 from app.models.user_character import UserCharacter
+from app.models.guild_management import GuildDirectory, GuildRosterCharacter
 from app.models.creature import Creature
 from app.models.events import Event
 from app.models.raffle import Raffle
 from app.models.workspace_audit import WorkspaceAudit
 from app.api.v1.endpoints.auth import get_current_admin_user, get_current_user
-from app.core.permissions import can_manage_guild, is_global_admin
+from app.core.permissions import is_global_admin
 from app.services.media_asset_service import UnsafeMediaError, validate_raster_image
 from app.services.tibia_validation_service import TibiaValidationService
 from app.services.tibia_api import TibiaAPIError, get_guild_info
 from app.services.guild_roster_service import GuildRosterService, GuildRosterSyncError
 from app.services.guild_authorization_service import GuildAuthorizationService
+from app.services.account_identity_service import AccountIdentityService
+from app.services.avatar_service import AvatarService
 from app.core import config, security
 from app.schemas.admin import (
     TibiaAPIStatus, 
@@ -158,8 +161,12 @@ def _remove_unreferenced_category_files(old_values: set[str], current_values: se
             path.unlink(missing_ok=True)
 
 
-def get_admin_or_guild_leader(current_user: User = Depends(get_current_user)):
-    if is_global_admin(current_user) or can_manage_guild(current_user):
+def get_admin_or_guild_leader(
+    current_user: User = Depends(get_current_user),
+    db: Session = Depends(get_db),
+):
+    contexts = GuildAuthorizationService.guild_contexts(db, current_user)
+    if is_global_admin(current_user) or any(row["role"] == "guild_leader" for row in contexts):
         return current_user
     raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Insufficient permissions")
 
@@ -203,11 +210,11 @@ def get_all_users(
 
     requested_guild = (guild_name or "").strip()
     if requested_guild:
-        if not is_global_admin(current_user):
-            own_guild = (current_user.guild_name or "").strip().lower()
-            if own_guild != requested_guild.lower():
-                raise HTTPException(status_code=403, detail="You can only access users from your guild")
-        query = query.filter(func.lower(User.guild_name) == requested_guild.lower())
+        member_ids = db.query(UserCharacter.user_id).filter(
+            UserCharacter.ownership_status == "verified",
+            func.lower(UserCharacter.guild_name) == requested_guild.lower(),
+        ).distinct()
+        query = query.filter(User.id.in_(member_ids))
 
     users = query.order_by(User.created_at.desc()).offset(skip).limit(limit).all()
 
@@ -226,6 +233,10 @@ def get_all_users(
                 username=user.username,
                 display_name=user.display_name,
                 email=user.email,
+                avatar_url=AvatarService.url(user.avatar_managed_key) or user.avatar_url,
+                primary_character_id=user.primary_character_id,
+                tibia_character_name=user.tibia_character_name,
+                world_name=user.world_name,
                 guild_name=user.guild_name,
                 guild_rank=user.guild_rank,
                 is_active=user.is_active,
@@ -234,15 +245,7 @@ def get_all_users(
                 is_writer=user.is_writer,
                 join_date=user.join_date,
                 created_at=user.created_at,
-                characters=[
-                    {
-                        "character_name": char.character_name,
-                        "level": char.level,
-                        "vocation": char.vocation,
-                        "last_seen": char.last_seen
-                    }
-                    for char in characters
-                ]
+                characters=[AccountIdentityService.serialize_character(db, char, primary_character_id=user.primary_character_id) for char in characters]
             )
         )
     
@@ -273,6 +276,10 @@ def get_user_detail(
         username=user.username,
         display_name=user.display_name,
         email=user.email,
+        avatar_url=AvatarService.url(user.avatar_managed_key) or user.avatar_url,
+        primary_character_id=user.primary_character_id,
+        tibia_character_name=user.tibia_character_name,
+        world_name=user.world_name,
         guild_name=user.guild_name,
         guild_rank=user.guild_rank,
         is_active=user.is_active,
@@ -281,15 +288,7 @@ def get_user_detail(
         is_writer=user.is_writer,
         join_date=user.join_date,
         created_at=user.created_at,
-        characters=[
-            {
-                "character_name": char.character_name,
-                "level": char.level,
-                "vocation": char.vocation,
-                "last_seen": char.last_seen
-            }
-            for char in characters
-        ]
+        characters=[AccountIdentityService.serialize_character(db, char, primary_character_id=user.primary_character_id) for char in characters]
     )
 
 
@@ -309,8 +308,8 @@ def get_stats(
     
     # Get guild rank distribution
     guild_ranks = {}
-    for user in db.query(User).all():
-        rank = user.guild_rank or "No Rank"
+    for character in db.query(UserCharacter).filter(UserCharacter.ownership_status == "verified").all():
+        rank = character.guild_rank or "No Rank"
         guild_ranks[rank] = guild_ranks.get(rank, 0) + 1
     
     return {
@@ -329,10 +328,10 @@ def get_registered_guilds(
     db: Session = Depends(get_db),
 ):
     guilds: set[str] = set()
-    for (guild_name,) in db.query(User.guild_name).filter(User.guild_name.isnot(None), User.is_active == True).all():
-        name = (guild_name or "").strip()
-        if name:
-            guilds.add(name)
+    for (guild_name,) in db.query(GuildDirectory.guild_name).filter(GuildDirectory.is_active.is_(True)).all():
+        guilds.add(guild_name)
+    for (guild_name,) in db.query(GuildRosterCharacter.guild_name).filter(GuildRosterCharacter.is_current.is_(True)).distinct().all():
+        guilds.add(guild_name)
     for (guild_name,) in db.query(Event.guild_name).filter(Event.guild_name.isnot(None), Event.is_deleted == False).all():
         name = (guild_name or "").strip()
         if name:
@@ -343,8 +342,7 @@ def get_registered_guilds(
             guilds.add(name)
 
     if not is_global_admin(current_user):
-        own = (current_user.guild_name or "").strip()
-        return [own] if own else []
+        return sorted({row["guild_name"] for row in GuildAuthorizationService.guild_contexts(db, current_user)})
 
     return sorted(guilds)
 
@@ -538,7 +536,7 @@ def update_user(
         user.email = user_update.email
     
     if user_update.guild_rank is not None:
-        user.guild_rank = user_update.guild_rank
+        raise HTTPException(status_code=409, detail="Guild rank is synchronized from the verified primary character")
     
     if user_update.is_active is not None:
         user.is_active = user_update.is_active
@@ -577,6 +575,8 @@ def update_user(
         username=user.username,
         display_name=user.display_name,
         email=user.email,
+        avatar_url=AvatarService.url(user.avatar_managed_key) or user.avatar_url,
+        primary_character_id=user.primary_character_id,
         guild_name=user.guild_name,
         guild_rank=user.guild_rank,
         is_active=user.is_active,
@@ -585,15 +585,7 @@ def update_user(
         is_writer=user.is_writer,
         join_date=user.join_date,
         created_at=user.created_at,
-        characters=[
-            {
-                "character_name": char.character_name,
-                "level": char.level,
-                "vocation": char.vocation,
-                "last_seen": char.last_seen
-            }
-            for char in characters
-        ]
+        characters=[AccountIdentityService.serialize_character(db, char, primary_character_id=user.primary_character_id) for char in characters]
     )
 
 
@@ -616,8 +608,11 @@ def delete_user(
     if user.id == current_user.id:
         raise HTTPException(status_code=400, detail="Cannot delete your own account")
     
-    # Delete user characters
-    db.query(UserCharacter).filter(UserCharacter.user_id == user_id).delete()
+    if db.query(UserCharacter.id).filter(UserCharacter.user_id == user_id).first():
+        raise HTTPException(
+            status_code=409,
+            detail="Accounts with character ownership history must be deactivated or unlinked, not deleted",
+        )
     
     # Delete user
     db.delete(user)
@@ -633,76 +628,11 @@ def update_user_character(
     current_user: User = Depends(get_current_admin_user),
     db: Session = Depends(get_db)
 ):
-    """
-    Update the character linked to a user account
-    Validates the character exists in Tibia (but allows saving even if validation fails)
-    Prevents linking if character is already linked to another account
-    Requires admin privileges
-    """
-    user = db.query(User).filter(User.id == user_id).first()
-    
-    if not user:
-        raise HTTPException(status_code=404, detail="User not found")
-    
-    # Check if character is already linked to another user
-    existing_link = db.query(UserCharacter).filter(
-        UserCharacter.character_name.ilike(character_name),
-        UserCharacter.user_id != user_id
-    ).first()
-    
-    if existing_link:
-        linked_user = db.query(User).filter(User.id == existing_link.user_id).first()
-        raise HTTPException(
-            status_code=400, 
-            detail=f"Character '{character_name}' is already linked to user '{linked_user.username}' (ID: {linked_user.id})"
-        )
-    
-    # Try to validate character (but don't block if it fails)
-    validation_passed = False
-    validation_message = ""
-    char_data = None
-    
-    try:
-        is_valid, char_data, error_msg = TibiaValidationService.validate_character(character_name, strict=False)
-        validation_passed = is_valid
-        if not is_valid:
-            validation_message = error_msg or "Character validation failed"
-    except Exception as e:
-        validation_message = f"Validation error: {str(e)}"
-    
-    # Update or create character link
-    char_link = db.query(UserCharacter).filter(UserCharacter.user_id == user_id).first()
-    
-    if char_link:
-        # Update existing character
-        char_link.character_name = character_name
-        if char_data:
-            char_link.level = char_data.get("level")
-            char_link.vocation = char_data.get("vocation")
-    else:
-        # Create new character link
-        char_link = UserCharacter(
-            user_id=user_id,
-            character_name=character_name,
-            level=char_data.get("level") if char_data else None,
-            vocation=char_data.get("vocation") if char_data else None
-        )
-        db.add(char_link)
-    
-    db.commit()
-    db.refresh(char_link)
-    
-    return {
-        "success": True,
-        "message": "Character updated successfully",
-        "character_name": character_name,
-        "validation_passed": validation_passed,
-        "validation_message": validation_message if not validation_passed else None,
-        "character_data": {
-            "level": char_link.level,
-            "vocation": char_link.vocation,
-        }
-    }
+    """Reject the obsolete unaudited link path in favor of admin ownership linking."""
+    raise HTTPException(
+        status_code=409,
+        detail="Use the audited administrator character-linking workflow",
+    )
 
 
 @router.post("/sync-guild", response_model=GuildSyncResult)

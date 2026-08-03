@@ -1,10 +1,9 @@
 """Neutral, rate-limited password recovery backed by hashed one-time tokens."""
 
 from datetime import timedelta
-import logging
 from typing import Literal
 
-from fastapi import APIRouter, BackgroundTasks, Depends, HTTPException, Request
+from fastapi import APIRouter, Depends, HTTPException, Request
 from pydantic import BaseModel, EmailStr, Field, field_validator, model_validator
 from sqlalchemy.orm import Session
 
@@ -16,11 +15,10 @@ from app.db.database import get_db
 from app.models.user import User
 from app.models.user_character import UserCharacter
 from app.services.auth_token_service import AuthTokenService, PASSWORD_RESET
-from app.services.email_service import EmailService
+from app.services.email_outbox_service import EmailOutboxService
 from app.services.character_ownership_service import normalize_character_name
 
 router = APIRouter()
-logger = logging.getLogger(__name__)
 NEUTRAL_MESSAGE = "If an account with that information exists, reset instructions will be sent"
 
 
@@ -56,20 +54,8 @@ class EmailTestRequest(BaseModel):
     locale: Literal["en", "es"] = "en"
 
 
-def _queue_reset_email(background_tasks: BackgroundTasks, *, user: User, raw_token: str, locale: str) -> None:
-    reset_link = f"{settings.RESET_PASSWORD_URL}?token={raw_token}"
-
-    def _send() -> None:
-        result = EmailService.send_password_reset_email(
-            to_email=user.email,
-            username=user.display_name or user.username,
-            reset_link=reset_link,
-            locale=locale,
-        )
-        if not result.ok:
-            logger.error("password_reset_email_failed user_id=%s", user.id)
-
-    background_tasks.add_task(_send)
+def _queue_reset_email(db: Session, *, user: User, raw_token: str, locale: str) -> None:
+    EmailOutboxService.enqueue_password_reset(db, user=user, raw_token=raw_token, locale=locale)
 
 
 def _find_user(db: Session, payload: PasswordResetRequest) -> User | None:
@@ -86,7 +72,6 @@ def _find_user(db: Session, payload: PasswordResetRequest) -> User | None:
 def request_password_reset(
     payload: PasswordResetRequest,
     request: Request,
-    background_tasks: BackgroundTasks,
     db: Session = Depends(get_db),
 ):
     subject = str(payload.email or payload.character_name or "").strip()
@@ -102,7 +87,7 @@ def request_password_reset(
             purpose=PASSWORD_RESET,
             ttl=timedelta(minutes=settings.PASSWORD_RESET_TTL_MINUTES),
         )
-        _queue_reset_email(background_tasks, user=user, raw_token=raw_token, locale=payload.locale)
+        _queue_reset_email(db, user=user, raw_token=raw_token, locale=payload.locale)
     db.commit()
     return {"message": NEUTRAL_MESSAGE}
 
@@ -124,7 +109,6 @@ def reset_password(payload: PasswordResetConfirm, db: Session = Depends(get_db))
 @router.post("/admin/send-reset-email")
 def admin_send_reset_email(
     payload: AdminPasswordResetByEmail,
-    background_tasks: BackgroundTasks,
     _admin: User = Depends(get_current_admin_user),
     db: Session = Depends(get_db),
 ):
@@ -137,24 +121,25 @@ def admin_send_reset_email(
         purpose=PASSWORD_RESET,
         ttl=timedelta(minutes=settings.PASSWORD_RESET_TTL_MINUTES),
     )
+    _queue_reset_email(db, user=user, raw_token=raw_token, locale=payload.locale)
     db.commit()
-    _queue_reset_email(background_tasks, user=user, raw_token=raw_token, locale=payload.locale)
     return {"message": "Password reset instructions queued"}
 
 
 @router.post("/test-email")
-def send_test_email(payload: EmailTestRequest, _admin: User = Depends(get_current_admin_user)):
-    subject, html_body, text_body = EmailService.build_password_reset_content(
-        username="Admin Test",
-        reset_link=f"{settings.RESET_PASSWORD_URL}?token=test-token-not-valid",
-        locale=payload.locale,
-    )
-    result = EmailService.send_message(EmailService.build_message(
-        to_email=payload.email,
-        subject=f"[Test] {subject}",
-        html_body=html_body,
-        text_body=text_body,
-    ))
-    if not result.ok:
-        raise HTTPException(status_code=503, detail=result.detail)
-    return {"message": "Test email queued"}
+def send_test_email(
+    payload: EmailTestRequest,
+    _admin: User = Depends(get_current_admin_user),
+    db: Session = Depends(get_db),
+):
+    row = EmailOutboxService.enqueue_test(db, recipient_email=str(payload.email), locale=payload.locale)
+    db.commit()
+    return {"message": "Test email queued", "outbox_id": row.id}
+
+
+@router.get("/email-diagnostics")
+def email_diagnostics(
+    _admin: User = Depends(get_current_admin_user),
+    db: Session = Depends(get_db),
+):
+    return EmailOutboxService.diagnostics(db)

@@ -10,7 +10,7 @@ from datetime import UTC, datetime
 
 from sqlalchemy.orm import Session, selectinload
 
-from app.core.permissions import can_manage_guild, can_view_guild_workspace
+from app.core.permissions import can_manage_guild
 from app.models.hunt import GuildHunt, GuildHuntParticipant
 from app.models.user import User
 from app.models.user_character import UserCharacter
@@ -29,19 +29,20 @@ class GuildHuntPlannerService:
         return can_manage_guild(user, hunt.guild_name, db=db, capability="hunts.manage")
 
     @staticmethod
-    def can_view(user: User, hunt: GuildHunt) -> bool:
-        return can_view_guild_workspace(user, hunt.guild_name)
+    def can_view(db: Session, user: User, hunt: GuildHunt) -> bool:
+        from app.services.guild_authorization_service import GuildAuthorizationService
+        return bool(user.is_superuser or GuildAuthorizationService.is_verified_member(db, user, hunt.guild_name))
 
     @staticmethod
     def audit(db: Session, actor: User, hunt: GuildHunt, action: str, metadata: dict | None = None) -> None:
         db.add(WorkspaceAudit(
             actor_id=actor.id,
-            workspace_type="admin_guild_assist" if actor.is_superuser and (actor.guild_name or "").casefold() != hunt.guild_name.casefold() else "guild",
+            workspace_type="admin_guild_assist" if actor.is_superuser else "guild",
             guild_name=hunt.guild_name,
             action=action,
             target_type="guild_hunt",
             target_id=str(hunt.id),
-            assisted=bool(actor.is_superuser and (actor.guild_name or "").casefold() != hunt.guild_name.casefold()),
+            assisted=bool(actor.is_superuser),
             safe_metadata=metadata or {},
         ))
 
@@ -124,7 +125,7 @@ class GuildHuntPlannerService:
 
     @staticmethod
     def join(db: Session, actor: User, hunt: GuildHunt) -> GuildHuntParticipant:
-        if not GuildHuntPlannerService.can_view(actor, hunt) or hunt.status != "scheduled":
+        if not GuildHuntPlannerService.can_view(db, actor, hunt) or hunt.status != "scheduled":
             raise PermissionError("This hunt is not available to join")
         existing = next((item for item in hunt.participants if item.user_id == actor.id), None)
         active_count = sum(1 for item in hunt.participants if item.attendance_status in GuildHuntPlannerService.ACTIVE_ATTENDANCE)

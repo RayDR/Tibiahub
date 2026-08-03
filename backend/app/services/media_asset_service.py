@@ -69,6 +69,18 @@ def validate_raster_image(content: bytes, declared_content_type: str | None = No
     if not matching:
         raise UnsafeMediaError("Unsupported image format")
     actual_mime, extension = matching
+    # Decoders commonly tolerate arbitrary bytes after a valid image. Reject
+    # those payloads so an executable/script cannot be smuggled as a raster.
+    if actual_format == "PNG":
+        marker = content.rfind(b"\x00\x00\x00\x00IEND\xaeB`\x82")
+        logical_size = marker + 12 if marker >= 0 else -1
+    elif actual_format == "JPEG":
+        marker = content.rfind(b"\xff\xd9")
+        logical_size = marker + 2 if marker >= 0 else -1
+    else:  # WebP RIFF length includes bytes after the first eight-byte header.
+        logical_size = int.from_bytes(content[4:8], "little") + 8 if len(content) >= 12 and content[:4] == b"RIFF" else -1
+    if logical_size != len(content):
+        raise UnsafeMediaError("Image contains unsupported trailing data")
     if declared and declared != actual_mime:
         raise UnsafeMediaError("Image content type does not match its data")
     return actual_mime, extension

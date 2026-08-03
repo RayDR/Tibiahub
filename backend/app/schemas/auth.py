@@ -44,7 +44,10 @@ class UserResponse(UserBase):
     # but do not make authenticated reads fail while those records are remediated.
     email: Optional[str] = None
     id: int
+    display_name: Optional[str] = None
+    title: Optional[str] = None
     avatar_url: Optional[str] = None
+    primary_character_id: Optional[int] = None
     is_active: bool
     is_superuser: bool
     email_verified_at: Optional[datetime] = None
