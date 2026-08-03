@@ -7,7 +7,8 @@ repository has the expected single Alembic head.
 
 The workflow acquires a deployment lock, loads credentials only from the
 existing external secure environment, creates and validates a mode-0600 custom
-PostgreSQL snapshot, records Git and Alembic metadata, backs up `frontend/dist`,
+PostgreSQL snapshot, records Git and Alembic metadata, creates an
+extension-preserving restore catalog, backs up `frontend/dist`,
 and captures sanitized PM2 state. Because validation can already have rebuilt
 the ignored live `dist`, it also checks out the recorded previous commit in a
 temporary Git worktree and creates a reproducible previous-commit frontend
@@ -49,7 +50,8 @@ deploy/scripts/rollback.sh --confirm-rollback-tibiahub \
 ```
 
 Rollback verifies the snapshot checksum and catalog, stops only TibiaHub PM2
-applications, restores the prior Git commit, recreates only the local
-`tibiahub` database from the snapshot using the external provisioning
-credentials, restores the prior frontend build and PM2 states, and retains all
-evidence for investigation.
+applications, restores the prior Git commit, and transactionally cleans and
+restores application-role-owned objects in only the local `tibiahub` database.
+Administrator-owned PostgreSQL extensions remain intact, and Alembic downgrade
+is never used. It then restores the prior frontend build and PM2 states and
+retains all evidence for investigation.

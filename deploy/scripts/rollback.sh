@@ -61,7 +61,8 @@ deploy_root_real="$(realpath -e "$DEPLOY_ROOT")"
 metadata="$evidence_dir/metadata.env"
 snapshot="$evidence_dir/tibiahub.dump"
 pm2_state="$evidence_dir/pm2-state.tsv"
-for required_file in "$metadata" "$snapshot" "$evidence_dir/tibiahub.dump.sha256" "$pm2_state"; do
+restore_list="$evidence_dir/tibiahub.restore.list"
+for required_file in "$metadata" "$snapshot" "$evidence_dir/tibiahub.dump.sha256" "$restore_list" "$pm2_state"; do
   [[ -f "$required_file" && ! -L "$required_file" ]] || {
     echo "Rollback evidence is incomplete." >&2
     exit 2
@@ -94,12 +95,9 @@ git cat-file -e "$previous_commit^{commit}"
 
 load_tibiahub_environment
 TIBIAHUB_DATABASE_NAME=tibiahub require_local_tibiahub_target
-load_postgres_admin_environment
-require_postgres_admin_access
 database_name="$(database_component name)"
-application_role="${TIBIAHUB_DATABASE_ROLE:-tibiahub_app}"
-[[ "$database_name" == tibiahub && "$application_role" =~ ^[A-Za-z_][A-Za-z0-9_]*$ ]] || {
-  echo "Rollback refused an unexpected database or application role." >&2
+[[ "$database_name" == tibiahub ]] || {
+  echo "Rollback refused an unexpected database." >&2
   exit 2
 }
 
@@ -111,28 +109,10 @@ done
 
 git switch --detach "$previous_commit"
 
-postgres_admin_dropdb --if-exists --force "$database_name"
-postgres_admin_createdb --owner="$application_role" "$database_name"
-postgres_admin_psql -X -v ON_ERROR_STOP=1 -d "$database_name" <<'SQL'
-CREATE EXTENSION IF NOT EXISTS pg_trgm;
-CREATE EXTENSION IF NOT EXISTS unaccent;
-DO $block$
-BEGIN
-  IF EXISTS (SELECT 1 FROM pg_available_extensions WHERE name = 'postgis') THEN
-    CREATE EXTENSION IF NOT EXISTS postgis;
-  END IF;
-END
-$block$;
-SQL
-
-if [[ "$TIBIAHUB_POSTGRES_ADMIN_MODE" == peer ]]; then
-  sudo -n -u postgres pg_restore \
-    -p "${TIBIAHUB_DATABASE_PORT:-5432}" --dbname="$database_name" \
-    --exit-on-error --no-owner --no-acl --role="$application_role" "$snapshot"
-else
-  pg_restore --dbname="$database_name" \
-    --exit-on-error --no-owner --no-acl --role="$application_role" "$snapshot"
-fi
+postgres_exec pg_restore \
+  --dbname="$database_name" \
+  --clean --if-exists --single-transaction --exit-on-error --no-owner --no-acl \
+  --use-list="$restore_list" "$snapshot"
 
 restored_revision="$(postgres_exec psql -X -A -t -v ON_ERROR_STOP=1 -c 'SELECT version_num FROM alembic_version')"
 restored_revision="${restored_revision//$'\n'/}"

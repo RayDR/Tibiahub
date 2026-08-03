@@ -107,7 +107,49 @@ mapfile -t migration_heads < <(
 
 load_tibiahub_environment
 TIBIAHUB_DATABASE_NAME=tibiahub require_local_tibiahub_target
-(load_postgres_admin_environment; require_postgres_admin_access)
+restore_ownership_violations="$(postgres_exec psql -X -A -t -v ON_ERROR_STOP=1 <<'SQL'
+SELECT count(*) FROM (
+  SELECT c.oid
+  FROM pg_class c
+  JOIN pg_namespace n ON n.oid = c.relnamespace
+  WHERE n.nspname = 'public'
+    AND c.relkind IN ('r', 'p', 'v', 'm', 'S')
+    AND c.relowner <> (SELECT oid FROM pg_roles WHERE rolname = current_user)
+    AND NOT EXISTS (
+      SELECT 1 FROM pg_depend d
+      JOIN pg_extension e ON e.oid = d.refobjid
+      WHERE d.classid = 'pg_class'::regclass AND d.objid = c.oid AND d.deptype = 'e'
+    )
+  UNION ALL
+  SELECT p.oid
+  FROM pg_proc p
+  JOIN pg_namespace n ON n.oid = p.pronamespace
+  WHERE n.nspname = 'public'
+    AND p.proowner <> (SELECT oid FROM pg_roles WHERE rolname = current_user)
+    AND NOT EXISTS (
+      SELECT 1 FROM pg_depend d
+      JOIN pg_extension e ON e.oid = d.refobjid
+      WHERE d.classid = 'pg_proc'::regclass AND d.objid = p.oid AND d.deptype = 'e'
+    )
+  UNION ALL
+  SELECT t.oid
+  FROM pg_type t
+  JOIN pg_namespace n ON n.oid = t.typnamespace
+  WHERE n.nspname = 'public' AND t.typtype IN ('e', 'd')
+    AND t.typowner <> (SELECT oid FROM pg_roles WHERE rolname = current_user)
+    AND NOT EXISTS (
+      SELECT 1 FROM pg_depend d
+      JOIN pg_extension e ON e.oid = d.refobjid
+      WHERE d.classid = 'pg_type'::regclass AND d.objid = t.oid AND d.deptype = 'e'
+    )
+) AS ownership_violations;
+SQL
+)"
+restore_ownership_violations="${restore_ownership_violations//$'\n'/}"
+[[ "$restore_ownership_violations" == 0 ]] || {
+  echo "Deployment refused: application objects are not fully owned by the runtime database role." >&2
+  exit 2
+}
 
 state_file="$DEPLOY_ROOT/current.env"
 state_previous_commit=""
@@ -159,6 +201,13 @@ chmod 600 "$snapshot"
 }
 pg_restore --list "$snapshot" >"$evidence_dir/tibiahub.dump.list"
 chmod 600 "$evidence_dir/tibiahub.dump.list"
+awk '!/ EXTENSION / && !/ TABLE DATA public spatial_ref_sys /' \
+  "$evidence_dir/tibiahub.dump.list" >"$evidence_dir/tibiahub.restore.list"
+chmod 600 "$evidence_dir/tibiahub.restore.list"
+[[ -s "$evidence_dir/tibiahub.restore.list" ]] || {
+  echo "The extension-preserving restore catalog is empty." >&2
+  exit 1
+}
 sha256sum "$snapshot" >"$evidence_dir/tibiahub.dump.sha256"
 chmod 600 "$evidence_dir/tibiahub.dump.sha256"
 

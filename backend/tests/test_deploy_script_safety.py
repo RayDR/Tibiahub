@@ -45,7 +45,7 @@ def test_deploy_requires_lock_clean_exact_develop_and_expected_head():
         "migration_heads",
         "require_local_tibiahub_target",
         "TIBIAHUB_DATABASE_NAME=tibiahub",
-        "(load_postgres_admin_environment; require_postgres_admin_access)",
+        "restore_ownership_violations",
     ):
         assert required in script
     assert "master" not in script.lower()
@@ -59,6 +59,8 @@ def test_snapshot_frontend_pm2_health_and_rollback_guards_are_present():
         'chmod 600 "$snapshot"',
         'pg_restore --list "$snapshot"',
         'sha256sum "$snapshot"',
+        "tibiahub.restore.list",
+        "TABLE DATA public spatial_ref_sys",
         'cp -a "$ROOT/frontend/dist"',
         'git worktree add --quiet --detach "$previous_worktree" "$previous_commit"',
         "frontend-dist-previous",
@@ -73,15 +75,17 @@ def test_snapshot_frontend_pm2_health_and_rollback_guards_are_present():
     for required in (
         "sha256sum --check --status",
         'pg_restore --list "$snapshot"',
-        "postgres_admin_dropdb --if-exists --force",
-        "postgres_admin_createdb --owner",
-        "--exit-on-error --no-owner --no-acl",
+        "--clean --if-exists --single-transaction --exit-on-error --no-owner --no-acl",
+        '--dbname="$database_name"',
+        '--use-list="$restore_list"',
         'git switch --detach "$previous_commit"',
         "frontend-dist-previous",
         "pm2-state.tsv",
     ):
         assert required in rollback
     assert "alembic downgrade" not in rollback.lower()
+    assert "postgres_admin_dropdb" not in rollback
+    assert "postgres_admin_createdb" not in rollback
 
 
 def test_pm2_operations_are_bounded_to_the_four_tibiahub_services():
