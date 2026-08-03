@@ -87,7 +87,10 @@ def normalize_name(value: str) -> str:
 
 
 def creature_id_for_name(name: str) -> int:
-    return zlib.crc32(normalize_name(name).encode("utf-8")) & 0xFFFFFFFF
+    # PostgreSQL INTEGER is signed 32-bit. CRC32 is unsigned and can produce
+    # values above 2_147_483_647, so constrain generated compatibility IDs to
+    # the positive signed range while preserving deterministic lookups.
+    return zlib.crc32(normalize_name(name).encode("utf-8")) & 0x7FFFFFFF
 
 
 def slugify_name(name: str) -> str:

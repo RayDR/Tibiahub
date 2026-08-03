@@ -21,7 +21,7 @@ from typing import Any
 
 import httpx
 from sqlalchemy import desc, or_, select
-from sqlalchemy.exc import IntegrityError
+from sqlalchemy.exc import IntegrityError, SQLAlchemyError
 from sqlalchemy.orm import Session
 
 from app.core.config import settings
@@ -471,6 +471,10 @@ class SyncService:
             SyncService._terminalize(db, job, terminal, "Sync completed with resumable errors" if failed_phases else "Sync completed successfully")
             await SyncService._maybe_send_notification(db, job, success=terminal == "completed")
         except Exception as exc:
+            # Flush errors leave SQLAlchemy sessions in a failed transaction
+            # until explicitly rolled back. Recover before terminalizing so a
+            # worker fault cannot strand a running job and maintenance hold.
+            db.rollback()
             job = SyncService.get_job(db, job_id)
             if job:
                 category, _, _ = SyncService.classify_provider_error(exc)
@@ -514,7 +518,7 @@ class SyncService:
             return "provider_rejected", False, None
         if isinstance(exc, (httpx.TimeoutException, TimeoutError, OSError)):
             return "provider_timeout", True, None
-        if isinstance(exc, (ValueError, TypeError)):
+        if isinstance(exc, (ValueError, TypeError, SQLAlchemyError)):
             return "invalid_payload", False, None
         return "temporary_provider_failure", True, None
 
@@ -884,7 +888,11 @@ class SyncService:
                         if only_bosses and not bool(payload.get("is_boss")):
                             success = True
                             break
-                        upsert_creature_payload(db, payload)
+                        # Isolate each provider record. A malformed record must
+                        # roll back its own flush without poisoning the durable
+                        # job session or discarding prior successful records.
+                        with db.begin_nested():
+                            upsert_creature_payload(db, payload)
                         counters[f"{key_prefix}_{operation}"] += 1
                         job.last_successful_external_id = payload.get("slug") or payload.get("name") or name
                         success = True
