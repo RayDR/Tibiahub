@@ -13,6 +13,7 @@ SERVICES=(
   tibiahub-frontend
   tibiahub-raffle-scheduler
   tibiahub-knowledge-worker
+  tibiahub-email-worker
 )
 
 if [[ "${1:-}" != "--confirm-rollback-tibiahub" || $# -ne 2 ]]; then
