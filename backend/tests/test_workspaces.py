@@ -23,6 +23,12 @@ def test_roles_have_explicit_capabilities(db):
     leader = make_user(db, username="leader-workspace", guild_rank="Leader", guild_name="One")
     vice = make_user(db, username="vice-workspace", guild_rank="Vice Leader", guild_name="One")
     member = make_user(db, username="member-workspace", guild_rank="Member", guild_name="One")
+    db.add_all([
+        UserCharacter(user_id=leader.id, character_name="Role Leader", normalized_name="role leader", ownership_status="verified", guild_name="One", guild_rank="Leader"),
+        UserCharacter(user_id=vice.id, character_name="Role Vice", normalized_name="role vice", ownership_status="verified", guild_name="One", guild_rank="Vice Leader"),
+        UserCharacter(user_id=member.id, character_name="Role Member", normalized_name="role member", ownership_status="verified", guild_name="One", guild_rank="Member"),
+    ])
+    db.flush()
     assert resolve_guild_role(leader).value == "guild_leader"
     assert resolve_guild_role(vice).value == "guild_viceleader"
     assert can_manage_guild_members(leader, "One")
@@ -33,7 +39,10 @@ def test_roles_have_explicit_capabilities(db):
 
 def test_own_workspace_and_member_route_cannot_cross_guild(client, db):
     member = make_user(db, username="own-workspace", guild_name="One")
-    db.add(GuildMemberSnapshot(guild_name="Two", character_name="Hidden", snapshot_at=__import__('datetime').datetime.utcnow()))
+    db.add_all([
+        UserCharacter(user_id=member.id, character_name="Own Workspace Knight", normalized_name="own workspace knight", ownership_status="verified", guild_name="One", world_name="Antica"),
+        GuildMemberSnapshot(guild_name="Two", character_name="Hidden", snapshot_at=__import__('datetime').datetime.utcnow()),
+    ])
     db.commit()
     own = client.get("/api/v1/guild/me", headers=auth(member))
     assert own.status_code == 200 and own.json()["guild_name"] == "One"
@@ -41,7 +50,8 @@ def test_own_workspace_and_member_route_cannot_cross_guild(client, db):
 
 
 def test_admin_directory_and_assistance_are_audited_without_membership_change(client, db):
-    make_user(db, username="guild-leader", guild_rank="Leader", guild_name="Blood Moon")
+    leader = make_user(db, username="guild-leader", guild_rank="Leader", guild_name="Blood Moon")
+    db.add(UserCharacter(user_id=leader.id, character_name="Blood Moon Leader", normalized_name="blood moon leader", ownership_status="verified", guild_name="Blood Moon", guild_rank="Leader", world_name="Antica"))
     admin = make_user(db, username="workspace-admin", is_superuser=True, guild_name="Admin Home")
     admin_id = admin.id
     db.commit()
@@ -81,8 +91,14 @@ def test_tibiadata_sync_keeps_matching_accounts_and_unlinks_departed_members(cli
     assert response.status_code == 200
     assert response.json()["unlinked_users"] == 1
     db.refresh(staying); db.refresh(departed)
-    assert staying.guild_name == "One" and staying.guild_rank == "Leader"
-    assert departed.guild_name is None and departed.guild_rank == "Unranked"
+    # Legacy account text is no longer an authorization source. Without a
+    # verified primary character, roster sync does not rewrite that cache.
+    assert staying.guild_name == "One" and staying.guild_rank == "Member"
+    assert departed.guild_name == "One" and departed.guild_rank == "Member"
+    staying_character = db.query(UserCharacter).filter_by(user_id=staying.id).one()
+    departed_character = db.query(UserCharacter).filter_by(user_id=departed.id).one()
+    assert staying_character.guild_rank == "Leader"
+    assert departed_character.guild_name is None
     audit = db.query(WorkspaceAudit).filter_by(action="guild_membership_synchronized").one()
     assert audit.assisted is True and audit.safe_metadata["actor_context"] == "system"
 
@@ -104,6 +120,8 @@ def test_admin_can_assign_composable_capabilities_with_audit(client, db):
 
 def test_scope_policy_and_legacy_compatibility(db):
     leader = make_user(db, username="scope-leader", guild_rank="Leader", guild_name="One")
+    db.add(UserCharacter(user_id=leader.id, character_name="Scope Leader", normalized_name="scope leader", ownership_status="verified", guild_name="One", guild_rank="Leader", world_name="Antica"))
+    db.flush()
     admin = make_user(db, username="scope-global", is_superuser=True)
     require_scope_creation(leader, ContentScope(ScopeType.GUILD, guild_name="One", world_name="Antica"))
     with pytest.raises(HTTPException):

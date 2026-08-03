@@ -115,6 +115,8 @@ def test_custom_guild_leader_rank_can_manage_own_guild_raffles(db: Session):
     from app.core.permissions import can_manage_guild, is_matching_raffle_leader
 
     leader = make_user(db, username="warbringer", guild_rank="Alpha Warbringer", guild_name="Bald Dwarfs")
+    db.add(UserCharacter(user_id=leader.id, character_name="Warbringer Knight", normalized_name="warbringer knight", ownership_status="verified", guild_name="Bald Dwarfs", guild_rank="Alpha Warbringer"))
+    db.flush()
 
     assert can_manage_guild(leader, "bald dwarfs") is True
     assert is_matching_raffle_leader(leader, "BALD DWARFS") is True

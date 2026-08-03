@@ -21,8 +21,13 @@ def application_payload(character="Applicant Knight", conduct=True):
     return {"character_name": character, "why_apply": "I want to support every guild member.", "contribution": "I can organize activities and resolve conflict.", "availability": "Ten hours weekly", "leadership_experience": "I have led gaming communities before.", "conduct_agreed": conduct}
 
 
+def link_verified(db, user, guild: str, rank: str, suffix: str = "Identity"):
+    db.add(UserCharacter(user_id=user.id, character_name=f"{user.username} {suffix}", normalized_name=f"{user.username} {suffix}".casefold(), ownership_status="verified", ownership_verified_at=user.created_at, guild_name=guild, guild_rank=rank, world_name="Antica"))
+
+
 def setup_opening(client, db, *, guild="Leadership One", allow_review=True):
     leader = make_user(db, username=f"leader-{guild}", guild_name=guild, guild_rank="Leader")
+    link_verified(db, leader, guild, "Leader")
     db.commit()
     created = client.post("/api/v1/guild/me/leadership/openings", json=opening_payload(allow_viceleader_review=allow_review), headers=auth(leader))
     assert created.status_code == 201
@@ -41,7 +46,7 @@ def setup_applicant(db, *, username="leadership-applicant", guild="Leadership On
 def test_openings_are_guild_scoped_and_conduct_is_required(client, db):
     _, opening = setup_opening(client, db)
     applicant = setup_applicant(db)
-    other = make_user(db, username="other-guild-member", guild_name="Other", guild_rank="Member"); other.tibia_character_name = "Other Knight"; db.commit()
+    other = setup_applicant(db, username="other-guild-member", guild="Other", character="Other Knight")
     assert client.post(f"/api/v1/guild/me/leadership/openings/{opening['id']}/applications", json=application_payload(conduct=False), headers=auth(applicant)).status_code == 422
     assert client.post(f"/api/v1/guild/me/leadership/openings/{opening['id']}/applications", json=application_payload("Other Knight"), headers=auth(other)).status_code == 404
 
@@ -50,6 +55,8 @@ def test_drafts_are_manager_only_and_member_openings_do_not_mask_applications(cl
     guild = "Visible Guild"
     leader = make_user(db, username="visible-leader", guild_name=guild, guild_rank="Leader")
     vice = make_user(db, username="visible-vice", guild_name=guild, guild_rank="Vice Leader")
+    link_verified(db, leader, guild, "Leader")
+    link_verified(db, vice, guild, "Vice Leader")
     member = setup_applicant(db, username="visible-member", guild=guild, character="Visible Knight")
     admin = make_user(db, username="visible-admin", guild_name="Admin Home", is_superuser=True)
     db.commit()
@@ -98,6 +105,7 @@ def test_applicant_privacy_and_internal_messages(client, db):
 def test_viceleader_review_is_explicit_and_cannot_decide(client, db):
     leader, opening = setup_opening(client, db, guild="Review Guild", allow_review=True)
     vice = make_user(db, username="review-vice", guild_name="Review Guild", guild_rank="Vice Leader")
+    link_verified(db, vice, "Review Guild", "Vice Leader")
     applicant = setup_applicant(db, guild="Review Guild", character="Review Knight")
     db.commit(); created = client.post(f"/api/v1/guild/me/leadership/openings/{opening['id']}/applications", json=application_payload("Review Knight"), headers=auth(applicant)).json()
     assert client.get(f"/api/v1/guild/me/leadership/applications/{created['id']}", headers=auth(vice)).status_code == 200
@@ -123,7 +131,8 @@ def test_acceptance_creates_one_pending_assignment_and_preserves_history(client,
 
 
 def test_admin_assistance_is_fixed_audited_and_does_not_change_membership(client, db):
-    make_user(db, username="assisted-leader", guild_name="Assisted Leadership", guild_rank="Leader")
+    assisted = make_user(db, username="assisted-leader", guild_name="Assisted Leadership", guild_rank="Leader")
+    link_verified(db, assisted, "Assisted Leadership", "Leader")
     admin = make_user(db, username="leadership-admin", guild_name="Admin Home", is_superuser=True); db.commit()
     response = client.post("/api/v1/admin/guilds/assisted-leadership/leadership/openings", json=opening_payload(), headers=auth(admin))
     assert response.status_code == 201

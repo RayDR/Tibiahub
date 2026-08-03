@@ -36,7 +36,8 @@ from app.models.external_data import Item, QuestMission, TibiaWikiLocation, Tibi
 from app.models.creature import Creature
 from app.models.guild_member_snapshot import GuildMemberSnapshot
 from app.models.leadership import GuildLeadershipApplication, GuildLeadershipOpening, GuildLeadershipRole
-from app.models.guild_management import GuildRosterCharacter
+from app.models.guild_management import GuildDirectory, GuildManagementGrant, GuildRosterCharacter
+from app.models.email_delivery import EmailOutbox
 from app.models.raffle import InternalNotification, Raffle, RaffleParticipant
 from app.models.user import User
 from app.models.user_character import UserCharacter
@@ -58,6 +59,8 @@ from app.knowledge.services.normalization import KnowledgeNormalizationService
 from app.knowledge.services.spatial import entities_inside_region, link_entity_to_location, nearby_entities, persist_map_point, persist_map_region, persist_route
 from app.services.raffle_scheduler_service import RaffleSchedulerService
 from app.services.auth_token_service import AuthTokenService, PASSWORD_RESET
+from app.services.account_identity_service import AccountIdentityService
+from app.services.email_outbox_service import EmailOutboxService
 
 
 BACKEND_ROOT = Path(__file__).resolve().parents[1]
@@ -299,6 +302,7 @@ def test_empty_database_upgrades_to_complete_postgresql_schema(pg_engine):
         "workspace_audits", "guild_leadership_openings", "media_assets", "creatures",
         "auth_one_time_tokens", "auth_request_events", "character_ownership_claims",
         "character_ownership_history", "guild_roster_characters", "guild_management_grants",
+        "guild_directory", "email_outbox", "email_worker_heartbeats",
         "knowledge_external_mappings",
         "knowledge_creature_item_drops", "tibiawiki_items",
         "quest_missions", "knowledge_accesses", "knowledge_quest_relations",
@@ -319,7 +323,7 @@ def test_empty_database_upgrades_to_complete_postgresql_schema(pg_engine):
         constraints = set(connection.execute(text(
             "SELECT conname FROM pg_constraint WHERE connamespace = 'public'::regnamespace"
         )).scalars())
-        assert {"uq_event_participant_user", "uq_guild_roster_identity", "fk_leadership_application_assignment"}.issubset(constraints)
+        assert {"uq_event_participant_user", "uq_guild_roster_identity", "fk_leadership_application_assignment", "fk_users_primary_character", "uq_guild_directory_identity"}.issubset(constraints)
         assert {
             "ck_auth_token_purpose", "ck_auth_token_hash_length", "ck_auth_request_purpose",
             "ck_character_claim_status", "ck_character_claim_hash_length",
@@ -344,7 +348,7 @@ def test_empty_database_upgrades_to_complete_postgresql_schema(pg_engine):
         assert "uq_raffle_active_participant_character" in index_definitions
         assert "uq_raffle_active_known_account" in index_definitions
         user_columns = {column["name"]: column for column in inspect(pg_engine).get_columns("users")}
-        assert {"is_superuser", "is_moderator", "is_writer"}.issubset(user_columns)
+        assert {"is_superuser", "is_moderator", "is_writer", "primary_character_id", "avatar_managed_key", "in_app_notifications_enabled", "email_notifications_enabled"}.issubset(user_columns)
         assert all(user_columns[name]["nullable"] is False for name in ("is_superuser", "is_moderator", "is_writer"))
         creature_columns = {column["name"] for column in inspect(pg_engine).get_columns("creatures")}
         assert {"knowledge_entity_id", "data_version", "protected_fields"} <= creature_columns
@@ -439,6 +443,46 @@ def test_verified_owner_uniqueness_and_ownership_history_immutability_on_postgre
         pg_session.commit()
     pg_session.rollback()
 
+
+def test_account_primary_multi_guild_unlink_and_outbox_idempotency_on_postgresql(pg_engine, pg_session):
+    owner = _user(pg_session, "postgres_identity_owner", guild="")
+    first = UserCharacter(
+        user_id=owner.id, character_name="Postgres First", normalized_name="postgres first",
+        ownership_status="verified", world_name="Antica", guild_name="Postgres One", guild_rank="Leader",
+    )
+    second = UserCharacter(
+        user_id=owner.id, character_name="Postgres Second", normalized_name="postgres second",
+        ownership_status="verified", world_name="Secura", guild_name="Postgres Two", guild_rank="Member",
+    )
+    pg_session.add_all([first, second]); pg_session.flush()
+    AccountIdentityService.set_primary(pg_session, owner, first, owner)
+    AccountIdentityService.discover_guild(pg_session, first)
+    AccountIdentityService.discover_guild(pg_session, second)
+    pg_session.commit()
+    assert owner.primary_character_id == first.id
+    assert {(row.guild_name, row.world_name) for row in pg_session.query(GuildDirectory)} == {
+        ("Postgres One", "Antica"), ("Postgres Two", "Secura"),
+    }
+    AccountIdentityService.set_primary(pg_session, owner, second, owner)
+    pg_session.commit()
+    assert owner.primary_character_id == second.id and owner.guild_name == "Postgres Two"
+    AccountIdentityService.unlink(pg_session, owner, second, owner, "PostgreSQL integration unlink")
+    pg_session.commit()
+    assert owner.primary_character_id is None and second.ownership_status == "unlinked"
+
+    factory = sessionmaker(bind=pg_engine, expire_on_commit=False)
+    def enqueue_once(_index: int) -> int:
+        with factory.begin() as session:
+            current = session.get(User, owner.id)
+            return EmailOutboxService.enqueue(
+                session, message_type="notification", recipient_email=current.email,
+                recipient_user_id=current.id, locale="en", template_payload={"subject": "One"},
+                secret_payload=None, idempotency_key="postgres-concurrent-idempotency",
+            ).id
+    with ThreadPoolExecutor(max_workers=2) as executor:
+        ids = list(executor.map(enqueue_once, range(2)))
+    assert ids[0] == ids[1]
+    assert pg_session.query(EmailOutbox).filter_by(idempotency_key="postgres-concurrent-idempotency").count() == 1
 
 def test_postgis_point_region_route_nearby_and_inside_region(pg_session):
     EntityTypeRegistry.register_initial(pg_session)
@@ -1008,8 +1052,10 @@ def test_postgresql_capabilities_guild_reconciliation_and_system_audit(pg_client
     assert synchronized.status_code == 200 and synchronized.json()["unlinked_users"] == 1
     pg_session.expire_all()
     assert pg_session.get(User, staying.id).guild_name == "Postgres Guild"
-    assert pg_session.get(User, staying.id).guild_rank == "Leader"
-    assert pg_session.get(User, departed.id).guild_name is None
+    assert pg_session.get(User, staying.id).guild_rank == "Member"
+    assert pg_session.get(User, departed.id).guild_name == "Postgres Guild"
+    assert pg_session.query(UserCharacter).filter_by(user_id=staying.id).one().guild_rank == "Leader"
+    assert pg_session.query(UserCharacter).filter_by(user_id=departed.id).one().guild_name is None
     audits = {row.action: row for row in pg_session.query(WorkspaceAudit).all()}
     assert audits["user_capabilities_updated"].safe_metadata["actor_context"] == "system"
     assert audits["guild_membership_synchronized"].safe_metadata["source"] == "tibiadata"
