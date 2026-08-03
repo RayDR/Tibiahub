@@ -92,6 +92,10 @@ class GuildMemberSnapshotResponse(BaseModel):
     last_login: Optional[str] = None
     world: Optional[str] = None
     snapshot_at: datetime
+    linked_user_id: Optional[int] = None
+    linked_username: Optional[str] = None
+    public_profile_url: Optional[str] = None
+    account_identity_known: bool = False
 
 
 class GuildMemberSnapshotPayload(BaseModel):

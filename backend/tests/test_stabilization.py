@@ -10,6 +10,7 @@ from PIL import Image
 
 from app.core.security import create_access_token
 from app.models.guild import Announcement
+from app.models.user_character import UserCharacter
 from app.services import media_asset_service as media
 from app.api.v1.endpoints.health import health_check, readiness_check
 from tests.conftest import make_user
@@ -99,6 +100,7 @@ def test_guild_reads_are_scoped_and_cross_guild_is_forbidden(client, db):
     member = make_user(db, username="guildmember", guild_name="Guild One")
     admin = make_user(db, username="scopeadmin", guild_name="Admins", is_superuser=True)
     db.add_all([
+        UserCharacter(user_id=member.id, character_name="Scoped Knight", normalized_name="scoped knight", ownership_status="verified", guild_name="Guild One", world_name="Antica"),
         Announcement(title="One", content="One", author_id=member.id, guild_name="Guild One"),
         Announcement(title="Two", content="Two", author_id=admin.id, guild_name="Guild Two"),
     ])

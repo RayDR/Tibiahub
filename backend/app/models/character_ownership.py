@@ -32,6 +32,7 @@ class CharacterOwnershipClaim(Base):
     character_name = Column(String(100), nullable=False)
     normalized_name = Column(String(100), nullable=False, index=True)
     challenge_hash = Column(String(64), nullable=False, unique=True)
+    challenge_ciphertext = Column(Text, nullable=True)
     status = Column(String(30), nullable=False, default="pending", index=True)
     expires_at = Column(DateTime(timezone=True), nullable=False)
     verification_requested_at = Column(DateTime(timezone=True), nullable=True)

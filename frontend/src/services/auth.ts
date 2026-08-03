@@ -3,6 +3,8 @@ import api, { LOGIN_TIMEOUT_MS } from './api';
 export interface User {
     id: number;
     username: string;
+    display_name?: string;
+    title?: string;
     email?: string;
     avatar_url?: string;
     tibia_character_name?: string;
@@ -16,6 +18,7 @@ export interface User {
     tibia_status?: string;
     is_active: boolean;
     is_superuser: boolean;
+    primary_character_id?: number;
 }
 
 export interface AuthResponse {

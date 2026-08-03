@@ -9,7 +9,7 @@ from typing import Awaitable, Callable
 
 from sqlalchemy.orm import Session, selectinload
 
-from app.models.guild_management import GuildRosterCharacter
+from app.models.guild_management import GuildDirectory, GuildRosterCharacter
 from app.models.user import User
 from app.models.user_character import UserCharacter
 from app.services.character_ownership_service import normalize_character_name
@@ -193,19 +193,41 @@ class GuildRosterService:
                 character.world_name = world
                 character.level = roster_row.level
                 character.vocation = roster_row.vocation
-                if character.user:
-                    character.user.guild_name = canonical_guild
-                    character.user.guild_rank = roster_row.guild_rank or "Member"
-                    character.user.world_name = world
+                if character.user and character.user.primary_character_id == character.id:
+                    from app.services.account_identity_service import AccountIdentityService
+                    AccountIdentityService.sync_primary_cache(character.user)
             else:
                 character.guild_name = None
                 character.guild_rank = None
-                if character.user and not any(
-                    normalize_guild_identity(other.guild_name or "") == guild_key
-                    for other in character.user.characters if other is not character
-                ):
-                    character.user.guild_name = None
-                    character.user.guild_rank = "Unranked"
+                if character.user and character.user.primary_character_id == character.id:
+                    from app.services.account_identity_service import AccountIdentityService
+                    AccountIdentityService.sync_primary_cache(character.user)
+
+        directory = db.query(GuildDirectory).filter_by(
+            normalized_guild_name=guild_key,
+            normalized_world_name=world_key,
+        ).first()
+        if directory is None:
+            directory = GuildDirectory(
+                guild_name=canonical_guild, normalized_guild_name=guild_key,
+                world_name=world, normalized_world_name=world_key,
+                source="tibiadata",
+            )
+            db.add(directory)
+        directory.guild_name = canonical_guild
+        directory.world_name = world
+        directory.is_active = True
+        directory.last_synchronized_at = now
+        directory.last_successful_sync_at = now
+        directory.sync_status = "synchronized"
+        directory.sync_failure_code = None
+        directory.member_count = len(enriched)
+        directory.leader_character_name = next((
+            str(member.get("name") or "").strip()
+            for member, _ in enriched
+            if str(member.get("rank") or member.get("title") or member.get("position") or "").strip().casefold()
+            in {"leader", "guild leader", "alpha warbringer"}
+        ), None)
 
         db.flush()
         return GuildRosterSyncResult(

@@ -4,11 +4,11 @@ from typing import Literal
 
 from fastapi import APIRouter, Depends, HTTPException
 from pydantic import BaseModel, Field
-from sqlalchemy.orm import Session
+from sqlalchemy.orm import Session, selectinload
 
 from app.api.v1.endpoints.auth import get_current_active_user
 from app.db.database import get_db
-from app.models.guild_management import GuildManagementGrant, GuildRosterCharacter
+from app.models.guild_management import GuildDirectory, GuildManagementGrant, GuildRosterCharacter
 from app.models.user import User
 from app.models.user_character import UserCharacter
 from app.services.guild_authorization_service import (
@@ -47,6 +47,26 @@ def guild_management_context(
     current_user: User = Depends(get_current_active_user),
 ):
     return {"guilds": GuildAuthorizationService.guild_contexts(db, current_user)}
+
+
+@router.get("/directory")
+def guild_directory(
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_active_user),
+):
+    if not current_user.is_superuser:
+        raise HTTPException(status_code=403, detail="Global administrator access required")
+    rows = db.query(GuildDirectory).order_by(GuildDirectory.guild_name, GuildDirectory.world_name).all()
+    rows = query.options(selectinload(GuildRosterCharacter.linked_user)).order_by(GuildRosterCharacter.character_name).limit(500).all()
+    return [{
+        "id": row.id, "guild_name": row.guild_name, "world_name": row.world_name,
+        "source": row.source, "is_active": row.is_active,
+        "first_discovered_at": row.first_discovered_at,
+        "last_synchronized_at": row.last_synchronized_at,
+        "last_successful_sync_at": row.last_successful_sync_at,
+        "sync_status": row.sync_status, "sync_failure_code": row.sync_failure_code,
+        "member_count": row.member_count, "leader_character_name": row.leader_character_name,
+    } for row in rows]
 
 
 @router.get("/manageable-guilds")
@@ -95,9 +115,12 @@ def guild_roster(
         "character_name": row.character_name, "rank": row.guild_rank, "level": row.level,
         "vocation": row.vocation, "last_activity_at": row.last_activity_at,
         "last_online_seen_at": row.last_online_seen_at, "is_current": row.is_current,
-        "linked_user_id": row.linked_user_id, "account_identity_known": row.linked_user_id is not None,
+        "linked_user_id": row.linked_user_id,
+        "linked_username": row.linked_user.username if row.linked_user and row.linked_user.is_active else None,
+        "public_profile_url": f"/members/{row.linked_user.username}" if row.linked_user and row.linked_user.is_active else None,
+        "account_identity_known": row.linked_user_id is not None,
         "last_synchronized_at": row.last_synchronized_at,
-    } for row in query.order_by(GuildRosterCharacter.character_name).limit(500).all()]
+    } for row in rows]
 
 
 @router.post("/guilds/{guild_name}/roster/sync")

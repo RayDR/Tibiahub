@@ -7,6 +7,8 @@ from app.core.security import verify_password
 from app.models.auth_security import AuthOneTimeToken, AuthRequestEvent
 from app.models.user import User
 from app.models.user_character import UserCharacter
+from app.models.email_delivery import EmailOutbox
+from app.core.secret_payload import decrypt_json
 from app.services.auth_token_service import AuthTokenService, EMAIL_VERIFICATION, PASSWORD_RESET
 from tests.conftest import make_user
 
@@ -34,12 +36,7 @@ def test_auth_me_serializes_legacy_internal_email_without_weakening_registration
     }).status_code == 422
 
 
-def test_registration_does_not_claim_character_and_verification_is_single_use(client, db, monkeypatch):
-    sent: list[dict] = []
-    monkeypatch.setattr(
-        "app.services.email_service.EmailService.send_verification_email",
-        lambda **kwargs: sent.append(kwargs) or type("Result", (), {"ok": True})(),
-    )
+def test_registration_does_not_claim_character_and_verification_is_single_use(client, db):
     response = client.post("/api/v1/auth/register", json={
         "username": "secure-register",
         "email": "secure-register@example.com",
@@ -52,9 +49,9 @@ def test_registration_does_not_claim_character_and_verification_is_single_use(cl
     assert user.tibia_character_name is None
     assert user.characters == []
     assert user.tibia_status == "ownership_unverified"
-    assert len(sent) == 1 and sent[0]["locale"] == "es"
-
-    raw = _token_from_link(sent[0]["verification_link"])
+    job = db.query(EmailOutbox).filter_by(recipient_user_id=user.id, message_type="email_verification").one()
+    assert job.locale == "es" and job.status == "pending"
+    raw = _token_from_link(decrypt_json(job.secret_payload_ciphertext)["link"])
     stored = db.query(AuthOneTimeToken).filter_by(user_id=user.id, purpose=EMAIL_VERIFICATION).one()
     assert stored.token_hash != raw and raw not in stored.token_hash
     assert client.post("/api/v1/email-verification/confirm", json={"token": raw}).status_code == 200
@@ -63,28 +60,23 @@ def test_registration_does_not_claim_character_and_verification_is_single_use(cl
     assert client.post("/api/v1/email-verification/confirm", json={"token": raw}).status_code == 400
 
 
-def test_password_recovery_is_neutral_rate_limited_hashed_and_replay_safe(client, db, monkeypatch):
+def test_password_recovery_is_neutral_rate_limited_hashed_and_replay_safe(client, db):
     user = make_user(db, username="recovery-user")
     user.email = "recovery-user@example.com"
     db.commit()
-    sent: list[dict] = []
-    monkeypatch.setattr(
-        "app.services.email_service.EmailService.send_password_reset_email",
-        lambda **kwargs: sent.append(kwargs) or type("Result", (), {"ok": True})(),
-    )
-
     known = client.post("/api/v1/password/request-reset", json={"email": user.email, "locale": "en"})
     unknown = client.post("/api/v1/password/request-reset", json={"email": "missing-account@example.com", "locale": "en"})
     assert known.status_code == unknown.status_code == 200
     assert known.json() == unknown.json()
-    assert len(sent) == 1
-    raw = _token_from_link(sent[0]["reset_link"])
+    jobs = db.query(EmailOutbox).filter_by(recipient_user_id=user.id, message_type="password_reset").all()
+    assert len(jobs) == 1
+    raw = _token_from_link(decrypt_json(jobs[0].secret_payload_ciphertext)["link"])
     row = db.query(AuthOneTimeToken).filter_by(user_id=user.id, purpose=PASSWORD_RESET).one()
     assert len(row.token_hash) == 64 and raw not in row.token_hash
 
     repeated = client.post("/api/v1/password/request-reset", json={"email": user.email, "locale": "en"})
     assert repeated.status_code == 200 and repeated.json() == known.json()
-    assert len(sent) == 1
+    assert db.query(EmailOutbox).filter_by(recipient_user_id=user.id, message_type="password_reset").count() == 1
     assert db.query(AuthRequestEvent).filter_by(purpose=PASSWORD_RESET).count() == 2
 
     reset = client.post("/api/v1/password/reset-password", json={
@@ -98,7 +90,7 @@ def test_password_recovery_is_neutral_rate_limited_hashed_and_replay_safe(client
     }).status_code == 400
 
 
-def test_character_recovery_requires_verified_ownership(client, db, monkeypatch):
+def test_character_recovery_requires_verified_ownership(client, db):
     user = make_user(db, username="character-recovery")
     db.add_all([
         UserCharacter(user_id=user.id, character_name="Legacy Name", normalized_name="legacy name"),
@@ -108,16 +100,11 @@ def test_character_recovery_requires_verified_ownership(client, db, monkeypatch)
         ),
     ])
     db.commit()
-    sent: list[dict] = []
-    monkeypatch.setattr(
-        "app.services.email_service.EmailService.send_password_reset_email",
-        lambda **kwargs: sent.append(kwargs) or type("Result", (), {"ok": True})(),
-    )
     legacy = client.post("/api/v1/password/request-reset", json={"character_name": "Legacy Name"})
     verified = client.post("/api/v1/password/request-reset", json={"character_name": "Verified Name"})
     assert legacy.status_code == verified.status_code == 200
     assert legacy.json() == verified.json()
-    assert len(sent) == 1
+    assert db.query(EmailOutbox).filter_by(recipient_user_id=user.id, message_type="password_reset").count() == 1
 
 
 def test_issuing_a_new_token_invalidates_old_and_expired_tokens_fail(db):

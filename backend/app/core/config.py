@@ -85,6 +85,8 @@ class Settings(BaseSettings):
     AUTH_TOKEN_MAX_PER_REQUESTER_HOUR: int = Field(20, ge=1, le=200)
     CHARACTER_CLAIM_TTL_MINUTES: int = Field(30, ge=10, le=1440)
     CHARACTER_CLAIM_MAX_ATTEMPTS: int = Field(3, ge=1, le=10)
+    AVATAR_STORAGE_ROOT: str = "/forge/tibiahub-storage/avatars"
+    AVATAR_MAX_BYTES: int = Field(5 * 1024 * 1024, ge=1024, le=10 * 1024 * 1024)
     SMTP_HOST: str = ""
     SMTP_PORT: int = 587
     SMTP_USER: str = ""
@@ -92,6 +94,11 @@ class Settings(BaseSettings):
     SMTP_FROM: str = ""
     SMTP_USE_TLS: bool = True
     SMTP_USE_SSL: bool = False
+    EMAIL_WORKER_ENABLED: bool = True
+    EMAIL_WORKER_ID: str = "email-worker-1"
+    EMAIL_WORKER_POLL_SECONDS: int = Field(5, ge=1, le=300)
+    EMAIL_WORKER_LEASE_SECONDS: int = Field(120, ge=30, le=3600)
+    EMAIL_WORKER_MAX_ATTEMPTS: int = Field(5, ge=1, le=20)
 
     @model_validator(mode="after")
     def validate_database(self) -> "Settings":
@@ -105,6 +112,8 @@ class Settings(BaseSettings):
             raise ValueError(f"Production requires the external TibiaHub secret file: {RUNTIME_SECRETS_FILE}")
         if self.APP_ENV == "production" and len(self.SECRET_KEY.get_secret_value()) < 32:
             raise ValueError("Production requires a strong SECRET_KEY in the external secret file")
+        if self.smtp_configured and self.SMTP_USE_TLS == self.SMTP_USE_SSL:
+            raise ValueError("Configured SMTP requires exactly one of SMTP_USE_TLS or SMTP_USE_SSL")
         return self
 
     @property
@@ -135,7 +144,7 @@ class Settings(BaseSettings):
 
     @property
     def smtp_configured(self) -> bool:
-        return bool(self.SMTP_HOST and self.SMTP_USER and self.SMTP_PASSWORD)
+        return bool(self.SMTP_HOST and self.SMTP_PORT and self.SMTP_USER and self.SMTP_PASSWORD and self.SMTP_FROM)
 
 
 settings = Settings()

@@ -13,6 +13,7 @@ from app.models.leadership import (
     GuildLeadershipInterview, GuildLeadershipOpening, GuildLeadershipRole, GuildLeadershipVote,
 )
 from app.models.user import User
+from app.models.user_character import UserCharacter
 from app.schemas.leadership import (
     ApplicationCreate, AssignmentEnd, DecisionCreate, InterviewCreate, MessageCreate, OpeningCreate,
     OpeningUpdate, PromotionUpdate, StatusUpdate, VoteCreate,
@@ -25,7 +26,15 @@ admin_router = APIRouter()
 
 
 def own_guild(user: User) -> str:
-    guild = (user.guild_name or "").strip()
+    primary = next((
+        row for row in user.characters
+        if row.id == user.primary_character_id and row.ownership_status == "verified" and row.guild_name
+    ), None)
+    fallback = next((
+        row for row in user.characters
+        if row.ownership_status == "verified" and row.guild_name
+    ), None)
+    guild = ((primary or fallback).guild_name if primary or fallback else "").strip()
     if not guild: raise HTTPException(409, "No guild membership is linked")
     return guild
 
@@ -70,7 +79,10 @@ def application_data(row: GuildLeadershipApplication, viewer: User) -> dict:
 def summary(db: Session, guild: str, user: User) -> dict:
     role = db.query(GuildLeadershipRole).filter(GuildLeadershipRole.guild_name.ilike(guild), GuildLeadershipRole.role_code == "viceleader").first()
     assigned_ids = {row.user_id for row in db.query(GuildLeadershipAssignment).join(GuildLeadershipRole).filter(GuildLeadershipAssignment.guild_name.ilike(guild), GuildLeadershipRole.role_code == "viceleader", GuildLeadershipAssignment.is_active.is_(True)).all()}
-    ranked_ids = {member.id for member in db.query(User).filter(User.guild_name.ilike(guild), User.is_active.is_(True)).all() if is_guild_viceleader(member, guild)}
+    ranked_ids = {
+        member.id for member in db.query(User).filter(User.is_active.is_(True)).all()
+        if is_guild_viceleader(member, guild)
+    }
     active_assignments = len(assigned_ids | ranked_ids)
     openings = db.query(GuildLeadershipOpening).filter(GuildLeadershipOpening.guild_name.ilike(guild)).all()
     applications = db.query(GuildLeadershipApplication).join(GuildLeadershipOpening).filter(GuildLeadershipOpening.guild_name.ilike(guild), GuildLeadershipApplication.status.in_(ACTIVE_APPLICATION_STATUSES)).all()
@@ -137,7 +149,13 @@ def lifecycle(db: Session, row: GuildLeadershipOpening, user: User, target: str)
     if target == "open": row.opened_at = datetime.now(UTC)
     if target == "closed": row.closed_at = datetime.now(UTC)
     LeadershipService.audit(db, user, row.guild_name, f"leadership_opening_{target}", "leadership_opening", row.id)
-    if target == "open": NotificationService.emit_users(db, db.query(User).filter(User.guild_name.ilike(row.guild_name), User.is_active.is_(True)).all(), "leadership_opening_published", f"leadership:opening:{row.id}:published:{row.version}", guild_name=row.guild_name, deep_link="/guild/leadership/recruitment", payload={"title": row.title})
+    if target == "open":
+        member_ids = db.query(UserCharacter.user_id).filter(
+            UserCharacter.ownership_status == "verified",
+            UserCharacter.guild_name.ilike(row.guild_name),
+        ).distinct()
+        recipients = db.query(User).filter(User.id.in_(member_ids), User.is_active.is_(True)).all()
+        NotificationService.emit_users(db, recipients, "leadership_opening_published", f"leadership:opening:{row.id}:published:{row.version}", guild_name=row.guild_name, deep_link="/guild/leadership/recruitment", payload={"title": row.title})
     db.commit(); return opening_data(row)
 
 

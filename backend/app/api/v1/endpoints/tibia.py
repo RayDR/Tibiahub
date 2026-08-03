@@ -31,6 +31,8 @@ async def sync_my_character(
     current_user: User = Depends(get_current_active_user),
     db: Session = Depends(get_db),
 ):
+    if not current_user.primary_character or current_user.primary_character.ownership_status != "verified":
+        raise HTTPException(status_code=409, detail="Select a verified primary character before synchronizing")
     payload, error = await try_sync_user_character_snapshot(db, current_user)
     if error:
         raise HTTPException(status_code=503, detail=error)
@@ -47,6 +49,8 @@ async def sync_user_character(
     user = db.query(User).filter(User.id == user_id).first()
     if not user:
         raise HTTPException(status_code=404, detail="User not found")
+    if not user.primary_character or user.primary_character.ownership_status != "verified":
+        raise HTTPException(status_code=409, detail="The account has no verified primary character")
     payload, error = await try_sync_user_character_snapshot(db, user)
     if error:
         raise HTTPException(status_code=503, detail=error)

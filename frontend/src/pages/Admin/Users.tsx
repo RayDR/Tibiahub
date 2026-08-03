@@ -11,6 +11,8 @@ import {
   GuildManagementGrant,
   GuildMember,
 } from '../../services/guildManagement';
+import AdminIdentityLinker from '../../components/admin/AdminIdentityLinker';
+import { adminEmailApi } from '../../services/adminEmail';
 
 const SUPPORTED_CAPABILITY_COUNT = 4;
 
@@ -117,6 +119,16 @@ export default function AdminUsers() {
     }
   };
 
+  const queueAccountEmail = async (user: GuildMember, kind: 'verify'|'reset') => {
+    setSaving(user.id);
+    try {
+      if (kind === 'verify') await adminEmailApi.verify(user.id, 'en');
+      else await adminEmailApi.reset(user.id, 'en');
+      showSuccess(t(`identity.admin.${kind}Queued`));
+    } catch { showError(t('identity.emailAdmin.error')); }
+    finally { setSaving(null); }
+  };
+
   return (
     <div className="space-y-4">
       <WorkspaceHeader
@@ -130,6 +142,7 @@ export default function AdminUsers() {
         <EmptyState title={t('workspace.errors.users')} description={t('workspace.errors.tryAgain')} />
       ) : (
         <>
+          <AdminIdentityLinker users={users} onLinked={(userId) => { void guildManagementApi.getUserDetail(userId).then(saved => setUsers(items => items.map(item => item.id === saved.id ? saved : item))); }} />
           <section className="admin-panel rounded-xl p-4" aria-labelledby="guild-permissions-title">
             <div className="flex flex-wrap items-end justify-between gap-3">
               <div>
@@ -163,27 +176,18 @@ export default function AdminUsers() {
               return (
                 <article key={user.id} className="admin-panel rounded-xl p-4">
                   <div className="flex flex-wrap items-start justify-between gap-3">
-                    <div>
+                    <div className="flex items-center gap-3">
+                      <div className="grid size-10 shrink-0 place-items-center overflow-hidden rounded-full bg-surface-raised">{user.avatar_url ? <img src={user.avatar_url} alt="" className="size-full object-cover" /> : <Shield className="size-4 text-content-muted" />}</div><div>
                       <h2 className="font-semibold">{user.display_name || user.username}</h2>
                       <p className="text-sm text-content-muted">
                         {user.email || user.username} · {user.guild_name || t('workspace.common.noGuild')}
                       </p>
-                    </div>
+                    </div></div>
                     <span className={`rounded-full px-2 py-1 text-xs ${user.is_active ? 'bg-success/15 text-success' : 'bg-danger/15 text-danger'}`}>
                       {user.is_active ? t('workspace.users.active') : t('workspace.users.inactive')}
                     </span>
                   </div>
-                  <div className="mt-4 grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
-                    <label className="grid gap-1 text-sm">
-                      <span className="text-content-muted">{t('workspace.users.guildRank')}</span>
-                      <select
-                        value={user.guild_rank || 'Unranked'}
-                        onChange={event => void update(user, { guild_rank: event.target.value })}
-                        className="admin-secondary min-h-11 rounded-lg bg-transparent px-3"
-                      >
-                        <option>Unranked</option><option>Member</option><option>Vice Leader</option><option>Leader</option>
-                      </select>
-                    </label>
+                  <div className="mt-4 grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
                     {([
                       ['is_superuser', Shield, t('workspace.users.admin')],
                       ['is_moderator', MessagesSquare, t('workspace.users.moderator')],
@@ -232,6 +236,7 @@ export default function AdminUsers() {
                       </div>
                     </div>
                   )}
+                  {user.email && <div className="mt-3 flex flex-wrap gap-2"><button type="button" className="app-button-secondary app-button-sm" disabled={saving === user.id} onClick={() => void queueAccountEmail(user, 'verify')}>{t('identity.admin.resendVerification')}</button><button type="button" className="app-button-secondary app-button-sm" disabled={saving === user.id} onClick={() => void queueAccountEmail(user, 'reset')}>{t('identity.admin.sendReset')}</button></div>}
                   {saving === user.id && (
                     <p className="mt-2 flex items-center gap-2 text-xs text-content-muted">
                       <Save className="h-3 w-3 animate-pulse" />{t('workspace.users.saving')}

@@ -39,6 +39,31 @@ class GuildRosterCharacter(Base):
     linked_user = relationship("User")
 
 
+class GuildDirectory(Base):
+    """Canonical discovered guild identity and synchronization state."""
+
+    __tablename__ = "guild_directory"
+    __table_args__ = (
+        UniqueConstraint("normalized_guild_name", "normalized_world_name", name="uq_guild_directory_identity"),
+        Index("ix_guild_directory_active_sync", "is_active", "last_successful_sync_at"),
+    )
+
+    id = Column(Integer, primary_key=True)
+    guild_name = Column(String(200), nullable=False, index=True)
+    normalized_guild_name = Column(String(200), nullable=False, index=True)
+    world_name = Column(String(100), nullable=False)
+    normalized_world_name = Column(String(100), nullable=False)
+    source = Column(String(50), nullable=False, default="verified_character")
+    is_active = Column(Boolean, nullable=False, default=True)
+    first_discovered_at = Column(DateTime(timezone=True), nullable=False, server_default=func.now())
+    last_synchronized_at = Column(DateTime(timezone=True), nullable=True)
+    last_successful_sync_at = Column(DateTime(timezone=True), nullable=True)
+    sync_status = Column(String(30), nullable=False, default="pending")
+    sync_failure_code = Column(String(80), nullable=True)
+    member_count = Column(Integer, nullable=False, default=0)
+    leader_character_name = Column(String(100), nullable=True)
+
+
 class GuildManagementGrant(Base):
     __tablename__ = "guild_management_grants"
     __table_args__ = (

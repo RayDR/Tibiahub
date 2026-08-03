@@ -29,28 +29,29 @@ def is_global_admin(user: User) -> bool:
     return bool(user and user.is_superuser)
 
 
+def _verified_guild_characters(user: User, guild_id: str | int | None = None):
+    requested = str(guild_id or "").strip().casefold()
+    return [
+        row for row in getattr(user, "characters", [])
+        if row.ownership_status == "verified"
+        and row.guild_name
+        and (not requested or row.guild_name.strip().casefold() == requested)
+    ]
+
+
 def is_guild_leader(user: User, guild_id: str | int | None = None, db=None) -> bool:
     if not user:
         return False
     if db is not None and guild_id is not None:
         return GuildAuthorizationService.is_verified_leader(db, user, str(guild_id))
-    rank = (user.guild_rank or "").strip().lower()
-    if rank not in LEADER_RANKS:
-        return False
-
-    if guild_id is None:
-        return True
-
-    guild_name = str(guild_id).strip().lower()
-    return bool(guild_name) and (user.guild_name or "").strip().lower() == guild_name
+    return any((row.guild_rank or "").strip().casefold() in LEADER_RANKS for row in _verified_guild_characters(user, guild_id))
 
 
 def is_guild_viceleader(user: User, guild_id: str | int | None = None) -> bool:
-    if not user or (user.guild_rank or "").strip().lower() not in VICELEADER_RANKS:
-        return False
-    if guild_id is None:
-        return True
-    return (user.guild_name or "").strip().casefold() == str(guild_id).strip().casefold()
+    return bool(user and any(
+        (row.guild_rank or "").strip().casefold() in VICELEADER_RANKS
+        for row in _verified_guild_characters(user, guild_id)
+    ))
 
 
 def resolve_guild_role(user: User) -> GuildRole:
@@ -64,9 +65,7 @@ def resolve_guild_role(user: User) -> GuildRole:
 
 
 def can_view_guild_workspace(user: User, guild_name: str) -> bool:
-    return bool(is_global_admin(user) or (
-        (user.guild_name or "").strip().casefold() == (guild_name or "").strip().casefold()
-    ))
+    return bool(is_global_admin(user) or _verified_guild_characters(user, guild_name))
 
 
 def can_assist_guild(user: User, _guild_name: str) -> bool:

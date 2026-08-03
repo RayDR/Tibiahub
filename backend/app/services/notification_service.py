@@ -17,15 +17,20 @@ class NotificationService:
     def emit_users(db: Session, recipients: list[User], notification_type: str, event_key: str, *, guild_name: str | None, deep_link: str, payload: dict | None = None) -> None:
         for recipient in {user.id: user for user in recipients if user and user.is_active}.values():
             dedupe = f"{event_key}:user:{recipient.id}"
-            if db.query(InternalNotification.id).filter(InternalNotification.recipient_user_id == recipient.id, InternalNotification.deduplication_key == dedupe).first():
-                continue
-            db.add(InternalNotification(
-                recipient_user_id=recipient.id, guild_name=guild_name, raffle_id=None,
-                notification_type=notification_type,
-                title_key=f"notifications.types.{notification_type}.title",
-                message_key=f"notifications.types.{notification_type}.message",
-                interpolation=payload or {}, deep_link=deep_link, deduplication_key=dedupe,
-            ))
+            if recipient.in_app_notifications_enabled and not db.query(InternalNotification.id).filter(InternalNotification.recipient_user_id == recipient.id, InternalNotification.deduplication_key == dedupe).first():
+                db.add(InternalNotification(
+                    recipient_user_id=recipient.id, guild_name=guild_name, raffle_id=None,
+                    notification_type=notification_type,
+                    title_key=f"notifications.types.{notification_type}.title",
+                    message_key=f"notifications.types.{notification_type}.message",
+                    interpolation=payload or {}, deep_link=deep_link, deduplication_key=dedupe,
+                ))
+            from app.services.email_outbox_service import EmailOutboxService
+            EmailOutboxService.enqueue_notification(
+                db, user=recipient, subject="TibiaHub notification",
+                message=f"A new {notification_type.replace('_', ' ')} notification is available in TibiaHub.",
+                event_key=dedupe,
+            )
 
     @staticmethod
     def recipients(db: Session, raffle: Raffle, *, include_managers: bool = True) -> list[User]:
@@ -55,19 +60,24 @@ class NotificationService:
     @staticmethod
     def emit(db: Session, raffle: Raffle, notification_type: str, event_key: str, *, payload: dict | None = None, include_managers: bool = True) -> None:
         for recipient in NotificationService.recipients(db, raffle, include_managers=include_managers):
-            if db.query(InternalNotification.id).filter(
+            if recipient.in_app_notifications_enabled and not db.query(InternalNotification.id).filter(
                 InternalNotification.recipient_user_id == recipient.id,
                 InternalNotification.deduplication_key == event_key,
             ).first():
-                continue
-            db.add(InternalNotification(
-                recipient_user_id=recipient.id, guild_name=raffle.guild_name, raffle_id=raffle.id,
-                notification_type=notification_type,
-                title_key=f"notifications.types.{notification_type}.title",
-                message_key=f"notifications.types.{notification_type}.message",
-                interpolation={"raffle": raffle.title, "test": raffle.purpose == "test", **(payload or {})},
-                deep_link=f"/guild/raffle?raffle={raffle.id}", deduplication_key=event_key,
-            ))
+                db.add(InternalNotification(
+                    recipient_user_id=recipient.id, guild_name=raffle.guild_name, raffle_id=raffle.id,
+                    notification_type=notification_type,
+                    title_key=f"notifications.types.{notification_type}.title",
+                    message_key=f"notifications.types.{notification_type}.message",
+                    interpolation={"raffle": raffle.title, "test": raffle.purpose == "test", **(payload or {})},
+                    deep_link=f"/guild/raffle?raffle={raffle.id}", deduplication_key=event_key,
+                ))
+            from app.services.email_outbox_service import EmailOutboxService
+            EmailOutboxService.enqueue_notification(
+                db, user=recipient, subject=f"TibiaHub: {raffle.title}",
+                message=f"A new {notification_type.replace('_', ' ')} update is available for {raffle.title}.",
+                event_key=event_key,
+            )
 
     @staticmethod
     def mark_read(notification: InternalNotification) -> None:

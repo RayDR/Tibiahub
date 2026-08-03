@@ -6,7 +6,7 @@ ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)"
 # shellcheck source=../../scripts/postgres-common.sh
 source "$ROOT/scripts/postgres-common.sh"
 
-EXPECTED_REVISION="guild_raffle_arch_20260802"
+EXPECTED_REVISION="account_identity_20260803"
 DEPLOY_ROOT="${TIBIAHUB_DEPLOY_ROOT:-/forge/tibiahub-backups/deployments}"
 LOCK_FILE="${TIBIAHUB_DEPLOY_LOCK_FILE:-$DEPLOY_ROOT/.deploy.lock}"
 SERVICES=(
@@ -14,6 +14,7 @@ SERVICES=(
   tibiahub-frontend
   tibiahub-raffle-scheduler
   tibiahub-knowledge-worker
+  tibiahub-email-worker
 )
 LOCAL_URLS=(
   http://127.0.0.1:8001/api/v1/health
@@ -332,6 +333,18 @@ for service in "${SERVICES[@]}"; do
   pm2 jlist | jq -e --arg name "$service" \
     'any(.[]; .name == $name and .pm2_env.status == "online")' >/dev/null
 done
+worker_heartbeat_count="$(postgres_exec psql -X -A -t -v ON_ERROR_STOP=1 <<'SQL'
+SELECT
+  (SELECT EXISTS (SELECT 1 FROM raffle_scheduler_state WHERE heartbeat_at >= now() - interval '5 minutes'))::int
+  + (SELECT EXISTS (SELECT 1 FROM knowledge_worker_heartbeats WHERE last_seen_at >= now() - interval '5 minutes'))::int
+  + (SELECT EXISTS (SELECT 1 FROM email_worker_heartbeats WHERE last_seen_at >= now() - interval '5 minutes'))::int;
+SQL
+)"
+worker_heartbeat_count="${worker_heartbeat_count//$'\n'/}"
+[[ "$worker_heartbeat_count" == 3 ]] || {
+  echo "One or more TibiaHub worker heartbeats are stale or missing." >&2
+  false
+}
 
 [[ "$(git branch --show-current)" == "develop" ]]
 [[ -z "$(git status --porcelain --untracked-files=all)" ]]

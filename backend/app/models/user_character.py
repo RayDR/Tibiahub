@@ -1,4 +1,4 @@
-from sqlalchemy import CheckConstraint, Column, Integer, String, DateTime, ForeignKey, Index, text
+from sqlalchemy import CheckConstraint, Column, Integer, String, DateTime, ForeignKey, Index, Text, text
 from sqlalchemy.orm import relationship
 from sqlalchemy.sql import func
 from app.db.database import Base
@@ -18,7 +18,7 @@ class UserCharacter(Base):
             name="ck_user_character_verified_has_normalized_name",
         ),
         CheckConstraint(
-            "ownership_status IN ('legacy_unverified','verified','disputed')",
+            "ownership_status IN ('legacy_unverified','verified','disputed','unlinked')",
             name="ck_user_character_ownership_status",
         ),
     )
@@ -29,6 +29,11 @@ class UserCharacter(Base):
     ownership_status = Column(String(30), nullable=False, default="legacy_unverified")
     ownership_verified_at = Column(DateTime(timezone=True), nullable=True)
     ownership_claim_id = Column(Integer, ForeignKey("character_ownership_claims.id", ondelete="SET NULL"), nullable=True)
+    verification_method = Column(String(40), nullable=True)
+    verified_by_user_id = Column(Integer, ForeignKey("users.id", ondelete="SET NULL"), nullable=True)
+    verification_reason = Column(Text, nullable=True)
+    unlinked_at = Column(DateTime(timezone=True), nullable=True)
+    unlinked_by_user_id = Column(Integer, ForeignKey("users.id", ondelete="SET NULL"), nullable=True)
     # optional cached Tibia data
     level = Column(Integer, nullable=True)
     vocation = Column(String(50), nullable=True)
@@ -41,4 +46,6 @@ class UserCharacter(Base):
     last_login_at = Column(DateTime(timezone=True), nullable=True)
     last_seen = Column(DateTime(timezone=True), nullable=True)
 
-    user = relationship("User", back_populates="characters")
+    user = relationship("User", back_populates="characters", foreign_keys=[user_id])
+    verified_by = relationship("User", foreign_keys=[verified_by_user_id])
+    unlinked_by = relationship("User", foreign_keys=[unlinked_by_user_id])

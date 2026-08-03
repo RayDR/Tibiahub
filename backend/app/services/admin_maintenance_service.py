@@ -10,6 +10,7 @@ from sqlalchemy.orm import Session
 
 from app.knowledge.models import KnowledgeEntity, KnowledgeRelationship
 from app.models.events import Event
+from app.models.guild_management import GuildDirectory, GuildRosterCharacter
 from app.models.hunt import GuildHunt
 from app.models.leadership import GuildLeadershipApplication, GuildLeadershipOpening
 from app.models.raffle import Raffle
@@ -33,7 +34,7 @@ class AdminMaintenanceService:
         needle = search.strip()
         if category == "guilds":
             names = set()
-            for model in (User, Event, Raffle, GuildHunt, GuildLeadershipOpening):
+            for model in (GuildDirectory, GuildRosterCharacter, Event, Raffle, GuildHunt, GuildLeadershipOpening):
                 for (name,) in db.query(model.guild_name).filter(model.guild_name.isnot(None)).distinct().all():
                     if name and (not needle or needle.casefold() in name.casefold()):
                         names.add(name.strip())
@@ -53,7 +54,11 @@ class AdminMaintenanceService:
             if not label:
                 raise MaintenanceError("Guild not found")
             counts = {
-                "active_users": db.query(User).filter(User.guild_name.ilike(label), User.is_active.is_(True)).count(),
+                "active_users": db.query(UserCharacter.user_id).join(User).filter(
+                    UserCharacter.guild_name.ilike(label),
+                    UserCharacter.ownership_status == "verified",
+                    User.is_active.is_(True),
+                ).distinct().count(),
                 "active_events": db.query(Event).filter(Event.guild_name.ilike(label), Event.is_deleted.is_(False)).count(),
                 "active_raffles": db.query(Raffle).filter(Raffle.guild_name.ilike(label), Raffle.is_deleted.is_(False)).count(),
                 "hunts": db.query(GuildHunt).filter(GuildHunt.guild_name.ilike(label)).count(),

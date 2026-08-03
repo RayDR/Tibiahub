@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState } from 'react';
 import { Link, useLocation, useNavigate } from 'react-router-dom';
-import { BookOpen, ChevronDown, Home, Map, Settings, Shield, UserRound } from 'lucide-react';
+import { BookOpen, ChevronDown, Home, Map, Settings, Shield } from 'lucide-react';
 import { FontAwesomeIcon } from '@fortawesome/react-fontawesome';
 import { useTranslation } from 'react-i18next';
 
@@ -9,6 +9,7 @@ import { cyclopediaSections } from '../config/cyclopediaSections';
 import LanguageSwitcher from './LanguageSwitcher';
 import NotificationIndicator from './NotificationIndicator';
 import ThemeSwitcher from './ThemeSwitcher';
+import AccountMenu from './account/AccountMenu';
 
 interface NavigationItem {
   path: string;
@@ -85,7 +86,7 @@ export default function Navigation() {
             <LanguageSwitcher />
             {isAuthenticated ? <NotificationIndicator /> : null}
             <ThemeSwitcher />
-            {isAuthenticated ? <Link to="/profile" aria-label={t('shell.profile')} className="app-nav-link grid min-h-11 min-w-11 place-items-center rounded-lg" data-active={isActive('/profile')}><UserRound className="size-4" /></Link> : <Link to="/login" className="app-button-primary app-button-sm ml-1">{t('auth.login')}</Link>}
+            {isAuthenticated ? <AccountMenu /> : <Link to="/login" className="app-button-primary app-button-sm ml-1">{t('auth.login')}</Link>}
           </div>
         </div>
       </header>

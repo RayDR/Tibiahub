@@ -5,7 +5,7 @@ from datetime import UTC, datetime
 from fastapi import HTTPException
 from sqlalchemy.orm import Session
 
-from app.core.permissions import is_global_admin, is_guild_leader, is_guild_viceleader
+from app.core.permissions import can_view_guild_workspace, is_global_admin, is_guild_leader, is_guild_viceleader
 from app.models.leadership import (
     GuildLeadershipApplication, GuildLeadershipApplicationHistory,
     GuildLeadershipApplicationMessage, GuildLeadershipAssignment,
@@ -68,14 +68,12 @@ class LeadershipService:
 
     @staticmethod
     def leaders(db: Session, guild_name: str) -> list[User]:
-        return [user for user in db.query(User).filter(User.guild_name.ilike(guild_name), User.is_active.is_(True)).all() if is_guild_leader(user, guild_name)]
+        return [user for user in db.query(User).filter(User.is_active.is_(True)).all() if is_guild_leader(user, guild_name)]
 
     @staticmethod
     def reviewers(db: Session, opening: GuildLeadershipOpening) -> list[User]:
         return [
-            user for user in db.query(User).filter(
-                User.guild_name.ilike(opening.guild_name), User.is_active.is_(True),
-            ).all()
+            user for user in db.query(User).filter(User.is_active.is_(True)).all()
             if LeadershipService.reviewer(user, opening)
         ]
 
@@ -103,7 +101,7 @@ class LeadershipService:
         )
         return bool(
             user.is_active
-            and (user.guild_name or "").casefold() == opening.guild_name.casefold()
+            and can_view_guild_workspace(user, opening.guild_name)
             and not is_guild_leader(user, opening.guild_name)
             and not is_guild_viceleader(user, opening.guild_name)
             and opening.status == "open"
@@ -125,7 +123,12 @@ class LeadershipService:
 
     @staticmethod
     def actor_context(user: User, guild_name: str) -> str:
-        return "admin_assistance" if is_global_admin(user) and (user.guild_name or "").casefold() != guild_name.casefold() else "guild"
+        owns_guild_character = any(
+            row.ownership_status == "verified"
+            and (row.guild_name or "").casefold() == guild_name.casefold()
+            for row in getattr(user, "characters", [])
+        )
+        return "admin_assistance" if is_global_admin(user) and not owns_guild_character else "guild"
 
     @staticmethod
     def audit(db: Session, user: User, guild_name: str, action: str, target_type: str, target_id: int, metadata: dict | None = None) -> None:
@@ -134,20 +137,20 @@ class LeadershipService:
 
     @staticmethod
     def profile_snapshot(user: User, character) -> dict:
-        return {"character_name": character.character_name, "level": character.level, "vocation": character.vocation, "guild_name": character.guild_name or user.guild_name, "guild_rank": character.guild_rank or user.guild_rank, "join_date": user.join_date.isoformat() if user.join_date else None, "last_activity": (character.last_seen or character.last_login_at or user.last_login_at).isoformat() if (character.last_seen or character.last_login_at or user.last_login_at) else None, "discord_username": user.discord_username, "world": character.world_name or user.world_name}
+        return {"character_name": character.character_name, "level": character.level, "vocation": character.vocation, "guild_name": character.guild_name, "guild_rank": character.guild_rank, "join_date": user.join_date.isoformat() if user.join_date else None, "last_activity": (character.last_seen or character.last_login_at or user.last_login_at).isoformat() if (character.last_seen or character.last_login_at or user.last_login_at) else None, "discord_username": user.discord_username, "world": character.world_name}
 
     @staticmethod
     def apply(db: Session, opening: GuildLeadershipOpening, user: User, payload) -> GuildLeadershipApplication:
         if not LeadershipService.eligible_opening(opening, user):
             raise HTTPException(409, "Opening is not accepting applications")
-        if (user.guild_name or "").casefold() != opening.guild_name.casefold() or is_guild_leader(user, opening.guild_name) or is_guild_viceleader(user, opening.guild_name):
+        if not can_view_guild_workspace(user, opening.guild_name) or is_guild_leader(user, opening.guild_name) or is_guild_viceleader(user, opening.guild_name):
             raise HTTPException(403, "Applicant is not an eligible guild member")
         character = next((
             entry for entry in user.characters
             if entry.ownership_status == "verified"
             and entry.character_name.casefold() == payload.character_name.casefold()
         ), None)
-        if not character or (character.guild_name and character.guild_name.casefold() != opening.guild_name.casefold()):
+        if not character or not character.guild_name or character.guild_name.casefold() != opening.guild_name.casefold():
             raise HTTPException(400, "Selected character is not linked to this guild")
         duplicate = db.query(GuildLeadershipApplication).filter(GuildLeadershipApplication.opening_id == opening.id, GuildLeadershipApplication.applicant_user_id == user.id, GuildLeadershipApplication.status.in_(ACTIVE_APPLICATION_STATUSES)).first()
         assignment = db.query(GuildLeadershipAssignment).filter(GuildLeadershipAssignment.guild_name.ilike(opening.guild_name), GuildLeadershipAssignment.role_id == opening.role_id, GuildLeadershipAssignment.user_id == user.id, GuildLeadershipAssignment.is_active.is_(True)).first()

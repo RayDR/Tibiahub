@@ -6,6 +6,10 @@ export interface GuildMember {
     username: string;
     display_name?: string;
     email?: string;
+    avatar_url?: string;
+    primary_character_id?: number;
+    tibia_character_name?: string;
+    world_name?: string;
     guild_name?: string;
     guild_rank?: string;
     is_active: boolean;
@@ -15,11 +19,17 @@ export interface GuildMember {
     join_date?: string;
     created_at: string;
     characters: {
+        id?: number;
         character_name: string;
         level?: number;
         vocation?: string;
         last_seen?: string;
     }[];
+}
+
+export interface AdminCharacterSearchResult {
+    character_name: string; world_name?: string; guild_name?: string; guild_rank?: string;
+    level?: number; vocation?: string; roster_character_id?: number; linked_user_id?: number; ownership_status?: string;
 }
 
 export interface SystemStats {
@@ -98,6 +108,12 @@ export interface GuildAccessContext {
 }
 
 export const guildManagementApi = {
+    searchCharacters: async (query: string): Promise<AdminCharacterSearchResult[]> =>
+        (await api.get('/admin/character-ownership/search', { params: { query } })).data,
+
+    linkCharacter: async (payload: { user_id: number; character_name: string; set_primary: boolean; allow_transfer: boolean; reason: string; confirmation: string }) =>
+        (await api.post('/admin/character-ownership/link', payload, { timeout: ADMIN_ACTION_TIMEOUT_MS })).data,
+
     getGuildContext: async (): Promise<GuildAccessContext[]> => {
         const response = await api.get('/guild-management/context');
         return response.data.guilds;

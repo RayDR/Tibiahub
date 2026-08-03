@@ -2,7 +2,7 @@ import logging
 import time
 from datetime import UTC, datetime, timedelta
 from typing import Any
-from fastapi import APIRouter, BackgroundTasks, Depends, HTTPException, status
+from fastapi import APIRouter, Depends, HTTPException, status
 from fastapi.security import OAuth2PasswordRequestForm, OAuth2PasswordBearer
 from sqlalchemy import func
 from sqlalchemy.orm import Session
@@ -166,7 +166,6 @@ def register_user(
     *,
     db: Session = Depends(get_db),
     user_in: UserCreate,
-    background_tasks: BackgroundTasks,
 ) -> Any:
     # Check if username already exists
     normalized_username = user_in.username.casefold()
@@ -205,13 +204,18 @@ def register_user(
             db, user=user, purpose=EMAIL_VERIFICATION,
             ttl=timedelta(hours=config.settings.EMAIL_VERIFICATION_TTL_HOURS),
         )
+    if raw_token:
+        queue_verification_email(db, user=user, raw_token=raw_token, locale=user_in.locale)
+    # The account, one-time token, and durable outbox row are one transaction.
+    # A successful registration can therefore never lose its verification job.
     db.commit()
     db.refresh(user)
-    if raw_token:
-        queue_verification_email(background_tasks, user=user, raw_token=raw_token, locale=user_in.locale)
     
     return user
 
 @router.get("/me", response_model=UserResponse)
 def read_users_me(current_user: User = Depends(get_current_active_user)):
-    return current_user
+    from app.services.avatar_service import AvatarService
+    payload = {column.name: getattr(current_user, column.name) for column in User.__table__.columns}
+    payload["avatar_url"] = AvatarService.url(current_user.avatar_managed_key, 64) or current_user.avatar_url
+    return payload

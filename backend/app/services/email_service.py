@@ -17,15 +17,16 @@ logger = logging.getLogger(__name__)
 class EmailSendResult:
     ok: bool
     detail: str
+    failure_category: str | None = None
 
 
 class EmailService:
     @staticmethod
     def verify_configuration() -> EmailSendResult:
         if not settings.smtp_configured:
-            detail = "SMTP is not configured. Set SMTP_HOST, SMTP_PORT, SMTP_USER, SMTP_PASSWORD, and optional SMTP_FROM."
+            detail = "SMTP is not configured. Set SMTP_HOST, SMTP_PORT, SMTP_USER, SMTP_PASSWORD, and SMTP_FROM."
             logger.warning("email_not_configured detail=%s", detail)
-            return EmailSendResult(ok=False, detail=detail)
+            return EmailSendResult(ok=False, detail=detail, failure_category="not_configured")
         return EmailSendResult(ok=True, detail="SMTP is configured")
 
     @staticmethod
@@ -61,7 +62,15 @@ class EmailService:
         except Exception as exc:
             recipient_hash = sha256(str(message["To"]).casefold().encode("utf-8")).hexdigest()[:12]
             logger.error("email_send_failed recipient_hash=%s error_type=%s", recipient_hash, type(exc).__name__)
-            return EmailSendResult(ok=False, detail="Email delivery failed")
+            if isinstance(exc, smtplib.SMTPAuthenticationError):
+                category = "authentication_rejected"
+            elif isinstance(exc, smtplib.SMTPRecipientsRefused):
+                category = "recipient_rejected"
+            elif isinstance(exc, (smtplib.SMTPConnectError, TimeoutError, OSError)):
+                category = "connection_failed"
+            else:
+                category = "smtp_rejected"
+            return EmailSendResult(ok=False, detail="Email delivery failed", failure_category=category)
 
     @staticmethod
     def build_password_reset_content(*, username: str, reset_link: str, locale: str = "en") -> tuple[str, str, str]:
@@ -133,4 +142,24 @@ class EmailService:
         )
         return EmailService.send_message(EmailService.build_message(
             to_email=to_email, subject=subject, html_body=html_body, text_body=text_body,
+        ))
+
+    @staticmethod
+    def send_test_email(*, to_email: str, locale: str = "en") -> EmailSendResult:
+        spanish = locale.casefold().startswith("es")
+        subject = "TibiaHub - prueba de entrega" if spanish else "TibiaHub - delivery test"
+        text = "La entrega SMTP de TibiaHub funciona." if spanish else "TibiaHub SMTP delivery is working."
+        html = f"<main><h1>{escape(subject)}</h1><p>{escape(text)}</p></main>"
+        return EmailService.send_message(EmailService.build_message(
+            to_email=to_email, subject=subject, html_body=html, text_body=text,
+        ))
+
+    @staticmethod
+    def send_notification_email(*, to_email: str, subject: str, message: str) -> EmailSendResult:
+        safe_subject = subject[:200]
+        safe_message = message[:2000]
+        return EmailService.send_message(EmailService.build_message(
+            to_email=to_email, subject=safe_subject,
+            html_body=f"<main><h1>{escape(safe_subject)}</h1><p>{escape(safe_message)}</p></main>",
+            text_body=f"{safe_subject}\n\n{safe_message}",
         ))

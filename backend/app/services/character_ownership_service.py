@@ -14,6 +14,7 @@ from sqlalchemy import func, update
 from sqlalchemy.orm import Session, sessionmaker
 
 from app.core.config import settings
+from app.core.secret_payload import decrypt_text, encrypt_text
 from app.db.database import SessionLocal
 from app.models.character_ownership import CharacterOwnershipClaim, CharacterOwnershipHistory
 from app.models.user import User
@@ -101,12 +102,14 @@ class CharacterOwnershipService:
                 raise ValueError("An active claim already exists")
             row.status = "expired"
             row.consumed_at = now
+            row.challenge_ciphertext = None
         raw_challenge = f"TIBIAHUB-{secrets.token_urlsafe(24)}"
         claim = CharacterOwnershipClaim(
             user_id=user.id,
             character_name=" ".join(character_name.strip().split()),
             normalized_name=normalized,
             challenge_hash=challenge_hash(raw_challenge),
+            challenge_ciphertext=encrypt_text(raw_challenge),
             status="pending",
             expires_at=now + timedelta(minutes=settings.CHARACTER_CLAIM_TTL_MINUTES),
         )
@@ -114,6 +117,28 @@ class CharacterOwnershipService:
         db.flush()
         _history(db, claim, "claim_created", to_user_id=user.id, actor_user_id=user.id)
         return claim, raw_challenge
+
+    @staticmethod
+    def active_challenge(claim: CharacterOwnershipClaim, user: User) -> str | None:
+        now = datetime.now(UTC)
+        if claim.user_id != user.id:
+            raise PermissionError("Claim is private")
+        if claim.status not in ACTIVE_CLAIM_STATUSES or _as_utc(claim.expires_at) <= now:
+            claim.challenge_ciphertext = None
+            return None
+        return decrypt_text(claim.challenge_ciphertext)
+
+    @staticmethod
+    def cancel(db: Session, claim: CharacterOwnershipClaim, user: User) -> None:
+        if claim.user_id != user.id:
+            raise PermissionError("Claim is private")
+        if claim.status not in {"pending", "queued"}:
+            raise ValueError("Only a pending claim can be cancelled")
+        claim.status = "rejected"
+        claim.consumed_at = datetime.now(UTC)
+        claim.challenge_ciphertext = None
+        claim.safe_failure_code = "cancelled_by_owner"
+        _history(db, claim, "claim_cancelled", to_user_id=user.id, actor_user_id=user.id)
 
     @staticmethod
     def queue(db: Session, claim: CharacterOwnershipClaim, user: User) -> None:
@@ -166,12 +191,44 @@ class CharacterOwnershipService:
                 (CharacterOwnershipClaim.next_attempt_at.is_(None)) | (CharacterOwnershipClaim.next_attempt_at <= now),
             ).order_by(CharacterOwnershipClaim.id).with_for_update(skip_locked=True).first()
             if claim is None:
-                return False
-            claim.status = "processing"
-            claim.attempt_count += 1
-            claim.lease_expires_at = now + timedelta(minutes=2)
-            claim_id = claim.id
-            requested_name = claim.character_name
+                # Guild discovery is intentionally asynchronous: ownership is
+                # complete before a potentially slow full-roster fetch starts.
+                from app.models.guild_management import GuildDirectory
+                stale_sync = now - timedelta(minutes=5)
+                directory = db.query(GuildDirectory).filter(
+                    (GuildDirectory.sync_status == "pending")
+                    | ((GuildDirectory.sync_status == "synchronizing")
+                       & (GuildDirectory.last_synchronized_at <= stale_sync)),
+                ).order_by(GuildDirectory.id).with_for_update(skip_locked=True).first()
+                if directory is None:
+                    return False
+                directory.sync_status = "synchronizing"
+                directory.last_synchronized_at = now
+                directory_id = directory.id
+                directory_name = directory.guild_name
+                claim_id = None
+            else:
+                directory_id = None
+                directory_name = None
+                claim.status = "processing"
+                claim.attempt_count += 1
+                claim.lease_expires_at = now + timedelta(minutes=2)
+                claim_id = claim.id
+                requested_name = claim.character_name
+
+        if directory_id is not None:
+            from app.services.guild_roster_service import GuildRosterService, GuildRosterSyncError
+            try:
+                with session_factory() as db:
+                    await GuildRosterService.synchronize(db, directory_name)
+                    db.commit()
+            except GuildRosterSyncError:
+                with session_factory.begin() as db:
+                    directory = db.get(GuildDirectory, directory_id)
+                    if directory:
+                        directory.sync_status = "failed"
+                        directory.sync_failure_code = "provider_unavailable"
+            return True
 
         try:
             payload = await fetch_character(requested_name)
@@ -194,6 +251,7 @@ class CharacterOwnershipService:
                 claim.status = "expired"
                 claim.consumed_at = now
                 claim.safe_failure_code = "challenge_expired"
+                claim.challenge_ciphertext = None
                 _history(db, claim, "claim_expired", to_user_id=claim.user_id)
                 return True
             if provider_failed:
@@ -203,12 +261,14 @@ class CharacterOwnershipService:
                 else:
                     claim.status = "failed"
                     claim.consumed_at = now
+                    claim.challenge_ciphertext = None
                 claim.safe_failure_code = "provider_unavailable"
                 _history(db, claim, "verification_deferred" if claim.status == "queued" else "verification_failed", to_user_id=claim.user_id, metadata={"code": claim.safe_failure_code})
                 return True
             if not payload or normalize_character_name(str(payload.get("name") or "")) != claim.normalized_name:
                 claim.status = "failed"
                 claim.consumed_at = now
+                claim.challenge_ciphertext = None
                 claim.safe_failure_code = "character_not_found"
                 _history(db, claim, "verification_failed", to_user_id=claim.user_id, metadata={"code": claim.safe_failure_code})
                 return True
@@ -218,6 +278,7 @@ class CharacterOwnershipService:
                 claim.status = "failed" if claim.attempt_count >= settings.CHARACTER_CLAIM_MAX_ATTEMPTS else "pending"
                 if claim.status == "failed":
                     claim.consumed_at = now
+                    claim.challenge_ciphertext = None
                 claim.safe_failure_code = "challenge_not_visible"
                 _history(db, claim, "verification_failed", to_user_id=claim.user_id, metadata={"code": claim.safe_failure_code})
                 return True
@@ -226,6 +287,7 @@ class CharacterOwnershipService:
             if existing and existing.user_id != claim.user_id and existing.ownership_status in {"verified", "disputed"}:
                 claim.status = "transfer_pending"
                 claim.verified_at = now
+                claim.challenge_ciphertext = None
                 claim.safe_failure_code = None
                 _history(db, claim, "transfer_requested", from_user_id=existing.user_id, to_user_id=claim.user_id)
                 return True
@@ -241,6 +303,11 @@ class CharacterOwnershipService:
             character.ownership_status = "verified"
             character.ownership_verified_at = now
             character.ownership_claim_id = claim.id
+            character.verification_method = "public_comment"
+            character.verified_by_user_id = claim.user_id
+            character.verification_reason = None
+            character.unlinked_at = None
+            character.unlinked_by_user_id = None
             db.add(character)
             db.flush()
             if legacy_user_id is not None:
@@ -249,10 +316,14 @@ class CharacterOwnershipService:
                     legacy_user.tibia_character_name = None
                     legacy_user.tibia_status = "legacy_ownership_replaced"
                 _history(db, claim, "legacy_link_replaced", from_user_id=legacy_user_id, to_user_id=claim.user_id)
-            _apply_primary(claim.user, character)
+            from app.services.account_identity_service import AccountIdentityService
+            if claim.user.primary_character_id is None:
+                AccountIdentityService.set_primary(db, claim.user, character, claim.user)
+            AccountIdentityService.discover_guild(db, character)
             claim.status = "verified"
             claim.verified_at = now
             claim.consumed_at = now
+            claim.challenge_ciphertext = None
             claim.safe_failure_code = None
             _history(db, claim, "ownership_verified", to_user_id=claim.user_id)
         return True
@@ -274,12 +345,20 @@ class CharacterOwnershipService:
         character.ownership_status = "verified"
         character.ownership_verified_at = datetime.now(UTC)
         character.ownership_claim_id = claim.id
+        character.verification_method = "admin_transfer" if actor.is_superuser else "owner_transfer"
+        character.verified_by_user_id = actor.id
+        character.verification_reason = admin_reason.strip() if admin_reason else None
         if previous_user and normalize_character_name(previous_user.tibia_character_name or "") == claim.normalized_name:
-            previous_user.tibia_character_name = None
+            from app.services.account_identity_service import AccountIdentityService
+            AccountIdentityService.sync_primary_cache(previous_user)
             previous_user.tibia_status = "ownership_transferred"
-        _apply_primary(claim.user, character)
+        from app.services.account_identity_service import AccountIdentityService
+        if claim.user.primary_character_id is None:
+            AccountIdentityService.set_primary(db, claim.user, character, actor)
+        AccountIdentityService.discover_guild(db, character)
         claim.status = "verified"
         claim.consumed_at = datetime.now(UTC)
+        claim.challenge_ciphertext = None
         _history(
             db, claim, "transfer_completed",
             from_user_id=previous_user_id, to_user_id=claim.user_id, actor_user_id=actor.id,
@@ -310,6 +389,7 @@ class CharacterOwnershipService:
             character.ownership_status = "verified"
         claim.status = "rejected"
         claim.consumed_at = datetime.now(UTC)
+        claim.challenge_ciphertext = None
         _history(
             db, claim, "claim_rejected",
             from_user_id=character.user_id if character else None,

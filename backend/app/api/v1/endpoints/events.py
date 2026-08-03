@@ -11,6 +11,8 @@ from datetime import UTC, datetime
 from app.db.database import get_db
 from app.models.events import Event, EventParticipant, PublicEventParticipant
 from app.models.user import User
+from app.models.user_character import UserCharacter
+from app.models.guild_management import GuildRosterCharacter
 from app.schemas.events import (
     Event as EventSchema,
     EventCreate,
@@ -24,6 +26,7 @@ from app.api.v1.endpoints.auth import get_current_user, get_current_admin_user
 from app.api.v1.endpoints.auth import get_current_manager_user
 from app.core.permissions import can_manage_guild, is_global_admin
 from app.services.guild_authorization_service import GuildAuthorizationService
+from app.services.character_ownership_service import normalize_character_name
 
 from app.services.tibia_api import get_active_guild_members, get_character_info, get_guild_info
 from app.services.public_code import generate_unique_code
@@ -72,7 +75,10 @@ def get_events(
         if requested_guild:
             query = query.filter(func.lower(Event.guild_name) == requested_guild.lower())
     else:
-        selected_guild = requested_guild or (current_user.guild_name or "").strip()
+        canonical_guilds = GuildAuthorizationService.guild_contexts(db, current_user)
+        selected_guild = requested_guild or (
+            canonical_guilds[0]["guild_name"] if len(canonical_guilds) == 1 else ""
+        )
         if not selected_guild:
             return []
         if not (
@@ -263,7 +269,12 @@ def join_event(
     if not _is_event_registration_open(event):
         raise HTTPException(status_code=400, detail="Event registration is closed")
 
-    if event.is_public is False and event.guild_name and (current_user.guild_name or "").strip().lower() != event.guild_name.strip().lower() and not current_user.is_superuser:
+    if (
+        event.is_public is False
+        and event.guild_name
+        and not current_user.is_superuser
+        and not GuildAuthorizationService.is_verified_member(db, current_user, event.guild_name)
+    ):
         raise HTTPException(status_code=403, detail="Private event restricted to guild members")
     
     if event.status != 'active':
@@ -438,8 +449,19 @@ async def add_manual_participant(
             assigned_number = (current_max + 1) if current_max else 1
         
         # Create participant
+        normalized_name = normalize_character_name(char_info['name'])
+        roster_character = db.query(GuildRosterCharacter).filter(
+            GuildRosterCharacter.normalized_character_name == normalized_name,
+            GuildRosterCharacter.is_current.is_(True),
+        ).first()
+        user_character = db.query(UserCharacter).filter(
+            UserCharacter.normalized_name == normalized_name,
+            UserCharacter.ownership_status == "verified",
+        ).first()
         participant = PublicEventParticipant(
             event_id=event_id,
+            guild_roster_character_id=roster_character.id if roster_character else None,
+            user_character_id=user_character.id if user_character else None,
             character_name=char_info['name'],
             character_level=char_info.get('level'),
             character_vocation=char_info.get('vocation'),
@@ -527,6 +549,21 @@ async def load_guild_participants(
             starting_number = (current_max + 1) if current_max else 1
         
         new_participant_count = 0
+        normalized_members = [normalize_character_name(member.get('name') or '') for member in active_members]
+        roster_by_name = {
+            row.normalized_character_name: row
+            for row in db.query(GuildRosterCharacter).filter(
+                GuildRosterCharacter.normalized_character_name.in_(normalized_members),
+                GuildRosterCharacter.is_current.is_(True),
+            ).all()
+        }
+        user_characters_by_name = {
+            row.normalized_name: row
+            for row in db.query(UserCharacter).filter(
+                UserCharacter.normalized_name.in_(normalized_members),
+                UserCharacter.ownership_status == "verified",
+            ).all()
+        }
         
         for member in active_members:
             # Check if already exists
@@ -546,6 +583,9 @@ async def load_guild_participants(
                 existing.character_world = member.get('world', event.guild_world)
                 existing.last_login = member.get('last_login')
                 existing.updated_at = datetime.now(UTC)
+                normalized_name = normalize_character_name(member['name'])
+                existing.guild_roster_character_id = roster_by_name.get(normalized_name).id if roster_by_name.get(normalized_name) else None
+                existing.user_character_id = user_characters_by_name.get(normalized_name).id if user_characters_by_name.get(normalized_name) else None
                 updated_count += 1
             else:
                 # Check slots
@@ -565,6 +605,8 @@ async def load_guild_participants(
                 # Create new participant
                 participant = PublicEventParticipant(
                     event_id=event_id,
+                    guild_roster_character_id=(roster_by_name.get(normalize_character_name(member['name'])).id if roster_by_name.get(normalize_character_name(member['name'])) else None),
+                    user_character_id=(user_characters_by_name.get(normalize_character_name(member['name'])).id if user_characters_by_name.get(normalize_character_name(member['name'])) else None),
                     character_name=member['name'],
                     character_level=member.get('level'),
                     character_vocation=member.get('vocation'),

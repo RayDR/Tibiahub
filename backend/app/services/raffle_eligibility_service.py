@@ -210,6 +210,7 @@ class RaffleEligibilityService:
             exclusion_code = None
             character_name = None
             member_data = None
+            selected_character = None
             if user.id in seen:
                 exclusion_code = "duplicate_account"
             elif not user.is_active:
@@ -217,17 +218,18 @@ class RaffleEligibilityService:
             elif user.username.casefold().startswith("guest_"):
                 exclusion_code = "guest_account"
             else:
-                names = [
-                    character.character_name for character in user.characters
+                characters = [
+                    character for character in user.characters
                     if character.character_name and character.ownership_status == "verified"
                 ]
-                for name in names:
-                    current = member_lookup.get(name.strip().casefold())
+                for candidate in characters:
+                    current = member_lookup.get(candidate.character_name.strip().casefold())
                     if current:
-                        character_name = current.get("name") or name
+                        selected_character = candidate
+                        character_name = current.get("name") or candidate.character_name
                         member_data = current
                         break
-                if not names:
+                if not characters:
                     exclusion_code = "no_linked_character"
                 elif not character_name:
                     exclusion_code = "not_guild_member"
@@ -251,7 +253,7 @@ class RaffleEligibilityService:
                 "normalized_character_name": (character_name or f"user-{user.id}").strip().casefold(),
                 "known_account_identity_key": f"user:{user.id}",
                 "guild_name": raffle.guild_name if character_name else None,
-                "world_name": user.world_name,
+                "world_name": selected_character.world_name if selected_character else None,
                 "guild_rank": (member_data or {}).get("rank") or (member_data or {}).get("title") or (member_data or {}).get("position"),
                 "weight_snapshot": 1,
                 "last_activity_at": as_utc(user.last_login_at),

@@ -1,6 +1,7 @@
 import { useState, useEffect } from 'react';
 import { guildManagementApi } from '../../services/guildManagement';
 import { Settings as SettingsIcon, Save, RefreshCw, CheckCircle, XCircle } from 'lucide-react';
+import EmailDiagnosticsPanel from '../../components/admin/EmailDiagnosticsPanel';
 
 interface SystemSettings {
     tibia_validation_enabled: boolean;
@@ -129,6 +130,7 @@ export default function AdminSettings() {
             )}
 
             <div className="space-y-6">
+                <EmailDiagnosticsPanel />
                 {/* Tibia Validation Settings */}
                 <div className="bg-surface-base/50 border border-line rounded-lg p-6">
                     <h2 className="text-xl font-semibold text-content-primary mb-4">Tibia Character Validation</h2>
