@@ -14,6 +14,7 @@ ALLOWED_SERVICES = {
     "tibiahub-raffle-scheduler",
     "tibiahub-knowledge-worker",
     "tibiahub-email-worker",
+    "tibiahub-sync-worker",
 }
 
 
@@ -42,7 +43,7 @@ def test_deploy_requires_lock_clean_exact_develop_and_expected_head():
         "git status --porcelain --untracked-files=all",
         "refs/remotes/origin/develop",
         'target_commit" == "$remote_commit',
-        'EXPECTED_REVISION="account_identity_20260803"',
+        'EXPECTED_REVISION="maintenance_sync_20260804"',
         "migration_heads",
         "require_local_tibiahub_target",
         "TIBIAHUB_DATABASE_NAME=tibiahub",
@@ -74,6 +75,7 @@ def test_snapshot_frontend_pm2_health_and_rollback_guards_are_present():
         "email_worker_heartbeats",
         "knowledge_worker_heartbeats",
         "raffle_scheduler_state",
+        "sync_worker_heartbeats",
     ):
         assert required in deploy
     for required in (
