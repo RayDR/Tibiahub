@@ -39,6 +39,10 @@ class UserLogin(BaseModel):
     password: str
 
 class UserResponse(UserBase):
+    # Legacy accounts may contain internally scoped addresses (for example,
+    # ``admin@tibiahub.local``). Keep strict EmailStr validation on UserCreate,
+    # but do not make authenticated reads fail while those records are remediated.
+    email: Optional[str] = None
     id: int
     avatar_url: Optional[str] = None
     is_active: bool

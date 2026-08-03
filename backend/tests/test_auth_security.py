@@ -15,6 +15,25 @@ def _token_from_link(link: str) -> str:
     return parse_qs(urlparse(link).query)["token"][0]
 
 
+def test_auth_me_serializes_legacy_internal_email_without_weakening_registration(client, db):
+    from app.core.security import create_access_token
+
+    user = make_user(db, username="legacy-email-admin", is_superuser=True)
+    user.email = "admin@tibiahub.local"
+    db.commit()
+    response = client.get(
+        "/api/v1/auth/me",
+        headers={"Authorization": f"Bearer {create_access_token(user.username)}"},
+    )
+    assert response.status_code == 200
+    assert response.json()["email"] == "admin@tibiahub.local"
+    assert client.post("/api/v1/auth/register", json={
+        "username": "invalid-new-email",
+        "email": "new@tibiahub.local",
+        "password": "valid password 2026",
+    }).status_code == 422
+
+
 def test_registration_does_not_claim_character_and_verification_is_single_use(client, db, monkeypatch):
     sent: list[dict] = []
     monkeypatch.setattr(
