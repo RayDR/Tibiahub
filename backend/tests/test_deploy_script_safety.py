@@ -45,6 +45,7 @@ def test_deploy_requires_lock_clean_exact_develop_and_expected_head():
         "migration_heads",
         "require_local_tibiahub_target",
         "TIBIAHUB_DATABASE_NAME=tibiahub",
+        "(load_postgres_admin_environment; require_postgres_admin_access)",
     ):
         assert required in script
     assert "master" not in script.lower()
@@ -93,7 +94,8 @@ def test_pm2_operations_are_bounded_to_the_four_tibiahub_services():
     assert declared == ALLOWED_SERVICES
     for forbidden in ("pm2 restart all", "pm2 stop all", "pm2 delete all", "pm2 kill"):
         assert forbidden not in combined
-    assert 'pm2 startOrReload "$ROOT/ecosystem.config.js" --only "$service"' in combined
+    assert combined.count("env -i") == 2
+    assert 'pm2 startOrReload "$ROOT/ecosystem.config.js" --only "$1"' in combined
 
 
 def test_scripts_do_not_embed_or_print_database_credentials():

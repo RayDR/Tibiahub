@@ -156,10 +156,15 @@ declare -A previous_status=()
 while IFS=$'\t' read -r service status; do
   previous_status["$service"]="$status"
 done <"$pm2_state"
+pm2_start_service() {
+  env -i \
+    HOME="$HOME" USER="${USER:-}" PATH="$PATH" PM2_HOME="${PM2_HOME:-$HOME/.pm2}" \
+    pm2 startOrReload "$ROOT/ecosystem.config.js" --only "$1" --update-env
+}
 for service in "${SERVICES[@]}"; do
   case "${previous_status[$service]:-absent}" in
     online)
-      pm2 startOrReload "$ROOT/ecosystem.config.js" --only "$service" --update-env
+      pm2_start_service "$service"
       ;;
     absent)
       if pm2 describe "$service" >/dev/null 2>&1; then pm2 delete "$service"; fi

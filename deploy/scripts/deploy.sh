@@ -107,6 +107,7 @@ mapfile -t migration_heads < <(
 
 load_tibiahub_environment
 TIBIAHUB_DATABASE_NAME=tibiahub require_local_tibiahub_target
+(load_postgres_admin_environment; require_postgres_admin_access)
 
 state_file="$DEPLOY_ROOT/current.env"
 state_previous_commit=""
@@ -256,9 +257,12 @@ fi
 rm -rf -- "$ROOT/frontend/dist"
 mv "$staged_dist" "$ROOT/frontend/dist"
 
-for service in "${SERVICES[@]}"; do
-  pm2 startOrReload "$ROOT/ecosystem.config.js" --only "$service" --update-env
-done
+pm2_start_service() {
+  env -i \
+    HOME="$HOME" USER="${USER:-}" PATH="$PATH" PM2_HOME="${PM2_HOME:-$HOME/.pm2}" \
+    pm2 startOrReload "$ROOT/ecosystem.config.js" --only "$1" --update-env
+}
+for service in "${SERVICES[@]}"; do pm2_start_service "$service"; done
 
 wait_for_url() {
   local url="$1"
