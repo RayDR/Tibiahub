@@ -8,8 +8,10 @@ from zoneinfo import ZoneInfo, ZoneInfoNotFoundError
 from sqlalchemy import func
 from sqlalchemy.orm import Session, selectinload
 
-from app.models.raffle import Raffle, RaffleEligibilityEntry, RaffleEligibilitySnapshot
+from app.models.guild_management import GuildRosterCharacter
+from app.models.raffle import Raffle, RaffleEligibilityEntry, RaffleEligibilitySnapshot, RaffleParticipant
 from app.models.user import User
+from app.services.guild_roster_service import normalize_guild_identity
 from app.services.tibia_api import get_guild_info
 
 
@@ -61,18 +63,98 @@ def compute_eligibility_cutoff(scheduled_run_at: datetime, timezone_name: str, e
 def _snapshot_hash(entries: list[dict], *, raffle_id: int, cutoff_at: datetime) -> str:
     canonical_entries = [{
         "user_id": item["user_id"],
+        "participant_id": item.get("participant_id"),
+        "guild_roster_character_id": item.get("guild_roster_character_id"),
         "character_name": item.get("character_name"),
+        "normalized_character_name": item.get("normalized_character_name"),
+        "known_account_identity_key": item.get("known_account_identity_key"),
         "guild_name": item.get("guild_name"),
         "guild_rank": item.get("guild_rank"),
         "last_activity_at": as_utc(item.get("last_activity_at")).isoformat() if item.get("last_activity_at") else None,
         "is_eligible": item["is_eligible"],
         "exclusion_code": item.get("exclusion_code"),
-    } for item in sorted(entries, key=lambda row: row["user_id"])]
+        "weight_snapshot": str(item.get("weight_snapshot", 1)),
+    } for item in sorted(entries, key=lambda row: (row.get("normalized_character_name") or "", row.get("user_id") or 0))]
     payload = {"raffle_id": raffle_id, "cutoff_at": as_utc(cutoff_at).isoformat(), "entries": canonical_entries}
     return hashlib.sha256(json.dumps(payload, sort_keys=True, separators=(",", ":")).encode()).hexdigest()
 
 
 class RaffleEligibilityService:
+    @staticmethod
+    def _preview_selected_participants(db: Session, raffle: Raffle, cutoff_at: datetime) -> list[dict]:
+        active = sorted(
+            db.query(RaffleParticipant).options(
+                selectinload(RaffleParticipant.user),
+                selectinload(RaffleParticipant.guild_roster_character),
+            ).filter(
+                RaffleParticipant.raffle_id == raffle.id,
+                RaffleParticipant.is_deleted.is_(False),
+            ).all(),
+            key=lambda row: row.normalized_character_name,
+        )
+        linked_user_ids = {participant.user_id for participant in active if participant.user_id is not None}
+        account_activity: dict[int, datetime] = {}
+        if linked_user_ids:
+            rows = db.query(GuildRosterCharacter).filter(
+                GuildRosterCharacter.normalized_guild_name == normalize_guild_identity(raffle.guild_name),
+                GuildRosterCharacter.is_current.is_(True),
+                GuildRosterCharacter.linked_user_id.in_(linked_user_ids),
+                GuildRosterCharacter.last_activity_at.isnot(None),
+            ).all()
+            for row in rows:
+                activity = as_utc(row.last_activity_at)
+                if activity and (row.linked_user_id not in account_activity or activity > account_activity[row.linked_user_id]):
+                    account_activity[row.linked_user_id] = activity
+        entries = []
+        seen_accounts: set[str] = set()
+        for participant in active:
+            activity = account_activity.get(participant.user_id) if participant.user_id is not None else None
+            activity = activity or (
+                participant.guild_roster_character.last_activity_at
+                if participant.guild_roster_character else participant.user.last_login_at if participant.user else None
+            )
+            exclusion_code = None
+            if not participant.is_eligible:
+                exclusion_code = "test_override_excluded"
+            elif participant.user is not None and not participant.user.is_active:
+                exclusion_code = "inactive_account"
+            elif participant.user is not None and participant.user.username.casefold().startswith("guest_"):
+                exclusion_code = "guest_account"
+            elif activity is None:
+                exclusion_code = "missing_activity"
+            elif as_utc(activity) < cutoff_at:
+                exclusion_code = "stale_activity"
+            elif (
+                raffle.unique_account_participation
+                and participant.known_account_identity_key
+                and participant.known_account_identity_key in seen_accounts
+            ):
+                exclusion_code = "duplicate_account"
+            if participant.eligibility_override is True and exclusion_code in {"missing_activity", "stale_activity"}:
+                exclusion_code = None
+            elif participant.eligibility_override is False and exclusion_code is None:
+                exclusion_code = "test_override_excluded"
+            if participant.known_account_identity_key:
+                seen_accounts.add(participant.known_account_identity_key)
+            entries.append({
+                "participant_id": participant.id,
+                "user_id": participant.user_id,
+                "guild_roster_character_id": participant.guild_roster_character_id,
+                "character_name": participant.character_name,
+                "normalized_character_name": participant.normalized_character_name,
+                "known_account_identity_key": participant.known_account_identity_key,
+                "guild_name": participant.guild_name_snapshot or raffle.guild_name,
+                "world_name": participant.world_name_snapshot,
+                "guild_rank": participant.guild_rank,
+                "weight_snapshot": 1 if raffle.weighting_mode == "equal" else participant.weight,
+                "last_activity_at": as_utc(activity),
+                "is_eligible": exclusion_code is None,
+                "exclusion_code": exclusion_code,
+                "exclusion_summary": participant.eligibility_override_reason if exclusion_code == "test_override_excluded" else EXCLUSION_SUMMARIES.get(exclusion_code),
+                "source_data": {"participant_source": participant.source, "account_identity_known": participant.known_account_identity_key is not None},
+            })
+        return entries
+
     @staticmethod
     async def preview(db: Session, raffle: Raffle) -> dict:
         if raffle.purpose not in {"test", "real"}:
@@ -86,6 +168,17 @@ class RaffleEligibilityService:
         cutoff_at = raffle.eligibility_cutoff_at or compute_eligibility_cutoff(
             effective_draw_at, raffle.timezone_name, raffle.eligibility_days,
         )
+        selected_entries = RaffleEligibilityService._preview_selected_participants(db, raffle, cutoff_at)
+        if selected_entries:
+            eligible_count = sum(1 for entry in selected_entries if entry["is_eligible"])
+            return {
+                "raffle_id": raffle.id, "cutoff_at": cutoff_at,
+                "timezone_name": raffle.timezone_name, "eligibility_days": raffle.eligibility_days,
+                "candidate_count": len(selected_entries), "eligible_count": eligible_count,
+                "excluded_count": len(selected_entries) - eligible_count,
+                "snapshot_hash": _snapshot_hash(selected_entries, raffle_id=raffle.id, cutoff_at=cutoff_at),
+                "entries": selected_entries, "persisted": False, "snapshot_id": None,
+            }
         try:
             guild_info = await get_guild_info(raffle.guild_name)
         except Exception as exc:
@@ -151,10 +244,16 @@ class RaffleEligibilityService:
 
             seen.add(user.id)
             entries.append({
+                "participant_id": None,
                 "user_id": user.id,
+                "guild_roster_character_id": None,
                 "character_name": character_name,
+                "normalized_character_name": (character_name or f"user-{user.id}").strip().casefold(),
+                "known_account_identity_key": f"user:{user.id}",
                 "guild_name": raffle.guild_name if character_name else None,
+                "world_name": user.world_name,
                 "guild_rank": (member_data or {}).get("rank") or (member_data or {}).get("title") or (member_data or {}).get("position"),
+                "weight_snapshot": 1,
                 "last_activity_at": as_utc(user.last_login_at),
                 "is_eligible": exclusion_code is None,
                 "exclusion_code": exclusion_code,
@@ -185,7 +284,7 @@ class RaffleEligibilityService:
     async def freeze(db: Session, raffle: Raffle, actor: User) -> RaffleEligibilitySnapshot:
         preview = await RaffleEligibilityService.preview(db, raffle)
         if preview["eligible_count"] < 2:
-            raise RaffleEligibilityError("insufficient_eligible_accounts", "At least two eligible accounts are required")
+            raise RaffleEligibilityError("insufficient_eligible_participants", "At least two eligible participants are required")
         next_number = (db.query(func.max(RaffleEligibilitySnapshot.snapshot_number))
                        .filter(RaffleEligibilitySnapshot.raffle_id == raffle.id).scalar() or 0) + 1
         snapshot = RaffleEligibilitySnapshot(
@@ -194,7 +293,7 @@ class RaffleEligibilityService:
             cutoff_at=preview["cutoff_at"],
             timezone_name=preview["timezone_name"],
             eligibility_days=preview["eligibility_days"],
-            source="tibiadata_guild_and_user_last_login_at",
+            source="persisted_raffle_participants",
             candidate_count=preview["candidate_count"],
             eligible_count=preview["eligible_count"],
             excluded_count=preview["excluded_count"],

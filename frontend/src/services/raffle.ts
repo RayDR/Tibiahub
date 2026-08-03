@@ -15,9 +15,12 @@ export interface RafflePrizeInput {
 
 export interface RaffleParticipant {
   id: number;
-  user_id: number;
-  username: string;
+  user_id?: number;
+  guild_roster_character_id?: number;
+  username?: string;
   character_name: string;
+  normalized_character_name: string;
+  account_identity_known: boolean;
   guild_rank?: string;
   weight: number;
   weight_multiplier: number;
@@ -92,6 +95,15 @@ export interface Raffle {
   last_error_summary?: string;
   retry_count: number;
   next_retry_at?: string;
+  unique_account_participation: boolean;
+  weighting_mode: 'equal' | 'weighted';
+}
+
+export interface RaffleCandidate {
+  roster_character_id: number; character_name: string; rank?: string; level?: number;
+  vocation?: string; last_activity_at: string; linked_user_id?: number; linked_username?: string;
+  account_identity_key?: string; account_identity_known: boolean; already_participating: boolean;
+  selectable: boolean; reason?: string;
 }
 
 export interface EligibilityPreview {
@@ -202,7 +214,7 @@ export const raffleApi = {
     return response.data;
   },
 
-  async update(raffleId: number, payload: Partial<{ title: string; description: string; guild_name: string; access_mode: RaffleAccessMode; show_participants: boolean; visibility: string; registration_enabled: boolean; run_mode: string; scheduled_run_at: string; timezone_name: string; eligibility_days: number; archive_after_days: number; status: RaffleStatus }>): Promise<Raffle> {
+  async update(raffleId: number, payload: Partial<{ title: string; description: string; guild_name: string; access_mode: RaffleAccessMode; show_participants: boolean; visibility: string; registration_enabled: boolean; run_mode: string; scheduled_run_at: string; timezone_name: string; eligibility_days: number; archive_after_days: number; status: RaffleStatus; unique_account_participation: boolean; weighting_mode: 'equal' | 'weighted' }>): Promise<Raffle> {
     const response = await api.put(`/raffles/${raffleId}`, payload);
     return response.data;
   },
@@ -212,7 +224,7 @@ export const raffleApi = {
     return response.data;
   },
 
-  async create(payload: { title: string; description?: string; guild_name: string; scope_type?: RaffleScope; world_name?: string; access_mode?: RaffleAccessMode; show_participants?: boolean; prizes: RafflePrizeInput[]; purpose?: 'test' | 'real' | 'legacy'; run_mode?: 'manual' | 'automatic'; scheduled_run_at?: string; timezone_name?: string; eligibility_days?: number }): Promise<Raffle> {
+  async create(payload: { title: string; description?: string; guild_name: string; scope_type?: RaffleScope; world_name?: string; access_mode?: RaffleAccessMode; show_participants?: boolean; prizes: RafflePrizeInput[]; purpose?: 'test' | 'real' | 'legacy'; run_mode?: 'manual' | 'automatic'; scheduled_run_at?: string; timezone_name?: string; eligibility_days?: number; unique_account_participation?: boolean; weighting_mode?: 'equal' | 'weighted' }): Promise<Raffle> {
     const response = await api.post('/raffles/', payload);
     return response.data;
   },
@@ -232,9 +244,31 @@ export const raffleApi = {
     return response.data;
   },
 
-  async updateWeightMultiplier(raffleId: number, participantId: number, weightMultiplier: number): Promise<Raffle> {
-    const response = await api.patch(`/raffles/${raffleId}/participants/${participantId}/weight`, { weight_multiplier: weightMultiplier });
+  async updateWeight(raffleId: number, participantId: number, weight: number): Promise<Raffle> {
+    const response = await api.patch(`/raffles/${raffleId}/participants/${participantId}/weight`, { weight });
     return response.data;
+  },
+
+  async candidates(raffleId: number, days: 7 | 15 | 30, search?: string): Promise<RaffleCandidate[]> {
+    return (await api.get(`/raffles/${raffleId}/participant-candidates`, { params: { days, search } })).data;
+  },
+  async refreshGuildRoster(raffleId: number): Promise<Record<string, number | string>> {
+    return (await api.post(`/raffles/${raffleId}/guild-roster/sync`)).data;
+  },
+  async addRosterParticipants(raffleId: number, rosterCharacterIds: number[], replaceExisting = false, addAllEligible = false, activityDays: 7 | 15 | 30 = 30): Promise<{ added: number; restored: number; removed: number; unchanged: number }> {
+    return (await api.post(`/raffles/${raffleId}/participants/bulk`, { roster_character_ids: rosterCharacterIds, replace_existing: replaceExisting, add_all_eligible: addAllEligible, activity_days: activityDays })).data;
+  },
+  async removeParticipants(raffleId: number, participantIds: number[], reason?: string): Promise<{ removed: number }> {
+    return (await api.post(`/raffles/${raffleId}/participants/remove`, { participant_ids: participantIds, reason })).data;
+  },
+  async updateParticipationSettings(raffleId: number, payload: { unique_account_participation?: boolean; weighting_mode?: 'equal' | 'weighted' }): Promise<Raffle> {
+    return (await api.patch(`/raffles/${raffleId}/participation-settings`, payload)).data;
+  },
+  async manageableGuildContext(): Promise<{ guilds: string[]; guild_worlds: Record<string, string | null> }> {
+    return (await api.get('/guild-management/manageable-guilds', { params: { capability: 'raffles.manage' } })).data;
+  },
+  async manageableGuilds(): Promise<string[]> {
+    return (await api.get('/guild-management/manageable-guilds', { params: { capability: 'raffles.manage' } })).data.guilds;
   },
 
   async draw(raffleId: number, dryRun: boolean = false): Promise<RaffleExecution> {
@@ -282,7 +316,7 @@ export const raffleApi = {
     return response.data;
   },
 
-  async permanentDelete(raffleId: number, reason: string, confirmation: string): Promise<Raffle> {
+  async permanentDelete(raffleId: number, reason: string, confirmation: string): Promise<{ id: number; deleted: true; audit_preserved: boolean }> {
     const response = await api.delete(`/raffles/${raffleId}/permanent`, { params: { reason, confirmation } });
     return response.data;
   },

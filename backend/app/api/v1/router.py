@@ -4,7 +4,7 @@ API v1 Router - Combines all API endpoints
 from fastapi import APIRouter, Depends
 
 from app.api.v1 import creatures, hunt_zones, admin as admin_old, recommendations, items, quests, knowledge_graph, npcs_locations, spatial
-from app.api.v1.endpoints import auth, guild, profile, admin, hunts, events, catalog, sync, password_reset, email_verification, character_ownership, tibia, sync_admin, raffles, health, me_activity, notifications, workspaces, leadership, knowledge_admin, maintenance, guild_permissions
+from app.api.v1.endpoints import auth, guild, profile, admin, hunts, events, catalog, sync, password_reset, email_verification, character_ownership, tibia, sync_admin, raffles, raffle_participants, health, me_activity, notifications, workspaces, leadership, knowledge_admin, maintenance, guild_permissions
 
 api_router = APIRouter()
 
@@ -22,6 +22,7 @@ api_router.include_router(guild_permissions.router, prefix="/guild-management", 
 api_router.include_router(hunts.router, prefix="/hunts", tags=["Hunt Catalog"])
 api_router.include_router(catalog.router, prefix="/catalog", tags=["Catalog"])
 api_router.include_router(events.router, prefix="/events", tags=["Events & Raffles"])
+api_router.include_router(raffle_participants.router, prefix="/raffles", tags=["Raffle Participants"])
 api_router.include_router(raffles.router, prefix="/raffles", tags=["Guild Raffles"])
 api_router.include_router(notifications.router)
 api_router.include_router(workspaces.router, prefix="/admin", tags=["Admin Workspaces"])

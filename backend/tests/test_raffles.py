@@ -137,11 +137,13 @@ def test_add_participant(db: Session):
     assert fetched[0].character_name == "Alice"
 
 
-def test_duplicate_account_blocked_by_db_constraint(db: Session):
+def test_duplicate_known_account_blocked_by_db_constraint(db: Session):
     from sqlalchemy.exc import IntegrityError
     user = make_user(db, username="bob")
     raffle = make_raffle(db, creator_id=user.id)
-    make_participant(db, raffle_id=raffle.id, user_id=user.id, character_name="Bob")
+    first = make_participant(db, raffle_id=raffle.id, user_id=user.id, character_name="Bob")
+    first.known_account_identity_key = f"user:{user.id}"
+    first.enforced_account_identity_key = f"user:{user.id}"
     db.flush()
     # Second participant with same user_id in same raffle must fail
     from app.models.raffle import RaffleParticipant
@@ -149,6 +151,8 @@ def test_duplicate_account_blocked_by_db_constraint(db: Session):
         raffle_id=raffle.id,
         user_id=user.id,
         character_name="BobAlt",
+        known_account_identity_key=f"user:{user.id}",
+        enforced_account_identity_key=f"user:{user.id}",
         weight=1.0,
         weight_multiplier=1.0,
         is_eligible=True,
@@ -164,8 +168,8 @@ def test_duplicate_account_blocked_by_db_constraint(db: Session):
 
 def test_vice_leader_weight():
     from app.services.raffle_service import participant_weight_from_rank
-    assert participant_weight_from_rank("Vice Leader") == pytest.approx(1.1)
-    assert participant_weight_from_rank("vice leader") == pytest.approx(1.1)
+    assert participant_weight_from_rank("Vice Leader") == pytest.approx(1.0)
+    assert participant_weight_from_rank("vice leader") == pytest.approx(1.0)
     assert participant_weight_from_rank("Member") == pytest.approx(1.0)
     assert participant_weight_from_rank(None) == pytest.approx(1.0)
 

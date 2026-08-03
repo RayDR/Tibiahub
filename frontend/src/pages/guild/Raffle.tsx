@@ -27,7 +27,7 @@ import { useConfirmation } from "../../context/ConfirmationContext";
 import { guildApi } from "../../services/guild";
 import {
   Raffle,
-  RaffleAccessMode,
+  RaffleCandidate,
   RaffleSimulation,
   RaffleStatus,
   raffleApi,
@@ -38,6 +38,18 @@ import {
 // ---------------------------------------------------------------------------
 
 type Tab = "overview" | "participants" | "prizes" | "winners" | "admin";
+
+function getErrorMessage(error: unknown): string | undefined {
+  if (!error || typeof error !== "object") return undefined;
+  const candidate = error as { message?: unknown; response?: { data?: { detail?: unknown } } };
+  const detail = candidate.response?.data?.detail;
+  if (typeof detail === "string") return detail;
+  if (detail && typeof detail === "object" && "message" in detail) {
+    const message = (detail as { message?: unknown }).message;
+    if (typeof message === "string") return message;
+  }
+  return typeof candidate.message === "string" ? candidate.message : undefined;
+}
 
 const STATUS_COLORS: Record<string, string> = {
   draft: "bg-surface-hover/15 text-content-secondary border-line/30",
@@ -148,14 +160,12 @@ export default function RafflePage() {
     title: string;
     description: string;
     guild_name: string;
-    access_mode: RaffleAccessMode;
     show_participants: boolean;
     prizes: Array<{ name: string; reward: string }>;
   }>({
     title: "",
     description: "",
     guild_name: "",
-    access_mode: "guild_only" as const,
     show_participants: true,
     prizes: [
       { name: "", reward: "" },
@@ -167,19 +177,29 @@ export default function RafflePage() {
   const [rerunReason, setRerunReason] = useState("");
   const [manualCharacter, setManualCharacter] = useState("");
   const [editMode, setEditMode] = useState(false);
+  const [manageableGuilds, setManageableGuilds] = useState<string[]>([]);
+  const [manageableGuildWorlds, setManageableGuildWorlds] = useState<Record<string, string | null>>({});
+  const [candidates, setCandidates] = useState<RaffleCandidate[]>([]);
+  const [activityDays, setActivityDays] = useState<7 | 15 | 30>(30);
+  const [candidateSearch, setCandidateSearch] = useState("");
+  const [selectedCandidates, setSelectedCandidates] = useState<number[]>([]);
+  const [selectedParticipants, setSelectedParticipants] = useState<number[]>([]);
+  const [replaceParticipants, setReplaceParticipants] = useState(false);
 
-  const isLeader = [
-    "leader",
-    "vice leader",
-    "guild leader",
-    "alpha warbringer",
-    "bloodhowl marshal",
-  ].includes((user?.guild_rank || "").toLowerCase());
-  const canManage = Boolean(user?.is_superuser || isLeader);
+  const canManage = Boolean(user?.is_superuser || manageableGuilds.length);
 
   useEffect(() => {
     const requested = Number(searchParams.get("raffle") || "");
     void loadRaffles(Number.isFinite(requested) && requested > 0 ? requested : undefined);
+  }, []);
+  useEffect(() => {
+    void raffleApi.manageableGuildContext().then(context => {
+      setManageableGuilds(context.guilds);
+      setManageableGuildWorlds(context.guild_worlds);
+    }).catch(() => {
+      setManageableGuilds([]);
+      setManageableGuildWorlds({});
+    });
   }, []);
   useEffect(() => {
     void (async () => {
@@ -192,12 +212,21 @@ export default function RafflePage() {
     })();
   }, []);
   useEffect(() => {
-    if (!createForm.guild_name && user?.guild_name) {
-      setCreateForm((c) => ({ ...c, guild_name: user.guild_name || "" }));
+    if (!createForm.guild_name && (manageableGuilds[0] || user?.guild_name)) {
+      setCreateForm((c) => ({ ...c, guild_name: manageableGuilds[0] || user?.guild_name || "" }));
     }
-  }, [user?.guild_name, createForm.guild_name]);
+  }, [user?.guild_name, createForm.guild_name, manageableGuilds]);
 
   const selectedRaffle = raffles.find((r) => r.id === selectedRaffleId) ?? null;
+
+  async function loadCandidates(raffleId: number, days = activityDays, search = candidateSearch) {
+    try { setCandidates(await raffleApi.candidates(raffleId, days, search)); }
+    catch { setCandidates([]); }
+  }
+
+  useEffect(() => {
+    if (selectedRaffleId && activeTab === "participants") void loadCandidates(selectedRaffleId);
+  }, [selectedRaffleId, activeTab, activityDays]);
 
   async function loadRaffles(targetId?: number) {
     setLoading(true);
@@ -209,8 +238,8 @@ export default function RafflePage() {
       } else {
         setSelectedRaffleId(null);
       }
-    } catch (err: any) {
-      toast.error(err?.message || "Failed to load raffles");
+    } catch (err: unknown) {
+      toast.error(getErrorMessage(err) || "Failed to load raffles");
     } finally {
       setLoading(false);
     }
@@ -230,7 +259,10 @@ export default function RafflePage() {
         title: createForm.title,
         description: createForm.description || undefined,
         guild_name: createForm.guild_name,
-        access_mode: createForm.access_mode,
+        scope_type: "guild",
+        access_mode: "guild_only",
+        purpose: "real",
+        run_mode: "manual",
         show_participants: createForm.show_participants,
         prizes: createForm.prizes.filter((p) => p.name && p.reward),
       });
@@ -239,7 +271,6 @@ export default function RafflePage() {
         title: "",
         description: "",
         guild_name: "",
-        access_mode: "guild_only",
         show_participants: true,
         prizes: [
           { name: "", reward: "" },
@@ -248,9 +279,9 @@ export default function RafflePage() {
         ],
       });
       await loadRaffles(raffle.id);
-    } catch (err: any) {
+    } catch (err: unknown) {
       toast.error(
-        err?.response?.data?.detail || err?.message || t("raffle.create.error"),
+        getErrorMessage(err) || t("raffle.create.error"),
       );
     } finally {
       setBusyAction(null);
@@ -270,11 +301,9 @@ export default function RafflePage() {
           count: updated.participants.length,
         }),
       );
-    } catch (err: any) {
+    } catch (err: unknown) {
       toast.error(
-        err?.response?.data?.detail ||
-          err?.message ||
-          t("raffle.participants.syncError"),
+        getErrorMessage(err) || t("raffle.participants.syncError"),
       );
     } finally {
       setBusyAction(null);
@@ -292,9 +321,9 @@ export default function RafflePage() {
         curr.map((r) => (r.id === updated.id ? updated : r)),
       );
       toast.success(t("raffle.prizes.success"));
-    } catch (err: any) {
+    } catch (err: unknown) {
       toast.error(
-        err?.response?.data?.detail || err?.message || t("raffle.prizes.error"),
+        getErrorMessage(err) || t("raffle.prizes.error"),
       );
     } finally {
       setBusyAction(null);
@@ -309,9 +338,9 @@ export default function RafflePage() {
       await refreshSelectedRaffle(selectedRaffle.id);
       setSimulation(null);
       toast.success(t("raffle.draw.success"));
-    } catch (err: any) {
+    } catch (err: unknown) {
       toast.error(
-        err?.response?.data?.detail || err?.message || t("raffle.draw.error"),
+        getErrorMessage(err) || t("raffle.draw.error"),
       );
     } finally {
       setBusyAction(null);
@@ -326,11 +355,9 @@ export default function RafflePage() {
       setSimulation(result);
       setActiveTab("winners");
       toast.success(t("raffle.simulation.title"));
-    } catch (err: any) {
+    } catch (err: unknown) {
       toast.error(
-        err?.response?.data?.detail ||
-          err?.message ||
-          t("raffle.simulation.error"),
+        getErrorMessage(err) || t("raffle.simulation.error"),
       );
     } finally {
       setBusyAction(null);
@@ -346,9 +373,9 @@ export default function RafflePage() {
       await refreshSelectedRaffle(selectedRaffle.id);
       setSimulation(null);
       toast.success(t("raffle.rerun.success"));
-    } catch (err: any) {
+    } catch (err: unknown) {
       toast.error(
-        err?.response?.data?.detail || err?.message || t("raffle.rerun.error"),
+        getErrorMessage(err) || t("raffle.rerun.error"),
       );
     } finally {
       setBusyAction(null);
@@ -374,11 +401,9 @@ export default function RafflePage() {
       );
       setEditMode(false);
       toast.success(t("raffle.edit.saveSuccess"));
-    } catch (err: any) {
+    } catch (err: unknown) {
       toast.error(
-        err?.response?.data?.detail ||
-          err?.message ||
-          t("raffle.edit.saveError"),
+        getErrorMessage(err) || t("raffle.edit.saveError"),
       );
     } finally {
       setBusyAction(null);
@@ -409,9 +434,9 @@ export default function RafflePage() {
       await raffleApi.softDelete(selectedRaffle.id, "deleted by manager");
       await loadRaffles();
       toast.success(t("raffle.delete.success"));
-    } catch (err: any) {
+    } catch (err: unknown) {
       toast.error(
-        err?.response?.data?.detail || err?.message || t("raffle.delete.error"),
+        getErrorMessage(err) || t("raffle.delete.error"),
       );
     } finally {
       setBusyAction(null);
@@ -431,11 +456,9 @@ export default function RafflePage() {
       );
       setManualCharacter("");
       toast.success(t("raffle.participants.addSuccess"));
-    } catch (err: any) {
+    } catch (err: unknown) {
       toast.error(
-        err?.response?.data?.detail ||
-          err?.message ||
-          t("raffle.participants.addError"),
+        getErrorMessage(err) || t("raffle.participants.addError"),
       );
     } finally {
       setBusyAction(null);
@@ -446,7 +469,7 @@ export default function RafflePage() {
     if (!selectedRaffle) return;
     setBusyAction(`weight-${participantId}`);
     try {
-      const updated = await raffleApi.updateWeightMultiplier(
+      const updated = await raffleApi.updateWeight(
         selectedRaffle.id,
         participantId,
         value,
@@ -454,15 +477,63 @@ export default function RafflePage() {
       setRaffles((curr) =>
         curr.map((r) => (r.id === updated.id ? updated : r)),
       );
-    } catch (err: any) {
+    } catch (err: unknown) {
       toast.error(
-        err?.response?.data?.detail ||
-          err?.message ||
-          t("raffle.participants.weightError"),
+        getErrorMessage(err) || t("raffle.participants.weightError"),
       );
     } finally {
       setBusyAction(null);
     }
+  }
+
+  async function handleRefreshRoster() {
+    if (!selectedRaffle) return;
+    setBusyAction("roster");
+    try {
+      await raffleApi.refreshGuildRoster(selectedRaffle.id);
+      await loadCandidates(selectedRaffle.id);
+      toast.success(t("raffle.participants.rosterRefreshed"));
+    } catch (error: unknown) { toast.error(getErrorMessage(error) || t("raffle.participants.rosterError")); }
+    finally { setBusyAction(null); }
+  }
+
+  async function handleAddCandidates(addAll = false) {
+    if (!selectedRaffle) return;
+    const count = addAll ? candidates.filter(item => item.selectable || (replaceParticipants && item.already_participating)).length : selectedCandidates.length;
+    if (replaceParticipants && !(await confirmation.confirm(t("raffle.participants.replaceConfirm", { current: selectedRaffle.participant_count, next: count }), { danger: true }))) return;
+    setBusyAction(addAll ? "add-all" : "add-selected");
+    try {
+      const result = await raffleApi.addRosterParticipants(selectedRaffle.id, selectedCandidates, replaceParticipants, addAll, activityDays);
+      await refreshSelectedRaffle(selectedRaffle.id);
+      await loadCandidates(selectedRaffle.id);
+      setSelectedCandidates([]);
+      toast.success(t("raffle.participants.bulkAdded", { added: result.added + result.restored, removed: result.removed }));
+    } catch (error: unknown) { toast.error(getErrorMessage(error) || t("raffle.participants.addError")); }
+    finally { setBusyAction(null); }
+  }
+
+  async function handleRemoveSelected() {
+    if (!selectedRaffle || !selectedParticipants.length) return;
+    if (!(await confirmation.confirm(t("raffle.participants.removeSelectedConfirm", { count: selectedParticipants.length }), { danger: true }))) return;
+    setBusyAction("remove-selected");
+    try {
+      await raffleApi.removeParticipants(selectedRaffle.id, selectedParticipants);
+      setSelectedParticipants([]);
+      await refreshSelectedRaffle(selectedRaffle.id);
+      await loadCandidates(selectedRaffle.id);
+      toast.success(t("raffle.participants.removeSuccess"));
+    } catch (error: unknown) { toast.error(getErrorMessage(error) || t("raffle.participants.removeError")); }
+    finally { setBusyAction(null); }
+  }
+
+  async function handleParticipationSetting(payload: { unique_account_participation?: boolean; weighting_mode?: "equal" | "weighted" }) {
+    if (!selectedRaffle) return;
+    setBusyAction("participant-settings");
+    try {
+      const updated = await raffleApi.updateParticipationSettings(selectedRaffle.id, payload);
+      setRaffles(current => current.map(item => item.id === updated.id ? updated : item));
+    } catch (error: unknown) { toast.error(getErrorMessage(error) || t("raffle.participants.settingsError")); }
+    finally { setBusyAction(null); }
   }
 
   async function handleRemoveParticipant(participantId: number) {
@@ -483,11 +554,9 @@ export default function RafflePage() {
         curr.map((r) => (r.id === updated.id ? updated : r)),
       );
       toast.success(t("raffle.participants.removeSuccess"));
-    } catch (err: any) {
+    } catch (err: unknown) {
       toast.error(
-        err?.response?.data?.detail ||
-          err?.message ||
-          t("raffle.participants.removeError"),
+        getErrorMessage(err) || t("raffle.participants.removeError"),
       );
     } finally {
       setBusyAction(null);
@@ -561,39 +630,12 @@ export default function RafflePage() {
             required
           />
 
-          <input
-            value={createForm.guild_name}
-            readOnly
-            aria-readonly="true"
-            className="w-full rounded-xl border border-line bg-surface-base/60 px-4 py-2.5 text-content-secondary"
-            required
-          />
+          {manageableGuilds.length > 1 ? <label className="grid gap-1 text-sm"><span>{t("raffle.workspace.fields.guild")}</span><select value={createForm.guild_name} onChange={event => setCreateForm(current => ({ ...current, guild_name: event.target.value }))} required className="min-h-11 rounded-xl border border-line bg-surface-base px-4"><option value="" />{manageableGuilds.map(name => <option key={name}>{name}</option>)}</select></label> : <dl className="rounded-xl border border-line bg-surface-base/60 px-4 py-3"><dt className="text-xs text-content-muted">{t("raffle.workspace.fields.guild")}</dt><dd className="mt-1 font-medium">{createForm.guild_name || "—"}</dd></dl>}
 
           <div className="grid gap-3 sm:grid-cols-2">
-            <div>
-              <label className="mb-1 block text-xs text-content-secondary">
-                {t("raffle.create.accessModeLabel")}
-              </label>
-              <select
-                value={createForm.access_mode}
-                onChange={(e) =>
-                  setCreateForm((c) => ({
-                    ...c,
-                    access_mode: e.target.value as
-                      "guild_only" | "world_only" | "public",
-                  }))
-                }
-                className="w-full rounded-xl border border-line bg-surface-base px-4 py-2.5 text-content-primary outline-none focus:border-primary"
-              >
-                <option value="guild_only">
-                  {t("raffle.accessModes.guild_only")}
-                </option>
-                <option value="world_only">
-                  {t("raffle.accessModes.world_only")}
-                </option>
-                <option value="public">{t("raffle.accessModes.public")}</option>
-              </select>
-            </div>
+            <dl className="rounded-xl border border-line bg-surface-base/60 px-4 py-3"><dt className="text-xs text-content-muted">{t("raffle.workspace.fields.scope")}</dt><dd className="mt-1 font-medium">{t("raffle.workspace.scopes.guild.title")}</dd></dl>
+            <dl className="rounded-xl border border-line bg-surface-base/60 px-4 py-3"><dt className="text-xs text-content-muted">{t("raffle.workspace.fields.purpose")}</dt><dd className="mt-1 font-medium">{t("raffle.operations.real")}</dd></dl>
+            <dl className="rounded-xl border border-line bg-surface-base/60 px-4 py-3"><dt className="text-xs text-content-muted">{t("raffle.workspace.fields.server")}</dt><dd className="mt-1 font-medium">{manageableGuildWorlds[createForm.guild_name] || user?.world_name || "—"}</dd></dl>
             <label className="flex items-center gap-3 rounded-xl border border-line bg-surface-base/60 px-4 py-3 text-sm text-content-secondary">
               <input
                 type="checkbox"
@@ -1095,7 +1137,34 @@ export default function RafflePage() {
 
                 {activeTab === "participants" && (
                   <div className="space-y-4">
-                    <div className="flex gap-2">
+                    <div className="grid gap-3 rounded-xl border border-line bg-surface-base/50 p-4 lg:grid-cols-2">
+                      <label className="grid gap-1 text-sm">
+                        <span>{t("raffle.participants.activityWindow")}</span>
+                        <select value={activityDays} onChange={event => setActivityDays(Number(event.target.value) as 7 | 15 | 30)} className="min-h-11 rounded-lg border border-line bg-surface px-3">
+                          {([7, 15, 30] as const).map(days => <option key={days} value={days}>{t("raffle.participants.days", { days })}</option>)}
+                        </select>
+                      </label>
+                      <label className="grid gap-1 text-sm">
+                        <span>{t("raffle.participants.search")}</span>
+                        <input value={candidateSearch} onChange={event => setCandidateSearch(event.target.value)} onKeyDown={event => { if (event.key === "Enter") { event.preventDefault(); void loadCandidates(selectedRaffle.id); } }} className="min-h-11 rounded-lg border border-line bg-surface px-3" placeholder={t("raffle.participants.searchPlaceholder")} />
+                      </label>
+                      <label className="flex min-h-11 items-center gap-2 text-sm"><input type="checkbox" checked={selectedRaffle.unique_account_participation} disabled={busyAction === "participant-settings"} onChange={event => void handleParticipationSetting({ unique_account_participation: event.target.checked })} />{t("raffle.participants.uniqueKnownAccount")}</label>
+                      <label className="grid gap-1 text-sm"><span>{t("raffle.participants.weightingMode")}</span><select value={selectedRaffle.weighting_mode} disabled={busyAction === "participant-settings"} onChange={event => void handleParticipationSetting({ weighting_mode: event.target.value as "equal" | "weighted" })} className="min-h-11 rounded-lg border border-line bg-surface px-3"><option value="equal">{t("raffle.participants.equal")}</option><option value="weighted">{t("raffle.participants.weighted")}</option></select></label>
+                      <p className="text-xs text-content-muted lg:col-span-2">{t("raffle.participants.unknownAccountHelp")}</p>
+                    </div>
+                    <div className="flex flex-wrap gap-2">
+                      <button type="button" onClick={() => void handleRefreshRoster()} disabled={busyAction === "roster"} className="app-button-secondary">{t("raffle.participants.refreshRoster")}</button>
+                      <button type="button" onClick={() => void loadCandidates(selectedRaffle.id)} className="app-button-secondary">{t("raffle.participants.searchAction")}</button>
+                      <label className="flex min-h-11 items-center gap-2 rounded-lg border border-line px-3 text-sm"><input type="checkbox" checked={replaceParticipants} onChange={event => setReplaceParticipants(event.target.checked)} />{t("raffle.participants.replaceExisting")}</label>
+                    </div>
+                    <div className="max-h-72 space-y-2 overflow-y-auto rounded-xl border border-line p-2">
+                      {candidates.length === 0 ? <p className="p-4 text-center text-sm text-content-muted">{t("raffle.participants.noCandidates")}</p> : candidates.map(candidate => <label key={candidate.roster_character_id} className={`flex min-w-0 items-start gap-3 rounded-lg border p-3 ${candidate.selectable ? "border-line" : "border-line bg-disabled text-content-muted"}`}>
+                        <input type="checkbox" className="mt-1" disabled={!candidate.selectable} checked={selectedCandidates.includes(candidate.roster_character_id)} onChange={event => setSelectedCandidates(current => event.target.checked ? [...current, candidate.roster_character_id] : current.filter(id => id !== candidate.roster_character_id))} />
+                        <span className="min-w-0 flex-1"><strong className="block truncate">{candidate.character_name}</strong><span className="block text-xs text-content-muted">{candidate.rank || t("guild.member")} · {candidate.level ?? "—"} {candidate.vocation || ""} · {new Date(candidate.last_activity_at).toLocaleDateString()}</span><span className="mt-1 inline-flex rounded-full border border-line px-2 py-0.5 text-xs">{t(candidate.account_identity_known ? "raffle.participants.registered" : "raffle.participants.unregistered")}</span>{candidate.reason ? <span className="ml-2 text-xs">{t(`raffle.participants.reasons.${candidate.reason}`, candidate.reason)}</span> : null}</span>
+                      </label>)}
+                    </div>
+                    <div className="flex flex-wrap gap-2"><button type="button" disabled={!selectedCandidates.length || busyAction === "add-selected"} onClick={() => void handleAddCandidates(false)} className="app-button-primary">{t("raffle.participants.addSelected", { count: selectedCandidates.length })}</button><button type="button" disabled={!candidates.some(item => item.selectable || (replaceParticipants && item.already_participating)) || busyAction === "add-all"} onClick={() => void handleAddCandidates(true)} className="app-button-secondary">{t("raffle.participants.addAll")}</button></div>
+                    {selectedRaffle.purpose === "test" && user?.is_superuser ? <div className="flex gap-2">
                       <input
                         value={manualCharacter}
                         onChange={(e) => setManualCharacter(e.target.value)}
@@ -1130,7 +1199,8 @@ export default function RafflePage() {
                           />
                         )}
                       </IconBtn>
-                    </div>
+                    </div> : null}
+                    <div className="flex items-center justify-between gap-3"><h3 className="font-semibold">{t("raffle.participants.current")}</h3><button type="button" disabled={!selectedParticipants.length || busyAction === "remove-selected"} onClick={() => void handleRemoveSelected()} className="app-button-danger">{t("raffle.participants.removeSelected", { count: selectedParticipants.length })}</button></div>
                     <div className="max-h-80 space-y-2 overflow-y-auto pr-1">
                       {selectedRaffle.participants.length === 0 ? (
                         <div className="rounded-xl border border-dashed border-line py-8 text-center text-sm text-content-muted">
@@ -1140,14 +1210,15 @@ export default function RafflePage() {
                         selectedRaffle.participants.map((participant) => (
                           <div
                             key={participant.id}
-                            className="flex items-center justify-between rounded-xl border border-line bg-surface-base/50 px-3 py-2.5"
+                            className="flex min-w-0 items-center gap-3 rounded-xl border border-line bg-surface-base/50 px-3 py-2.5"
                           >
+                            <input type="checkbox" checked={selectedParticipants.includes(participant.id)} onChange={event => setSelectedParticipants(current => event.target.checked ? [...current, participant.id] : current.filter(id => id !== participant.id))} aria-label={t("raffle.participants.selectCharacter", { character: participant.character_name })} />
                             <div className="min-w-0">
                               <div className="truncate font-medium text-content-primary">
                                 {participant.character_name}
                               </div>
                               <div className="text-xs text-content-muted">
-                                {participant.username} &middot;{" "}
+                                {participant.username || t("raffle.participants.unregistered")} &middot;{" "}
                                 {participant.guild_rank || t("guild.member")}
                               </div>
                             </div>
@@ -1171,22 +1242,7 @@ export default function RafflePage() {
                                     : "1.0"}
                                 </div>
                               </div>
-                              <div className="flex gap-0.5">
-                                {[1, 2, 3, 4, 5].map((w) => (
-                                  <button
-                                    key={w}
-                                    onClick={() =>
-                                      void handleWeightChange(participant.id, w)
-                                    }
-                                    disabled={
-                                      busyAction === `weight-${participant.id}`
-                                    }
-                                    className={`h-6 w-5 rounded text-xs transition ${Math.round(participant.weight_multiplier || 1) === w ? "bg-primary text-content-inverse" : "border border-line text-content-secondary hover:border-primary/50"}`}
-                                  >
-                                    {w}
-                                  </button>
-                                ))}
-                              </div>
+                              {selectedRaffle.weighting_mode === "weighted" ? <input type="number" min="0.0001" max="1000000" step="0.1" defaultValue={participant.weight} onBlur={event => { const value = Number(event.target.value); if (!Number.isFinite(value) || value <= 0 || value > 1000000) { toast.error(t("raffle.participants.invalidWeight")); event.currentTarget.value = String(participant.weight); return; } if (value !== Number(participant.weight)) void handleWeightChange(participant.id, value); }} className="h-9 w-24 rounded-lg border border-line bg-surface px-2 text-sm" aria-label={t("raffle.participants.weightFor", { character: participant.character_name })} /> : <span className="text-xs text-content-muted">{t("raffle.participants.equalProbability")}</span>}
                               <IconBtn
                                 onClick={() =>
                                   void handleRemoveParticipant(participant.id)

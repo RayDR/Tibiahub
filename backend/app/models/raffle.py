@@ -1,15 +1,23 @@
 """
 Guild raffle models.
 
-This system is account-based through local users, while keeping the winning
-character that represents each account inside the guild raffle.
+Participants are character identities. A verified local account may be linked
+when known, while synchronized external guild characters remain first-class.
 """
-from sqlalchemy import Boolean, Column, DateTime, Float, ForeignKey, Index, Integer, Numeric, String, Text, UniqueConstraint, text
+from sqlalchemy import Boolean, CheckConstraint, Column, DateTime, ForeignKey, Index, Integer, Numeric, String, Text, UniqueConstraint, text
 from sqlalchemy.orm import relationship
 from sqlalchemy.sql import func
 
 from app.db.database import Base
 from app.db.types import JSONBType
+
+
+def _normalized_character_default(context) -> str:
+    return " ".join(str(context.get_current_parameters().get("character_name") or context.get_current_parameters().get("participant_character_name") or "").split()).casefold()
+
+
+def _raffle_id_snapshot_default(context) -> int:
+    return int(context.get_current_parameters().get("raffle_id") or 0)
 
 
 class Raffle(Base):
@@ -24,6 +32,7 @@ class Raffle(Base):
                 "AND execution_state IN ('pending','failed','claimed','running')"
             ),
         ),
+        CheckConstraint("weighting_mode IN ('equal','weighted')", name="ck_raffles_weighting_mode"),
     )
 
     id = Column(Integer, primary_key=True, index=True)
@@ -43,9 +52,12 @@ class Raffle(Base):
     timezone_name = Column(String(64), nullable=False, default="America/Chicago")
     eligibility_days = Column(Integer, nullable=False, default=5)
     eligibility_cutoff_at = Column(DateTime(timezone=True), nullable=True)
+    unique_account_participation = Column(Boolean, nullable=False, default=True)
+    weighting_mode = Column(String(20), nullable=False, default="equal")
     publication_status = Column(String(20), nullable=False, default="private")
     published_at = Column(DateTime(timezone=True), nullable=True)
     published_by_id = Column(Integer, ForeignKey("users.id"), nullable=True)
+    published_by_character_name = Column(String(100), nullable=True)
     execution_state = Column(String(20), nullable=False, default="pending")
     executed_at = Column(DateTime(timezone=True), nullable=True)
     execution_trigger = Column(String(20), nullable=True)
@@ -89,17 +101,24 @@ class Raffle(Base):
 class RaffleParticipant(Base):
     __tablename__ = "raffle_participants"
     __table_args__ = (
-        UniqueConstraint("raffle_id", "user_id", name="uq_raffle_participant_user"),
-        UniqueConstraint("raffle_id", "character_name", name="uq_raffle_participant_character"),
+        Index("uq_raffle_active_participant_character", "raffle_id", "normalized_character_name", unique=True, postgresql_where=text("is_deleted IS FALSE"), sqlite_where=text("is_deleted = 0")),
+        Index("uq_raffle_active_known_account", "raffle_id", "enforced_account_identity_key", unique=True, postgresql_where=text("is_deleted IS FALSE AND enforced_account_identity_key IS NOT NULL"), sqlite_where=text("is_deleted = 0 AND enforced_account_identity_key IS NOT NULL")),
+        CheckConstraint("weight > 0", name="ck_raffle_participant_positive_weight"),
     )
 
     id = Column(Integer, primary_key=True, index=True)
     raffle_id = Column(Integer, ForeignKey("raffles.id"), nullable=False, index=True)
-    user_id = Column(Integer, ForeignKey("users.id"), nullable=False, index=True)
+    user_id = Column(Integer, ForeignKey("users.id", ondelete="SET NULL"), nullable=True, index=True)
+    guild_roster_character_id = Column(Integer, ForeignKey("guild_roster_characters.id", ondelete="SET NULL"), nullable=True, index=True)
     character_name = Column(String(100), nullable=False, index=True)
+    normalized_character_name = Column(String(100), nullable=False, index=True, default=_normalized_character_default)
+    known_account_identity_key = Column(String(100), nullable=True, index=True)
+    enforced_account_identity_key = Column(String(100), nullable=True)
+    guild_name_snapshot = Column(String(200), nullable=False, default="")
+    world_name_snapshot = Column(String(100), nullable=True)
     guild_rank = Column(String(100), nullable=True)
-    weight = Column(Float, nullable=False, default=1.0)
-    weight_multiplier = Column(Float, nullable=False, default=1.0)
+    weight = Column(Numeric(12, 4), nullable=False, default=1)
+    weight_multiplier = Column(Numeric(12, 4), nullable=False, default=1)
     is_eligible = Column(Boolean, nullable=False, default=True)
     eligibility_override = Column(Boolean, nullable=True)
     eligibility_override_reason = Column(Text, nullable=True)
@@ -114,6 +133,7 @@ class RaffleParticipant(Base):
 
     raffle = relationship("Raffle", back_populates="participants")
     user = relationship("User", foreign_keys=[user_id], backref="raffle_participations")
+    guild_roster_character = relationship("GuildRosterCharacter")
     winners = relationship("RaffleWinner", back_populates="participant")
 
 
@@ -195,14 +215,19 @@ class RaffleEligibilitySnapshot(Base):
 
 class RaffleEligibilityEntry(Base):
     __tablename__ = "raffle_eligibility_entries"
-    __table_args__ = (UniqueConstraint("snapshot_id", "user_id", name="uq_raffle_snapshot_user"),)
 
     id = Column(Integer, primary_key=True)
     snapshot_id = Column(Integer, ForeignKey("raffle_eligibility_snapshots.id"), nullable=False, index=True)
-    user_id = Column(Integer, ForeignKey("users.id"), nullable=False, index=True)
+    participant_id = Column(Integer, ForeignKey("raffle_participants.id", ondelete="SET NULL"), nullable=True)
+    user_id = Column(Integer, ForeignKey("users.id", ondelete="SET NULL"), nullable=True, index=True)
+    guild_roster_character_id = Column(Integer, ForeignKey("guild_roster_characters.id", ondelete="SET NULL"), nullable=True)
     character_name = Column(String(100), nullable=True)
+    normalized_character_name = Column(String(100), nullable=False, default=_normalized_character_default)
+    known_account_identity_key = Column(String(100), nullable=True)
     guild_name = Column(String(200), nullable=True)
     guild_rank = Column(String(100), nullable=True)
+    world_name = Column(String(100), nullable=True)
+    weight_snapshot = Column(Numeric(12, 4), nullable=False, default=1)
     last_activity_at = Column(DateTime(timezone=True), nullable=True)
     is_eligible = Column(Boolean, nullable=False)
     exclusion_code = Column(String(50), nullable=True)
@@ -249,8 +274,14 @@ class RaffleRunResult(Base):
     run_id = Column(Integer, ForeignKey("raffle_runs.id"), nullable=False, index=True)
     prize_id = Column(Integer, ForeignKey("raffle_prizes.id"), nullable=False)
     prize_position = Column(String(20), nullable=False)
-    participant_user_id = Column(Integer, ForeignKey("users.id"), nullable=False)
+    participant_user_id = Column(Integer, ForeignKey("users.id", ondelete="SET NULL"), nullable=True)
+    participant_roster_character_id = Column(Integer, ForeignKey("guild_roster_characters.id", ondelete="SET NULL"), nullable=True)
     participant_character_name = Column(String(100), nullable=False)
+    participant_normalized_character_name = Column(String(100), nullable=False, default=_normalized_character_default)
+    participant_account_identity_key = Column(String(100), nullable=True)
+    participant_guild_name = Column(String(200), nullable=False, default="")
+    participant_world_name = Column(String(100), nullable=True)
+    participant_weight = Column(Numeric(12, 4), nullable=False, default=1)
     selection_index = Column(Integer, nullable=False)
     candidate_count = Column(Integer, nullable=False)
     derived_entropy_hash = Column(String(64), nullable=False)
@@ -325,7 +356,10 @@ class RaffleTestAudit(Base):
     __tablename__ = "raffle_test_audits"
 
     id = Column(Integer, primary_key=True)
-    raffle_id = Column(Integer, ForeignKey("raffles.id"), nullable=False, index=True)
+    raffle_id = Column(Integer, ForeignKey("raffles.id", ondelete="SET NULL"), nullable=True, index=True)
+    raffle_id_snapshot = Column(Integer, nullable=False, index=True, default=_raffle_id_snapshot_default)
+    raffle_title_snapshot = Column(String(200), nullable=False, default="")
+    guild_name_snapshot = Column(String(200), nullable=False, default="")
     actor_id = Column(Integer, ForeignKey("users.id"), nullable=False)
     action = Column(String(80), nullable=False, index=True)
     reason = Column(Text, nullable=True)

@@ -4,9 +4,12 @@ from datetime import UTC, datetime
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 
+from app.models.guild_management import GuildManagementGrant
 from app.models.raffle import InternalNotification, Raffle, RaffleManagerGrant
 from app.models.user import User
-from app.core.permissions import is_guild_leader
+from app.models.user_character import UserCharacter
+from app.services.guild_authorization_service import LEADER_RANKS
+from app.services.guild_roster_service import normalize_guild_identity
 
 
 class NotificationService:
@@ -26,16 +29,28 @@ class NotificationService:
 
     @staticmethod
     def recipients(db: Session, raffle: Raffle, *, include_managers: bool = True) -> list[User]:
-        users = db.query(User).filter(User.is_active.is_(True)).all()
-        manager_ids = set()
+        manager_ids: set[int] = set()
         if include_managers:
-            manager_ids = {row.user_id for row in db.query(RaffleManagerGrant).filter(
+            manager_ids.update(row.user_id for row in db.query(GuildManagementGrant).filter(
+                GuildManagementGrant.normalized_guild_name == normalize_guild_identity(raffle.guild_name),
+                GuildManagementGrant.capability == "raffles.manage",
+                GuildManagementGrant.revoked_at.is_(None),
+            ))
+            manager_ids.update(row.user_id for row in db.query(RaffleManagerGrant).filter(
                 RaffleManagerGrant.raffle_id == raffle.id, RaffleManagerGrant.revoked_at.is_(None)
-            )}
-        return [user for user in users if user.is_superuser or (
-            (user.guild_name or "").casefold() == raffle.guild_name.casefold()
-            and (is_guild_leader(user, raffle.guild_name) or user.id in manager_ids)
-        )]
+            ))
+        leader_ids = {
+            row.user_id for row in db.query(UserCharacter).filter(
+                UserCharacter.ownership_status == "verified",
+                UserCharacter.guild_name.ilike(raffle.guild_name),
+            ).all()
+            if (row.guild_rank or "").strip().casefold() in LEADER_RANKS
+        }
+        recipients = manager_ids | leader_ids
+        return db.query(User).filter(
+            User.is_active.is_(True),
+            (User.is_superuser.is_(True)) | (User.id.in_(recipients)),
+        ).all()
 
     @staticmethod
     def emit(db: Session, raffle: Raffle, notification_type: str, event_key: str, *, payload: dict | None = None, include_managers: bool = True) -> None:

@@ -3,6 +3,7 @@ from __future__ import annotations
 import random
 import re
 from datetime import UTC, datetime
+from decimal import Decimal
 from typing import Dict, List, Optional
 
 from sqlalchemy.orm import Session, selectinload
@@ -10,6 +11,9 @@ from sqlalchemy.orm import Session, selectinload
 from app.models.raffle import Raffle, RaffleParticipant, RafflePrize, RaffleWinner
 from app.models.user import User
 from app.services.tibia_api import get_guild_info
+from app.models.guild_management import GuildRosterCharacter
+from app.services.guild_roster_service import GuildRosterService, normalize_guild_identity
+from app.services.raffle_participant_service import RaffleParticipantService
 
 
 ACCESS_MODE_ALIASES = {
@@ -36,10 +40,9 @@ STATUS_ALIASES = {
 }
 
 
-def participant_weight_from_rank(rank: Optional[str]) -> float:
-    if not rank:
-        return 1.0
-    return 1.1 if rank.strip().lower() == "vice leader" else 1.0
+def participant_weight_from_rank(_rank: Optional[str]) -> float:
+    """Compatibility helper: rank never changes draw probability."""
+    return 1.0
 
 
 def normalize_access_mode(access_mode: Optional[str], visibility: Optional[str] = None) -> str:
@@ -90,13 +93,14 @@ def pick_weighted_participant(participants: List[dict], rng: Optional[random.Ran
     if not participants:
         raise ValueError("No participants available")
     rng = rng or random.Random()
-    total_weight = sum(max(item.get("weight", 0.0), 0.0) for item in participants)
+    weights = [max(Decimal(str(item.get("weight", 0))), Decimal("0")) for item in participants]
+    total_weight = sum(weights, Decimal("0"))
     if total_weight <= 0:
         raise ValueError("Total weight must be positive")
-    threshold = rng.uniform(0, total_weight)
-    current = 0.0
-    for participant in participants:
-        current += max(participant.get("weight", 0.0), 0.0)
+    threshold = Decimal(str(rng.random())) * total_weight
+    current = Decimal("0")
+    for participant, weight in zip(participants, weights):
+        current += weight
         if current >= threshold:
             return participant
     return participants[-1]
@@ -112,16 +116,20 @@ def select_weighted_winners(participants: List[dict], prizes: List[dict], rng: O
             break
         winner = pick_weighted_participant(remaining, rng=rng)
         winners.append({"prize": prize, "participant": winner})
-        remaining = [item for item in remaining if item["user_id"] != winner["user_id"]]
+        remaining = [item for item in remaining if item["participant_id"] != winner["participant_id"]]
 
     return winners
 
 
-def prepare_participant_pool(participants: List[RaffleParticipant]) -> tuple[List[dict], List[dict], List[str]]:
+def prepare_participant_pool(
+    participants: List[RaffleParticipant], *,
+    unique_account_participation: bool = True,
+    weighting_mode: str = "weighted",
+) -> tuple[List[dict], List[dict], List[str]]:
     eligible: List[dict] = []
     excluded: List[dict] = []
     warnings: List[str] = []
-    seen_user_ids: set[int] = set()
+    seen_account_keys: set[str] = set()
 
     for participant in participants:
         reason: Optional[str] = None
@@ -129,15 +137,11 @@ def prepare_participant_pool(participants: List[RaffleParticipant]) -> tuple[Lis
             reason = "participant deleted"
         elif not participant.is_eligible:
             reason = "marked ineligible"
-        elif not participant.user_id:
-            reason = "missing account"
-        elif participant.user is None:
-            reason = "missing user relation"
         elif not participant.character_name:
             reason = "missing character name"
         elif participant.weight is None or participant.weight <= 0:
             reason = "non-positive weight"
-        elif participant.user_id in seen_user_ids:
+        elif unique_account_participation and participant.known_account_identity_key and participant.known_account_identity_key in seen_account_keys:
             reason = "duplicate account"
 
         if reason:
@@ -147,22 +151,24 @@ def prepare_participant_pool(participants: List[RaffleParticipant]) -> tuple[Lis
                     "user_id": participant.user_id,
                     "character_name": participant.character_name,
                     "guild_rank": participant.guild_rank,
-                    "weight": participant.weight or 0.0,
+                    "weight": participant.weight or Decimal("0"),
                     "weight_multiplier": participant.weight_multiplier or 1.0,
                     "reason": reason,
                 }
             )
             continue
 
-        seen_user_ids.add(participant.user_id)
+        if participant.known_account_identity_key:
+            seen_account_keys.add(participant.known_account_identity_key)
+        effective_weight = Decimal("1") if weighting_mode == "equal" else Decimal(participant.weight)
         eligible.append(
             {
                 "participant_id": participant.id,
                 "user_id": participant.user_id,
-                "username": participant.user.username,
+                "username": participant.user.username if participant.user else None,
                 "character_name": participant.character_name,
                 "guild_rank": participant.guild_rank,
-                "weight": participant.weight,
+                "weight": effective_weight,
                 "weight_multiplier": participant.weight_multiplier or 1.0,
             }
         )
@@ -174,88 +180,18 @@ def prepare_participant_pool(participants: List[RaffleParticipant]) -> tuple[Lis
 
 class RaffleService:
     @staticmethod
-    async def sync_participants(db: Session, raffle: Raffle) -> List[RaffleParticipant]:
-        guild_info = await get_guild_info(raffle.guild_name)
-        if not guild_info:
-            raise ValueError(f"Guild '{raffle.guild_name}' not found in TibiaData")
-
-        guild_members = guild_info.get("members") or []
-        member_lookup: Dict[str, dict] = {}
-        for member in guild_members:
-            name = (member.get("name") or "").strip().lower()
-            if name:
-                member_lookup[name] = member
-
-        users = (
-            db.query(User)
-            .options(selectinload(User.characters))
-            .filter(User.is_active == True)
-            .all()
+    async def sync_participants(db: Session, raffle: Raffle, actor: User, *, replace_existing: bool = False) -> List[RaffleParticipant]:
+        await GuildRosterService.synchronize(db, raffle.guild_name)
+        roster_ids = [row[0] for row in db.query(GuildRosterCharacter.id).filter(
+            GuildRosterCharacter.normalized_guild_name == normalize_guild_identity(raffle.guild_name),
+            GuildRosterCharacter.is_current.is_(True),
+        ).all()]
+        RaffleParticipantService.add_roster_characters(
+            db, raffle, actor, roster_character_ids=roster_ids,
+            replace_existing=replace_existing,
         )
-
-        db.query(RaffleParticipant).filter(RaffleParticipant.raffle_id == raffle.id).update(
-            {RaffleParticipant.is_eligible: False},
-            synchronize_session=False,
-        )
-
-        synced: List[RaffleParticipant] = []
-        seen_user_ids = set()
-        for user in users:
-            candidate_names = []
-            if user.tibia_character_name:
-                candidate_names.append(user.tibia_character_name)
-            candidate_names.extend(character.character_name for character in user.characters)
-
-            selected_name = None
-            member_data = None
-            for candidate in candidate_names:
-                lookup = member_lookup.get(candidate.strip().lower())
-                if lookup:
-                    selected_name = lookup.get("name") or candidate
-                    member_data = lookup
-                    break
-
-            if not selected_name or not member_data or user.id in seen_user_ids:
-                continue
-
-            seen_user_ids.add(user.id)
-            existing = db.query(RaffleParticipant).filter(
-                RaffleParticipant.raffle_id == raffle.id,
-                RaffleParticipant.user_id == user.id,
-            ).first()
-            weight = participant_weight_from_rank(member_data.get("rank") or member_data.get("title") or member_data.get("position"))
-            if existing:
-                existing.character_name = selected_name
-                existing.guild_rank = member_data.get("rank") or member_data.get("title") or member_data.get("position")
-                effective_multiplier = existing.weight_multiplier or 1.0
-                if existing.source != "manual_override":
-                    existing.weight = weight * max(1.0, min(5.0, effective_multiplier))
-                existing.is_eligible = True
-                existing.is_deleted = False
-                existing.deleted_at = None
-                existing.deleted_by_user_id = None
-                existing.delete_reason = None
-                existing.source_data = member_data
-                synced.append(existing)
-                continue
-
-            participant = RaffleParticipant(
-                raffle_id=raffle.id,
-                user_id=user.id,
-                character_name=selected_name,
-                guild_rank=member_data.get("rank") or member_data.get("title") or member_data.get("position"),
-                weight=weight,
-                weight_multiplier=1.0,
-                source="guild_sync",
-                source_data=member_data,
-                is_deleted=False,
-            )
-            db.add(participant)
-            synced.append(participant)
-
-        db.commit()
-        db.refresh(raffle)
-        return synced
+        db.flush()
+        return [row for row in raffle.participants if not row.is_deleted]
 
     @staticmethod
     def execute_raffle(db: Session, raffle: Raffle, executed_by: User, *, rerun_reason: Optional[str] = None, dry_run: bool = False) -> List[RaffleWinner]:
@@ -275,7 +211,11 @@ class RaffleService:
         if not prizes:
             raise ValueError("No prizes configured")
 
-        eligible_pool, _, _ = prepare_participant_pool(participants)
+        eligible_pool, _, _ = prepare_participant_pool(
+            participants,
+            unique_account_participation=raffle.unique_account_participation,
+            weighting_mode=raffle.weighting_mode,
+        )
         if not eligible_pool:
             raise ValueError("No eligible participants found")
 
@@ -289,13 +229,13 @@ class RaffleService:
         snapshot = [
             {
                 "user_id": participant.user_id,
-                "username": participant.user.username,
+                "username": participant.user.username if participant.user else None,
                 "character_name": participant.character_name,
                 "guild_rank": participant.guild_rank,
-                "weight": participant.weight,
+                "weight": str(participant.weight),
             }
             for participant in participants
-            if participant.user is not None and not participant.is_deleted
+            if not participant.is_deleted
         ]
 
         for pick in picks:
@@ -353,8 +293,11 @@ class RaffleService:
             {
                 "id": participant.id,
                 "user_id": participant.user_id,
-                "username": participant.user.username,
+                "username": participant.user.username if participant.user else None,
                 "character_name": participant.character_name,
+                "normalized_character_name": participant.normalized_character_name,
+                "guild_roster_character_id": participant.guild_roster_character_id,
+                "account_identity_known": participant.known_account_identity_key is not None,
                 "guild_rank": participant.guild_rank,
                 "weight": participant.weight,
                 "weight_multiplier": participant.weight_multiplier,
@@ -365,7 +308,7 @@ class RaffleService:
                 "eligibility_override_reason": participant.eligibility_override_reason,
             }
             for participant in raffle.participants
-            if not participant.is_deleted and participant.user is not None
+            if not participant.is_deleted
         ]
         return {
             "id": raffle.id,
@@ -386,6 +329,8 @@ class RaffleService:
             "timezone_name": getattr(raffle, "timezone_name", "America/Chicago"),
             "eligibility_days": getattr(raffle, "eligibility_days", 5),
             "eligibility_cutoff_at": getattr(raffle, "eligibility_cutoff_at", None),
+            "unique_account_participation": getattr(raffle, "unique_account_participation", True),
+            "weighting_mode": getattr(raffle, "weighting_mode", "equal"),
             "publication_status": getattr(raffle, "publication_status", "private"),
             "execution_state": getattr(raffle, "execution_state", "pending"),
             "executed_at": getattr(raffle, "executed_at", None),
@@ -431,7 +376,7 @@ class RaffleService:
             "reward": prize.reward,
             "participant_id": participant.id,
             "user_id": participant.user_id,
-            "username": participant.user.username,
+            "username": participant.user.username if participant.user else None,
             "character_name": participant.character_name,
             "run_number": winner.run_number,
             "is_rerun": winner.is_rerun,
@@ -443,7 +388,11 @@ class RaffleService:
     def build_simulation_payload(raffle: Raffle, winners: List[RaffleWinner]) -> dict:
         sync_legacy_raffle_fields(raffle)
         visible_participants = [participant for participant in raffle.participants if not participant.is_deleted]
-        eligible_participants, ineligible_participants, warnings = prepare_participant_pool(visible_participants)
+        eligible_participants, ineligible_participants, warnings = prepare_participant_pool(
+            visible_participants,
+            unique_account_participation=raffle.unique_account_participation,
+            weighting_mode=raffle.weighting_mode,
+        )
         prizes = [
             {"id": prize.id, "name": prize.name, "reward": prize.reward, "order_index": prize.order_index}
             for prize in sorted(raffle.prizes, key=lambda prize: (_reward_value(prize.reward), prize.order_index))

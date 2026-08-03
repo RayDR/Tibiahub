@@ -65,6 +65,15 @@ def guild_source(*characters):
     return {"name": "TEST GUILD", "world": "Test", "members": [{"name": name, "rank": "Member"} for name in characters]}
 
 
+def add_verified_guild_character(db, user, *, guild_name: str, rank: str = "Member"):
+    name = f"{user.username} Guild Character"
+    db.add(UserCharacter(
+        user_id=user.id, character_name=name, normalized_name=name.casefold(),
+        ownership_status="verified", ownership_verified_at=datetime.now(UTC),
+        guild_name=guild_name, guild_rank=rank,
+    ))
+
+
 async def execute_fixture(db, monkeypatch, *, purpose="test"):
     admin = make_user(db, username=f"admin_{purpose}", is_superuser=True)
     raffle = make_automatic_raffle(db, admin, purpose=purpose)
@@ -232,6 +241,7 @@ async def test_delivered_rerun_requires_global_override(db, monkeypatch):
 async def test_public_results_gated_and_have_no_user_ids(db, client, monkeypatch):
     admin, raffle, _, _ = await execute_fixture(db, monkeypatch)
     leader = make_user(db, username="publication_leader", guild_rank="Leader", guild_name=raffle.guild_name)
+    add_verified_guild_character(db, leader, guild_name=raffle.guild_name, rank="Leader")
     db.commit()
     hidden = client.get(f"/api/v1/raffles/public/code/{raffle.public_code}")
     assert hidden.status_code == 200
@@ -252,6 +262,9 @@ def test_manager_grant_revoke_cross_guild_and_publish_boundaries(db, client):
     manager = make_user(db, username="grant_manager")
     outsider = make_user(db, username="grant_outsider", guild_name="OTHER")
     raffle = make_automatic_raffle(db, admin)
+    add_verified_guild_character(db, leader, guild_name=raffle.guild_name, rank="Leader")
+    add_verified_guild_character(db, manager, guild_name=raffle.guild_name)
+    add_verified_guild_character(db, outsider, guild_name="OTHER")
     db.commit()
     assert client.post(f"/api/v1/raffles/{raffle.id}/managers", json={"user_id": outsider.id}, headers=auth(admin)).status_code == 400
     assert client.get(f"/api/v1/raffles/{raffle.id}/runs", headers=auth(outsider)).status_code == 403

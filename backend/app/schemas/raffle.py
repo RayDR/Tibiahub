@@ -34,6 +34,8 @@ class RaffleCreate(BaseModel):
     timezone_name: str = "America/Chicago"
     eligibility_days: int = Field(5, ge=1, le=30)
     eligibility_cutoff_at: Optional[datetime] = None
+    unique_account_participation: bool = True
+    weighting_mode: Literal["equal", "weighted"] = "equal"
 
     @field_validator("scheduled_run_at", "eligibility_cutoff_at")
     @classmethod
@@ -59,6 +61,8 @@ class RaffleUpdate(BaseModel):
     timezone_name: Optional[str] = None
     eligibility_days: Optional[int] = Field(None, ge=1, le=30)
     publication_status: Optional[Literal["private", "published"]] = None
+    unique_account_participation: Optional[bool] = None
+    weighting_mode: Optional[Literal["equal", "weighted"]] = None
     prizes: Optional[List[RafflePrizeCreate]] = Field(None, max_length=50)
 
     @field_validator("scheduled_run_at")
@@ -71,12 +75,16 @@ class RaffleUpdate(BaseModel):
 
 class RaffleParticipantResponse(BaseModel):
     id: int
-    user_id: int
-    username: str
+    user_id: Optional[int] = None
+    guild_roster_character_id: Optional[int] = None
+    username: Optional[str] = None
     character_name: str
+    normalized_character_name: str
+    account_identity_known: bool = False
     guild_rank: Optional[str] = None
-    weight: float
-    weight_multiplier: float = 1.0
+    weight: Decimal
+    weight_multiplier: Decimal = Decimal("1")
+    effective_probability: Optional[Decimal] = None
     is_eligible: bool
     created_at: datetime
     source: Optional[str] = None
@@ -106,8 +114,8 @@ class RaffleWinnerResponse(BaseModel):
     prize_name: str
     reward: str
     participant_id: int
-    user_id: int
-    username: str
+    user_id: Optional[int] = None
+    username: Optional[str] = None
     character_name: str
     run_number: int
     is_rerun: bool
@@ -155,6 +163,8 @@ class RaffleResponse(BaseModel):
     last_error_summary: Optional[str] = None
     retry_count: int = 0
     next_retry_at: Optional[datetime] = None
+    unique_account_participation: bool = True
+    weighting_mode: Literal["equal", "weighted"] = "equal"
 
 
 class RaffleExecutionResponse(BaseModel):
@@ -179,7 +189,48 @@ class RaffleRerunRequest(BaseModel):
 
 
 class RaffleWeightUpdateRequest(BaseModel):
-    weight_multiplier: float = Field(..., ge=1.0, le=5.0)
+    weight: Decimal = Field(..., gt=0, le=1_000_000)
+
+
+class RaffleParticipationSettingsRequest(BaseModel):
+    unique_account_participation: Optional[bool] = None
+    weighting_mode: Optional[Literal["equal", "weighted"]] = None
+
+
+class RaffleParticipantsMutationRequest(BaseModel):
+    roster_character_ids: List[int] = Field(default_factory=list, max_length=500)
+    add_all_eligible: bool = False
+    activity_days: Literal[7, 15, 30] = 30
+    replace_existing: bool = False
+
+
+class RaffleParticipantsRemoveRequest(BaseModel):
+    participant_ids: List[int] = Field(..., min_length=1, max_length=500)
+    reason: Optional[str] = Field(None, max_length=500)
+
+
+class RaffleParticipantMutationResponse(BaseModel):
+    raffle_id: int
+    added: int = 0
+    restored: int = 0
+    removed: int = 0
+    unchanged: int = 0
+
+
+class RaffleCandidateResponse(BaseModel):
+    roster_character_id: int
+    character_name: str
+    rank: Optional[str] = None
+    level: Optional[int] = None
+    vocation: Optional[str] = None
+    last_activity_at: datetime
+    linked_user_id: Optional[int] = None
+    linked_username: Optional[str] = None
+    account_identity_key: Optional[str] = None
+    account_identity_known: bool
+    already_participating: bool
+    selectable: bool
+    reason: Optional[str] = None
 
 
 class RaffleDrawRequest(BaseModel):
