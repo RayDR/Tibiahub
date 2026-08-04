@@ -9,6 +9,7 @@ from fastapi import Response, status
 from PIL import Image
 
 from app.core.security import create_access_token
+from app.models.creature import Creature
 from app.models.guild import Announcement
 from app.models.user_character import UserCharacter
 from app.services import media_asset_service as media
@@ -196,3 +197,39 @@ def test_loot_media_source_prefers_stored_provider_url():
     )
 
     assert media.build_loot_source_url(loot) == loot.item_image_url
+
+
+
+def test_discovery_uses_local_creature_image_endpoint(client, db):
+    creature = Creature(
+        name="Discovery Image Test",
+        normalized_name="discovery image test",
+        slug="discovery-image-test",
+        hitpoints=100,
+        experience=50,
+        is_boss=False,
+        is_hidden=False,
+        image_url=(
+            "https://static.wikia.nocookie.net/tibia/images/"
+            "0/00/Discovery.gif/revision/latest?path-prefix=en"
+        ),
+    )
+    db.add(creature)
+    db.commit()
+    db.refresh(creature)
+
+    response = client.get("/api/v1/catalog/discovery")
+
+    assert response.status_code == 200
+
+    featured = response.json()["featured_creatures"]
+    result = next(
+        row
+        for row in featured
+        if row["id"] == creature.id
+    )
+
+    assert result["image_url"] == (
+        f"/api/v1/creatures/{creature.id}/image"
+    )
+    assert "static.wikia.nocookie.net" not in result["image_url"]

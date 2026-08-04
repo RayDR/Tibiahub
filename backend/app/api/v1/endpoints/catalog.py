@@ -41,7 +41,17 @@ def cyclopedia_discovery(db: Session = Depends(get_db)):
         EntityMetadata.search_count.desc(), EntityMetadata.last_viewed_at.desc(),
     ).limit(8).all()
     return {
-        "featured_creatures": [{"id": row.id, "name": row.name, "slug": row.slug, "image_url": row.image_url, "experience": row.experience, "hitpoints": row.hitpoints} for row in featured],
+        "featured_creatures": [
+            {
+                "id": row.id,
+                "name": row.name,
+                "slug": row.slug,
+                "image_url": f"/api/v1/creatures/{row.id}/image",
+                "experience": row.experience,
+                "hitpoints": row.hitpoints,
+            }
+            for row in featured
+        ],
         "popular_hunts": [{"id": row.id, "name": row.name, "slug": row.slug, "city": row.city, "recommended_level": row.recommended_level or row.min_level} for row in hunts],
         "recent_quests": [{"id": row.external_id or str(row.id), "name": row.name, "slug": row.slug, "summary": row.summary, "updated_at": row.updated_at} for row in quests],
         "latest_knowledge": [{"id": str(row.uuid), "name": row.canonical_name, "slug": row.slug, "entity_type": row.entity_type, "updated_at": row.updated_at} for row in latest],
