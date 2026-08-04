@@ -44,7 +44,10 @@ export default function CyclopediaDiscovery() {
         <DiscoveryGroup
           icon={<Sparkles />}
           title={t("cyclopedia.discovery.featuredCreatures")}
-          items={data.featured_creatures}
+          items={data.featured_creatures.map((item) => ({
+            ...item,
+            image_url: `/api/v1/creatures/${item.id}/image`,
+          }))}
           href={(item) => `/creatures/${item.slug || item.id}`}
           meta={(item) =>
             item.experience
