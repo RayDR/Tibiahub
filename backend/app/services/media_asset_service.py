@@ -152,19 +152,39 @@ def build_creature_asset_key(creature) -> str:
     return f"creature:{_normalize_key_part(creature.name)}"
 
 
+
 def build_creature_source_url(creature) -> Optional[str]:
-    """Priority: image_url_override → alias → image_url."""
-    override = (getattr(creature, "image_url_override", None) or "").strip()
+    """Priority: explicit override → stored provider URL → alias fallback."""
+    override = (
+        getattr(creature, "image_url_override", None) or ""
+    ).strip()
     if override:
         return override
-    alias = (getattr(creature, "image_alias", None) or "").strip()
+
+    # The provider URL was obtained while synchronizing the creature page and
+    # is more reliable than reconstructing a case-sensitive MediaWiki title.
+    stored_url = (
+        getattr(creature, "image_url", None) or ""
+    ).strip()
+    if stored_url:
+        return stored_url
+
+    alias = (
+        getattr(creature, "image_alias", None) or ""
+    ).strip()
     if alias:
         safe = alias.replace(" ", "_")
-        if not safe.lower().endswith((".gif", ".png", ".jpg", ".jpeg", ".webp")):
+        if not safe.lower().endswith(
+            (".gif", ".png", ".jpg", ".jpeg", ".webp")
+        ):
             safe = f"{safe}.gif"
-        return f"{settings.TIBIAWIKI_BASE_PAGE_URL}/Special:FilePath/{safe}"
-    return (getattr(creature, "image_url", None) or None)
 
+        return (
+            f"{settings.TIBIAWIKI_BASE_PAGE_URL}"
+            f"/Special:FilePath/{safe}"
+        )
+
+    return None
 
 def build_loot_asset_key(loot) -> str:
     alias = (getattr(loot, "item_image_alias", None) or "").strip()
@@ -173,23 +193,42 @@ def build_loot_asset_key(loot) -> str:
     return f"item:{_normalize_key_part(loot.item_name)}"
 
 
+
 def build_loot_source_url(loot) -> Optional[str]:
-    override = (getattr(loot, "item_image_url_override", None) or "").strip()
+    """Priority: explicit override → stored provider URL → alias fallback."""
+    override = (
+        getattr(loot, "item_image_url_override", None) or ""
+    ).strip()
     if override:
         return override
-    alias = (getattr(loot, "item_image_alias", None) or "").strip()
+
+    stored_url = (
+        getattr(loot, "item_image_url", None) or ""
+    ).strip()
+    if stored_url:
+        return stored_url
+
+    alias = (
+        getattr(loot, "item_image_alias", None) or ""
+    ).strip()
     if alias:
         safe = alias.replace(" ", "_")
-        if not safe.lower().endswith((".gif", ".png", ".jpg", ".jpeg", ".webp")):
+        if not safe.lower().endswith(
+            (".gif", ".png", ".jpg", ".jpeg", ".webp")
+        ):
             safe = f"{safe}.gif"
-        return f"{settings.TIBIAWIKI_BASE_PAGE_URL}/Special:FilePath/{safe}"
-    url = (getattr(loot, "item_image_url", None) or "").strip()
-    if url:
-        return url
-    # fallback: build Special:FilePath from item name
-    safe_name = loot.item_name.replace(" ", "_")
-    return f"{settings.TIBIAWIKI_BASE_PAGE_URL}/Special:FilePath/{safe_name}.gif"
 
+        return (
+            f"{settings.TIBIAWIKI_BASE_PAGE_URL}"
+            f"/Special:FilePath/{safe}"
+        )
+
+    safe_name = loot.item_name.replace(" ", "_")
+
+    return (
+        f"{settings.TIBIAWIKI_BASE_PAGE_URL}"
+        f"/Special:FilePath/{safe_name}.gif"
+    )
 
 def build_zone_asset_key(zone) -> str:
     return f"zone:{_normalize_key_part(zone.name)}"
@@ -201,37 +240,228 @@ def build_zone_source_url(zone) -> Optional[str]:
 
 # ── internal fetch helpers ────────────────────────────────────────────────────
 
-async def _resolve_wiki_special_path(url: str, client: httpx.AsyncClient) -> Optional[str]:
-    """Use the MediaWiki API to turn Special:FilePath into a direct CDN URL."""
+_WIKI_TITLE_LOWER_WORDS = frozenset({
+    "a",
+    "an",
+    "and",
+    "as",
+    "at",
+    "by",
+    "for",
+    "from",
+    "in",
+    "of",
+    "on",
+    "or",
+    "the",
+    "to",
+    "with",
+})
+
+
+def _normalize_wiki_file_title(value: str) -> str:
+    normalized = unquote(value or "").strip()
+
+    if normalized.lower().startswith("file:"):
+        normalized = normalized[5:]
+
+    normalized = normalized.replace("_", " ")
+
+    return " ".join(normalized.split()).casefold()
+
+
+def _wiki_file_title_candidates(asset_name: str) -> list[str]:
+    """Build common MediaWiki filename-capitalization variants."""
+    decoded = unquote(asset_name or "").replace("_", " ").strip()
+
+    if not decoded:
+        return []
+
+    stem, extension = os.path.splitext(decoded)
+    extension = extension.lower()
+
+    words = stem.split()
+
+    first_letter = (
+        f"{stem[:1].upper()}{stem[1:]}{extension}"
+        if stem
+        else decoded
+    )
+
+    smart_title_words = []
+    for index, word in enumerate(words):
+        if index > 0 and word.casefold() in _WIKI_TITLE_LOWER_WORDS:
+            smart_title_words.append(word.casefold())
+        else:
+            smart_title_words.append(
+                f"{word[:1].upper()}{word[1:]}"
+                if word
+                else word
+            )
+
+    smart_title = f"{' '.join(smart_title_words)}{extension}"
+
+    full_title = (
+        f"{' '.join(word[:1].upper() + word[1:] for word in words)}"
+        f"{extension}"
+    )
+
+    candidates = [
+        f"{stem}{extension}",
+        first_letter,
+        smart_title,
+        full_title,
+    ]
+
+    result: list[str] = []
+
+    for candidate in candidates:
+        if candidate and candidate not in result:
+            result.append(candidate)
+
+    return result
+
+
+def _extract_mediawiki_image_url(
+    payload: dict,
+    *,
+    expected_title: str | None = None,
+) -> Optional[str]:
+    pages = ((payload.get("query") or {}).get("pages") or [])
+
+    if isinstance(pages, dict):
+        page_rows = pages.values()
+    else:
+        page_rows = pages
+
+    normalized_expected = (
+        _normalize_wiki_file_title(expected_title)
+        if expected_title
+        else None
+    )
+
+    for page in page_rows:
+        if not isinstance(page, dict):
+            continue
+
+        if page.get("missing") is not None:
+            continue
+
+        page_title = page.get("title") or ""
+
+        if (
+            normalized_expected
+            and _normalize_wiki_file_title(page_title)
+            != normalized_expected
+        ):
+            continue
+
+        image_info = page.get("imageinfo") or []
+
+        if not image_info:
+            continue
+
+        resolved_url = image_info[0].get("url")
+
+        if not resolved_url:
+            continue
+
+        validate_remote_url(resolved_url)
+
+        return resolved_url
+
+    return None
+
+
+async def _resolve_wiki_special_path(
+    url: str,
+    client: httpx.AsyncClient,
+) -> Optional[str]:
+    """Resolve a Fandom Special:FilePath URL through MediaWiki."""
     parsed = urlparse(url)
     asset_name = unquote(parsed.path.rsplit("/", 1)[-1])
+
     if not asset_name:
         return None
-    file_title = asset_name[0].upper() + asset_name[1:]
+
+    candidates = _wiki_file_title_candidates(asset_name)
+
     try:
         validate_remote_url(settings.TIBIAWIKI_API_URL)
-        resp = await client.get(
+
+        exact_response = await client.get(
             settings.TIBIAWIKI_API_URL,
             params={
                 "action": "query",
-                "titles": f"File:{file_title}",
+                "titles": "|".join(
+                    f"File:{candidate}"
+                    for candidate in candidates
+                ),
+                "prop": "imageinfo",
+                "iiprop": "url",
+                "redirects": "1",
+                "format": "json",
+                "formatversion": "2",
+            },
+        )
+
+        _validate_connected_peer(exact_response)
+        exact_response.raise_for_status()
+
+        if len(exact_response.content) > 1024 * 1024:
+            raise UnsafeMediaError(
+                "The provider metadata response is too large"
+            )
+
+        resolved_url = _extract_mediawiki_image_url(
+            exact_response.json() or {},
+        )
+
+        if resolved_url:
+            return resolved_url
+
+        search_term, _extension = os.path.splitext(
+            asset_name.replace("_", " ")
+        )
+        search_term = search_term.replace('"', " ").strip()
+
+        search_response = await client.get(
+            settings.TIBIAWIKI_API_URL,
+            params={
+                "action": "query",
+                "generator": "search",
+                "gsrsearch": f'"{search_term}"',
+                "gsrnamespace": "6",
+                "gsrlimit": "10",
                 "prop": "imageinfo",
                 "iiprop": "url",
                 "format": "json",
+                "formatversion": "2",
             },
         )
-        _validate_connected_peer(resp)
-        resp.raise_for_status()
-        if len(resp.content) > 1024 * 1024:
-            raise UnsafeMediaError("The provider metadata response is too large")
-        pages = ((resp.json() or {}).get("query") or {}).get("pages") or {}
-        for page in pages.values():
-            info = (page.get("imageinfo") or [])
-            if info and info[0].get("url"):
-                return info[0]["url"]
-    except Exception:
-        pass
-    return None
+
+        _validate_connected_peer(search_response)
+        search_response.raise_for_status()
+
+        if len(search_response.content) > 1024 * 1024:
+            raise UnsafeMediaError(
+                "The provider metadata response is too large"
+            )
+
+        return _extract_mediawiki_image_url(
+            search_response.json() or {},
+            expected_title=asset_name,
+        )
+
+    except Exception as exc:
+        logger.warning(
+            "mediawiki_image_resolution_failed "
+            "asset=%s error_type=%s",
+            asset_name[:160],
+            type(exc).__name__,
+        )
+
+        return None
 
 
 async def _fetch_image_once(source_url: str) -> tuple[bytes, str, str]:
