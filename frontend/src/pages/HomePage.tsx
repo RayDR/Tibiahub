@@ -1,23 +1,29 @@
-import { FormEvent, useEffect, useMemo, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
+import type { LucideIcon } from 'lucide-react';
 import {
   ArrowRight,
   BookOpen,
   Clock3,
   Gem,
   MapPin,
-  Search,
   Shield,
   Sparkles,
   Swords,
 } from 'lucide-react';
-import { Link, useNavigate } from 'react-router-dom';
+import { Link } from 'react-router-dom';
 import { useTranslation } from 'react-i18next';
 
 import { Card, Page, PageHeader, Section } from '../components/ui';
+import KnowledgeSearchBox, {
+  type KnowledgeSearchSection,
+} from '../components/search/KnowledgeSearchBox';
 import { activityApi, type UserActivityEntry } from '../services/activity';
+import {
+  creaturesApi,
+  huntZonesApi,
+  itemsApi,
+} from '../services/api';
 import { useAuth } from '../context/AuthContext';
-
-type SearchSection = 'creatures' | 'bosses' | 'items' | 'quests' | 'zones';
 
 interface QuestHistoryEntry {
   id: number;
@@ -26,15 +32,43 @@ interface QuestHistoryEntry {
   createdAt: string;
 }
 
+interface HomeSearchOption {
+  key: KnowledgeSearchSection;
+  icon: LucideIcon;
+  title: string;
+  help: string;
+  to: string;
+  artUrl?: string;
+}
+
+/*
+ * Future Tibia-style illustrations can be assigned here without
+ * changing Home layout. Local synchronized media remains the fallback.
+ *
+ * Example:
+ *
+ * creatures: '/assets/home/creatures.webp',
+ * bosses: '/assets/home/bosses.webp',
+ * items: '/assets/home/items.webp',
+ * quests: '/assets/home/quests.webp',
+ * zones: '/assets/home/zones.webp',
+ */
+const HOME_CUSTOM_ART: Partial<
+  Record<KnowledgeSearchSection, string>
+> = {};
+
 export default function HomePage() {
   const { t, i18n } = useTranslation();
-  const navigate = useNavigate();
   const { isAuthenticated, user } = useAuth();
 
-  const [section, setSection] = useState<SearchSection>('creatures');
+  const [section, setSection] =
+    useState<KnowledgeSearchSection>('creatures');
   const [query, setQuery] = useState('');
   const [activity, setActivity] = useState<UserActivityEntry[]>([]);
   const [clearingHistory, setClearingHistory] = useState(false);
+  const [capabilityArt, setCapabilityArt] = useState<
+    Partial<Record<KnowledgeSearchSection, string>>
+  >({});
 
   useEffect(() => {
     if (!isAuthenticated) {
@@ -52,12 +86,82 @@ export default function HomePage() {
     return () => controller.abort();
   }, [isAuthenticated]);
 
+  useEffect(() => {
+    const controller = new AbortController();
+    let mounted = true;
+
+    void Promise.allSettled([
+      creaturesApi.getHighlights(8, controller.signal),
+      creaturesApi.getBosses(
+        { skip: 0, limit: 8 },
+        controller.signal,
+      ),
+      itemsApi.getHighlights(8, controller.signal),
+      huntZonesApi.getHighlights(8, controller.signal),
+    ]).then(([creatures, bosses, items, zones]) => {
+      if (!mounted) {
+        return;
+      }
+
+      const next: Partial<
+        Record<KnowledgeSearchSection, string>
+      > = {};
+
+      if (creatures.status === 'fulfilled') {
+        const creature = creatures.value.find(
+          (row) => !row.is_boss,
+        );
+
+        if (creature) {
+          next.creatures = `/api/v1/creatures/${creature.id}/image`;
+        }
+      }
+
+      if (bosses.status === 'fulfilled') {
+        const boss = bosses.value[0];
+
+        if (boss) {
+          next.bosses = `/api/v1/creatures/${boss.id}/image`;
+        }
+      }
+
+      if (items.status === 'fulfilled') {
+        const item = items.value.find(
+          (row) => row.image_item_id != null || row.id != null,
+        );
+        const imageId = item?.image_item_id ?? item?.id;
+
+        if (imageId != null) {
+          next.items = `/api/v1/items/${imageId}/image`;
+        }
+      }
+
+      if (zones.status === 'fulfilled') {
+        const zone = zones.value[0];
+
+        if (zone) {
+          next.zones = `/api/v1/hunt-zones/${zone.id}/map-image`;
+        }
+      }
+
+      setCapabilityArt(next);
+    });
+
+    return () => {
+      mounted = false;
+      controller.abort();
+    };
+  }, []);
+
   const questHistory = useMemo<QuestHistoryEntry[]>(() => {
     const seen = new Set<string>();
     const entries: QuestHistoryEntry[] = [];
 
     for (const entry of activity) {
-      if (entry.activity_type !== 'view_quest' || !entry.entity_id) {
+      if (
+        entry.activity_type !== 'view_quest' ||
+        !entry.entity_id
+      ) {
         continue;
       }
 
@@ -85,41 +189,51 @@ export default function HomePage() {
     return entries;
   }, [activity, t]);
 
-  const searchOptions = [
+  const searchOptions: HomeSearchOption[] = [
     {
-      key: 'creatures' as const,
+      key: 'creatures',
       icon: BookOpen,
-      title: t('home.assistantPreview.categories.creatures.title'),
-      help: t('home.assistantPreview.categories.creatures.help'),
+      title: t(
+        'home.assistantPreview.categories.creatures.title',
+      ),
+      help: t(
+        'home.assistantPreview.categories.creatures.help',
+      ),
       to: '/cyclopedia?tab=creatures',
+      artUrl:
+        HOME_CUSTOM_ART.creatures || capabilityArt.creatures,
     },
     {
-      key: 'bosses' as const,
+      key: 'bosses',
       icon: Shield,
       title: t('home.assistantPreview.categories.bosses.title'),
       help: t('home.assistantPreview.categories.bosses.help'),
       to: '/cyclopedia?tab=bosses',
+      artUrl: HOME_CUSTOM_ART.bosses || capabilityArt.bosses,
     },
     {
-      key: 'items' as const,
+      key: 'items',
       icon: Gem,
       title: t('home.assistantPreview.categories.items.title'),
       help: t('home.assistantPreview.categories.items.help'),
       to: '/cyclopedia?tab=items',
+      artUrl: HOME_CUSTOM_ART.items || capabilityArt.items,
     },
     {
-      key: 'quests' as const,
+      key: 'quests',
       icon: BookOpen,
       title: t('home.assistantPreview.categories.quests.title'),
       help: t('home.assistantPreview.categories.quests.help'),
       to: '/cyclopedia?tab=quests',
+      artUrl: HOME_CUSTOM_ART.quests || capabilityArt.quests,
     },
     {
-      key: 'zones' as const,
+      key: 'zones',
       icon: MapPin,
       title: t('home.assistantPreview.categories.zones.title'),
       help: t('home.assistantPreview.categories.zones.help'),
       to: '/cyclopedia?tab=zones',
+      artUrl: HOME_CUSTOM_ART.zones || capabilityArt.zones,
     },
   ];
 
@@ -143,18 +257,6 @@ export default function HomePage() {
       label: t('home.assistantPreview.prompts.quest'),
     },
   ];
-
-  const submitSearch = (event: FormEvent) => {
-    event.preventDefault();
-
-    const params = new URLSearchParams({ tab: section });
-
-    if (query.trim()) {
-      params.set('q', query.trim());
-    }
-
-    navigate(`/cyclopedia?${params.toString()}`);
-  };
 
   const clearActivity = async () => {
     setClearingHistory(true);
@@ -191,62 +293,21 @@ export default function HomePage() {
               eyebrow={t('home.assistantPreview.eyebrow')}
               title={
                 isAuthenticated
-                  ? t('home.assistantPreview.titleAuthenticated', {
-                      username: user?.username || '',
-                    })
+                  ? t(
+                      'home.assistantPreview.titleAuthenticated',
+                      { username: user?.username || '' },
+                    )
                   : t('home.assistantPreview.titleGuest')
               }
               subtitle={t('home.assistantPreview.subtitle')}
             />
 
-            <form
-              onSubmit={submitSearch}
-              className="grid gap-2 rounded-2xl border border-line bg-surface-overlay p-2 sm:grid-cols-[10rem_minmax(0,1fr)_auto]"
-              role="search"
-            >
-              <select
-                aria-label={t('home.assistantPreview.section')}
-                value={section}
-                onChange={(event) =>
-                  setSection(event.target.value as SearchSection)
-                }
-                className="ds-select"
-              >
-                <option value="creatures">
-                  {t('home.assistantPreview.categories.creatures.title')}
-                </option>
-                <option value="bosses">
-                  {t('home.assistantPreview.categories.bosses.title')}
-                </option>
-                <option value="items">
-                  {t('home.assistantPreview.categories.items.title')}
-                </option>
-                <option value="quests">
-                  {t('home.assistantPreview.categories.quests.title')}
-                </option>
-                <option value="zones">
-                  {t('home.assistantPreview.categories.zones.title')}
-                </option>
-              </select>
-
-              <label className="relative min-w-0">
-                <span className="sr-only">
-                  {t('home.assistantPreview.searchLabel')}
-                </span>
-                <Search className="pointer-events-none absolute left-3 top-1/2 size-4 -translate-y-1/2 text-content-muted" />
-                <input
-                  className="app-input pl-9"
-                  value={query}
-                  onChange={(event) => setQuery(event.target.value)}
-                  placeholder={t('home.assistantPreview.placeholder')}
-                />
-              </label>
-
-              <button className="app-button-primary" type="submit">
-                {t('home.assistantPreview.search')}
-                <ArrowRight className="size-4" />
-              </button>
-            </form>
+            <KnowledgeSearchBox
+              section={section}
+              query={query}
+              onSectionChange={setSection}
+              onQueryChange={setQuery}
+            />
 
             <p className="mt-2 text-xs text-content-muted">
               {t('home.assistantPreview.localOnly')}
@@ -254,16 +315,24 @@ export default function HomePage() {
 
             <div
               className="mt-4 flex flex-wrap gap-2"
-              aria-label={t('home.assistantPreview.quickFilters')}
+              aria-label={t(
+                'home.assistantPreview.quickFilters',
+              )}
             >
               {searchOptions.map((option) => {
                 const Icon = option.icon;
                 const active = section === option.key;
+                const useTibiaSprite =
+                  option.artUrl &&
+                  ['creatures', 'bosses', 'items'].includes(
+                    option.key,
+                  );
 
                 return (
                   <button
                     key={option.key}
                     type="button"
+                    title={option.help}
                     aria-pressed={active}
                     onClick={() => setSection(option.key)}
                     className={
@@ -272,7 +341,19 @@ export default function HomePage() {
                         : 'app-button-ghost app-button-sm'
                     }
                   >
-                    <Icon className="size-3.5" />
+                    {useTibiaSprite ? (
+                      <img
+                        src={option.artUrl}
+                        alt=""
+                        aria-hidden="true"
+                        className="size-5 object-contain [image-rendering:pixelated]"
+                      />
+                    ) : (
+                      <Icon
+                        className="size-3.5"
+                        aria-hidden="true"
+                      />
+                    )}
                     {option.title}
                   </button>
                 );
@@ -301,10 +382,10 @@ export default function HomePage() {
                     setSection(prompt.section);
                     setQuery(prompt.query);
                   }}
-                  className="flex w-full items-center justify-between gap-3 rounded-xl border border-line bg-surface-raised px-3 py-3 text-left text-sm transition hover:border-primary/50 hover:bg-surface-active"
+                  className="group flex w-full items-center justify-between gap-3 rounded-xl border border-line bg-surface-raised px-3 py-3 text-left text-sm transition hover:border-primary/50 hover:bg-surface-active"
                 >
                   <span>{prompt.label}</span>
-                  <ArrowRight className="size-4 shrink-0 text-primary" />
+                  <ArrowRight className="size-4 shrink-0 text-primary transition-transform group-hover:translate-x-1 motion-reduce:transform-none" />
                 </button>
               ))}
             </div>
@@ -327,6 +408,7 @@ export default function HomePage() {
                 <Clock3 className="size-5 text-primary" />
                 {t('home.questHistory.title')}
               </h2>
+
               <p className="text-sm text-content-muted">
                 {t('home.questHistory.help')}
               </p>
@@ -357,10 +439,12 @@ export default function HomePage() {
             {questHistory.map((entry) => (
               <Link
                 key={entry.questId}
-                to={`/quests/${encodeURIComponent(entry.questId)}`}
+                to={`/quests/${encodeURIComponent(
+                  entry.questId,
+                )}`}
                 className="min-w-0"
               >
-                <Card className="h-full p-4 transition hover:border-primary/50">
+                <Card className="h-full p-4 transition hover:-translate-y-0.5 hover:border-primary/50 motion-reduce:transform-none">
                   <BookOpen className="size-4 text-primary" />
                   <h3 className="mt-3 line-clamp-2 font-semibold">
                     {entry.title}
@@ -380,34 +464,79 @@ export default function HomePage() {
 
       <Section aria-labelledby="home-search-options">
         <div>
-          <h2 id="home-search-options" className="text-lg font-semibold">
+          <h2
+            id="home-search-options"
+            className="text-lg font-semibold"
+          >
             {t('home.assistantPreview.exploreTitle')}
           </h2>
+
           <p className="text-sm text-content-muted">
             {t('home.assistantPreview.exploreHelp')}
           </p>
         </div>
 
         <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-5">
-          {searchOptions.map((option) => {
-            const Icon = option.icon;
-
-            return (
-              <Link key={option.key} to={option.to}>
-                <Card className="h-full p-4 transition hover:border-primary/50">
-                  <div className="grid size-10 place-items-center rounded-xl bg-primary/10 text-primary">
-                    <Icon className="size-5" />
-                  </div>
-                  <h3 className="mt-3 font-semibold">{option.title}</h3>
-                  <p className="mt-1 text-sm text-content-secondary">
-                    {option.help}
-                  </p>
-                </Card>
-              </Link>
-            );
-          })}
+          {searchOptions.map((option) => (
+            <HomeCapabilityCard
+              key={option.key}
+              option={option}
+            />
+          ))}
         </div>
       </Section>
     </Page>
+  );
+}
+
+function HomeCapabilityCard({
+  option,
+}: {
+  option: HomeSearchOption;
+}) {
+  const Icon = option.icon;
+
+  return (
+    <Link
+      to={option.to}
+      title={option.help}
+      aria-label={`${option.title}: ${option.help}`}
+      className="group block h-full"
+    >
+      <Card className="relative h-full min-h-44 overflow-hidden p-0 transition duration-300 hover:-translate-y-1 hover:border-primary/60 hover:shadow-lg motion-reduce:transform-none motion-reduce:transition-none">
+        {option.artUrl ? (
+          <div className="pointer-events-none absolute inset-y-0 right-0 w-2/5 overflow-hidden">
+            <img
+              src={option.artUrl}
+              alt=""
+              aria-hidden="true"
+              loading="lazy"
+              className="h-full w-full object-contain object-right opacity-70 transition duration-300 group-hover:scale-110 group-hover:opacity-100 motion-reduce:transform-none"
+            />
+            <div className="absolute inset-0 bg-gradient-to-r from-surface-raised via-surface-raised/80 to-transparent" />
+          </div>
+        ) : null}
+
+        <div className="relative z-10 flex h-full flex-col p-4">
+          <div className="grid size-10 place-items-center rounded-xl bg-primary/10 text-primary transition duration-300 group-hover:scale-110 group-hover:bg-primary/20 motion-reduce:transform-none">
+            <Icon className="size-5" aria-hidden="true" />
+          </div>
+
+          <div
+            className={option.artUrl ? 'max-w-[72%]' : undefined}
+          >
+            <h3 className="mt-3 font-semibold">
+              {option.title}
+            </h3>
+
+            <p className="mt-1 text-sm text-content-secondary">
+              {option.help}
+            </p>
+          </div>
+
+          <ArrowRight className="mt-auto size-4 translate-y-2 self-end text-primary opacity-0 transition duration-300 group-hover:translate-x-1 group-hover:translate-y-0 group-hover:opacity-100 motion-reduce:transform-none" />
+        </div>
+      </Card>
+    </Link>
   );
 }
