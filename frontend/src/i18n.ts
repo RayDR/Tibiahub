@@ -90,6 +90,49 @@ i18n
                         "subtitle": "Complete your weekly tasks, find your next hunt, and plan your next set."
                     },
                     "home": {
+                        "assistantPreview": {
+                            "eyebrow": "TibiaHub guide",
+                            "status": "Conversational assistant preview",
+                            "titleAuthenticated": "What are we looking for today, {{username}}?",
+                            "titleGuest": "What are you looking for in Tibia?",
+                            "subtitle": "Explore TibiaHub's local knowledge now. A conversational hunt and progression assistant will be added here later.",
+                            "section": "Search section",
+                            "searchLabel": "Search TibiaHub",
+                            "placeholder": "Creature, boss, item, quest or hunting zone",
+                            "search": "Explore",
+                            "localOnly": "Current searches use TibiaHub's synchronized PostgreSQL knowledge and do not contact external providers during this request.",
+                            "quickFilters": "Available search sections",
+                            "promptTitle": "Start with an example",
+                            "promptHelp": "Choose a real local search while the conversational assistant is being prepared.",
+                            "futureHelp": "Later, this space will understand questions about hunts, equipment, quests and where to obtain items.",
+                            "exploreTitle": "What TibiaHub can search",
+                            "exploreHelp": "Open one of the currently available knowledge areas.",
+                            "categories": {
+                                "creatures": { "title": "Creatures", "help": "Stats, weaknesses, loot and known locations." },
+                                "bosses": { "title": "Bosses", "help": "Boss records, difficulty and related encounters." },
+                                "items": { "title": "Loot and items", "help": "Find items and the creatures that may drop them." },
+                                "quests": { "title": "Quests", "help": "Requirements, missions, NPCs and related places." },
+                                "zones": { "title": "Hunting zones", "help": "Explore synchronized hunting areas and level ranges." }
+                            },
+                            "prompts": {
+                                "hunt": "Find creatures related to Dragon",
+                                "huntQuery": "Dragon",
+                                "item": "Find where Boots of Haste may appear",
+                                "itemQuery": "Boots of Haste",
+                                "quest": "Open Lion's Rock quest information",
+                                "questQuery": "Lion's Rock Quest/Spoiler"
+                            }
+                        },
+                        "questHistory": {
+                            "title": "Continue your quests",
+                            "help": "Your five most recently opened quests.",
+                            "open": "Open quest",
+                            "viewAll": "View quest history",
+                            "clear": "Clear history",
+                            "clearing": "Clearing…",
+                            "unknownQuest": "Recently viewed quest"
+                        },
+
                         "eyebrow": "Local knowledge and guild operations",
                         "welcomeBack": "Welcome back, {{username}}",
                         "guestTitle": "TibiaHub Home",
@@ -890,6 +933,49 @@ i18n
                         "subtitle": "Completa tus weekly tasks, encuentra tu próxima hunt y consigue tu próximo set."
                     },
                     "home": {
+                        "assistantPreview": {
+                            "eyebrow": "Guía de TibiaHub",
+                            "status": "Vista previa del asistente conversacional",
+                            "titleAuthenticated": "¿Qué buscamos hoy, {{username}}?",
+                            "titleGuest": "¿Qué estás buscando en Tibia?",
+                            "subtitle": "Explora ahora el conocimiento local de TibiaHub. Más adelante este espacio tendrá un asistente conversacional para hunts y progresión.",
+                            "section": "Sección de búsqueda",
+                            "searchLabel": "Buscar en TibiaHub",
+                            "placeholder": "Criatura, boss, objeto, quest o zona de caza",
+                            "search": "Explorar",
+                            "localOnly": "Las búsquedas actuales usan el conocimiento PostgreSQL sincronizado de TibiaHub y no contactan proveedores externos durante esta consulta.",
+                            "quickFilters": "Secciones de búsqueda disponibles",
+                            "promptTitle": "Comienza con un ejemplo",
+                            "promptHelp": "Elige una búsqueda local real mientras preparamos el asistente conversacional.",
+                            "futureHelp": "Después este espacio comprenderá preguntas sobre hunts, equipo, quests y dónde conseguir objetos.",
+                            "exploreTitle": "Qué puede buscar TibiaHub",
+                            "exploreHelp": "Abre una de las áreas de conocimiento disponibles actualmente.",
+                            "categories": {
+                                "creatures": { "title": "Criaturas", "help": "Estadísticas, debilidades, loot y ubicaciones conocidas." },
+                                "bosses": { "title": "Bosses", "help": "Registros de bosses, dificultad y encuentros relacionados." },
+                                "items": { "title": "Loot y objetos", "help": "Encuentra objetos y las criaturas que pueden soltarlos." },
+                                "quests": { "title": "Quests", "help": "Requisitos, misiones, NPC y lugares relacionados." },
+                                "zones": { "title": "Zonas de caza", "help": "Explora áreas de caza sincronizadas y rangos de nivel." }
+                            },
+                            "prompts": {
+                                "hunt": "Buscar criaturas relacionadas con Dragon",
+                                "huntQuery": "Dragon",
+                                "item": "Buscar dónde puede aparecer Boots of Haste",
+                                "itemQuery": "Boots of Haste",
+                                "quest": "Abrir la información de Lion's Rock",
+                                "questQuery": "Lion's Rock Quest/Spoiler"
+                            }
+                        },
+                        "questHistory": {
+                            "title": "Continúa con tus quests",
+                            "help": "Las cinco quests que abriste más recientemente.",
+                            "open": "Abrir quest",
+                            "viewAll": "Ver historial de quests",
+                            "clear": "Limpiar historial",
+                            "clearing": "Limpiando…",
+                            "unknownQuest": "Quest visitada recientemente"
+                        },
+
                         "eyebrow": "Conocimiento local y operaciones de guild",
                         "welcomeBack": "Bienvenido de vuelta, {{username}}",
                         "guestTitle": "Inicio de TibiaHub",
