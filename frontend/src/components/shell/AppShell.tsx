@@ -26,16 +26,18 @@ export default function AppShell({ children, dataVersion }: { children: ReactNod
   const { pathname } = useLocation();
   const context = currentContext(pathname, t);
 
-  return <div className="app-shell min-h-screen text-content-primary">
+  return <div className="app-shell flex min-h-screen flex-col text-content-primary">
     <Navigation />
-    <div className="app-shell-main">
+    <div className="app-shell-main flex min-h-0 flex-1 flex-col">
       {context ? <Container><nav className="app-context-bar gap-1 text-xs text-content-muted" aria-label={t('shell.breadcrumbs')}>
         <Link to="/" className="inline-flex min-h-9 items-center gap-1 rounded px-1 hover:text-content-primary"><Home className="size-3.5" /><span className="sr-only">{t('nav.home')}</span></Link>
         <ChevronRight className="size-3.5" aria-hidden="true" />
         {context.parent ? <><Link to={context.parent.to} className="rounded px-1 hover:text-content-primary">{context.parent.label}</Link><ChevronRight className="size-3.5" aria-hidden="true" /></> : null}
         <span className="truncate text-content-secondary" aria-current="page">{context.label}</span>
       </nav></Container> : null}
-      <Container>{children}</Container>
+      <main className="flex-1">
+        <Container>{children}</Container>
+      </main>
       <footer className="mt-16 border-t border-line py-8 text-center">
         <p className="text-sm text-content-secondary">{t('footer.project', { version: dataVersion || t('footer.unavailable') })}</p>
         <p className="mt-2 text-xs text-content-muted">{t('footer.trademark')}</p>

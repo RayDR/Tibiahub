@@ -105,6 +105,20 @@ i18n
                             "promptTitle": "Start with an example",
                             "promptHelp": "Choose a real local search while the conversational assistant is being prepared.",
                             "futureHelp": "Later, this space will understand questions about hunts, equipment, quests and where to obtain items.",
+                            "searchSuggestions": {
+                                "listLabel": "Local knowledge suggestions",
+                                "loading": "Searching local knowledge…",
+                                "empty": "No direct suggestions yet. Explore to view the complete results.",
+                                "open": "Open",
+                                "creatureStats": "{{hp}} HP · {{exp}} EXP",
+                                "zoneMeta": "{{place}} · Level {{level}}+",
+                                "types": {
+                                    "boss": "Boss",
+                                    "item": "Item",
+                                    "quest": "Quest",
+                                    "zone": "Hunting zone"
+                                }
+                            },
                             "exploreTitle": "What TibiaHub can search",
                             "exploreHelp": "Open one of the currently available knowledge areas.",
                             "categories": {
@@ -948,6 +962,20 @@ i18n
                             "promptTitle": "Comienza con un ejemplo",
                             "promptHelp": "Elige una búsqueda local real mientras preparamos el asistente conversacional.",
                             "futureHelp": "Después este espacio comprenderá preguntas sobre hunts, equipo, quests y dónde conseguir objetos.",
+                            "searchSuggestions": {
+                                "listLabel": "Sugerencias del conocimiento local",
+                                "loading": "Buscando en el conocimiento local…",
+                                "empty": "Aún no hay sugerencias directas. Explora para ver los resultados completos.",
+                                "open": "Abrir",
+                                "creatureStats": "{{hp}} HP · {{exp}} EXP",
+                                "zoneMeta": "{{place}} · Nivel {{level}}+",
+                                "types": {
+                                    "boss": "Boss",
+                                    "item": "Objeto",
+                                    "quest": "Quest",
+                                    "zone": "Zona de caza"
+                                }
+                            },
                             "exploreTitle": "Qué puede buscar TibiaHub",
                             "exploreHelp": "Abre una de las áreas de conocimiento disponibles actualmente.",
                             "categories": {
