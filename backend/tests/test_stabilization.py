@@ -140,3 +140,59 @@ def test_health_endpoints_report_database_failure_as_unavailable():
     assert payload["status"] == "degraded"
     assert payload["db"] == "unavailable"
     assert payload["external_sync"]["active_jobs"] is None
+
+
+
+def test_wiki_file_title_candidates_restore_mediawiki_case():
+    iron_candidates = media._wiki_file_title_candidates(
+        "iron_servant.gif"
+    )
+
+    assert "Iron Servant.gif" in iron_candidates
+
+    summoning_candidates = media._wiki_file_title_candidates(
+        "stolen_knowledge_of_summoning.gif"
+    )
+
+    assert "Stolen Knowledge of Summoning.gif" in summoning_candidates
+
+
+def test_media_source_prefers_stored_provider_url():
+    creature = SimpleNamespace(
+        name="Iron Servant",
+        image_url_override=None,
+        image_alias="iron_servant.gif",
+        image_url=(
+            "https://static.wikia.nocookie.net/tibia/images/"
+            "a/ab/Iron_Servant.gif"
+        ),
+    )
+
+    assert media.build_creature_source_url(creature) == creature.image_url
+
+
+def test_media_source_uses_alias_only_without_stored_url():
+    creature = SimpleNamespace(
+        name="Iron Servant",
+        image_url_override=None,
+        image_alias="Iron Servant.gif",
+        image_url=None,
+    )
+
+    assert media.build_creature_source_url(creature).endswith(
+        "/Special:FilePath/Iron_Servant.gif"
+    )
+
+
+def test_loot_media_source_prefers_stored_provider_url():
+    loot = SimpleNamespace(
+        item_name="Crystal Coin",
+        item_image_url_override=None,
+        item_image_alias="crystal_coin.gif",
+        item_image_url=(
+            "https://static.wikia.nocookie.net/tibia/images/"
+            "4/45/Crystal_Coin.gif"
+        ),
+    )
+
+    assert media.build_loot_source_url(loot) == loot.item_image_url
