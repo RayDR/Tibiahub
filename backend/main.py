@@ -107,30 +107,57 @@ async def maintenance_enforcement(request, call_next):
         or not path.startswith("/api/")
     ):
         return await call_next(request)
+
+    blocked_response = None
     db = SessionLocal()
+
     try:
         try:
-            hold = db.query(MaintenanceHold).filter(MaintenanceHold.released_at.is_(None)).order_by(MaintenanceHold.enabled_at).first()
+            hold = (
+                db.query(MaintenanceHold)
+                .filter(MaintenanceHold.released_at.is_(None))
+                .order_by(MaintenanceHold.enabled_at)
+                .first()
+            )
         except SQLAlchemyError:
             db.rollback()
             if settings.APP_ENV == "test":
                 return await call_next(request)
             raise
-        if hold is None or _maintenance_admin(request, db):
-            return await call_next(request)
+
+        is_admin = (
+            hold is not None
+            and _maintenance_admin(request, db)
+        )
+
+        if hold is not None and not is_admin:
+            blocked_response = {
+                "message": hold.public_message,
+                "planned_end_at": (
+                    hold.planned_end_at.isoformat()
+                    if hold.planned_end_at
+                    else None
+                ),
+            }
+    finally:
+        # Release the maintenance lookup connection before executing
+        # the endpoint. Otherwise every request holds an additional
+        # database connection for its entire duration.
+        db.close()
+
+    if blocked_response is not None:
         return JSONResponse(
             status_code=503,
             headers={"Retry-After": "60"},
             content={
                 "detail": {
                     "code": "maintenance_mode",
-                    "message": hold.public_message,
-                    "planned_end_at": hold.planned_end_at.isoformat() if hold.planned_end_at else None,
+                    **blocked_response,
                 }
             },
         )
-    finally:
-        db.close()
+
+    return await call_next(request)
 
 
 @app.middleware("http")
