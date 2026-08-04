@@ -5,7 +5,7 @@ from datetime import UTC, datetime
 from typing import Any, Iterable, Optional
 
 from sqlalchemy.orm import Session, selectinload
-from sqlalchemy import or_
+from sqlalchemy import case, func, or_
 
 from app.models import Creature, HuntZone, Loot, SpawnLocation
 from app.services.entity_metadata_service import EntityMetadataService
@@ -274,9 +274,29 @@ def list_cached_creatures(
     include_hidden: bool = False,
 ) -> list[Creature]:
     query = db.query(Creature)
+    relevance_order = None
+
     if search:
         normalized = normalize_search_text(search)
-        query = query.filter(Creature.normalized_name.contains(normalized))
+        query = query.filter(
+            Creature.normalized_name.contains(
+                normalized,
+                autoescape=True,
+            )
+        )
+
+        if sort_by == "name":
+            relevance_order = case(
+                (Creature.normalized_name == normalized, 0),
+                (
+                    Creature.normalized_name.startswith(
+                        normalized,
+                        autoescape=True,
+                    ),
+                    1,
+                ),
+                else_=2,
+            )
     if category:
         query = query.filter(Creature.classification.ilike(category))
     if is_boss is not None:
@@ -289,5 +309,19 @@ def list_cached_creatures(
         "hitpoints": Creature.hitpoints,
         "difficulty": Creature.difficulty,
     }.get(sort_by, Creature.name)
-    query = query.order_by(sort_column.desc() if sort_order == "desc" else sort_column.asc(), Creature.name.asc())
+
+    if relevance_order is not None:
+        query = query.order_by(
+            relevance_order.asc(),
+            func.length(Creature.normalized_name).asc(),
+            Creature.name.asc(),
+        )
+    else:
+        query = query.order_by(
+            sort_column.desc()
+            if sort_order == "desc"
+            else sort_column.asc(),
+            Creature.name.asc(),
+        )
+
     return query.offset(skip).limit(limit).all()

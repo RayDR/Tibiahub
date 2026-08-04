@@ -15,7 +15,6 @@ import {
   Shield,
   Sparkles,
 } from 'lucide-react';
-import type { TFunction } from 'i18next';
 import { useTranslation } from 'react-i18next';
 import { useNavigate } from 'react-router-dom';
 
@@ -33,11 +32,18 @@ export type KnowledgeSearchSection =
   | 'quests'
   | 'zones';
 
+type KnowledgeSuggestionKind =
+  | 'creature'
+  | 'boss'
+  | 'item'
+  | 'quest'
+  | 'zone';
+
 export interface KnowledgeSuggestion {
   key: string;
   section: KnowledgeSearchSection;
+  kind: KnowledgeSuggestionKind;
   label: string;
-  subtitle: string;
   to: string;
   imageUrl?: string;
 }
@@ -57,8 +63,32 @@ const sectionIcons: Record<KnowledgeSearchSection, LucideIcon> = {
   zones: MapPin,
 };
 
+const CACHE_STORAGE_KEY =
+  'tibiahub:knowledge-search-suggestions:v2';
+const CACHE_SEPARATOR = '\u0000';
+const MAX_CACHE_ENTRIES = 32;
+const MAX_REMOTE_RESULTS = 50;
+const MAX_VISIBLE_SUGGESTIONS = 8;
+
+const suggestionCache = new Map<
+  string,
+  KnowledgeSuggestion[]
+>();
+
+let cacheHydrated = false;
+
 const normalize = (value: string) =>
-  value.trim().toLocaleLowerCase().replace(/\s+/g, ' ');
+  value
+    .normalize('NFD')
+    .replace(/[\u0300-\u036f]/g, '')
+    .trim()
+    .toLocaleLowerCase()
+    .replace(/\s+/g, ' ');
+
+const cacheKey = (
+  section: KnowledgeSearchSection,
+  query: string,
+) => `${section}${CACHE_SEPARATOR}${normalize(query)}`;
 
 const fallbackUrl = (
   section: KnowledgeSearchSection,
@@ -73,11 +103,163 @@ const fallbackUrl = (
   return `/cyclopedia?${params.toString()}`;
 };
 
-async function loadSuggestions(
+function hydrateSuggestionCache() {
+  if (cacheHydrated) {
+    return;
+  }
+
+  cacheHydrated = true;
+
+  try {
+    const raw = sessionStorage.getItem(CACHE_STORAGE_KEY);
+
+    if (!raw) {
+      return;
+    }
+
+    const stored = JSON.parse(raw) as Record<
+      string,
+      KnowledgeSuggestion[]
+    >;
+
+    for (const [key, suggestions] of Object.entries(stored)) {
+      if (Array.isArray(suggestions)) {
+        suggestionCache.set(key, suggestions);
+      }
+    }
+  } catch {
+    sessionStorage.removeItem(CACHE_STORAGE_KEY);
+  }
+}
+
+function persistSuggestionCache() {
+  try {
+    sessionStorage.setItem(
+      CACHE_STORAGE_KEY,
+      JSON.stringify(Object.fromEntries(suggestionCache)),
+    );
+  } catch {
+    // Search continues with the in-memory cache.
+  }
+}
+
+function storeSuggestions(
+  section: KnowledgeSearchSection,
+  query: string,
+  suggestions: KnowledgeSuggestion[],
+) {
+  const key = cacheKey(section, query);
+
+  suggestionCache.delete(key);
+  suggestionCache.set(key, suggestions);
+
+  while (suggestionCache.size > MAX_CACHE_ENTRIES) {
+    const oldestKey = suggestionCache.keys().next().value;
+
+    if (typeof oldestKey !== 'string') {
+      break;
+    }
+
+    suggestionCache.delete(oldestKey);
+  }
+
+  persistSuggestionCache();
+}
+
+function suggestionRank(
+  query: string,
+  suggestion: KnowledgeSuggestion,
+) {
+  const normalizedQuery = normalize(query);
+  const normalizedLabel = normalize(suggestion.label);
+
+  if (normalizedLabel === normalizedQuery) {
+    return 0;
+  }
+
+  if (normalizedLabel.startsWith(normalizedQuery)) {
+    return 1;
+  }
+
+  if (normalizedLabel.includes(normalizedQuery)) {
+    return 2;
+  }
+
+  return 3;
+}
+
+function rankSuggestions(
+  query: string,
+  suggestions: KnowledgeSuggestion[],
+) {
+  return suggestions
+    .map((suggestion) => ({
+      suggestion,
+      rank: suggestionRank(query, suggestion),
+      normalizedLabel: normalize(suggestion.label),
+    }))
+    .filter(({ rank }) => rank < 3)
+    .sort(
+      (left, right) =>
+        left.rank - right.rank ||
+        left.normalizedLabel.length -
+          right.normalizedLabel.length ||
+        left.normalizedLabel.localeCompare(
+          right.normalizedLabel,
+        ),
+    )
+    .map(({ suggestion }) => suggestion);
+}
+
+function cachedSuggestionsFor(
+  section: KnowledgeSearchSection,
+  query: string,
+): KnowledgeSuggestion[] | null {
+  hydrateSuggestionCache();
+
+  const exact = suggestionCache.get(cacheKey(section, query));
+
+  if (exact) {
+    return rankSuggestions(query, exact);
+  }
+
+  const normalizedQuery = normalize(query);
+  const prefix = `${section}${CACHE_SEPARATOR}`;
+
+  const ancestors = [...suggestionCache.entries()]
+    .filter(([key]) => key.startsWith(prefix))
+    .map(([key, suggestions]) => ({
+      cachedQuery: key.slice(prefix.length),
+      suggestions,
+    }))
+    .filter(
+      ({ cachedQuery }) =>
+        cachedQuery.length >= 2 &&
+        normalizedQuery.startsWith(cachedQuery),
+    )
+    .sort(
+      (left, right) =>
+        right.cachedQuery.length - left.cachedQuery.length,
+    );
+
+  for (const ancestor of ancestors) {
+    const filtered = rankSuggestions(
+      normalizedQuery,
+      ancestor.suggestions,
+    );
+
+    if (filtered.length >= 3) {
+      return filtered;
+    }
+  }
+
+  return null;
+}
+
+async function loadRemoteSuggestions(
   section: KnowledgeSearchSection,
   query: string,
   signal: AbortSignal,
-  t: TFunction,
 ): Promise<KnowledgeSuggestion[]> {
   if (section === 'creatures') {
     const rows = await creaturesApi.getAll(
@@ -85,7 +267,7 @@ async function loadSuggestions(
         search: query,
         is_boss: false,
         skip: 0,
-        limit: 6,
+        limit: MAX_REMOTE_RESULTS,
       },
       signal,
     );
@@ -95,13 +277,12 @@ async function loadSuggestions(
       .map((row) => ({
         key: `creature:${row.id}`,
         section,
+        kind: 'creature',
         label: row.name,
-        subtitle: t('home.searchSuggestions.creatureStats', {
-          hp: row.hitpoints.toLocaleString(),
-          exp: row.experience.toLocaleString(),
-        }),
         to: `/creatures/${row.slug || row.id}`,
-        imageUrl: `/api/v1/creatures/${row.id}/image`,
+        imageUrl:
+          `/api/v1/creatures/${row.id}/image` +
+          '?placeholder=false',
       }));
   }
 
@@ -110,7 +291,7 @@ async function loadSuggestions(
       {
         search: query,
         skip: 0,
-        limit: 6,
+        limit: MAX_REMOTE_RESULTS,
       },
       signal,
     );
@@ -118,17 +299,21 @@ async function loadSuggestions(
     return rows.map((row) => ({
       key: `boss:${row.id}`,
       section,
+      kind: 'boss',
       label: row.name,
-      subtitle:
-        row.difficulty ||
-        t('home.searchSuggestions.types.boss'),
       to: `/creatures/${row.slug || row.id}`,
-      imageUrl: `/api/v1/creatures/${row.id}/image`,
+      imageUrl:
+        `/api/v1/creatures/${row.id}/image` +
+        '?placeholder=false',
     }));
   }
 
   if (section === 'items') {
-    const rows = await itemsApi.search(query, 6, signal);
+    const rows = await itemsApi.search(
+      query,
+      MAX_REMOTE_RESULTS,
+      signal,
+    );
 
     return rows.map((row) => {
       const imageId = row.image_item_id ?? row.id;
@@ -136,31 +321,30 @@ async function loadSuggestions(
       return {
         key: `item:${row.normalized_name}`,
         section,
+        kind: 'item',
         label: row.item_name,
-        subtitle:
-          row.category ||
-          row.item_type ||
-          t('home.searchSuggestions.types.item'),
         to: fallbackUrl(section, row.item_name),
         imageUrl:
           imageId != null
-            ? `/api/v1/items/${imageId}/image`
+            ? `/api/v1/items/${imageId}/image` +
+              '?placeholder=false'
             : undefined,
       };
     });
   }
 
   if (section === 'quests') {
-    const rows = await questsApi.search(query, 6, signal);
+    const rows = await questsApi.search(
+      query,
+      MAX_REMOTE_RESULTS,
+      signal,
+    );
 
     return rows.map((row) => ({
       key: `quest:${row.id || row.slug || row.name}`,
       section,
+      kind: 'quest',
       label: row.name,
-      subtitle:
-        row.group_name ||
-        row.location ||
-        t('home.searchSuggestions.types.quest'),
       to:
         row.id != null
           ? `/quests/${row.id}`
@@ -172,7 +356,7 @@ async function loadSuggestions(
     {
       search: query,
       skip: 0,
-      limit: 6,
+      limit: MAX_REMOTE_RESULTS,
     },
     signal,
   );
@@ -180,17 +364,36 @@ async function loadSuggestions(
   return rows.map((row) => ({
     key: `zone:${row.id}`,
     section,
+    kind: 'zone',
     label: row.name,
-    subtitle: t('home.searchSuggestions.zoneMeta', {
-      place:
-        row.city ||
-        row.region ||
-        t('home.searchSuggestions.types.zone'),
-      level: row.recommended_level || row.min_level || 0,
-    }),
     to: fallbackUrl(section, row.name),
     imageUrl: `/api/v1/hunt-zones/${row.id}/map-image`,
   }));
+}
+
+async function loadSuggestions(
+  section: KnowledgeSearchSection,
+  query: string,
+  signal: AbortSignal,
+): Promise<KnowledgeSuggestion[]> {
+  const cached = cachedSuggestionsFor(section, query);
+
+  if (cached) {
+    return cached.slice(0, MAX_VISIBLE_SUGGESTIONS);
+  }
+
+  const remote = await loadRemoteSuggestions(
+    section,
+    query,
+    signal,
+  );
+
+  storeSuggestions(section, query, remote);
+
+  return rankSuggestions(query, remote).slice(
+    0,
+    MAX_VISIBLE_SUGGESTIONS,
+  );
 }
 
 export default function KnowledgeSearchBox({
@@ -203,9 +406,9 @@ export default function KnowledgeSearchBox({
   const navigate = useNavigate();
   const listId = useId();
 
-  const [suggestions, setSuggestions] = useState<KnowledgeSuggestion[]>(
-    [],
-  );
+  const [suggestions, setSuggestions] = useState<
+    KnowledgeSuggestion[]
+  >([]);
   const [loading, setLoading] = useState(false);
   const [open, setOpen] = useState(false);
   const [activeIndex, setActiveIndex] = useState(-1);
@@ -231,7 +434,6 @@ export default function KnowledgeSearchBox({
         section,
         normalizedQuery,
         controller.signal,
-        t,
       )
         .then((rows) => {
           setSuggestions(rows);
@@ -248,15 +450,17 @@ export default function KnowledgeSearchBox({
             setLoading(false);
           }
         });
-    }, 250);
+    }, 220);
 
     return () => {
       window.clearTimeout(timer);
       controller.abort();
     };
-  }, [query, section, t]);
+  }, [query, section]);
 
-  const openSuggestion = (suggestion: KnowledgeSuggestion) => {
+  const openSuggestion = (
+    suggestion: KnowledgeSuggestion,
+  ) => {
     setOpen(false);
     setActiveIndex(-1);
     navigate(suggestion.to);
@@ -299,33 +503,30 @@ export default function KnowledgeSearchBox({
       return;
     }
 
-    if (normalizedQuery.length >= 2) {
-      const controller = new AbortController();
+    const controller = new AbortController();
 
-      setLoading(true);
+    setLoading(true);
 
-      try {
-        const freshSuggestions = await loadSuggestions(
-          section,
-          normalizedQuery,
-          controller.signal,
-          t,
-        );
+    try {
+      const freshSuggestions = await loadSuggestions(
+        section,
+        normalizedQuery,
+        controller.signal,
+      );
 
-        const freshExact = exactSuggestion(
-          freshSuggestions,
-          normalizedQuery,
-        );
+      const freshExact = exactSuggestion(
+        freshSuggestions,
+        normalizedQuery,
+      );
 
-        if (freshExact) {
-          openSuggestion(freshExact);
-          return;
-        }
-      } catch {
-        // Fall through to the complete Cyclopedia result page.
-      } finally {
-        setLoading(false);
+      if (freshExact) {
+        openSuggestion(freshExact);
+        return;
       }
+    } catch {
+      // Continue to the complete Cyclopedia result page.
+    } finally {
+      setLoading(false);
     }
 
     navigate(fallbackUrl(section, normalizedQuery));
@@ -443,20 +644,24 @@ export default function KnowledgeSearchBox({
             id={listId}
             role="listbox"
             aria-label={t(
-              'home.searchSuggestions.listLabel',
+              'home.assistantPreview.searchSuggestions.listLabel',
             )}
-            className="absolute left-0 right-0 top-[calc(100%+.5rem)] z-50 max-h-80 overflow-y-auto rounded-2xl border border-line bg-surface-overlay p-2 shadow-2xl"
+            className="absolute left-0 right-0 top-[calc(100%+.5rem)] z-50 max-h-96 overflow-y-auto rounded-2xl border border-line bg-surface-overlay p-2 shadow-2xl"
           >
             {loading && suggestions.length === 0 ? (
               <div className="flex items-center gap-2 px-3 py-4 text-sm text-content-muted">
                 <Loader2 className="size-4 animate-spin" />
-                {t('home.searchSuggestions.loading')}
+                {t(
+                  'home.assistantPreview.searchSuggestions.loading',
+                )}
               </div>
             ) : null}
 
             {!loading && suggestions.length === 0 ? (
               <div className="px-3 py-4 text-sm text-content-muted">
-                {t('home.searchSuggestions.empty')}
+                {t(
+                  'home.assistantPreview.searchSuggestions.empty',
+                )}
               </div>
             ) : null}
 
@@ -484,13 +689,18 @@ export default function KnowledgeSearchBox({
                   <strong className="block truncate text-sm">
                     {suggestion.label}
                   </strong>
+
                   <span className="block truncate text-xs text-content-muted">
-                    {suggestion.subtitle}
+                    {t(
+                      `home.assistantPreview.searchSuggestions.types.${suggestion.kind}`,
+                    )}
                   </span>
                 </span>
 
                 <span className="text-xs font-semibold text-primary">
-                  {t('home.searchSuggestions.open')}
+                  {t(
+                    'home.assistantPreview.searchSuggestions.open',
+                  )}
                 </span>
               </button>
             ))}
@@ -508,6 +718,7 @@ export default function KnowledgeSearchBox({
         ) : (
           <Sparkles className="size-4" />
         )}
+
         {t('home.assistantPreview.search')}
       </button>
     </form>
@@ -527,15 +738,16 @@ function SuggestionMedia({
   }, [suggestion.imageUrl]);
 
   return (
-    <span className="grid size-11 shrink-0 place-items-center overflow-hidden rounded-xl bg-primary/10 text-primary">
+    <span className="grid size-12 shrink-0 place-items-center overflow-hidden rounded-xl bg-primary/10 text-primary">
       {suggestion.imageUrl && !failed ? (
         <img
           src={suggestion.imageUrl}
           alt=""
           aria-hidden="true"
-          loading="lazy"
+          loading="eager"
+          decoding="async"
           onError={() => setFailed(true)}
-          className="size-10 object-contain [image-rendering:pixelated]"
+          className="size-11 object-contain p-0.5 [image-rendering:pixelated]"
         />
       ) : (
         <Icon className="size-5" aria-hidden="true" />
