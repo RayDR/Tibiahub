@@ -191,6 +191,54 @@ async def get_creature_category_previews(
     return result
 
 
+@router.get("/popular", response_model=List[CreatureSimple])
+async def get_popular_creatures(
+    response: Response,
+    limit: int = Query(12, ge=1, le=30),
+    db: Session = Depends(get_db),
+):
+    """Return non-boss creatures ordered by real search/view activity."""
+    metadata = EntityMetadataService.get_popular(
+        db,
+        entity_type="creature",
+        limit=min(limit * 4, 120),
+    )
+
+    creature_ids = [
+        row.entity_id
+        for row in metadata
+        if row.entity_id is not None
+    ]
+
+    response.headers["Cache-Control"] = (
+        "public, max-age=300, stale-while-revalidate=900"
+    )
+
+    if not creature_ids:
+        return []
+
+    rows = (
+        db.query(CreatureModel)
+        .filter(
+            CreatureModel.id.in_(creature_ids),
+            CreatureModel.is_hidden == False,
+            CreatureModel.is_boss == False,
+        )
+        .all()
+    )
+
+    by_id = {
+        creature.id: creature
+        for creature in rows
+    }
+
+    return [
+        by_id[creature_id]
+        for creature_id in creature_ids
+        if creature_id in by_id
+    ][:limit]
+
+
 @router.get("/highlights", response_model=List[CreatureSimple])
 async def get_creature_highlights(
     limit: int = Query(18, ge=1, le=50),

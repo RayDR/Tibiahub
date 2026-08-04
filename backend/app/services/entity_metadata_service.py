@@ -118,3 +118,28 @@ class EntityMetadataService:
             .limit(limit)
             .all()
         )
+
+
+    @staticmethod
+    def get_popular(
+        db: Session,
+        *,
+        entity_type: str,
+        limit: int = 12,
+    ) -> list[EntityMetadata]:
+        """Return entities ranked only by real search/view activity."""
+        return (
+            db.query(EntityMetadata)
+            .filter(
+                EntityMetadata.entity_type == entity_type,
+                EntityMetadata.entity_id.isnot(None),
+                EntityMetadata.search_count > 0,
+            )
+            .order_by(
+                EntityMetadata.search_count.desc(),
+                EntityMetadata.last_viewed_at.desc(),
+                EntityMetadata.updated_at.desc(),
+            )
+            .limit(limit)
+            .all()
+        )
