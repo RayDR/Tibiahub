@@ -9,7 +9,6 @@ from app.core.config import settings
 from app.db.database import get_db
 from app.models.spawn_location import SpawnLocation
 from app.models import HuntZone as HuntZoneModel
-from app.models.settings import SystemSettings as SettingsModel
 from app.schemas import HuntZone, HuntZoneCreate, HuntRecommendation
 from app.services.entity_metadata_service import EntityMetadataService
 from app.services.text_utils import normalize_search_text
@@ -17,15 +16,6 @@ from app.services.hunt_service import HuntRecommendationService
 from app.services import media_asset_service as media_svc
 
 router = APIRouter(prefix="/hunt-zones", tags=["hunt-zones"])
-
-
-def _get_setting(db: Session, key: str, default: str = "") -> str:
-    value = db.query(SettingsModel).filter(SettingsModel.key == key).first()
-    return value.value if value and value.value is not None else default
-
-
-def _is_image_autofetch_enabled(db: Session) -> bool:
-    return _get_setting(db, "auto_fetch_missing_images_enabled", "0") == "1"
 
 
 async def _resolve_fandom_image_url(image_url: str) -> str | None:
@@ -141,25 +131,11 @@ async def get_hunt_zone_map_image(zone_id: int, request: Request, db: Session = 
         raise HTTPException(status_code=404, detail="Hunt zone not found")
 
     asset_key = media_svc.build_zone_asset_key(zone)
-    source_url = media_svc.build_zone_source_url(zone)
-    if not source_url:
-        placeholder = _placeholder_map_svg(zone.name)
-        return Response(
-            content=placeholder,
-            media_type="image/svg+xml",
-            headers={
-                "Cache-Control": "public, max-age=3600",
-                "X-Image-Source": "placeholder",
-                "X-Asset-Key": asset_key,
-            },
-        )
-
-    autofetch = _is_image_autofetch_enabled(db)
-    asset = await media_svc.get_or_fetch_asset(
+    # Public requests must never perform provider downloads.
+    # Missing assets are populated exclusively by sync/admin workers.
+    asset = media_svc.get_asset(
         db,
-        asset_key=asset_key,
-        source_url=source_url,
-        autofetch_enabled=autofetch,
+        asset_key,
     )
 
     if not asset or asset.status != "cached":

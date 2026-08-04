@@ -23,16 +23,6 @@ from app.knowledge.services import KnowledgeGraphService
 router = APIRouter(prefix="/items", tags=["items"])
 
 
-def _is_image_autofetch_enabled(db: Session) -> bool:
-    from app.models.settings import SystemSettings as SettingsModel
-
-    def _get_setting(key: str, default: str = "") -> str:
-        value = db.query(SettingsModel).filter(SettingsModel.key == key).first()
-        return value.value if value and value.value is not None else default
-
-    return _get_setting("auto_fetch_missing_images_enabled", "0") == "1"
-
-
 def _placeholder_svg(label: str) -> bytes:
     safe = media_svc.escape_svg_text(label or "Unknown Item", limit=42)
     return (
@@ -74,20 +64,11 @@ async def get_item_image(
         if item
         else media_svc.build_loot_asset_key(loot)
     )
-    source_url = item.image_url if item else media_svc.build_loot_source_url(loot)
-    if not source_url:
-        return _unavailable_item_image(
-            label=label,
-            asset_key=asset_key,
-            include_placeholder=include_placeholder,
-        )
-
-    autofetch = _is_image_autofetch_enabled(db)
-    asset = await media_svc.get_or_fetch_asset(
+    # Public requests must never perform provider downloads.
+    # Missing assets are populated exclusively by sync/admin workers.
+    asset = media_svc.get_asset(
         db,
-        asset_key=asset_key,
-        source_url=source_url,
-        autofetch_enabled=autofetch,
+        asset_key,
     )
 
     if not asset or asset.status != "cached":
