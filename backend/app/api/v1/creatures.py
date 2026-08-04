@@ -46,6 +46,38 @@ def _placeholder_svg(label: str) -> bytes:
     ).encode("utf-8")
 
 
+def _unavailable_creature_image(
+    *,
+    label: str,
+    asset_key: str,
+    include_placeholder: bool,
+    status: str = "missing",
+) -> Response:
+    headers = {
+        "Cache-Control": "public, max-age=300",
+        "X-Image-Source": (
+            "placeholder"
+            if include_placeholder
+            else "unavailable"
+        ),
+        "X-Image-Status": status,
+        "X-Asset-Key": asset_key,
+    }
+
+    if not include_placeholder:
+        raise HTTPException(
+            status_code=404,
+            detail="Creature image unavailable",
+            headers=headers,
+        )
+
+    return Response(
+        content=_placeholder_svg(label),
+        media_type="image/svg+xml",
+        headers=headers,
+    )
+
+
 def _normalize_category_key(value: str) -> str:
     normalized = re.sub(r"[^a-z0-9]+", "_", (value or "").strip().lower()).strip("_")
     return normalized or "uncategorized"
@@ -232,7 +264,12 @@ async def create_creature(
 
 
 @router.get("/{creature_id}/image")
-async def get_creature_image(creature_id: int, request: Request, db: Session = Depends(get_db)):
+async def get_creature_image(
+    creature_id: int,
+    request: Request,
+    include_placeholder: bool = Query(True, alias="placeholder"),
+    db: Session = Depends(get_db),
+):
     """Serve creature image from local MediaAsset cache (local-first)."""
     creature = get_cached_creature_by_id(db, creature_id)
     if not creature:
@@ -241,15 +278,10 @@ async def get_creature_image(creature_id: int, request: Request, db: Session = D
     asset_key = media_svc.build_creature_asset_key(creature)
     source_url = media_svc.build_creature_source_url(creature)
     if not source_url:
-        placeholder = _placeholder_svg(creature.name)
-        return Response(
-            content=placeholder,
-            media_type="image/svg+xml",
-            headers={
-                "Cache-Control": "public, max-age=3600",
-                "X-Image-Source": "placeholder",
-                "X-Asset-Key": asset_key,
-            },
+        return _unavailable_creature_image(
+            label=creature.name,
+            asset_key=asset_key,
+            include_placeholder=include_placeholder,
         )
 
     autofetch = _is_image_autofetch_enabled(db)
@@ -261,30 +293,23 @@ async def get_creature_image(creature_id: int, request: Request, db: Session = D
     )
 
     if not asset or asset.status != "cached":
-        placeholder = _placeholder_svg(creature.name)
-        return Response(
-            content=placeholder,
-            media_type="image/svg+xml",
-            headers={
-                "Cache-Control": "public, max-age=3600",
-                "X-Image-Source": "placeholder",
-                "X-Image-Status": getattr(asset, "status", "missing") if asset else "missing",
-                "X-Asset-Key": asset_key,
-            },
+        return _unavailable_creature_image(
+            label=creature.name,
+            asset_key=asset_key,
+            include_placeholder=include_placeholder,
+            status=(
+                getattr(asset, "status", "missing")
+                if asset
+                else "missing"
+            ),
         )
 
     content = asset.read_bytes()
     if not content:
-        placeholder = _placeholder_svg(creature.name)
-        return Response(
-            content=placeholder,
-            media_type="image/svg+xml",
-            headers={
-                "Cache-Control": "public, max-age=3600",
-                "X-Image-Source": "placeholder",
-                "X-Image-Status": "missing",
-                "X-Asset-Key": asset_key,
-            },
+        return _unavailable_creature_image(
+            label=creature.name,
+            asset_key=asset_key,
+            include_placeholder=include_placeholder,
         )
 
     etag = asset.sha256_hash[:20] if asset.sha256_hash else hashlib.sha1(content).hexdigest()

@@ -47,7 +47,12 @@ def _placeholder_svg(label: str) -> bytes:
 
 
 @router.get("/{item_id}/image")
-async def get_item_image(item_id: int, request: Request, db: Session = Depends(get_db)):
+async def get_item_image(
+    item_id: int,
+    request: Request,
+    include_placeholder: bool = Query(True, alias="placeholder"),
+    db: Session = Depends(get_db),
+):
     """Serve loot/item image from local MediaAsset cache (local-first)."""
     item = (
         db.query(ExternalItemModel)
@@ -71,15 +76,10 @@ async def get_item_image(item_id: int, request: Request, db: Session = Depends(g
     )
     source_url = item.image_url if item else media_svc.build_loot_source_url(loot)
     if not source_url:
-        placeholder = _placeholder_svg(label)
-        return Response(
-            content=placeholder,
-            media_type="image/svg+xml",
-            headers={
-                "Cache-Control": "public, max-age=3600",
-                "X-Image-Source": "placeholder",
-                "X-Asset-Key": asset_key,
-            },
+        return _unavailable_item_image(
+            label=label,
+            asset_key=asset_key,
+            include_placeholder=include_placeholder,
         )
 
     autofetch = _is_image_autofetch_enabled(db)
@@ -91,30 +91,23 @@ async def get_item_image(item_id: int, request: Request, db: Session = Depends(g
     )
 
     if not asset or asset.status != "cached":
-        placeholder = _placeholder_svg(label)
-        return Response(
-            content=placeholder,
-            media_type="image/svg+xml",
-            headers={
-                "Cache-Control": "public, max-age=3600",
-                "X-Image-Source": "placeholder",
-                "X-Image-Status": getattr(asset, "status", "missing") if asset else "missing",
-                "X-Asset-Key": asset_key,
-            },
+        return _unavailable_item_image(
+            label=label,
+            asset_key=asset_key,
+            include_placeholder=include_placeholder,
+            status=(
+                getattr(asset, "status", "missing")
+                if asset
+                else "missing"
+            ),
         )
 
     content = asset.read_bytes()
     if not content:
-        placeholder = _placeholder_svg(label)
-        return Response(
-            content=placeholder,
-            media_type="image/svg+xml",
-            headers={
-                "Cache-Control": "public, max-age=3600",
-                "X-Image-Source": "placeholder",
-                "X-Image-Status": "missing",
-                "X-Asset-Key": asset_key,
-            },
+        return _unavailable_item_image(
+            label=label,
+            asset_key=asset_key,
+            include_placeholder=include_placeholder,
         )
 
     etag = asset.sha256_hash[:20] if asset.sha256_hash else hashlib.sha1(content).hexdigest()
@@ -136,6 +129,38 @@ async def get_item_image(item_id: int, request: Request, db: Session = Depends(g
             "X-Image-Source": "local-media-asset",
             "X-Asset-Key": asset_key,
         },
+    )
+
+
+def _unavailable_item_image(
+    *,
+    label: str,
+    asset_key: str,
+    include_placeholder: bool,
+    status: str = "missing",
+) -> Response:
+    headers = {
+        "Cache-Control": "public, max-age=300",
+        "X-Image-Source": (
+            "placeholder"
+            if include_placeholder
+            else "unavailable"
+        ),
+        "X-Image-Status": status,
+        "X-Asset-Key": asset_key,
+    }
+
+    if not include_placeholder:
+        raise HTTPException(
+            status_code=404,
+            detail="Item image unavailable",
+            headers=headers,
+        )
+
+    return Response(
+        content=_placeholder_svg(label),
+        media_type="image/svg+xml",
+        headers=headers,
     )
 
 

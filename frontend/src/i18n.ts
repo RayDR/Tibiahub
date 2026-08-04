@@ -113,6 +113,7 @@ i18n
                                 "creatureStats": "{{hp}} HP · {{exp}} EXP",
                                 "zoneMeta": "{{place}} · Level {{level}}+",
                                 "types": {
+                                    "creature": "Creature",
                                     "boss": "Boss",
                                     "item": "Item",
                                     "quest": "Quest",
@@ -970,6 +971,7 @@ i18n
                                 "creatureStats": "{{hp}} HP · {{exp}} EXP",
                                 "zoneMeta": "{{place}} · Nivel {{level}}+",
                                 "types": {
+                                    "creature": "Criatura",
                                     "boss": "Boss",
                                     "item": "Objeto",
                                     "quest": "Quest",
