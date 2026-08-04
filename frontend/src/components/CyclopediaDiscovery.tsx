@@ -20,6 +20,9 @@ import {
   type DiscoveryCard,
   discoveryApi,
 } from '../services/discovery';
+import {
+  buildLocalEntityMediaUrl,
+} from '../utils/entityMedia';
 
 type DiscoveryMode =
   | 'creatures'
@@ -90,21 +93,24 @@ function contextualImageUrl(
   const type = item.entity_type || '';
 
   if (type === 'creature' || type === 'boss') {
-    return (
-      `/api/v1/creatures/${item.id}/image` +
-      '?placeholder=false'
+    return buildLocalEntityMediaUrl(
+      type,
+      item.id,
     );
   }
 
   if (type === 'item') {
-    return (
-      `/api/v1/items/${item.id}/image` +
-      '?placeholder=false'
+    return buildLocalEntityMediaUrl(
+      'item',
+      item.id,
     );
   }
 
   if (type === 'hunt_zone') {
-    return `/api/v1/hunt-zones/${item.id}/map-image`;
+    return buildLocalEntityMediaUrl(
+      'zone',
+      item.id,
+    );
   }
 
   return undefined;
