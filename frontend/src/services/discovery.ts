@@ -13,5 +13,12 @@ export interface CyclopediaDiscovery {
 }
 
 export const discoveryApi = {
-  load: async (): Promise<CyclopediaDiscovery> => (await api.get('/catalog/discovery')).data,
+  load: async (
+    signal?: AbortSignal,
+  ): Promise<CyclopediaDiscovery> =>
+    (
+      await api.get('/catalog/discovery', {
+        signal,
+      })
+    ).data,
 };
