@@ -1,4 +1,5 @@
 import React, { createContext, useContext, useState, useEffect } from 'react';
+import axios from 'axios';
 import { User, authApi } from '../services/auth';
 import { useNavigate } from 'react-router-dom';
 
@@ -20,14 +21,69 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
     const navigate = useNavigate();
 
     const fetchUser = async (): Promise<User | null> => {
+        setLoading(true);
+
         try {
-            const userData = await authApi.getMe();
-            setUser(userData);
-            return userData;
-        } catch (error) {
-            console.error('Failed to fetch user', error);
-            localStorage.removeItem('token');
-            setUser(null);
+            for (let attempt = 0; attempt < 2; attempt += 1) {
+                try {
+                    const userData = await authApi.getMe();
+                    setUser(userData);
+                    return userData;
+                } catch (error) {
+                    const isAxiosError =
+                        axios.isAxiosError(error);
+
+                    const status = isAxiosError
+                        ? error.response?.status
+                        : undefined;
+
+                    const invalidCredentials =
+                        status === 401 || status === 403;
+
+                    if (invalidCredentials) {
+                        localStorage.removeItem('token');
+                        setUser(null);
+                        return null;
+                    }
+
+                    const transientFailure =
+                        isAxiosError &&
+                        (
+                            !error.response ||
+                            error.code === 'ECONNABORTED' ||
+                            (
+                                status !== undefined &&
+                                status >= 500
+                            )
+                        );
+
+                    if (
+                        transientFailure &&
+                        attempt === 0
+                    ) {
+                        await new Promise<void>(
+                            (resolve) => {
+                                window.setTimeout(
+                                    resolve,
+                                    400,
+                                );
+                            },
+                        );
+
+                        continue;
+                    }
+
+                    console.error(
+                        'Temporarily unable to fetch user',
+                        error,
+                    );
+
+                    // Preserve both the token and the current
+                    // authenticated state for transient failures.
+                    return null;
+                }
+            }
+
             return null;
         } finally {
             setLoading(false);

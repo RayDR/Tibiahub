@@ -24,15 +24,6 @@ _CATEGORY_IMAGE_KEY_PREFIX = "cyclopedia_category_image_"
 _CATEGORY_IMAGE_DIR = Path("backend/storage/category-images")
 
 
-def _get_setting(db: Session, key: str, default: str = "") -> str:
-    value = db.query(SettingsModel).filter(SettingsModel.key == key).first()
-    return value.value if value and value.value is not None else default
-
-
-def _is_image_autofetch_enabled(db: Session) -> bool:
-    return _get_setting(db, "auto_fetch_missing_images_enabled", "0") == "1"
-
-
 def _placeholder_svg(label: str) -> bytes:
     safe = media_svc.escape_svg_text(label or "Unknown", limit=42)
     return (
@@ -399,20 +390,11 @@ async def get_creature_image(
         raise HTTPException(status_code=404, detail="Creature not found in local cache")
 
     asset_key = media_svc.build_creature_asset_key(creature)
-    source_url = media_svc.build_creature_source_url(creature)
-    if not source_url:
-        return _unavailable_creature_image(
-            label=creature.name,
-            asset_key=asset_key,
-            include_placeholder=include_placeholder,
-        )
-
-    autofetch = _is_image_autofetch_enabled(db)
-    asset = await media_svc.get_or_fetch_asset(
+    # Public requests must never perform provider downloads.
+    # Missing assets are populated exclusively by sync/admin workers.
+    asset = media_svc.get_asset(
         db,
-        asset_key=asset_key,
-        source_url=source_url,
-        autofetch_enabled=autofetch,
+        asset_key,
     )
 
     if not asset or asset.status != "cached":
