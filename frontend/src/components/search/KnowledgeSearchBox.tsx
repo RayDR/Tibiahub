@@ -57,6 +57,7 @@ interface KnowledgeSearchBoxProps {
   submitLabel?: string;
   externalSuggestions?: KnowledgeSuggestion[];
   externalLoading?: boolean;
+  compact?: boolean;
 }
 
 const sectionIcons: Record<KnowledgeSearchSection, LucideIcon> = {
@@ -409,6 +410,7 @@ export default function KnowledgeSearchBox({
   submitLabel,
   externalSuggestions,
   externalLoading = false,
+  compact = false,
 }: KnowledgeSearchBoxProps) {
   const { t } = useTranslation();
   const navigate = useNavigate();
@@ -599,10 +601,16 @@ export default function KnowledgeSearchBox({
   return (
     <form
       onSubmit={(event) => void submit(event)}
-      className={`grid gap-2 rounded-2xl border border-line bg-surface-overlay p-2 ${
+      className={`grid border border-line bg-surface-overlay ${
+        compact
+          ? 'gap-1 rounded-xl p-1'
+          : 'gap-2 rounded-2xl p-2'
+      } ${
         showSectionSelect
           ? 'sm:grid-cols-[10rem_minmax(0,1fr)_auto]'
-          : 'sm:grid-cols-[minmax(0,1fr)_auto]'
+          : compact
+            ? 'sm:grid-cols-1'
+            : 'sm:grid-cols-[minmax(0,1fr)_auto]'
       }`}
       role="search"
     >
@@ -648,7 +656,11 @@ export default function KnowledgeSearchBox({
           <Search className="pointer-events-none absolute left-3 top-1/2 size-4 -translate-y-1/2 text-content-muted" />
 
           <input
-            className="app-input w-full pl-9"
+            className={`app-input w-full pl-9 ${
+              compact
+                ? 'h-9 py-1 text-sm'
+                : ''
+            }`}
             value={query}
             autoComplete="off"
             aria-autocomplete="list"
@@ -747,7 +759,11 @@ export default function KnowledgeSearchBox({
       </div>
 
       <button
-        className="app-button-primary"
+        className={
+          compact
+            ? 'sr-only'
+            : 'app-button-primary'
+        }
         type="submit"
         disabled={loading}
       >

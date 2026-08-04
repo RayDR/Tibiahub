@@ -50,6 +50,21 @@ export const creaturesApi = {
     return response.data;
   },
 
+  getPopular: async (
+    limit: number = 12,
+    signal?: AbortSignal,
+  ): Promise<CreatureSimple[]> => {
+    const response = await api.get(
+      '/creatures/popular',
+      {
+        params: { limit },
+        signal,
+      },
+    );
+
+    return response.data;
+  },
+
   getBosses: async (params?: {
     skip?: number;
     limit?: number;

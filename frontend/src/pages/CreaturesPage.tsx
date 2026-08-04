@@ -32,6 +32,8 @@ import { iconByCategory } from '../components/icons/CategoryIcons';
 import { useAuth } from '../context/AuthContext';
 import { activityApi } from '../services/activity';
 import CyclopediaDiscovery from '../components/CyclopediaDiscovery';
+import CompactEntityStrip from '../components/CompactEntityStrip';
+import CyclopediaTabMedia from '../components/CyclopediaTabMedia';
 import KnowledgeSearchBox, {
   type KnowledgeSearchSection,
   type KnowledgeSuggestion,
@@ -169,24 +171,35 @@ const CreaturesPage: React.FC = () => {
   const [quests, setQuests] = useState<QuestSearchResult[]>([]);
   const [zones, setZones] = useState<HuntZone[]>([]);
   const [loading, setLoading] = useState(false);
+  const [loadingMore, setLoadingMore] = useState(false);
   const [initialLoaded, setInitialLoaded] = useState(false);
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
   const [skip, setSkip] = useState(0);
   const [hasMore, setHasMore] = useState(false);
   const [mapPreviewFailed, setMapPreviewFailed] = useState<Record<number, boolean>>({});
-  const [usedHighlightsSource, setUsedHighlightsSource] = useState(false);
+  const [, setUsedHighlightsSource] = useState(false);
   const [showCategories, setShowCategories] = useState(false);
   const [categoryImages, setCategoryImages] = useState<Record<string, string>>({});
   const [categoryPreviews, setCategoryPreviews] = useState<
     Record<string, CreatureCategoryPreview[]>
   >({});
-  const [recentPreviewCards, setRecentPreviewCards] = useState<CyclopediaPreviewCard[]>([]);
+  const [, setRecentPreviewCards] = useState<
+    CyclopediaPreviewCard[]
+  >([]);
   const [mostVisitedPreviewCards, setMostVisitedPreviewCards] = useState<
     CyclopediaPreviewCard[]
   >([]);
   const [topPreviewCards, setTopPreviewCards] = useState<CyclopediaPreviewCard[]>([]);
+  const [tabMedia, setTabMedia] = useState<
+    Partial<Record<SearchMode, string>>
+  >({});
+  const [isSearchCompact, setIsSearchCompact] =
+    useState(false);
   const [snapshotReadyTick, setSnapshotReadyTick] = useState(0);
   const activeRequestRef = useRef<AbortController | null>(null);
+  const stickySearchRef = useRef<HTMLDivElement | null>(null);
+  const loadMoreSentinelRef = useRef<HTMLDivElement | null>(null);
+  const loadMoreLockRef = useRef(false);
   const lastSearchSignatureRef = useRef<string>('');
   const pendingScrollRestoreRef = useRef<number | null>(null);
   const applyingSnapshotRef = useRef(false);
@@ -305,6 +318,95 @@ const CreaturesPage: React.FC = () => {
       });
 
     return () => controller.abort();
+  }, []);
+
+  useEffect(() => {
+    const controller = new AbortController();
+    let mounted = true;
+
+    const loadTabMedia = async () => {
+      const [
+        popularCreatures,
+        bosses,
+        lootItems,
+        tomeItems,
+        zonesForTabs,
+      ] = await Promise.all([
+        creaturesApi
+          .getPopular(1, controller.signal)
+          .catch(() => []),
+        creaturesApi
+          .getBosses(
+            {
+              skip: 0,
+              limit: 1,
+            },
+            controller.signal,
+          )
+          .catch(() => []),
+        itemsApi
+          .getHighlights(12, controller.signal)
+          .catch(() => []),
+        itemsApi
+          .search(
+            'Tome of Knowledge',
+            5,
+            controller.signal,
+          )
+          .catch(() => []),
+        huntZonesApi
+          .getHighlights(1, controller.signal)
+          .catch(() => []),
+      ]);
+
+      if (!mounted) {
+        return;
+      }
+
+      const lootItem = lootItems.find(
+        (item) => item.image_item_id != null,
+      );
+
+      const tomeItem =
+        tomeItems.find(
+          (item) =>
+            item.item_name
+              .trim()
+              .toLowerCase() ===
+            'tome of knowledge',
+        ) ||
+        tomeItems.find(
+          (item) =>
+            item.image_item_id != null,
+        );
+
+      setTabMedia({
+        creatures: popularCreatures[0]
+          ? `/api/v1/creatures/${popularCreatures[0].id}/image?placeholder=false`
+          : undefined,
+        bosses: bosses[0]
+          ? `/api/v1/creatures/${bosses[0].id}/image?placeholder=false`
+          : undefined,
+        items:
+          lootItem?.image_item_id != null
+            ? `/api/v1/items/${lootItem.image_item_id}/image?placeholder=false`
+            : undefined,
+        quests:
+          tomeItem?.image_item_id != null
+            ? `/api/v1/items/${tomeItem.image_item_id}/image?placeholder=false`
+            : undefined,
+        zones: zonesForTabs[0]
+          ? `/api/v1/hunt-zones/${zonesForTabs[0].id}/map-image`
+          : undefined,
+      });
+    };
+
+    void loadTabMedia();
+
+    return () => {
+      mounted = false;
+      controller.abort();
+    };
   }, []);
 
   useEffect(() => {
@@ -462,8 +564,28 @@ const CreaturesPage: React.FC = () => {
       try {
         let top: CyclopediaPreviewCard[] = [];
         if (mode === 'creatures') {
-          const data = (await creaturesApi.getHighlights(5, controller.signal)).filter((x) => !x.is_boss);
-          top = data.map((c) => ({ id: `creature:${c.id}`, name: c.name, subtitle: t('cyclopedia.cards.experience', { value: c.experience.toLocaleString() }), to: `/creatures/${c.slug || c.id}`, imageUrl: `/api/v1/creatures/${c.id}/image` }));
+          const data = await creaturesApi.getPopular(
+            12,
+            controller.signal,
+          );
+
+          top = data.map((creature) => ({
+            id: `creature:${creature.id}`,
+            name: creature.name,
+            subtitle: t(
+              'cyclopedia.cards.experience',
+              {
+                value:
+                  creature.experience.toLocaleString(),
+              },
+            ),
+            to: `/creatures/${
+              creature.slug || creature.id
+            }`,
+            imageUrl:
+              `/api/v1/creatures/${creature.id}/image` +
+              '?placeholder=false',
+          }));
         } else if (mode === 'bosses') {
           const data = await creaturesApi.getBosses({ skip: 0, limit: 5 }, controller.signal);
           top = data.map((c) => ({ id: `boss:${c.id}`, name: c.name, subtitle: c.difficulty || t('cyclopedia.cards.boss'), to: `/creatures/${c.slug || c.id}`, imageUrl: `/api/v1/creatures/${c.id}/image` }));
@@ -568,7 +690,6 @@ const CreaturesPage: React.FC = () => {
   async function performSearch(reset: boolean = true) {
     const normalized = searchTerm.trim();
     const nextSkip = reset ? 0 : skip;
-    const hasCreatureFilters = normalized.length > 0 || !!creatureCategory;
     const requiresRemoteFetch = mode === 'creatures'
       ? true
       : mode === 'bosses'
@@ -665,11 +786,27 @@ const CreaturesPage: React.FC = () => {
       }
     }
 
+    if (
+      !reset &&
+      loadMoreLockRef.current
+    ) {
+      return;
+    }
+
+    if (!reset) {
+      loadMoreLockRef.current = true;
+    }
+
     activeRequestRef.current?.abort();
     const controller = new AbortController();
     activeRequestRef.current = controller;
 
-    setLoading(true);
+    if (reset) {
+      setLoading(true);
+    } else {
+      setLoadingMore(true);
+    }
+
     setErrorMessage(null);
 
     // Local accumulator for cache writing at the end of each branch
@@ -678,51 +815,19 @@ const CreaturesPage: React.FC = () => {
 
     try {
       if (mode === 'creatures') {
-        const isLanding =
-          reset && !hasCreatureFilters;
-
-        let paginationSkip =
-          !reset &&
-          usedHighlightsSource &&
-          !hasCreatureFilters
-            ? creatures.length
-            : nextSkip;
-
-        let data: CreatureSimple[];
-
-        if (isLanding) {
-          data = (
-            await creaturesApi.getHighlights(
-              PAGE_SIZE,
-              controller.signal,
-            )
-          ).filter(
-            (creature) =>
-              !creature.is_boss,
-          );
-
-          paginationSkip = 0;
-        } else {
-          data = await creaturesApi.getAll(
-            {
-              skip: paginationSkip,
-              limit: PAGE_SIZE,
-              search:
-                normalized || undefined,
-              is_boss: false,
-              sort_by: creatureSort,
-              sort_order: sortOrder,
-              category:
-                creatureCategory ||
-                undefined,
-            },
-            controller.signal,
-          );
-        }
-
-        const nextHasMore = isLanding
-          ? data.length > 0
-          : data.length === PAGE_SIZE;
+        const data = await creaturesApi.getAll(
+          {
+            skip: nextSkip,
+            limit: PAGE_SIZE,
+            search: normalized || undefined,
+            is_boss: false,
+            sort_by: creatureSort,
+            sort_order: sortOrder,
+            category:
+              creatureCategory || undefined,
+          },
+          controller.signal,
+        );
 
         setCreatures((current) =>
           reset
@@ -733,15 +838,11 @@ const CreaturesPage: React.FC = () => {
               ),
         );
 
-        setSkip(
-          (reset ? 0 : paginationSkip) +
-            data.length,
+        setSkip(nextSkip + data.length);
+        setHasMore(
+          data.length === PAGE_SIZE,
         );
-
-        setHasMore(nextHasMore);
-        setUsedHighlightsSource(
-          isLanding,
-        );
+        setUsedHighlightsSource(false);
 
         setItems([]);
         setQuests([]);
@@ -750,21 +851,16 @@ const CreaturesPage: React.FC = () => {
         searchPreviewCards = data
           .slice(0, 5)
           .map((creature) => ({
-            id:
-              `creature:${creature.id}`,
+            id: `creature:${creature.id}`,
             name: creature.name,
             subtitle:
               creature.difficulty ||
-              t(
-                'cyclopedia.cards.creature',
-              ),
-            to:
-              `/creatures/` +
-              (creature.slug ||
-                creature.id),
+              t('cyclopedia.cards.creature'),
+            to: `/creatures/${
+              creature.slug || creature.id
+            }`,
             imageUrl:
-              `/api/v1/creatures/` +
-              `${creature.id}/image` +
+              `/api/v1/creatures/${creature.id}/image` +
               '?placeholder=false',
           }));
 
@@ -774,9 +870,9 @@ const CreaturesPage: React.FC = () => {
             items: [],
             quests: [],
             zones: [],
-            hasMore: nextHasMore,
-            usedHighlightsSource:
-              isLanding,
+            hasMore:
+              data.length === PAGE_SIZE,
+            usedHighlightsSource: false,
           };
         }
       } else if (mode === 'bosses') {
@@ -901,10 +997,24 @@ const CreaturesPage: React.FC = () => {
         return;
       }
       console.error(error);
-      resetResults();
-      setErrorMessage(error?.response?.data?.detail || error?.message || 'Failed to load cyclopedia data');
+
+      if (reset) {
+        resetResults();
+      }
+
+      setErrorMessage(
+        error?.response?.data?.detail ||
+          error?.message ||
+          'Failed to load cyclopedia data',
+      );
     } finally {
-      setLoading(false);
+      if (reset) {
+        setLoading(false);
+      } else {
+        setLoadingMore(false);
+        loadMoreLockRef.current = false;
+      }
+
       setInitialLoaded(true);
       // Restore scroll position if returning from a detail page (cache miss path)
       if (pendingScrollRestoreRef.current !== null) {
@@ -999,6 +1109,112 @@ const CreaturesPage: React.FC = () => {
   const hasActiveQuery = searchTerm.trim().length > 0 || (mode === 'creatures' && !!creatureCategory);
   const isEmpty = hasActiveQuery && !loading && creatures.length === 0 && items.length === 0 && quests.length === 0 && zones.length === 0;
 
+  useEffect(() => {
+    let scheduled = false;
+
+    const updateCompactState = () => {
+      if (scheduled) {
+        return;
+      }
+
+      scheduled = true;
+
+      window.requestAnimationFrame(() => {
+        scheduled = false;
+
+        const anchorTop =
+          stickySearchRef.current?.offsetTop || 0;
+
+        const shouldCompact =
+          hasActiveQuery &&
+          window.scrollY > anchorTop + 160;
+
+        setIsSearchCompact((current) =>
+          current === shouldCompact
+            ? current
+            : shouldCompact,
+        );
+      });
+    };
+
+    updateCompactState();
+
+    window.addEventListener(
+      'scroll',
+      updateCompactState,
+      { passive: true },
+    );
+
+    window.addEventListener(
+      'resize',
+      updateCompactState,
+    );
+
+    return () => {
+      window.removeEventListener(
+        'scroll',
+        updateCompactState,
+      );
+
+      window.removeEventListener(
+        'resize',
+        updateCompactState,
+      );
+    };
+  }, [hasActiveQuery, mode]);
+
+  useEffect(() => {
+    const sentinel =
+      loadMoreSentinelRef.current;
+
+    if (
+      !sentinel ||
+      !hasMore ||
+      loading ||
+      loadingMore ||
+      errorMessage ||
+      (
+        mode !== 'creatures' &&
+        mode !== 'bosses'
+      )
+    ) {
+      return undefined;
+    }
+
+    const observer = new IntersectionObserver(
+      (entries) => {
+        if (
+          entries[0]?.isIntersecting &&
+          !loadMoreLockRef.current
+        ) {
+          void performSearch(false);
+        }
+      },
+      {
+        root: null,
+        rootMargin:
+          '0px 0px 650px 0px',
+        threshold: 0,
+      },
+    );
+
+    observer.observe(sentinel);
+
+    return () => observer.disconnect();
+  }, [
+    hasMore,
+    loading,
+    loadingMore,
+    errorMessage,
+    mode,
+    creatures.length,
+    skip,
+    searchTerm,
+    creatureCategory,
+    creatureSort,
+    sortOrder,
+  ]);
+
   // P7 — lightweight prefetch for other tabs after initial load.
   // Runs once, 3 s after first successful data load, only caches highlights.
   useEffect(() => {
@@ -1011,8 +1227,22 @@ const CreaturesPage: React.FC = () => {
         if (cacheGet(key)) continue; // already warm
         try {
           if (m === 'creatures') {
-            const data = (await creaturesApi.getHighlights(12)).filter((c) => !c.is_boss);
-            cacheSet(key, { creatures: data, items: [], quests: [], zones: [], hasMore: true, usedHighlightsSource: true });
+            const data = await creaturesApi.getAll({
+              skip: 0,
+              limit: 12,
+              is_boss: false,
+              sort_by: 'name',
+              sort_order: 'asc',
+            });
+
+            cacheSet(key, {
+              creatures: data,
+              items: [],
+              quests: [],
+              zones: [],
+              hasMore: data.length === 12,
+              usedHighlightsSource: false,
+            });
           } else if (m === 'bosses') {
             const data = await creaturesApi.getBosses({ skip: 0, limit: 12 });
             cacheSet(key, { creatures: data, items: [], quests: [], zones: [], hasMore: true, usedHighlightsSource: false });
@@ -1034,26 +1264,6 @@ const CreaturesPage: React.FC = () => {
     return () => window.clearTimeout(timer);
   }, [initialLoaded]); // eslint-disable-line react-hooks/exhaustive-deps
 
-  const personalizedPreviewCards =
-    isAuthenticated &&
-    mostVisitedPreviewCards.length > 0
-      ? mostVisitedPreviewCards
-      : recentPreviewCards;
-
-  const personalizedPreviewTitle =
-    isAuthenticated &&
-    mostVisitedPreviewCards.length > 0
-      ? t(
-          'cyclopedia.cards.mostVisited',
-        )
-      : isAuthenticated
-        ? t(
-            'cyclopedia.cards.yourRecent',
-          )
-        : t(
-            'cyclopedia.cards.recent',
-          );
-
   return (
     <div className="py-6 sm:py-8">
       <div className="relative space-y-5">
@@ -1066,10 +1276,42 @@ const CreaturesPage: React.FC = () => {
           />
         </div>
 
-        <div className="relative z-20 mx-auto max-w-6xl">
-          <AppCard className="flex flex-col gap-2 p-2 shadow-2xl">
+        <div
+          ref={stickySearchRef}
+          className={`mx-auto transition-all duration-200 ${
+            isSearchCompact
+              ? 'sticky top-2 z-40 max-w-4xl'
+              : 'relative z-20 max-w-6xl'
+          }`}
+        >
+          <AppCard
+            className={`flex flex-col shadow-2xl ${
+              isSearchCompact
+                ? 'gap-1 border-primary/20 bg-surface-overlay/95 p-1 backdrop-blur-xl'
+                : 'gap-2 p-2'
+            }`}
+          >
+            {!isSearchCompact &&
+              (
+                mode === 'creatures' ||
+                mode === 'bosses'
+              ) &&
+              mostVisitedPreviewCards.length >
+                0 ? (
+                <CompactEntityStrip
+                  title={t(
+                    'cyclopedia.cards.mostVisited',
+                  )}
+                  items={
+                    mostVisitedPreviewCards
+                  }
+                  variant="chips"
+                />
+              ) : null}
             <AppTabs
               className="min-w-0"
+              compact={isSearchCompact}
+              iconOnly={isSearchCompact}
               activeKey={mode}
               onChange={(key) => {
                 urlSyncedRef.current = false;
@@ -1079,9 +1321,19 @@ const CreaturesPage: React.FC = () => {
                 key: section.mode,
                 label: t(section.i18nLabel),
                 icon: (
-                  <FontAwesomeIcon
-                    icon={section.icon}
-                    className="w-4"
+                  <CyclopediaTabMedia
+                    imageUrl={
+                      tabMedia[
+                        section.mode as SearchMode
+                      ]
+                    }
+                    label={t(section.i18nLabel)}
+                    fallback={
+                      <FontAwesomeIcon
+                        icon={section.icon}
+                        className="w-4"
+                      />
+                    }
                   />
                 ),
               }))}
@@ -1098,9 +1350,12 @@ const CreaturesPage: React.FC = () => {
               showSectionSelect={false}
               externalSuggestions={searchSuggestions}
               externalLoading={loading}
+              compact={isSearchCompact}
             />
 
-            {(mode === 'creatures' || mode === 'bosses') && (
+            {!isSearchCompact &&
+              (mode === 'creatures' ||
+                mode === 'bosses') && (
               <div className="space-y-2">
                 {mode === 'creatures' && (
                   <div className="flex justify-end">
@@ -1227,11 +1482,22 @@ const CreaturesPage: React.FC = () => {
           </AppCard>
         </div>
 
-        {!searchTerm.trim() && !creatureCategory ? (
-          <CyclopediaDiscovery
-            mode={mode}
-            primaryItems={topPreviewCards}
-          />
+        {!searchTerm.trim() &&
+        !creatureCategory ? (
+          mode === 'creatures' ? (
+            <CompactEntityStrip
+              title={t(
+                'cyclopedia.discovery.mostPopularCreatures',
+              )}
+              items={topPreviewCards}
+              variant="rail"
+            />
+          ) : (
+            <CyclopediaDiscovery
+              mode={mode}
+              primaryItems={topPreviewCards}
+            />
+          )
         ) : null}
       </div>
 
@@ -1259,65 +1525,6 @@ const CreaturesPage: React.FC = () => {
 
         {!loading && (
           <>
-            {!searchTerm.trim() &&
-              (mode !== 'creatures' ||
-                !creatureCategory) &&
-              personalizedPreviewCards.length >
-                0 && (
-                <div className="mb-8 rounded-2xl border border-line/50 bg-surface-base/50 p-5">
-                  <div className="mb-3 text-sm font-semibold uppercase tracking-wide text-primary">
-                    {personalizedPreviewTitle}
-                  </div>
-
-                  <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-5">
-                    {personalizedPreviewCards.map(
-                      (entry) => (
-                        <Link
-                          key={
-                            `personalized-` +
-                            entry.id
-                          }
-                          to={entry.to}
-                          className="rounded-xl border border-line bg-surface-base/40 p-3 transition hover:border-primary/40"
-                        >
-                          <div className="mb-2 flex items-center gap-2">
-                            <ImageWithFallback
-                              src={
-                                entry.imageUrl ||
-                                null
-                              }
-                              alt={entry.name}
-                              className="h-10 w-10 rounded object-contain [image-rendering:pixelated]"
-                              containerClassName="h-10 w-10"
-                              fallbackLabel={
-                                entry.name
-                              }
-                            />
-
-                            <div className="min-w-0">
-                              <div className="truncate text-sm font-semibold text-content-primary">
-                                {entry.name}
-                              </div>
-                              <div className="truncate text-xs text-content-muted">
-                                {entry.subtitle}
-                              </div>
-                            </div>
-                          </div>
-
-                          {entry.createdAt ? (
-                            <div className="text-[11px] text-content-muted">
-                              {new Date(
-                                entry.createdAt,
-                              ).toLocaleDateString()}
-                            </div>
-                          ) : null}
-                        </Link>
-                      ),
-                    )}
-                  </div>
-                </div>
-              )}
-
             <div className="grid grid-cols-1 gap-6 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4">
             {(mode === 'creatures' || mode === 'bosses') && creatures.map((creature, index) => (
               <CreatureCard key={creature.id} creature={creature} index={index} />
@@ -1424,16 +1631,27 @@ const CreaturesPage: React.FC = () => {
           </>
         )}
 
-        {!loading && (mode === 'creatures' || mode === 'bosses') && hasMore && creatures.length > 0 && (
-          <div className="mt-8 flex justify-center">
-            <button
-              onClick={() => void performSearch(false)}
-              className="rounded-xl border border-line bg-surface-base px-5 py-3 text-sm font-semibold text-content-primary hover:border-primary/60 hover:text-primary"
-            >
-              {t('cyclopedia.actions.loadMore')}
-            </button>
+        {(mode === 'creatures' ||
+          mode === 'bosses') &&
+        hasMore &&
+        creatures.length > 0 ? (
+          <div
+            ref={loadMoreSentinelRef}
+            className="h-px w-full"
+            aria-hidden="true"
+          />
+        ) : null}
+
+        {loadingMore ? (
+          <div
+            className="flex items-center justify-center gap-2 py-5 text-sm text-content-muted"
+            role="status"
+            aria-live="polite"
+          >
+            <Loader2 className="size-4 animate-spin text-primary" />
+            {t('common.loading')}
           </div>
-        )}
+        ) : null}
 
         {isEmpty && !errorMessage && (
           <div className="py-20 text-center opacity-70">
