@@ -116,6 +116,81 @@ async def get_cyclopedia_category_image_file(file_name: str):
     return FileResponse(path=str(target))
 
 
+@router.get("/category-previews")
+async def get_creature_category_previews(
+    response: Response,
+    db: Session = Depends(get_db),
+):
+    """Return local creature candidates for GIF-first category cards."""
+    creatures = (
+        db.query(CreatureModel)
+        .filter(
+            CreatureModel.is_hidden == False,
+            CreatureModel.is_boss == False,
+            CreatureModel.classification.isnot(None),
+            CreatureModel.classification != "",
+        )
+        .all()
+    )
+
+    ranked: dict[str, list[tuple[tuple, dict]]] = {}
+
+    for creature in creatures:
+        category_key = _normalize_category_key(
+            creature.classification or ""
+        )
+        name_key = _normalize_category_key(creature.name or "")
+
+        media_rank = (
+            0
+            if creature.image_asset_id is not None
+            else 1
+            if (
+                creature.image_url_override
+                or creature.image_url
+            )
+            else 2
+        )
+
+        exact_rank = 0 if name_key == category_key else 1
+
+        score = (
+            media_rank,
+            exact_rank,
+            -int(creature.experience or 0),
+            len(creature.name or ""),
+            (creature.name or "").lower(),
+        )
+
+        ranked.setdefault(category_key, []).append(
+            (
+                score,
+                {
+                    "id": creature.id,
+                    "name": creature.name,
+                    "slug": creature.slug,
+                },
+            )
+        )
+
+    result = {
+        category_key: [
+            payload
+            for _, payload in sorted(
+                candidates,
+                key=lambda candidate: candidate[0],
+            )[:6]
+        ]
+        for category_key, candidates in ranked.items()
+    }
+
+    response.headers["Cache-Control"] = (
+        "public, max-age=3600, stale-while-revalidate=86400"
+    )
+
+    return result
+
+
 @router.get("/highlights", response_model=List[CreatureSimple])
 async def get_creature_highlights(
     limit: int = Query(18, ge=1, le=50),

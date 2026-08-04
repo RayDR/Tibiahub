@@ -1,224 +1,497 @@
+import type { TFunction } from 'i18next';
+import type { LucideIcon } from 'lucide-react';
 import {
   BookOpenCheck,
-  Compass,
   Crown,
-  Flame,
+  Gem,
   MapPinned,
   Sparkles,
-  Swords,
-} from "lucide-react";
-import { useEffect, useState } from "react";
-import { Link } from "react-router-dom";
-import { useTranslation } from "react-i18next";
+} from 'lucide-react';
+import {
+  useEffect,
+  useMemo,
+  useState,
+} from 'react';
+import { Link } from 'react-router-dom';
+import { useTranslation } from 'react-i18next';
 
 import {
-  CyclopediaDiscovery as DiscoveryPayload,
-  DiscoveryCard,
+  type CyclopediaDiscovery as DiscoveryPayload,
+  type DiscoveryCard,
   discoveryApi,
-} from "../services/discovery";
+} from '../services/discovery';
 
-export default function CyclopediaDiscovery() {
+type DiscoveryMode =
+  | 'creatures'
+  | 'bosses'
+  | 'items'
+  | 'quests'
+  | 'zones';
+
+type ContextKind =
+  | 'creature'
+  | 'boss'
+  | 'item'
+  | 'quest'
+  | 'zone';
+
+interface PrimaryPreview {
+  id: string;
+  name: string;
+  subtitle: string;
+  to: string;
+  imageUrl?: string;
+}
+
+interface ContextCard {
+  id: string;
+  name: string;
+  subtitle: string;
+  to: string;
+  imageUrl?: string;
+  kind: ContextKind;
+}
+
+interface CyclopediaDiscoveryProps {
+  mode: DiscoveryMode;
+  primaryItems: PrimaryPreview[];
+}
+
+const fallbackIcons: Record<ContextKind, LucideIcon> = {
+  creature: Sparkles,
+  boss: Crown,
+  item: Gem,
+  quest: BookOpenCheck,
+  zone: MapPinned,
+};
+
+const modeKinds: Record<DiscoveryMode, ContextKind> = {
+  creatures: 'creature',
+  bosses: 'boss',
+  items: 'item',
+  quests: 'quest',
+  zones: 'zone',
+};
+
+const modeEntityTypes: Record<DiscoveryMode, string[]> = {
+  creatures: ['creature'],
+  bosses: ['boss'],
+  items: ['item'],
+  quests: ['quest'],
+  zones: ['hunt_zone'],
+};
+
+const normalize = (value: string) =>
+  value.trim().toLocaleLowerCase().replace(/\s+/g, ' ');
+
+function contextualImageUrl(
+  item: DiscoveryCard,
+): string | undefined {
+  const type = item.entity_type || '';
+
+  if (type === 'creature' || type === 'boss') {
+    return (
+      `/api/v1/creatures/${item.id}/image` +
+      '?placeholder=false'
+    );
+  }
+
+  if (type === 'item') {
+    return (
+      `/api/v1/items/${item.id}/image` +
+      '?placeholder=false'
+    );
+  }
+
+  if (type === 'hunt_zone') {
+    return `/api/v1/hunt-zones/${item.id}/map-image`;
+  }
+
+  return undefined;
+}
+
+function contextualLink(item: DiscoveryCard): string {
+  const type = item.entity_type || '';
+
+  const tab =
+    type === 'quest'
+      ? 'quests'
+      : type === 'item'
+        ? 'items'
+        : type === 'hunt_zone'
+          ? 'zones'
+          : type === 'boss'
+            ? 'bosses'
+            : 'creatures';
+
+  return (
+    `/cyclopedia?tab=${tab}&q=` +
+    encodeURIComponent(item.name)
+  );
+}
+
+function contextualSubtitle(
+  item: DiscoveryCard,
+  t: TFunction,
+): string {
+  if (item.search_count) {
+    return t('cyclopedia.discovery.searches', {
+      count: item.search_count,
+    });
+  }
+
+  if (item.summary) {
+    return item.summary;
+  }
+
+  if (
+    item.entity_type === 'hunt_zone' &&
+    item.recommended_level
+  ) {
+    return `${item.city || t('common.unknown')} · ${t(
+      'cyclopedia.zones.level',
+      {
+        level: item.recommended_level,
+      },
+    )}`;
+  }
+
+  return t(
+    `cyclopedia.discovery.types.${item.entity_type}`,
+    {
+      defaultValue:
+        item.entity_type || t('common.unknown'),
+    },
+  );
+}
+
+function relatedCards(
+  data: DiscoveryPayload,
+  mode: DiscoveryMode,
+  primaryItems: PrimaryPreview[],
+  t: TFunction,
+): ContextCard[] {
+  const expectedTypes = new Set(modeEntityTypes[mode]);
+
+  const candidates: DiscoveryCard[] = [
+    ...data.trending,
+    ...data.latest_knowledge,
+    ...(mode === 'quests'
+      ? data.recent_quests.map((item) => ({
+          ...item,
+          entity_type: 'quest',
+        }))
+      : []),
+    ...(mode === 'zones'
+      ? data.popular_hunts.map((item) => ({
+          ...item,
+          entity_type: 'hunt_zone',
+        }))
+      : []),
+    ...(mode === 'bosses' && data.boosted_boss
+      ? [
+          {
+            ...data.boosted_boss,
+            entity_type: 'boss',
+          },
+        ]
+      : []),
+  ];
+
+  const primaryNames = new Set(
+    primaryItems.map((item) => normalize(item.name)),
+  );
+
+  const seen = new Set<string>();
+  const cards: ContextCard[] = [];
+
+  for (const item of candidates) {
+    const entityType = item.entity_type || '';
+
+    if (!expectedTypes.has(entityType)) {
+      continue;
+    }
+
+    const normalizedName = normalize(item.name);
+
+    if (
+      !normalizedName ||
+      primaryNames.has(normalizedName)
+    ) {
+      continue;
+    }
+
+    const key = `${entityType}:${normalizedName}`;
+
+    if (seen.has(key)) {
+      continue;
+    }
+
+    seen.add(key);
+
+    cards.push({
+      id: `${entityType}:${item.id}`,
+      name: item.name,
+      subtitle: contextualSubtitle(item, t),
+      to: contextualLink(item),
+      imageUrl: contextualImageUrl(item),
+      kind: modeKinds[mode],
+    });
+
+    if (cards.length >= 6) {
+      break;
+    }
+  }
+
+  return cards;
+}
+
+function primaryTitle(
+  mode: DiscoveryMode,
+  t: TFunction,
+): string {
+  if (mode === 'creatures') {
+    return t('cyclopedia.discovery.featuredCreatures');
+  }
+
+  if (mode === 'quests') {
+    return t('cyclopedia.discovery.recentQuests');
+  }
+
+  if (mode === 'zones') {
+    return t('cyclopedia.discovery.popularHunts');
+  }
+
+  if (mode === 'bosses') {
+    return t('nav.bosses');
+  }
+
+  return t('nav.loot');
+}
+
+function normalizePrimaryImage(
+  imageUrl: string | undefined,
+  mode: DiscoveryMode,
+): string | undefined {
+  if (!imageUrl) {
+    return undefined;
+  }
+
+  if (
+    (mode === 'creatures' ||
+      mode === 'bosses' ||
+      mode === 'items') &&
+    !imageUrl.includes('placeholder=')
+  ) {
+    return `${imageUrl}?placeholder=false`;
+  }
+
+  return imageUrl;
+}
+
+function normalizePrimaryLink(
+  item: PrimaryPreview,
+  mode: DiscoveryMode,
+): string {
+  if (mode === 'items') {
+    return (
+      '/cyclopedia?tab=items&q=' +
+      encodeURIComponent(item.name)
+    );
+  }
+
+  if (mode === 'zones') {
+    return (
+      '/cyclopedia?tab=zones&q=' +
+      encodeURIComponent(item.name)
+    );
+  }
+
+  return item.to;
+}
+
+export default function CyclopediaDiscovery({
+  mode,
+  primaryItems,
+}: CyclopediaDiscoveryProps) {
   const { t } = useTranslation();
-  const [data, setData] = useState<DiscoveryPayload | null>(null);
+  const [data, setData] =
+    useState<DiscoveryPayload | null>(null);
+
   useEffect(() => {
+    const controller = new AbortController();
     let active = true;
+
     void discoveryApi
-      .load()
+      .load(controller.signal)
       .then((value) => {
-        if (active) setData(value);
+        if (active) {
+          setData(value);
+        }
       })
       .catch(() => {
-        if (active) setData(null);
+        if (active) {
+          setData(null);
+        }
       });
+
     return () => {
       active = false;
+      controller.abort();
     };
   }, []);
-  if (!data) return null;
+
+  const primaryCards = useMemo<ContextCard[]>(
+    () =>
+      primaryItems.slice(0, 6).map((item) => ({
+        id: item.id,
+        name: item.name,
+        subtitle: item.subtitle,
+        to: normalizePrimaryLink(item, mode),
+        imageUrl: normalizePrimaryImage(
+          item.imageUrl,
+          mode,
+        ),
+        kind: modeKinds[mode],
+      })),
+    [mode, primaryItems],
+  );
+
+  const related = useMemo(
+    () =>
+      data
+        ? relatedCards(data, mode, primaryItems, t)
+        : [],
+    [data, mode, primaryItems, t],
+  );
+
+  if (
+    primaryCards.length === 0 &&
+    related.length === 0
+  ) {
+    return null;
+  }
+
   return (
     <section
-      className="mx-auto max-w-6xl space-y-5"
-      aria-label={t("cyclopedia.discovery.label")}
+      className="mx-auto max-w-6xl space-y-4"
+      aria-label={t('cyclopedia.discovery.label')}
     >
-      <div className="grid gap-4 lg:grid-cols-[minmax(0,1.4fr)_minmax(18rem,.6fr)]">
-        <DiscoveryGroup
-          icon={<Sparkles />}
-          title={t("cyclopedia.discovery.featuredCreatures")}
-          items={data.featured_creatures.map((item) => ({
-            ...item,
-            image_url: `/api/v1/creatures/${item.id}/image`,
-          }))}
-          href={(item) => `/creatures/${item.slug || item.id}`}
-          meta={(item) =>
-            item.experience
-              ? t("cyclopedia.cards.experience", {
-                  value: item.experience.toLocaleString(),
-                })
-              : ""
-          }
-        />
-        <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-1">
-          <BoostCard
-            icon={<Flame />}
-            title={t("cyclopedia.discovery.boostedCreature")}
-            item={data.boosted_creature}
-            state={data.boosted_state}
-          />
-          <BoostCard
-            icon={<Crown />}
-            title={t("cyclopedia.discovery.boostedBoss")}
-            item={data.boosted_boss}
-            state={data.boosted_state}
-          />
+      <div className="flex items-center justify-between gap-3">
+        <div>
+          <p className="text-xs font-semibold uppercase tracking-[0.14em] text-primary">
+            {t(
+              mode === 'items'
+                ? 'nav.loot'
+                : `nav.${mode}`,
+            )}
+          </p>
+          <h2 className="mt-1 text-xl font-semibold text-content-primary">
+            {primaryTitle(mode, t)}
+          </h2>
         </div>
       </div>
-      <div className="grid gap-4 lg:grid-cols-2">
-        <DiscoveryGroup
-          icon={<Swords />}
-          title={t("cyclopedia.discovery.popularHunts")}
-          items={data.popular_hunts}
-          href={(item) =>
-            `/cyclopedia?tab=zones&q=${encodeURIComponent(item.name)}`
-          }
-          meta={(item) =>
-            `${item.city || t("common.unknown")} · ${t("cyclopedia.zones.level", { level: item.recommended_level || 0 })}`
-          }
-        />
-        <DiscoveryGroup
-          icon={<BookOpenCheck />}
-          title={t("cyclopedia.discovery.recentQuests")}
-          items={data.recent_quests}
-          href={(item) => `/quests/${item.id}`}
-          meta={(item) => item.summary || t("cyclopedia.quests.noDetails")}
-        />
-        <DiscoveryGroup
-          icon={<MapPinned />}
-          title={t("cyclopedia.discovery.latestKnowledge")}
-          items={data.latest_knowledge}
-          href={(item) => discoveryLink(item)}
-          meta={(item) =>
-            t(`cyclopedia.discovery.types.${item.entity_type}`, {
-              defaultValue: item.entity_type || t("common.unknown"),
-            })
-          }
-        />
-        <DiscoveryGroup
-          icon={<Compass />}
-          title={t("cyclopedia.discovery.trending")}
-          items={data.trending}
-          href={(item) => discoveryLink(item)}
-          meta={(item) =>
-            t("cyclopedia.discovery.searches", {
-              count: item.search_count || 0,
-            })
-          }
-        />
+
+      <div
+        className={`grid gap-4 ${
+          related.length
+            ? 'lg:grid-cols-[minmax(0,1.35fr)_minmax(18rem,.65fr)]'
+            : ''
+        }`}
+      >
+        {primaryCards.length ? (
+          <ContextGroup
+            items={primaryCards}
+            columns="wide"
+          />
+        ) : null}
+
+        {related.length ? (
+          <ContextGroup
+            title={t('cyclopedia.discovery.trending')}
+            items={related}
+            columns="compact"
+          />
+        ) : null}
       </div>
     </section>
   );
 }
 
-function DiscoveryGroup({
-  icon,
+function ContextGroup({
   title,
   items,
-  href,
-  meta,
+  columns,
 }: {
-  icon: React.ReactNode;
-  title: string;
-  items: DiscoveryCard[];
-  href: (item: DiscoveryCard) => string;
-  meta: (item: DiscoveryCard) => string;
+  title?: string;
+  items: ContextCard[];
+  columns: 'wide' | 'compact';
 }) {
-  const { t } = useTranslation();
   return (
     <article className="rounded-2xl bg-surface-raised p-5 shadow-sm">
-      <h2 className="flex items-center gap-2 text-lg font-semibold">
-        <span className="text-primary [&>svg]:size-5">{icon}</span>
-        {title}
-      </h2>
-      {items.length ? (
-        <div className="mt-4 grid gap-2 sm:grid-cols-2">
-          {items.slice(0, 6).map((item) => (
-            <Link
-              key={String(item.id)}
-              to={href(item)}
-              className="group flex min-w-0 items-center gap-3 rounded-xl bg-surface p-3 hover:bg-surface-active"
-            >
-              {item.image_url ? (
-                <img
-                  src={item.image_url}
-                  alt=""
-                  className="size-11 shrink-0 rounded-lg object-contain"
-                  loading="lazy"
-                />
-              ) : (
-                <span className="grid size-11 shrink-0 place-items-center rounded-lg bg-primary-subtle text-primary">
-                  <Sparkles className="size-4" />
-                </span>
-              )}
-              <span className="min-w-0">
-                <strong className="block truncate text-sm">{item.name}</strong>
-                <span className="line-clamp-1 text-xs text-content-muted">
-                  {meta(item)}
-                </span>
+      {title ? (
+        <h3 className="mb-4 text-sm font-semibold uppercase tracking-wide text-content-secondary">
+          {title}
+        </h3>
+      ) : null}
+
+      <div
+        className={
+          columns === 'wide'
+            ? 'grid gap-2 sm:grid-cols-2'
+            : 'grid gap-2'
+        }
+      >
+        {items.map((item) => (
+          <Link
+            key={item.id}
+            to={item.to}
+            className="group flex min-w-0 items-center gap-3 rounded-xl bg-surface p-3 transition hover:bg-surface-active"
+          >
+            <ContextMedia item={item} />
+
+            <span className="min-w-0">
+              <strong className="block truncate text-sm text-content-primary">
+                {item.name}
+              </strong>
+              <span className="line-clamp-1 text-xs text-content-muted">
+                {item.subtitle}
               </span>
-            </Link>
-          ))}
-        </div>
-      ) : (
-        <p className="mt-4 rounded-xl bg-surface p-4 text-sm text-content-muted">
-          {t("cyclopedia.discovery.empty")}
-        </p>
-      )}
-    </article>
-  );
-}
-function BoostCard({
-  icon,
-  title,
-  item,
-  state,
-}: {
-  icon: React.ReactNode;
-  title: string;
-  item: DiscoveryCard | null;
-  state: string;
-}) {
-  const { t } = useTranslation();
-  return (
-    <article className="rounded-2xl bg-gradient-to-br from-accent-subtle to-surface-raised p-4 shadow-sm">
-      <div className="flex items-center gap-2 text-accent">
-        <span className="[&>svg]:size-5">{icon}</span>
-        <h2 className="font-semibold">{title}</h2>
+            </span>
+          </Link>
+        ))}
       </div>
-      {item ? (
-        <Link
-          to={discoveryLink(item)}
-          className="mt-3 block text-lg font-semibold"
-        >
-          {item.name}
-        </Link>
-      ) : (
-        <p className="mt-3 text-sm text-content-secondary">
-          {t(`cyclopedia.discovery.boostedState.${state}`)}
-        </p>
-      )}
     </article>
   );
 }
-function discoveryLink(item: DiscoveryCard) {
-  const type = item.entity_type || "";
-  const tab =
-    type === "quest"
-      ? "quests"
-      : type === "item"
-        ? "items"
-        : type === "hunt_zone"
-          ? "zones"
-          : type === "boss"
-            ? "bosses"
-            : "creatures";
-  return `/cyclopedia?tab=${tab}&q=${encodeURIComponent(item.name)}`;
+
+function ContextMedia({
+  item,
+}: {
+  item: ContextCard;
+}) {
+  const Icon = fallbackIcons[item.kind];
+  const [failed, setFailed] = useState(false);
+
+  useEffect(() => {
+    setFailed(false);
+  }, [item.imageUrl]);
+
+  return (
+    <span className="grid size-12 shrink-0 place-items-center overflow-hidden rounded-xl bg-primary/10 text-primary">
+      {item.imageUrl && !failed ? (
+        <img
+          src={item.imageUrl}
+          alt=""
+          aria-hidden="true"
+          loading="lazy"
+          decoding="async"
+          onError={() => setFailed(true)}
+          className="size-11 object-contain p-0.5 [image-rendering:pixelated]"
+        />
+      ) : (
+        <Icon className="size-5" aria-hidden="true" />
+      )}
+    </span>
+  );
 }

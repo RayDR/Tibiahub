@@ -8,7 +8,13 @@ import { faBook, faScroll } from '@fortawesome/free-solid-svg-icons';
 
 import CreatureCard from '../components/CreatureCard';
 import ImageWithFallback from '../components/ImageWithFallback';
-import { creaturesApi, huntZonesApi, itemsApi, questsApi } from '../services/api';
+import {
+  creaturesApi,
+  huntZonesApi,
+  itemsApi,
+  questsApi,
+  type CreatureCategoryPreview,
+} from '../services/api';
 import {
   buildCacheKey,
   cacheGet,
@@ -84,6 +90,60 @@ const mergeUniqueCreatures = (current: CreatureSimple[], incoming: CreatureSimpl
   return merged;
 };
 
+const isLocalCategoryMediaUrl = (
+  value?: string,
+): value is string =>
+  Boolean(
+    value &&
+      (
+        value.startsWith('/') ||
+        value.startsWith('data:') ||
+        value.startsWith('blob:')
+      ),
+  );
+
+function CreatureCategoryMedia({
+  sources,
+  label,
+  fallback,
+}: {
+  sources: string[];
+  label: string;
+  fallback: React.ReactNode;
+}) {
+  const sourceKey = sources.join('|');
+  const [sourceIndex, setSourceIndex] = useState(0);
+
+  useEffect(() => {
+    setSourceIndex(0);
+  }, [sourceKey]);
+
+  const source = sources[sourceIndex];
+
+  return (
+    <span
+      title={label}
+      className="grid size-14 shrink-0 place-items-center overflow-hidden rounded-xl bg-primary/10 text-primary"
+    >
+      {source ? (
+        <img
+          src={source}
+          alt=""
+          aria-hidden="true"
+          loading="lazy"
+          decoding="async"
+          onError={() =>
+            setSourceIndex((current) => current + 1)
+          }
+          className="size-13 object-contain p-1 [image-rendering:pixelated]"
+        />
+      ) : (
+        fallback
+      )}
+    </span>
+  );
+}
+
 const CreaturesPage: React.FC = () => {
   const PAGE_SIZE = 20;
   const { t } = useTranslation();
@@ -117,6 +177,9 @@ const CreaturesPage: React.FC = () => {
   const [usedHighlightsSource, setUsedHighlightsSource] = useState(false);
   const [showCategories, setShowCategories] = useState(false);
   const [categoryImages, setCategoryImages] = useState<Record<string, string>>({});
+  const [categoryPreviews, setCategoryPreviews] = useState<
+    Record<string, CreatureCategoryPreview[]>
+  >({});
   const [recentPreviewCards, setRecentPreviewCards] = useState<CyclopediaPreviewCard[]>([]);
   const [topPreviewCards, setTopPreviewCards] = useState<CyclopediaPreviewCard[]>([]);
   const [snapshotReadyTick, setSnapshotReadyTick] = useState(0);
@@ -222,9 +285,22 @@ const CreaturesPage: React.FC = () => {
 
   useEffect(() => {
     const controller = new AbortController();
-    void creaturesApi.getCategoryImages(controller.signal)
-      .then((data) => setCategoryImages(data || {}))
-      .catch(() => setCategoryImages({}));
+
+    void Promise.all([
+      creaturesApi.getCategoryImages(controller.signal),
+      creaturesApi.getCategoryPreviews(controller.signal),
+    ])
+      .then(([images, previews]) => {
+        setCategoryImages(images || {});
+        setCategoryPreviews(previews || {});
+      })
+      .catch(() => {
+        if (!controller.signal.aborted) {
+          setCategoryImages({});
+          setCategoryPreviews({});
+        }
+      });
+
     return () => controller.abort();
   }, []);
 
@@ -266,11 +342,6 @@ const CreaturesPage: React.FC = () => {
         } catch {
           // Keep local fallback.
         }
-      }
-
-      if (!isAuthenticated) {
-        if (mounted) setTopPreviewCards([]);
-        return;
       }
 
       try {
@@ -811,28 +882,82 @@ const CreaturesPage: React.FC = () => {
                 )}
 
                 {mode === 'creatures' && showCategories && (
-                  <div className="grid grid-cols-2 gap-2 sm:grid-cols-3 md:grid-cols-5 lg:grid-cols-8">
+                  <div className="grid grid-cols-2 gap-3 sm:grid-cols-3 lg:grid-cols-6">
                     {CREATURE_CATEGORIES.map((category) => {
-                      const active = creatureCategory === category;
-                      const CategoryIcon = iconByCategory(category);
-                      const categoryKey = (category || 'all').toLowerCase();
-                      const categoryImageUrl = categoryImages[categoryKey];
+                      const active =
+                        creatureCategory === category;
+                      const CategoryIcon =
+                        iconByCategory(category);
+                      const categoryKey = (
+                        category || 'all'
+                      ).toLowerCase();
+
+                      const configuredImage =
+                        categoryImages[categoryKey];
+
+                      const previewSources = (
+                        categoryPreviews[categoryKey] || []
+                      ).map(
+                        (preview) =>
+                          `/api/v1/creatures/${preview.id}/image?placeholder=false`,
+                      );
+
+                      const mediaSources = Array.from(
+                        new Set(
+                          [
+                            isLocalCategoryMediaUrl(
+                              configuredImage,
+                            )
+                              ? configuredImage
+                              : undefined,
+                            ...previewSources,
+                          ].filter(
+                            (value): value is string =>
+                              Boolean(value),
+                          ),
+                        ),
+                      );
+
+                      const label =
+                        category ||
+                        t('cyclopedia.categories.all');
+
                       return (
                         <button
                           key={category || 'all'}
-                          onClick={() => setCreatureCategory(category)}
-                          className={`app-stone-panel rounded-xl px-3 py-2 text-left text-xs transition ${active ? 'ring-1 ring-primary text-content-primary' : 'text-content-muted hover:text-content-primary'}`}
+                          type="button"
+                          onClick={() =>
+                            setCreatureCategory(category)
+                          }
+                          className={`app-stone-panel group min-h-[6.5rem] rounded-xl px-3 py-3 text-left transition ${
+                            active
+                              ? 'ring-1 ring-primary text-content-primary'
+                              : 'text-content-muted hover:text-content-primary'
+                          }`}
                         >
-                          <div className="mb-1 flex items-center gap-1.5">
-                            {categoryImageUrl ? (
-                              <img src={categoryImageUrl} alt={category || t('cyclopedia.categories.all')} className="h-5 w-5 rounded object-cover" loading="lazy" />
-                            ) : (
-                              <CategoryIcon className="text-primary" />
-                            )}
-                            <span className="truncate font-semibold">{category || t('cyclopedia.categories.all')}</span>
-                          </div>
-                          <div className="text-[10px] uppercase tracking-wide opacity-75">
-                            {category ? t('cyclopedia.categories.browse') : t('cyclopedia.categories.overview')}
+                          <div className="flex items-center gap-3">
+                            <CreatureCategoryMedia
+                              sources={mediaSources}
+                              label={label}
+                              fallback={
+                                <CategoryIcon className="text-primary" />
+                              }
+                            />
+
+                            <span className="min-w-0">
+                              <span className="block truncate text-sm font-semibold">
+                                {label}
+                              </span>
+                              <span className="mt-1 block text-[10px] uppercase tracking-wide opacity-75">
+                                {category
+                                  ? t(
+                                      'cyclopedia.categories.browse',
+                                    )
+                                  : t(
+                                      'cyclopedia.categories.overview',
+                                    )}
+                              </span>
+                            </span>
                           </div>
                         </button>
                       );
@@ -870,7 +995,10 @@ const CreaturesPage: React.FC = () => {
         </div>
 
         {!searchTerm.trim() && !creatureCategory ? (
-          <CyclopediaDiscovery />
+          <CyclopediaDiscovery
+            mode={mode}
+            primaryItems={topPreviewCards}
+          />
         ) : null}
       </div>
 
@@ -930,34 +1058,7 @@ const CreaturesPage: React.FC = () => {
               </div>
             )}
 
-            {!searchTerm.trim() && (mode !== 'creatures' || !creatureCategory) && isAuthenticated && topPreviewCards.length > 0 && (
-              <div className="mb-8 rounded-2xl border border-line/50 bg-surface-base/50 p-5">
-                <div className="mb-3 text-sm font-semibold uppercase tracking-wide text-primary">{t('cyclopedia.cards.topGlobal')}</div>
-                <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-5">
-                  {topPreviewCards.map((entry) => (
-                    <Link
-                      key={`top-${entry.id}`}
-                      to={entry.to}
-                      className="rounded-xl border border-line bg-surface-base/40 p-3 transition hover:border-primary/40"
-                    >
-                      <div className="mb-2 flex items-center gap-2">
-                        {entry.imageUrl ? (
-                          <img src={entry.imageUrl} alt={entry.name} className="h-10 w-10 rounded object-cover" loading="lazy" />
-                        ) : (
-                          <div className="flex h-10 w-10 items-center justify-center rounded bg-surface text-content-secondary">
-                            <ScrollText size={14} />
-                          </div>
-                        )}
-                        <div>
-                          <div className="truncate text-sm font-semibold text-content-primary">{entry.name}</div>
-                          <div className="text-xs text-content-muted">{entry.subtitle}</div>
-                        </div>
-                      </div>
-                    </Link>
-                  ))}
-                </div>
-              </div>
-            )}
+
 
             <div className="grid grid-cols-1 gap-6 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4">
             {(mode === 'creatures' || mode === 'bosses') && creatures.map((creature, index) => (

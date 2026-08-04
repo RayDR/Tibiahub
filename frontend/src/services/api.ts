@@ -7,6 +7,12 @@ export const LOGIN_TIMEOUT_MS = 20000;
 export const ADMIN_ACTION_TIMEOUT_MS = 30000;
 export const HEALTH_TIMEOUT_MS = 5000;
 
+export interface CreatureCategoryPreview {
+  id: number;
+  name: string;
+  slug?: string | null;
+}
+
 const api = axios.create({
   baseURL: API_BASE_URL,
   timeout: REQUEST_TIMEOUT_MS,
@@ -55,8 +61,23 @@ export const creaturesApi = {
     return response.data;
   },
 
-  getCategoryImages: async (signal?: AbortSignal): Promise<Record<string, string>> => {
-    const response = await api.get('/creatures/category-images', { signal });
+  getCategoryImages: async (
+    signal?: AbortSignal,
+  ): Promise<Record<string, string>> => {
+    const response = await api.get(
+      '/creatures/category-images',
+      { signal },
+    );
+    return response.data || {};
+  },
+
+  getCategoryPreviews: async (
+    signal?: AbortSignal,
+  ): Promise<Record<string, CreatureCategoryPreview[]>> => {
+    const response = await api.get(
+      '/creatures/category-previews',
+      { signal },
+    );
     return response.data || {};
   },
 
