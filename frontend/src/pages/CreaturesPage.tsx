@@ -1,6 +1,16 @@
 import React, { useEffect, useMemo, useRef, useState } from 'react';
-import { Link, useSearchParams } from 'react-router-dom';
-import { AlertTriangle, ArrowDownAZ, ArrowUpAZ, Crown, Loader2, ScrollText, Sparkles } from 'lucide-react';
+import {
+  Link,
+  useSearchParams } from 'react-router-dom';
+import { AlertTriangle,
+  ArrowDownAZ,
+  ArrowUpAZ,
+  Crown,
+  Loader2,
+  ScrollText,
+  Search,
+  X,
+} from 'lucide-react';
 import { useTranslation } from 'react-i18next';
 import axios from 'axios';
 import { FontAwesomeIcon } from '@fortawesome/react-fontawesome';
@@ -194,6 +204,8 @@ const CreaturesPage: React.FC = () => {
     Partial<Record<SearchMode, string>>
   >({});
   const [isSearchCompact, setIsSearchCompact] =
+    useState(false);
+  const [mobileSearchOpen, setMobileSearchOpen] =
     useState(false);
   const [snapshotReadyTick, setSnapshotReadyTick] = useState(0);
   const activeRequestRef = useRef<AbortController | null>(null);
@@ -1122,12 +1134,8 @@ const CreaturesPage: React.FC = () => {
       window.requestAnimationFrame(() => {
         scheduled = false;
 
-        const anchorTop =
-          stickySearchRef.current?.offsetTop || 0;
-
         const shouldCompact =
-          hasActiveQuery &&
-          window.scrollY > anchorTop + 160;
+          window.scrollY > 180;
 
         setIsSearchCompact((current) =>
           current === shouldCompact
@@ -1161,7 +1169,13 @@ const CreaturesPage: React.FC = () => {
         updateCompactState,
       );
     };
-  }, [hasActiveQuery, mode]);
+  }, [mode]);
+
+  useEffect(() => {
+    if (!isSearchCompact) {
+      setMobileSearchOpen(false);
+    }
+  }, [isSearchCompact, mode]);
 
   useEffect(() => {
     const sentinel =
@@ -1265,9 +1279,9 @@ const CreaturesPage: React.FC = () => {
   }, [initialLoaded]); // eslint-disable-line react-hooks/exhaustive-deps
 
   return (
-    <div className="py-6 sm:py-8">
-      <div className="relative space-y-5">
-        <div className="ds-enter">
+    <div className="mx-auto w-full max-w-6xl py-6 sm:py-8">
+      <div className="contents">
+        <div className="ds-enter mb-5">
           <PageHeader
             title={t('nav.search')}
             subtitle={t('hero.subtitle')}
@@ -1278,10 +1292,10 @@ const CreaturesPage: React.FC = () => {
 
         <div
           ref={stickySearchRef}
-          className={`mx-auto transition-all duration-200 ${
+          className={`mx-auto mb-5 w-full transition-all duration-200 ${
             isSearchCompact
-              ? 'sticky top-2 z-40 max-w-4xl'
-              : 'relative z-20 max-w-6xl'
+              ? 'sticky top-[4.5rem] z-40 sm:top-[4.75rem]'
+              : 'relative z-20'
           }`}
         >
           <AppCard
@@ -1308,50 +1322,142 @@ const CreaturesPage: React.FC = () => {
                   variant="chips"
                 />
               ) : null}
-            <AppTabs
-              className="min-w-0"
-              compact={isSearchCompact}
-              iconOnly={isSearchCompact}
-              activeKey={mode}
-              onChange={(key) => {
-                urlSyncedRef.current = false;
-                setMode(key as SearchMode);
-              }}
-              items={cyclopediaSections.map((section) => ({
-                key: section.mode,
-                label: t(section.i18nLabel),
-                icon: (
-                  <CyclopediaTabMedia
-                    imageUrl={
-                      tabMedia[
-                        section.mode as SearchMode
-                      ]
-                    }
-                    label={t(section.i18nLabel)}
-                    fallback={
-                      <FontAwesomeIcon
-                        icon={section.icon}
-                        className="w-4"
+            <div
+              className={
+                isSearchCompact
+                  ? 'flex min-w-0 items-center gap-1'
+                  : ''
+              }
+            >
+              <AppTabs
+                className={
+                  isSearchCompact
+                    ? 'min-w-0 flex-1 overflow-x-auto'
+                    : 'min-w-0'
+                }
+                compact={isSearchCompact}
+                iconOnly={isSearchCompact}
+                activeKey={mode}
+                onChange={(key) => {
+                  urlSyncedRef.current = false;
+                  setMode(key as SearchMode);
+                }}
+                items={cyclopediaSections.map(
+                  (section) => ({
+                    key: section.mode,
+                    label: t(section.i18nLabel),
+                    icon: (
+                      <CyclopediaTabMedia
+                        imageUrl={
+                          tabMedia[
+                            section.mode as SearchMode
+                          ]
+                        }
+                        label={t(
+                          section.i18nLabel,
+                        )}
+                        fallback={
+                          <FontAwesomeIcon
+                            icon={section.icon}
+                            className="w-4"
+                          />
+                        }
                       />
-                    }
-                  />
-                ),
-              }))}
-            />
+                    ),
+                  }),
+                )}
+              />
 
-            <KnowledgeSearchBox
-              section={mode}
-              query={searchTerm}
-              onSectionChange={(nextMode) => {
-                urlSyncedRef.current = false;
-                setMode(nextMode);
-              }}
-              onQueryChange={setSearchTerm}
-              showSectionSelect={false}
-              externalSuggestions={searchSuggestions}
-              externalLoading={loading}
-              compact={isSearchCompact}
-            />
+              {isSearchCompact ? (
+                <button
+                  type="button"
+                  title={t('nav.search')}
+                  aria-label={t('nav.search')}
+                  aria-expanded={
+                    mobileSearchOpen
+                  }
+                  onClick={() =>
+                    setMobileSearchOpen(
+                      (current) => !current,
+                    )
+                  }
+                  className="app-button-ghost grid size-9 shrink-0 place-items-center rounded-lg md:hidden"
+                >
+                  {mobileSearchOpen ? (
+                    <X className="size-4" />
+                  ) : (
+                    <Search className="size-4" />
+                  )}
+                </button>
+              ) : null}
+            </div>
+
+            {!isSearchCompact ? (
+              <KnowledgeSearchBox
+                section={mode}
+                query={searchTerm}
+                onSectionChange={(nextMode) => {
+                  urlSyncedRef.current = false;
+                  setMode(nextMode);
+                }}
+                onQueryChange={setSearchTerm}
+                showSectionSelect={false}
+                externalSuggestions={
+                  searchSuggestions
+                }
+                externalLoading={loading}
+              />
+            ) : (
+              <>
+                <div className="hidden md:block">
+                  <KnowledgeSearchBox
+                    section={mode}
+                    query={searchTerm}
+                    onSectionChange={(
+                      nextMode,
+                    ) => {
+                      urlSyncedRef.current =
+                        false;
+                      setMode(nextMode);
+                    }}
+                    onQueryChange={
+                      setSearchTerm
+                    }
+                    showSectionSelect={false}
+                    externalSuggestions={
+                      searchSuggestions
+                    }
+                    externalLoading={loading}
+                    compact
+                  />
+                </div>
+
+                {mobileSearchOpen ? (
+                  <div className="md:hidden">
+                    <KnowledgeSearchBox
+                      section={mode}
+                      query={searchTerm}
+                      onSectionChange={(
+                        nextMode,
+                      ) => {
+                        urlSyncedRef.current =
+                          false;
+                        setMode(nextMode);
+                      }}
+                      onQueryChange={
+                        setSearchTerm
+                      }
+                      showSectionSelect={false}
+                      externalSuggestions={
+                        searchSuggestions
+                      }
+                      externalLoading={loading}
+                      compact
+                    />
+                  </div>
+                ) : null}
+              </>
+            )}
 
             {!isSearchCompact &&
               (mode === 'creatures' ||
@@ -1453,12 +1559,6 @@ const CreaturesPage: React.FC = () => {
                   </div>
                 )}
 
-                {mode === 'creatures' && !searchTerm.trim() && !creatureCategory && (
-                  <div className="flex items-center gap-2 rounded-xl border border-line bg-surface-raised px-3 py-2 text-xs text-content-muted">
-                    <Sparkles size={14} /> {t('cyclopedia.helpers.classification')}
-                  </div>
-                )}
-
                 {mode === 'bosses' && (
                   <div className="flex items-center gap-2 rounded-xl border border-danger/20 bg-danger/10 px-3 py-2 text-xs text-danger">
                     <Crown size={14} /> {t('cyclopedia.helpers.bosses')}
@@ -1491,6 +1591,7 @@ const CreaturesPage: React.FC = () => {
               )}
               items={topPreviewCards}
               variant="rail"
+              nudgeSessionKey="popular-creatures"
             />
           ) : (
             <CyclopediaDiscovery
