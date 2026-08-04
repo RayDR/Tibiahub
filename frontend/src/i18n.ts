@@ -251,7 +251,6 @@ i18n
                             "hide": "Hide categories"
                         },
                         "helpers": {
-                            "classification": "Classification-first mode active. Pick a category or search directly.",
                             "bosses": "Search and browse boss encounters."
                         },
                         "sort": {
@@ -1109,7 +1108,6 @@ i18n
                             "hide": "Ocultar categorías"
                         },
                         "helpers": {
-                            "classification": "Modo por clasificación activo. Elige una categoría o busca directamente.",
                             "bosses": "Busca y explora encuentros de bosses."
                         },
                         "sort": {

@@ -1,7 +1,7 @@
 import type {
   PointerEvent as ReactPointerEvent,
 } from 'react';
-import { useRef } from 'react';
+import { useEffect, useRef } from 'react';
 import { Link } from 'react-router-dom';
 
 import ImageWithFallback from './ImageWithFallback';
@@ -17,6 +17,7 @@ interface CompactEntityStripProps {
   title: string;
   items: CompactEntityStripItem[];
   variant: 'rail' | 'chips';
+  nudgeSessionKey?: string;
 }
 
 interface DragState {
@@ -31,6 +32,7 @@ export default function CompactEntityStrip({
   title,
   items,
   variant,
+  nudgeSessionKey,
 }: CompactEntityStripProps) {
   const containerRef =
     useRef<HTMLDivElement | null>(null);
@@ -42,6 +44,99 @@ export default function CompactEntityStrip({
     scrollLeft: 0,
     moved: false,
   });
+
+  useEffect(() => {
+    if (
+      variant !== 'rail' ||
+      !nudgeSessionKey ||
+      items.length < 2
+    ) {
+      return undefined;
+    }
+
+    const container = containerRef.current;
+
+    if (!container) {
+      return undefined;
+    }
+
+    const timers: number[] = [];
+    const storageKey =
+      `tibiahub:strip-nudge:${nudgeSessionKey}`;
+
+    const startTimer = window.setTimeout(() => {
+      if (
+        container.scrollWidth <=
+        container.clientWidth + 8
+      ) {
+        return;
+      }
+
+      try {
+        if (
+          window.sessionStorage.getItem(
+            storageKey,
+          ) === '1'
+        ) {
+          return;
+        }
+
+        window.sessionStorage.setItem(
+          storageKey,
+          '1',
+        );
+      } catch {
+        // Storage may be unavailable in restricted mode.
+      }
+
+      if (
+        window.matchMedia(
+          '(prefers-reduced-motion: reduce)',
+        ).matches
+      ) {
+        return;
+      }
+
+      const distance = Math.min(
+        120,
+        Math.max(
+          64,
+          container.clientWidth * 0.2,
+        ),
+      );
+
+      const move = (
+        delay: number,
+        left: number,
+      ) => {
+        timers.push(
+          window.setTimeout(() => {
+            container.scrollTo({
+              left,
+              behavior: 'smooth',
+            });
+          }, delay),
+        );
+      };
+
+      move(0, distance);
+      move(650, 0);
+      move(1250, distance * 0.75);
+      move(1900, 0);
+    }, 650);
+
+    timers.push(startTimer);
+
+    return () => {
+      timers.forEach((timer) =>
+        window.clearTimeout(timer),
+      );
+    };
+  }, [
+    items.length,
+    nudgeSessionKey,
+    variant,
+  ]);
 
   if (items.length === 0) {
     return null;
@@ -122,7 +217,7 @@ export default function CompactEntityStrip({
       aria-label={title}
       className={
         variant === 'rail'
-          ? 'mx-auto max-w-6xl'
+          ? 'w-full'
           : 'min-w-0'
       }
     >
@@ -153,7 +248,7 @@ export default function CompactEntityStrip({
           'flex min-w-0 select-none items-center overflow-x-auto',
           'overscroll-x-contain [scrollbar-width:none]',
           '[&::-webkit-scrollbar]:hidden',
-          'touch-pan-x',
+          'touch-pan-x snap-x snap-proximity',
           variant === 'rail'
             ? 'cursor-grab gap-2 active:cursor-grabbing'
             : 'gap-1.5',
