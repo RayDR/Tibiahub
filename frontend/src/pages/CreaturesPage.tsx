@@ -1,4 +1,4 @@
-import React, { useEffect, useRef, useState } from 'react';
+import React, { useEffect, useMemo, useRef, useState } from 'react';
 import { Link, useSearchParams } from 'react-router-dom';
 import { AlertTriangle, ArrowDownAZ, ArrowUpAZ, Crown, Loader2, ScrollText, Sparkles } from 'lucide-react';
 import { useTranslation } from 'react-i18next';
@@ -20,15 +20,18 @@ import { checkAndInvalidateIfStale } from '../services/cyclopediaCache';
 import { CreatureSimple, HuntZone, ItemSearchResult, QuestSearchResult } from '../types';
 import PageHeader from '../components/ui/PageHeader';
 import AppTabs from '../components/ui/AppTabs';
-import AppInput from '../components/ui/AppInput';
 import AppCard from '../components/ui/AppCard';
 import { cyclopediaSections, modeToTab, tabToMode } from '../config/cyclopediaSections';
 import { iconByCategory } from '../components/icons/CategoryIcons';
 import { useAuth } from '../context/AuthContext';
 import { activityApi } from '../services/activity';
 import CyclopediaDiscovery from '../components/CyclopediaDiscovery';
+import KnowledgeSearchBox, {
+  type KnowledgeSearchSection,
+  type KnowledgeSuggestion,
+} from '../components/search/KnowledgeSearchBox';
 
-type SearchMode = 'creatures' | 'bosses' | 'items' | 'quests' | 'zones';
+type SearchMode = KnowledgeSearchSection;
 type CreatureSort = 'name' | 'experience' | 'hitpoints' | 'difficulty';
 type SortOrder = 'asc' | 'desc';
 type CreatureCategory = '' | 'Amphibic' | 'Aquatic' | 'Bird' | 'Construct' | 'Demon' | 'Dragon' | 'Elemental' | 'Fey' | 'Giant' | 'Human' | 'Humanoid' | 'Lycanthrope' | 'Magical' | 'Mammal' | 'Undead' | 'Beast';
@@ -123,13 +126,71 @@ const CreaturesPage: React.FC = () => {
   const applyingSnapshotRef = useRef(false);
   const { isAuthenticated } = useAuth();
 
-  const searchPlaceholder = (() => {
-    if (mode === 'creatures') return t('search.creaturesPlaceholder');
-    if (mode === 'bosses') return t('search.bossesPlaceholder');
-    if (mode === 'items') return t('search.lootPlaceholder');
-    if (mode === 'quests') return t('search.questsPlaceholder');
-    return t('search.zonesPlaceholder');
-  })();
+  const searchSuggestions = useMemo<
+    KnowledgeSuggestion[]
+  >(() => {
+    if (mode === 'creatures' || mode === 'bosses') {
+      return creatures.slice(0, 20).map((creature) => ({
+        key: `${mode}:${creature.id}`,
+        section: mode,
+        kind: mode === 'bosses' ? 'boss' : 'creature',
+        label: creature.name,
+        to: `/creatures/${creature.slug || creature.id}`,
+        imageUrl:
+          `/api/v1/creatures/${creature.id}/image` +
+          '?placeholder=false',
+      }));
+    }
+
+    if (mode === 'items') {
+      return items.slice(0, 20).map((item) => {
+        const imageId = item.image_item_id ?? item.id;
+
+        return {
+          key: `item:${item.normalized_name}`,
+          section: mode,
+          kind: 'item',
+          label: item.item_name,
+          to:
+            `/cyclopedia?tab=items&q=${encodeURIComponent(
+              item.item_name,
+            )}`,
+          imageUrl:
+            imageId != null
+              ? `/api/v1/items/${imageId}/image` +
+                '?placeholder=false'
+              : undefined,
+        };
+      });
+    }
+
+    if (mode === 'quests') {
+      return quests.slice(0, 20).map((quest) => ({
+        key: `quest:${quest.id || quest.slug || quest.name}`,
+        section: mode,
+        kind: 'quest',
+        label: quest.name,
+        to:
+          quest.id != null
+            ? `/quests/${quest.id}`
+            : `/cyclopedia?tab=quests&q=${encodeURIComponent(
+                quest.name,
+              )}`,
+      }));
+    }
+
+    return zones.slice(0, 20).map((zone) => ({
+      key: `zone:${zone.id}`,
+      section: mode,
+      kind: 'zone',
+      label: zone.name,
+      to:
+        `/cyclopedia?tab=zones&q=${encodeURIComponent(
+          zone.name,
+        )}`,
+      imageUrl: `/api/v1/hunt-zones/${zone.id}/map-image`,
+    }));
+  }, [creatures, items, mode, quests, zones]);
 
   const resetResults = () => {
     setCreatures([]);
@@ -152,16 +213,11 @@ const CreaturesPage: React.FC = () => {
     : t('cyclopedia.states.creatureEmptySubtitle');
 
   useEffect(() => {
-    const stored = localStorage.getItem('cyclopediaShowCategories');
-    if (stored === '0') {
-      setShowCategories(false);
-      return;
-    }
-    if (stored === '1') {
-      setShowCategories(true);
-      return;
-    }
-    setShowCategories(window.innerWidth >= 1024);
+    const stored = localStorage.getItem(
+      'cyclopediaShowCategories',
+    );
+
+    setShowCategories(stored === '1');
   }, []);
 
   useEffect(() => {
@@ -586,6 +642,15 @@ const CreaturesPage: React.FC = () => {
     }
   }, [searchParams]);
 
+  // Keep direct links from Home and browser history synchronized.
+  useEffect(() => {
+    const nextQuery = searchParams.get('q') || '';
+
+    setSearchTerm((current) =>
+      current === nextQuery ? current : nextQuery,
+    );
+  }, [searchParams]);
+
   // Effect 2: mode → URL. Only fires when the user clicks an in-page tab
   // (not when Effect 1 already updated the URL). Skipped on first render
   // because mode was initialized from URL in useState.
@@ -690,58 +755,46 @@ const CreaturesPage: React.FC = () => {
       <div className="relative space-y-5">
         <div className="ds-enter">
           <PageHeader
-            title={t('hero.title')}
+            title={t('nav.search')}
             subtitle={t('hero.subtitle')}
             icon={faBook}
+            size="md"
           />
         </div>
 
-        {!searchTerm.trim() && !creatureCategory && <CyclopediaDiscovery />}
-
         <div className="relative z-20 mx-auto max-w-6xl">
           <AppCard className="flex flex-col gap-2 p-2 shadow-2xl">
-            <div className="flex min-w-0 flex-col gap-2 lg:flex-row lg:items-center">
-              <AppTabs
-                className="min-w-0 lg:flex-1"
-                activeKey={mode}
-                onChange={(key) => {
-                  urlSyncedRef.current = false; // user-initiated tab click → let Effect 2 update URL
-                  setMode(key as SearchMode);
-                }}
-                items={cyclopediaSections.map((section) => ({
-                  key: section.mode,
-                  label: t(section.i18nLabel),
-                  icon: <FontAwesomeIcon icon={section.icon} className="w-4" />,
-                }))}
-              />
+            <AppTabs
+              className="min-w-0"
+              activeKey={mode}
+              onChange={(key) => {
+                urlSyncedRef.current = false;
+                setMode(key as SearchMode);
+              }}
+              items={cyclopediaSections.map((section) => ({
+                key: section.mode,
+                label: t(section.i18nLabel),
+                icon: (
+                  <FontAwesomeIcon
+                    icon={section.icon}
+                    className="w-4"
+                  />
+                ),
+              }))}
+            />
 
-              <div className="min-w-0 lg:w-[min(420px,40vw)]">
-                <AppInput
-                  search
-                  type="text"
-                  placeholder={searchPlaceholder}
-                  value={searchTerm}
-                  onChange={(event) => setSearchTerm(event.target.value)}
-                  showClear={searchTerm.length > 0}
-                  onClear={() => {
-                    setSearchTerm('');
-                    resetResults();
-                  }}
-                  onKeyDown={(event) => {
-                    if (event.key === 'Enter') {
-                      event.preventDefault();
-                      void performSearch(true);
-                    }
-                  }}
-                  onSearch={() => {
-                    void performSearch(true);
-                  }}
-                  searchAriaLabel={t('a11y.search')}
-                  clearAriaLabel={t('a11y.clearSearch')}
-                  className="h-12"
-                />
-              </div>
-            </div>
+            <KnowledgeSearchBox
+              section={mode}
+              query={searchTerm}
+              onSectionChange={(nextMode) => {
+                urlSyncedRef.current = false;
+                setMode(nextMode);
+              }}
+              onQueryChange={setSearchTerm}
+              showSectionSelect={false}
+              externalSuggestions={searchSuggestions}
+              externalLoading={loading}
+            />
 
             {(mode === 'creatures' || mode === 'bosses') && (
               <div className="space-y-2">
@@ -815,6 +868,10 @@ const CreaturesPage: React.FC = () => {
             )}
           </AppCard>
         </div>
+
+        {!searchTerm.trim() && !creatureCategory ? (
+          <CyclopediaDiscovery />
+        ) : null}
       </div>
 
       <div className="pb-12 pt-6">

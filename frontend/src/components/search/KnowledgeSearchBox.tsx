@@ -53,6 +53,10 @@ interface KnowledgeSearchBoxProps {
   query: string;
   onSectionChange: (section: KnowledgeSearchSection) => void;
   onQueryChange: (query: string) => void;
+  showSectionSelect?: boolean;
+  submitLabel?: string;
+  externalSuggestions?: KnowledgeSuggestion[];
+  externalLoading?: boolean;
 }
 
 const sectionIcons: Record<KnowledgeSearchSection, LucideIcon> = {
@@ -401,6 +405,10 @@ export default function KnowledgeSearchBox({
   query,
   onSectionChange,
   onQueryChange,
+  showSectionSelect = true,
+  submitLabel,
+  externalSuggestions,
+  externalLoading = false,
 }: KnowledgeSearchBoxProps) {
   const { t } = useTranslation();
   const navigate = useNavigate();
@@ -422,6 +430,20 @@ export default function KnowledgeSearchBox({
       setSuggestions([]);
       setLoading(false);
       setOpen(false);
+      return undefined;
+    }
+
+    if (externalSuggestions !== undefined) {
+      setLoading(externalLoading);
+      setSuggestions(
+        externalLoading
+          ? []
+          : rankSuggestions(
+              normalizedQuery,
+              externalSuggestions,
+            ).slice(0, MAX_VISIBLE_SUGGESTIONS),
+      );
+      setOpen(true);
       return undefined;
     }
 
@@ -456,7 +478,12 @@ export default function KnowledgeSearchBox({
       window.clearTimeout(timer);
       controller.abort();
     };
-  }, [query, section]);
+  }, [
+    query,
+    section,
+    externalLoading,
+    externalSuggestions,
+  ]);
 
   const openSuggestion = (
     suggestion: KnowledgeSuggestion,
@@ -500,6 +527,11 @@ export default function KnowledgeSearchBox({
 
     if (currentExact) {
       openSuggestion(currentExact);
+      return;
+    }
+
+    if (externalSuggestions !== undefined) {
+      navigate(fallbackUrl(section, normalizedQuery));
       return;
     }
 
@@ -567,39 +599,45 @@ export default function KnowledgeSearchBox({
   return (
     <form
       onSubmit={(event) => void submit(event)}
-      className="grid gap-2 rounded-2xl border border-line bg-surface-overlay p-2 sm:grid-cols-[10rem_minmax(0,1fr)_auto]"
+      className={`grid gap-2 rounded-2xl border border-line bg-surface-overlay p-2 ${
+        showSectionSelect
+          ? 'sm:grid-cols-[10rem_minmax(0,1fr)_auto]'
+          : 'sm:grid-cols-[minmax(0,1fr)_auto]'
+      }`}
       role="search"
     >
-      <select
-        aria-label={t('home.assistantPreview.section')}
-        value={section}
-        onChange={(event) => {
-          onSectionChange(
-            event.target.value as KnowledgeSearchSection,
-          );
-          setSuggestions([]);
-          setOpen(false);
-        }}
-        className="ds-select"
-      >
-        <option value="creatures">
-          {t(
-            'home.assistantPreview.categories.creatures.title',
-          )}
-        </option>
-        <option value="bosses">
-          {t('home.assistantPreview.categories.bosses.title')}
-        </option>
-        <option value="items">
-          {t('home.assistantPreview.categories.items.title')}
-        </option>
-        <option value="quests">
-          {t('home.assistantPreview.categories.quests.title')}
-        </option>
-        <option value="zones">
-          {t('home.assistantPreview.categories.zones.title')}
-        </option>
-      </select>
+      {showSectionSelect ? (
+        <select
+          aria-label={t('home.assistantPreview.section')}
+          value={section}
+          onChange={(event) => {
+            onSectionChange(
+              event.target.value as KnowledgeSearchSection,
+            );
+            setSuggestions([]);
+            setOpen(false);
+          }}
+          className="ds-select"
+        >
+          <option value="creatures">
+            {t(
+              'home.assistantPreview.categories.creatures.title',
+            )}
+          </option>
+          <option value="bosses">
+            {t('home.assistantPreview.categories.bosses.title')}
+          </option>
+          <option value="items">
+            {t('home.assistantPreview.categories.items.title')}
+          </option>
+          <option value="quests">
+            {t('home.assistantPreview.categories.quests.title')}
+          </option>
+          <option value="zones">
+            {t('home.assistantPreview.categories.zones.title')}
+          </option>
+        </select>
+      ) : null}
 
       <div className="relative min-w-0">
         <label className="relative block">
@@ -719,7 +757,7 @@ export default function KnowledgeSearchBox({
           <Sparkles className="size-4" />
         )}
 
-        {t('home.assistantPreview.search')}
+        {submitLabel || t('home.assistantPreview.search')}
       </button>
     </form>
   );
