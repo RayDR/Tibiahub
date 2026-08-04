@@ -264,7 +264,7 @@ i18n
                         },
                         "cards": {
                             "recent": "Recent searches",
-                            "yourRecent": "Continue Where You Left Off",
+                            "yourRecent": "Continue Where You Left Off", "mostVisited": "Most visited by you", "visits": "{{count}} visits",
                             "topGlobal": "Top 5 most searched (global)", "recentSearch": "Recent search", "searchWithQuery": "Search: {{query}}", "experience": "{{value}} EXP", "creature": "Creature", "boss": "Boss", "quest": "Quest", "huntZone": "Hunt zone", "drops": "{{count}} drops"
                         },
                         "items": {
@@ -303,7 +303,7 @@ i18n
                         "actions": {
                             "loadMore": "Load more"
                         },
-                        "discovery": { "label": "Cyclopedia discovery", "featuredCreatures": "Featured Creatures", "popularHunts": "Popular Hunts", "recentQuests": "Recent Quests", "boostedCreature": "Boosted Creature", "boostedBoss": "Boosted Boss", "latestKnowledge": "Latest Knowledge", "trending": "Trending", "searches": "{{count}} searches", "empty": "Local synchronized content will appear here as it becomes available.", "types": { "creature": "Creature", "boss": "Boss", "item": "Item", "quest": "Quest", "npc": "NPC", "location": "Location", "town": "Town", "area": "Area", "access": "Access", "mission": "Mission", "hunt_zone": "Hunt zone", "route": "Route" }, "boostedState": { "awaiting_official_sync": "Awaiting an official synchronized daily boost. No placeholder is shown." } }
+                        "discovery": { "label": "Cyclopedia discovery", "mostPopularCreatures": "Most Popular Creatures", "popularHunts": "Popular Hunts", "popularLoot": "Popular Loot", "recentQuests": "Recent Quests", "boostedCreature": "Boosted Creature", "boostedBoss": "Boosted Boss", "latestKnowledge": "Latest Knowledge", "trending": "Trending", "searches": "{{count}} searches", "empty": "Local synchronized content will appear here as it becomes available.", "types": { "creature": "Creature", "boss": "Boss", "item": "Item", "quest": "Quest", "npc": "NPC", "location": "Location", "town": "Town", "area": "Area", "access": "Access", "mission": "Mission", "hunt_zone": "Hunt zone", "route": "Route" }, "boostedState": { "awaiting_official_sync": "Awaiting an official synchronized daily boost. No placeholder is shown." } }
                     },
                     "language": {
                         "english": "English",
@@ -1122,7 +1122,7 @@ i18n
                         },
                         "cards": {
                             "recent": "Búsquedas recientes",
-                            "yourRecent": "Continúa donde lo dejaste",
+                            "yourRecent": "Continúa donde lo dejaste", "mostVisited": "Más visitados por ti", "visits": "{{count}} visitas",
                             "topGlobal": "Top 5 más buscados (global)", "recentSearch": "Búsqueda reciente", "searchWithQuery": "Búsqueda: {{query}}", "experience": "{{value}} EXP", "creature": "Criatura", "boss": "Boss", "quest": "Quest", "huntZone": "Zona de caza", "drops": "{{count}} drops"
                         },
                         "items": {
@@ -1161,7 +1161,7 @@ i18n
                         "actions": {
                             "loadMore": "Cargar más"
                         },
-                        "discovery": { "label": "Descubrimiento de Cyclopedia", "featuredCreatures": "Criaturas destacadas", "popularHunts": "Cacerías populares", "recentQuests": "Quests recientes", "boostedCreature": "Criatura potenciada", "boostedBoss": "Boss potenciado", "latestKnowledge": "Conocimiento reciente", "trending": "Tendencias", "searches": "{{count}} búsquedas", "empty": "El contenido local sincronizado aparecerá aquí cuando esté disponible.", "types": { "creature": "Criatura", "boss": "Boss", "item": "Objeto", "quest": "Quest", "npc": "NPC", "location": "Ubicación", "town": "Ciudad", "area": "Área", "access": "Acceso", "mission": "Misión", "hunt_zone": "Zona de caza", "route": "Ruta" }, "boostedState": { "awaiting_official_sync": "Esperando una sincronización oficial del bonus diario. No se muestra contenido de relleno." } }
+                        "discovery": { "label": "Descubrimiento de Cyclopedia", "mostPopularCreatures": "Criaturas más populares", "popularHunts": "Cacerías populares", "popularLoot": "Loot popular", "recentQuests": "Quests recientes", "boostedCreature": "Criatura potenciada", "boostedBoss": "Boss potenciado", "latestKnowledge": "Conocimiento reciente", "trending": "Tendencias", "searches": "{{count}} búsquedas", "empty": "El contenido local sincronizado aparecerá aquí cuando esté disponible.", "types": { "creature": "Criatura", "boss": "Boss", "item": "Objeto", "quest": "Quest", "npc": "NPC", "location": "Ubicación", "town": "Ciudad", "area": "Área", "access": "Acceso", "mission": "Misión", "hunt_zone": "Zona de caza", "route": "Ruta" }, "boostedState": { "awaiting_official_sync": "Esperando una sincronización oficial del bonus diario. No se muestra contenido de relleno." } }
                     },
                     "language": {
                         "english": "Inglés",

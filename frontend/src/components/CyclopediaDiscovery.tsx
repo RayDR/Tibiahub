@@ -257,7 +257,9 @@ function primaryTitle(
   t: TFunction,
 ): string {
   if (mode === 'creatures') {
-    return t('cyclopedia.discovery.featuredCreatures');
+    return t(
+      'cyclopedia.discovery.mostPopularCreatures',
+    );
   }
 
   if (mode === 'quests') {
@@ -272,7 +274,7 @@ function primaryTitle(
     return t('nav.bosses');
   }
 
-  return t('nav.loot');
+  return t('cyclopedia.discovery.popularLoot');
 }
 
 function normalizePrimaryImage(

@@ -181,6 +181,9 @@ const CreaturesPage: React.FC = () => {
     Record<string, CreatureCategoryPreview[]>
   >({});
   const [recentPreviewCards, setRecentPreviewCards] = useState<CyclopediaPreviewCard[]>([]);
+  const [mostVisitedPreviewCards, setMostVisitedPreviewCards] = useState<
+    CyclopediaPreviewCard[]
+  >([]);
   const [topPreviewCards, setTopPreviewCards] = useState<CyclopediaPreviewCard[]>([]);
   const [snapshotReadyTick, setSnapshotReadyTick] = useState(0);
   const activeRequestRef = useRef<AbortController | null>(null);
@@ -309,12 +312,124 @@ const CreaturesPage: React.FC = () => {
     let mounted = true;
 
     const loadLandingCards = async () => {
+      if (mounted) {
+        setMostVisitedPreviewCards([]);
+      }
+
       const localRecent = loadRecentPreviewCards(mode);
       if (mounted) setRecentPreviewCards(localRecent);
 
       if (isAuthenticated) {
         try {
-          const activity = await activityApi.getMine(80, controller.signal);
+          const activity = await activityApi.getMine(
+            80,
+            controller.signal,
+          );
+
+          const expectedViewActivity =
+            mode === 'creatures'
+              ? 'view_creature'
+              : mode === 'bosses'
+                ? 'view_boss'
+                : null;
+
+          if (expectedViewActivity) {
+            const visits = new Map<
+              string,
+              {
+                count: number;
+                latest: string;
+                name: string;
+                slug: string;
+              }
+            >();
+
+            for (const entry of activity) {
+              if (
+                entry.activity_type !==
+                expectedViewActivity
+              ) {
+                continue;
+              }
+
+              const entityId = String(
+                entry.entity_id || '',
+              ).trim();
+
+              const name = String(
+                entry.metadata?.name || '',
+              ).trim();
+
+              if (
+                !/^\d+$/.test(entityId) ||
+                !name
+              ) {
+                continue;
+              }
+
+              const slug = String(
+                entry.metadata?.slug || '',
+              ).trim();
+
+              const existing =
+                visits.get(entityId);
+
+              visits.set(entityId, {
+                count:
+                  (existing?.count || 0) + 1,
+                latest:
+                  existing &&
+                  existing.latest >
+                    entry.created_at
+                    ? existing.latest
+                    : entry.created_at,
+                name,
+                slug:
+                  slug ||
+                  existing?.slug ||
+                  '',
+              });
+            }
+
+            const mostVisited = [
+              ...visits.entries(),
+            ]
+              .sort(
+                ([, left], [, right]) =>
+                  right.count - left.count ||
+                  right.latest.localeCompare(
+                    left.latest,
+                  ),
+              )
+              .slice(0, 5)
+              .map(([entityId, visit]) => ({
+                id:
+                  `visited:${mode}:` +
+                  entityId,
+                name: visit.name,
+                subtitle: t(
+                  'cyclopedia.cards.visits',
+                  {
+                    count: visit.count,
+                  },
+                ),
+                to:
+                  `/creatures/` +
+                  (visit.slug || entityId),
+                imageUrl:
+                  `/api/v1/creatures/` +
+                  `${entityId}/image` +
+                  '?placeholder=false',
+                createdAt: visit.latest,
+              }));
+
+            if (mounted) {
+              setMostVisitedPreviewCards(
+                mostVisited,
+              );
+            }
+          }
+
           const cards: CyclopediaPreviewCard[] = [];
           for (const entry of activity) {
             if (entry.activity_type !== 'search') continue;
@@ -353,8 +468,38 @@ const CreaturesPage: React.FC = () => {
           const data = await creaturesApi.getBosses({ skip: 0, limit: 5 }, controller.signal);
           top = data.map((c) => ({ id: `boss:${c.id}`, name: c.name, subtitle: c.difficulty || t('cyclopedia.cards.boss'), to: `/creatures/${c.slug || c.id}`, imageUrl: `/api/v1/creatures/${c.id}/image` }));
         } else if (mode === 'items') {
-          const data = await itemsApi.getHighlights(5, controller.signal);
-          top = data.map((i) => ({ id: `item:${i.normalized_name}`, name: i.item_name, subtitle: t('cyclopedia.cards.drops', { count: i.drops.length }), to: '/cyclopedia?tab=items', imageUrl: i.image_item_id ? `/api/v1/items/${i.image_item_id}/image` : undefined }));
+          const data = (
+            await itemsApi.getHighlights(
+              20,
+              controller.signal,
+            )
+          )
+            .filter(
+              (item) =>
+                item.image_item_id != null &&
+                item.drops.length > 0,
+            )
+            .slice(0, 5);
+
+          top = data.map((item) => ({
+            id: `item:${item.normalized_name}`,
+            name: item.item_name,
+            subtitle: t(
+              'cyclopedia.cards.drops',
+              {
+                count: item.drops.length,
+              },
+            ),
+            to:
+              '/cyclopedia?tab=items&q=' +
+              encodeURIComponent(
+                item.item_name,
+              ),
+            imageUrl:
+              `/api/v1/items/` +
+              `${item.image_item_id}/image` +
+              '?placeholder=false',
+          }));
         } else if (mode === 'quests') {
           const data = await questsApi.getHighlights(5, controller.signal);
           top = data.map((q) => ({ id: `quest:${q.id || q.name}`, name: q.name, subtitle: q.group_name || t('cyclopedia.cards.quest'), to: q.id ? `/quests/${q.id}` : '/cyclopedia?tab=quests' }));
@@ -373,7 +518,7 @@ const CreaturesPage: React.FC = () => {
       mounted = false;
       controller.abort();
     };
-  }, [mode, isAuthenticated]);
+  }, [mode, isAuthenticated, t]);
 
   useEffect(() => {
     const snapshot = loadSnapshot(mode);
@@ -425,7 +570,7 @@ const CreaturesPage: React.FC = () => {
     const nextSkip = reset ? 0 : skip;
     const hasCreatureFilters = normalized.length > 0 || !!creatureCategory;
     const requiresRemoteFetch = mode === 'creatures'
-      ? (!reset || hasCreatureFilters)
+      ? true
       : mode === 'bosses'
         ? (!reset || normalized.length > 0)
         : mode === 'items'
@@ -533,39 +678,107 @@ const CreaturesPage: React.FC = () => {
 
     try {
       if (mode === 'creatures') {
-        let data: CreatureSimple[] = [];
+        const isLanding =
+          reset && !hasCreatureFilters;
 
-        const paginationSkip = !reset && usedHighlightsSource && !hasCreatureFilters ? creatures.length : nextSkip;
-        data = await creaturesApi.getAll(
-          {
-            skip: paginationSkip,
-            limit: PAGE_SIZE,
-            search: normalized || undefined,
-            is_boss: false,
-            sort_by: creatureSort,
-            sort_order: sortOrder,
-            category: creatureCategory || undefined,
-          },
-          controller.signal,
+        let paginationSkip =
+          !reset &&
+          usedHighlightsSource &&
+          !hasCreatureFilters
+            ? creatures.length
+            : nextSkip;
+
+        let data: CreatureSimple[];
+
+        if (isLanding) {
+          data = (
+            await creaturesApi.getHighlights(
+              PAGE_SIZE,
+              controller.signal,
+            )
+          ).filter(
+            (creature) =>
+              !creature.is_boss,
+          );
+
+          paginationSkip = 0;
+        } else {
+          data = await creaturesApi.getAll(
+            {
+              skip: paginationSkip,
+              limit: PAGE_SIZE,
+              search:
+                normalized || undefined,
+              is_boss: false,
+              sort_by: creatureSort,
+              sort_order: sortOrder,
+              category:
+                creatureCategory ||
+                undefined,
+            },
+            controller.signal,
+          );
+        }
+
+        const nextHasMore = isLanding
+          ? data.length > 0
+          : data.length === PAGE_SIZE;
+
+        setCreatures((current) =>
+          reset
+            ? data
+            : mergeUniqueCreatures(
+                current,
+                data,
+              ),
         );
 
-        setCreatures((current) => (reset ? data : mergeUniqueCreatures(current, data)));
-        setSkip((reset ? 0 : paginationSkip) + data.length);
-        setHasMore(data.length === PAGE_SIZE);
-        if (hasCreatureFilters || !reset) {
-          setUsedHighlightsSource(false);
-        }
+        setSkip(
+          (reset ? 0 : paginationSkip) +
+            data.length,
+        );
+
+        setHasMore(nextHasMore);
+        setUsedHighlightsSource(
+          isLanding,
+        );
+
         setItems([]);
         setQuests([]);
         setZones([]);
-        searchPreviewCards = data.slice(0, 5).map((c) => ({
-          id: `creature:${c.id}`,
-          name: c.name,
-          subtitle: c.difficulty || t('cyclopedia.cards.creature'),
-          to: `/creatures/${c.slug || c.id}`,
-          imageUrl: `/api/v1/creatures/${c.id}/image`,
-        }));
-        if (reset) _cacheResult = { creatures: data, items: [], quests: [], zones: [], hasMore: data.length === PAGE_SIZE, usedHighlightsSource: false };
+
+        searchPreviewCards = data
+          .slice(0, 5)
+          .map((creature) => ({
+            id:
+              `creature:${creature.id}`,
+            name: creature.name,
+            subtitle:
+              creature.difficulty ||
+              t(
+                'cyclopedia.cards.creature',
+              ),
+            to:
+              `/creatures/` +
+              (creature.slug ||
+                creature.id),
+            imageUrl:
+              `/api/v1/creatures/` +
+              `${creature.id}/image` +
+              '?placeholder=false',
+          }));
+
+        if (reset) {
+          _cacheResult = {
+            creatures: data,
+            items: [],
+            quests: [],
+            zones: [],
+            hasMore: nextHasMore,
+            usedHighlightsSource:
+              isLanding,
+          };
+        }
       } else if (mode === 'bosses') {
         const data = await creaturesApi.getBosses(
           {
@@ -821,6 +1034,26 @@ const CreaturesPage: React.FC = () => {
     return () => window.clearTimeout(timer);
   }, [initialLoaded]); // eslint-disable-line react-hooks/exhaustive-deps
 
+  const personalizedPreviewCards =
+    isAuthenticated &&
+    mostVisitedPreviewCards.length > 0
+      ? mostVisitedPreviewCards
+      : recentPreviewCards;
+
+  const personalizedPreviewTitle =
+    isAuthenticated &&
+    mostVisitedPreviewCards.length > 0
+      ? t(
+          'cyclopedia.cards.mostVisited',
+        )
+      : isAuthenticated
+        ? t(
+            'cyclopedia.cards.yourRecent',
+          )
+        : t(
+            'cyclopedia.cards.recent',
+          );
+
   return (
     <div className="py-6 sm:py-8">
       <div className="relative space-y-5">
@@ -1026,46 +1259,73 @@ const CreaturesPage: React.FC = () => {
 
         {!loading && (
           <>
-            {!searchTerm.trim() && (mode !== 'creatures' || !creatureCategory) && recentPreviewCards.length > 0 && (
-              <div className="mb-8 rounded-2xl border border-line/50 bg-surface-base/50 p-5">
-                <div className="mb-3 text-sm font-semibold uppercase tracking-wide text-primary">
-                  {isAuthenticated ? t('cyclopedia.cards.yourRecent') : t('cyclopedia.cards.recent')}
-                </div>
-                <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-5">
-                  {recentPreviewCards.map((entry) => (
-                    <Link
-                      key={`recent-${entry.id}`}
-                      to={entry.to}
-                      className="rounded-xl border border-line bg-surface-base/40 p-3 transition hover:border-primary/40"
-                    >
-                      <div className="mb-2 flex items-center gap-2">
-                        {entry.imageUrl ? (
-                          <img src={entry.imageUrl} alt={entry.name} className="h-10 w-10 rounded object-cover" loading="lazy" />
-                        ) : (
-                          <div className="flex h-10 w-10 items-center justify-center rounded bg-surface text-content-secondary">
-                            <ScrollText size={14} />
+            {!searchTerm.trim() &&
+              (mode !== 'creatures' ||
+                !creatureCategory) &&
+              personalizedPreviewCards.length >
+                0 && (
+                <div className="mb-8 rounded-2xl border border-line/50 bg-surface-base/50 p-5">
+                  <div className="mb-3 text-sm font-semibold uppercase tracking-wide text-primary">
+                    {personalizedPreviewTitle}
+                  </div>
+
+                  <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-5">
+                    {personalizedPreviewCards.map(
+                      (entry) => (
+                        <Link
+                          key={
+                            `personalized-` +
+                            entry.id
+                          }
+                          to={entry.to}
+                          className="rounded-xl border border-line bg-surface-base/40 p-3 transition hover:border-primary/40"
+                        >
+                          <div className="mb-2 flex items-center gap-2">
+                            <ImageWithFallback
+                              src={
+                                entry.imageUrl ||
+                                null
+                              }
+                              alt={entry.name}
+                              className="h-10 w-10 rounded object-contain [image-rendering:pixelated]"
+                              containerClassName="h-10 w-10"
+                              fallbackLabel={
+                                entry.name
+                              }
+                            />
+
+                            <div className="min-w-0">
+                              <div className="truncate text-sm font-semibold text-content-primary">
+                                {entry.name}
+                              </div>
+                              <div className="truncate text-xs text-content-muted">
+                                {entry.subtitle}
+                              </div>
+                            </div>
                           </div>
-                        )}
-                        <div>
-                          <div className="truncate text-sm font-semibold text-content-primary">{entry.name}</div>
-                          <div className="text-xs text-content-muted">{entry.subtitle}</div>
-                        </div>
-                      </div>
-                      {entry.createdAt && <div className="text-[11px] text-content-muted">{new Date(entry.createdAt).toLocaleDateString()}</div>}
-                    </Link>
-                  ))}
+
+                          {entry.createdAt ? (
+                            <div className="text-[11px] text-content-muted">
+                              {new Date(
+                                entry.createdAt,
+                              ).toLocaleDateString()}
+                            </div>
+                          ) : null}
+                        </Link>
+                      ),
+                    )}
+                  </div>
                 </div>
-              </div>
-            )}
-
-
+              )}
 
             <div className="grid grid-cols-1 gap-6 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4">
             {(mode === 'creatures' || mode === 'bosses') && creatures.map((creature, index) => (
               <CreatureCard key={creature.id} creature={creature} index={index} />
             ))}
 
-            {mode === 'items' && items.map((item, index) => (
+            {mode === 'items' &&
+              searchTerm.trim().length > 1 &&
+              items.map((item, index) => (
               <AppCard key={`${item.normalized_name}-${index}`} className="ds-enter p-5">
                 <div className="mb-4 flex items-start gap-3">
                   <ImageWithFallback
