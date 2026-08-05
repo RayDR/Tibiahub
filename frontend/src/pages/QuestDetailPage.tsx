@@ -8,6 +8,7 @@ import type { QuestDetail, QuestItemValue, QuestNamedValue, QuestRelationship } 
 import { useAuth } from '../context/AuthContext';
 import { activityApi } from '../services/activity';
 import MapMetadataPanel from '../components/MapMetadataPanel';
+import { Page } from '../components/ui';
 
 function Names({ values }: { values: QuestNamedValue[] }) {
   return <ul className="space-y-2">{values.map((value, index) => <li key={`${value.name}-${index}`} className="rounded-lg border border-line bg-surface-base/60 px-3 py-2 text-sm text-content-secondary">{value.name}</li>)}</ul>;
@@ -75,11 +76,11 @@ export default function QuestDetailPage() {
   }, [questId, isAuthenticated, t]);
 
   const unresolved = useMemo(() => quest?.relationships.filter(item => item.resolution_status !== 'resolved').length || 0, [quest]);
-  if (loading) return <div className="flex min-h-[24rem] items-center justify-center text-primary"><Loader2 className="animate-spin" size={42} /></div>;
-  if (!quest || error) return <div className="mx-auto mt-20 max-w-3xl rounded-2xl border border-danger/20 bg-danger/20 p-6 text-danger"><div className="mb-3 text-lg font-semibold">{t('questDetail.unavailable')}</div><p className="text-sm text-danger/80">{error || t('questDetail.notFound')}</p></div>;
+  if (loading) return <Page><div className="flex min-h-[24rem] items-center justify-center text-primary"><Loader2 className="animate-spin" size={42} /></div></Page>;
+  if (!quest || error) return <Page><div className="mx-auto max-w-3xl rounded-2xl border border-danger/20 bg-danger/20 p-6 text-danger"><div className="mb-3 text-lg font-semibold">{t('questDetail.unavailable')}</div><p className="text-sm text-danger/80">{error || t('questDetail.notFound')}</p></div></Page>;
 
   const requirementCount = quest.required_items.length + quest.required_quests.length;
-  return <div className="pb-12 pt-6"><div>
+  return <Page><div>
     <button onClick={() => navigate('/cyclopedia')} className="mb-6 flex min-h-11 items-center gap-2 text-content-secondary hover:text-content-primary"><ArrowLeft size={18} />{t('questDetail.back')}</button>
     <article className="rounded-2xl border border-line bg-surface-base/70 p-4 sm:p-6">
       <header className="mb-5"><div className="flex items-start gap-3 text-primary"><ScrollText className="mt-1 shrink-0" size={24} /><div><h1 className="text-2xl font-bold text-content-primary sm:text-3xl">{quest.name}</h1>{quest.group_name && <p className="mt-1 text-xs text-primary">{t('questDetail.group', { name: quest.group_name })}</p>}</div></div><p className="mt-4 text-content-secondary">{quest.summary || quest.description || t('questDetail.noDetails')}</p></header>
@@ -103,5 +104,5 @@ export default function QuestDetailPage() {
       <MapMetadataPanel entityId={quest.knowledge_entity_id} />
       <footer className="mt-6 flex flex-wrap items-center gap-3 text-xs text-content-muted">{quest.last_synced_at && <span>{t('questDetail.updated', { date: new Date(quest.last_synced_at).toLocaleString() })}</span>}{unresolved > 0 && <span>{t('questDetail.referencesPending', { count: unresolved })}</span>}{quest.source_url && <a href={quest.source_url} target="_blank" rel="noreferrer" className="text-primary hover:text-primary">{t('questDetail.source')}</a>}</footer>
     </article>
-  </div></div>;
+  </div></Page>;
 }

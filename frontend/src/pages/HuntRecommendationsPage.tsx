@@ -10,6 +10,7 @@ import AppTabs from '../components/ui/AppTabs';
 import AppButton from '../components/ui/AppButton';
 import AppCard from '../components/ui/AppCard';
 import AppInput from '../components/ui/AppInput';
+import { Page } from '../components/ui';
 import { useAuth } from '../context/AuthContext';
 import { activityApi } from '../services/activity';
 
@@ -160,7 +161,7 @@ const HuntRecommendationsPage: React.FC = () => {
   };
 
   return (
-    <div className="pb-12 pt-6">
+    <Page>
 
       {/* Hero Section */}
       <div className="mb-8 text-center">
@@ -578,7 +579,7 @@ const HuntRecommendationsPage: React.FC = () => {
           )}
         </div>
       </div>
-    </div>
+    </Page>
   );
 };
 

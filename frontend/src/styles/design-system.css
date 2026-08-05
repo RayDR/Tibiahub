@@ -91,7 +91,13 @@
   --space-16: 4rem;
   --space-20: 5rem;
   --space-24: 6rem;
+  --app-content-max-width: 90rem;
+  --app-focused-content-max-width: 64rem;
   --content-max-width: 90rem;
+  --app-page-padding-top: var(--space-6);
+  --app-page-padding-bottom: var(--space-12);
+  --app-nav-clearance: 4.75rem;
+  --app-sticky-offset: 4.75rem;
   --sidebar-width: 18rem;
   --control-height-sm: 2.25rem;
   --control-height-md: 2.75rem;
@@ -217,8 +223,9 @@ h6 {
 }
 
 /* Layout primitives */
-.ds-container { width: 100%; max-width: var(--content-max-width); margin-inline: auto; padding-inline: var(--space-4); }
-.ds-page { min-height: 100%; padding-block: var(--density-page-space) var(--space-12); }
+.ds-container { width: 100%; max-width: var(--app-content-max-width); margin-inline: auto; padding-inline: var(--space-4); }
+.ds-page { width: 100%; min-height: 100%; padding-block: var(--app-page-padding-top) var(--app-page-padding-bottom); }
+.ds-page-focused { max-width: var(--app-focused-content-max-width); margin-inline: auto; }
 .ds-section { display: grid; gap: var(--density-component-gap); }
 .ds-panel, .ds-card { border: 1px solid var(--border); background: rgb(var(--ds-surface) / 0.82); color: var(--text-primary); box-shadow: var(--elevation-1); }
 .ds-panel { border-radius: var(--radius-xl); }
@@ -320,8 +327,9 @@ h6 {
 
 /* Application and workspace shells */
 .app-shell { min-width: 20rem; overflow-x: clip; background: radial-gradient(circle at 50% 0%, rgb(var(--ds-primary) / 0.08), transparent 34rem), var(--surface-base); }
-.app-shell-main { padding-top: 4.75rem; padding-bottom: calc(5.25rem + env(safe-area-inset-bottom)); }
+.app-shell-main { padding-top: var(--app-nav-clearance); padding-bottom: calc(5.25rem + env(safe-area-inset-bottom)); }
 .app-context-bar { min-height: 2.5rem; display: flex; align-items: center; }
+.app-sticky-offset { top: var(--app-sticky-offset); }
 .app-mobile-nav { padding-bottom: max(var(--space-1), env(safe-area-inset-bottom)); }
 .app-mobile-nav-grid { display: grid; grid-template-columns: repeat(var(--mobile-nav-count, 4), minmax(0, 1fr)); }
 .app-mobile-nav-link { display: flex; min-width: 0; min-height: 3.5rem; flex-direction: column; align-items: center; justify-content: center; gap: 0.125rem; border-radius: var(--radius-md); color: var(--text-muted); font-size: 0.65rem; font-weight: var(--font-weight-medium); }
@@ -338,7 +346,12 @@ h6 {
 .responsive-data-table { display: none; }
 
 @media (min-width: 768px) {
-  .app-shell-main { padding-top: 5.75rem; padding-bottom: 0; }
+  :root,
+  [data-theme] {
+    --app-nav-clearance: 5.75rem;
+    --app-sticky-offset: 5.75rem;
+  }
+  .app-shell-main { padding-top: var(--app-nav-clearance); padding-bottom: 0; }
   .responsive-card-list { display: none; }
   .responsive-data-table { display: block; }
 }

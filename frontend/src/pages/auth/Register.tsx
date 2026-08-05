@@ -6,6 +6,7 @@ import { isValidPassword } from '../../utils/passwordPolicy';
 import { Users, KeyRound, ShieldAlert, Mail } from 'lucide-react';
 import AppCard from '../../components/ui/AppCard';
 import AppButton from '../../components/ui/AppButton';
+import { Page } from '../../components/ui';
 
 export default function Register() {
     const { t, i18n } = useTranslation();
@@ -50,7 +51,7 @@ export default function Register() {
     };
 
     return (
-        <div className="flex items-center justify-center min-h-[calc(100vh-200px)] py-12">
+        <Page className="grid min-h-[70vh] place-items-center">
             <AppCard className="w-full max-w-lg p-8 shadow-xl">
                 <div className="text-center mb-8">
                     <h2 className="text-3xl font-bold text-primary font-serif tracking-wider">{t('auth.joinGuild')}</h2>
@@ -148,6 +149,6 @@ export default function Register() {
                     </Link>
                 </p>
             </AppCard>
-        </div>
+        </Page>
     );
 }

@@ -2,14 +2,23 @@ import React from 'react';
 import { cn } from './cn';
 
 type DivProps = React.HTMLAttributes<HTMLDivElement>;
+type PageVariant = 'default' | 'focused';
+
+interface PageProps extends DivProps {
+  variant?: PageVariant;
+}
 
 export const Container = React.forwardRef<HTMLDivElement, DivProps>(({ className, ...props }, ref) => (
   <div ref={ref} className={cn('ds-container', className)} {...props} />
 ));
 Container.displayName = 'Container';
 
-export const Page = React.forwardRef<HTMLDivElement, DivProps>(({ className, ...props }, ref) => (
-  <main ref={ref} className={cn('ds-page', className)} {...props} />
+export const Page = React.forwardRef<HTMLDivElement, PageProps>(({ className, variant = 'default', ...props }, ref) => (
+  <div
+    ref={ref}
+    className={cn('ds-page', variant === 'focused' && 'ds-page-focused', className)}
+    {...props}
+  />
 ));
 Page.displayName = 'Page';
 

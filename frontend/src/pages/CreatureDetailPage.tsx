@@ -22,6 +22,7 @@ import type { Creature } from "../types";
 import { useAuth } from "../context/AuthContext";
 import { activityApi } from "../services/activity";
 import MapMetadataPanel from "../components/MapMetadataPanel";
+import { Page } from "../components/ui";
 
 const formatNumber = (
   value: number | null | undefined,
@@ -120,18 +121,21 @@ const CreatureDetailPage: React.FC = () => {
 
   if (loading) {
     return (
-      <div className="flex min-h-[24rem] items-center justify-center text-primary">
+      <Page>
+        <div className="flex min-h-[24rem] items-center justify-center text-primary">
         <div className="flex flex-col items-center gap-4">
           <Loader2 className="animate-spin" size={48} />
           <p className="text-lg font-semibold">{t("creatureDetail.loading")}</p>
         </div>
-      </div>
+        </div>
+      </Page>
     );
   }
 
   if (!creature || errorMessage) {
     return (
-      <div className="mx-auto max-w-3xl rounded-2xl border border-danger/20 bg-danger/20 p-6 text-danger">
+      <Page>
+        <div className="mx-auto max-w-3xl rounded-2xl border border-danger/20 bg-danger/20 p-6 text-danger">
         <div className="mb-3 flex items-center gap-2 text-lg font-semibold">
           <AlertTriangle className="h-5 w-5" />{" "}
           {t("creatureDetail.unavailable")}
@@ -139,7 +143,8 @@ const CreatureDetailPage: React.FC = () => {
         <p className="text-sm text-danger/80">
           {errorMessage || t("creatureDetail.notFound")}
         </p>
-      </div>
+        </div>
+      </Page>
     );
   }
 
@@ -159,7 +164,7 @@ const CreatureDetailPage: React.FC = () => {
   const backTarget = (location.state as { from?: string } | null)?.from;
 
   return (
-    <div className="pb-12 pt-6">
+    <Page>
       <div className="relative mb-8">
         <div className="pointer-events-none absolute inset-0 bg-gradient-to-b from-primary/10 to-transparent" />
         <div className="relative z-10">
@@ -451,7 +456,7 @@ const CreatureDetailPage: React.FC = () => {
         </div>
       </div>
       <MapMetadataPanel entityId={creature.knowledge_entity_id || undefined} />
-    </div>
+    </Page>
   );
 };
 

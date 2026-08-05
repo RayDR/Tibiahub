@@ -10,6 +10,7 @@ import LanguageSwitcher from './LanguageSwitcher';
 import NotificationIndicator from './NotificationIndicator';
 import ThemeSwitcher from './ThemeSwitcher';
 import AccountMenu from './account/AccountMenu';
+import { Container } from './ui';
 
 interface NavigationItem {
   path: string;
@@ -59,36 +60,38 @@ export default function Navigation() {
 
   return (
     <>
-      <header className="fixed inset-x-0 top-0 z-sticky px-2 pt-2 sm:px-4 sm:pt-3">
-        <div className="app-nav-shell mx-auto flex max-w-[90rem] items-center justify-between rounded-xl px-2 py-1.5 shadow-lg backdrop-blur-md sm:px-3">
-          <Link to="/" className="flex min-h-11 min-w-0 items-center gap-2 rounded-lg px-1.5" aria-label={t('shell.homeLabel')}>
-            <img src="/assets/logo/tibiahub.png" alt="" className="size-8 shrink-0 rounded-lg sm:size-9" />
-            <span className="hidden font-serif text-sm font-bold text-content-primary sm:inline"><span className="text-primary">Tibia</span>Hub</span>
-          </Link>
+      <header className="fixed inset-x-0 top-0 z-sticky">
+        <Container className="pt-2 sm:pt-3">
+          <div className="app-nav-shell flex items-center justify-between rounded-xl px-2 py-1.5 shadow-lg backdrop-blur-md sm:px-3">
+            <Link to="/" className="flex min-h-11 min-w-0 items-center gap-2 rounded-lg px-1.5" aria-label={t('shell.homeLabel')}>
+              <img src="/assets/logo/tibiahub.png" alt="" className="size-8 shrink-0 rounded-lg sm:size-9" />
+              <span className="hidden font-serif text-sm font-bold text-content-primary sm:inline"><span className="text-primary">Tibia</span>Hub</span>
+            </Link>
 
-          <nav className="hidden min-w-0 items-center gap-1 md:flex" aria-label={t('shell.primaryNavigation')}>
-            {primaryItems.map(item => {
-              const Icon = item.icon;
-              if (item.path === '/cyclopedia') {
-                return <div ref={menuRef} key={item.path} className="relative flex">
-                  <Link to={item.path} className="app-nav-link flex min-h-11 items-center gap-2 rounded-l-lg px-3" data-active={isActive(item.path)}><Icon className="size-4" /><span>{item.label}</span></Link>
-                  <button type="button" className="app-nav-link min-h-11 rounded-r-lg px-2" aria-label={t('a11y.openCyclopediaMenu')} aria-expanded={cyclopediaMenuOpen} onClick={() => setCyclopediaMenuOpen(value => !value)}><ChevronDown className={`size-4 transition-transform ${cyclopediaMenuOpen ? 'rotate-180' : ''}`} /></button>
-                  {cyclopediaMenuOpen ? <div className="ds-dropdown absolute left-0 top-full mt-2 w-56">
-                    {cyclopediaSections.map(entry => <button key={entry.key} type="button" onClick={() => { setCyclopediaMenuOpen(false); navigate(`/cyclopedia?tab=${entry.key}`); }} className="flex min-h-11 w-full items-center gap-2 rounded-sm px-3 text-left text-sm text-content-secondary hover:bg-surface-hover hover:text-content-primary"><FontAwesomeIcon icon={entry.icon} className="w-4" /><span>{t(entry.i18nLabel)}</span></button>)}
-                  </div> : null}
-                </div>;
-              }
-              return <Link key={item.path} to={item.path} className="app-nav-link flex min-h-11 items-center gap-2 rounded-lg px-3" data-active={isActive(item.path)}><Icon className="size-4" /><span>{item.label}</span></Link>;
-            })}
-          </nav>
+            <nav className="hidden min-w-0 items-center gap-1 md:flex" aria-label={t('shell.primaryNavigation')}>
+              {primaryItems.map(item => {
+                const Icon = item.icon;
+                if (item.path === '/cyclopedia') {
+                  return <div ref={menuRef} key={item.path} className="relative flex">
+                    <Link to={item.path} className="app-nav-link flex min-h-11 items-center gap-2 rounded-l-lg px-3" data-active={isActive(item.path)}><Icon className="size-4" /><span>{item.label}</span></Link>
+                    <button type="button" className="app-nav-link min-h-11 rounded-r-lg px-2" aria-label={t('a11y.openCyclopediaMenu')} aria-expanded={cyclopediaMenuOpen} onClick={() => setCyclopediaMenuOpen(value => !value)}><ChevronDown className={`size-4 transition-transform ${cyclopediaMenuOpen ? 'rotate-180' : ''}`} /></button>
+                    {cyclopediaMenuOpen ? <div className="ds-dropdown absolute left-0 top-full mt-2 w-56">
+                      {cyclopediaSections.map(entry => <button key={entry.key} type="button" onClick={() => { setCyclopediaMenuOpen(false); navigate(`/cyclopedia?tab=${entry.key}`); }} className="flex min-h-11 w-full items-center gap-2 rounded-sm px-3 text-left text-sm text-content-secondary hover:bg-surface-hover hover:text-content-primary"><FontAwesomeIcon icon={entry.icon} className="w-4" /><span>{t(entry.i18nLabel)}</span></button>)}
+                    </div> : null}
+                  </div>;
+                }
+                return <Link key={item.path} to={item.path} className="app-nav-link flex min-h-11 items-center gap-2 rounded-lg px-3" data-active={isActive(item.path)}><Icon className="size-4" /><span>{item.label}</span></Link>;
+              })}
+            </nav>
 
-          <div className="flex shrink-0 items-center gap-0.5">
-            <LanguageSwitcher />
-            {isAuthenticated ? <NotificationIndicator /> : null}
-            <ThemeSwitcher />
-            {isAuthenticated ? <AccountMenu /> : <Link to="/login" className="app-button-primary app-button-sm ml-1">{t('auth.login')}</Link>}
+            <div className="flex shrink-0 items-center gap-0.5">
+              <LanguageSwitcher />
+              {isAuthenticated ? <NotificationIndicator /> : null}
+              <ThemeSwitcher />
+              {isAuthenticated ? <AccountMenu /> : <Link to="/login" className="app-button-primary app-button-sm ml-1">{t('auth.login')}</Link>}
+            </div>
           </div>
-        </div>
+        </Container>
       </header>
 
       <nav className="app-mobile-nav fixed inset-x-0 bottom-0 z-sticky border-t border-line bg-surface-overlay px-1 pt-1 backdrop-blur-md md:hidden" aria-label={t('shell.mobileNavigation')}>

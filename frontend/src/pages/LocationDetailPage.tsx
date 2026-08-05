@@ -6,6 +6,7 @@ import { Link, useNavigate, useParams } from 'react-router-dom';
 import { namedKnowledgeApi } from '../services/api';
 import type { LocationKnowledgeDetail, NamedKnowledgeRelationship } from '../types';
 import MapMetadataPanel from '../components/MapMetadataPanel';
+import { Page } from '../components/ui';
 
 function relationshipPath(relationship: NamedKnowledgeRelationship): string | null {
   if (relationship.resolution_state !== 'resolved' || !relationship.target_slug) return null;
@@ -32,10 +33,10 @@ export default function LocationDetailPage() {
     return () => controller.abort();
   }, [identifier]);
 
-  if (loading) return <div role="status" className="flex min-h-[24rem] items-center justify-center text-primary"><Loader2 className="animate-spin" size={42} /><span className="sr-only">{t('namedKnowledge.loading')}</span></div>;
-  if (!place) return <div className="mx-auto mt-28 max-w-3xl rounded-2xl border border-danger/20 bg-danger/20 p-6"><h1 className="text-lg font-semibold text-danger">{t('namedKnowledge.locationUnavailable')}</h1><p className="mt-2 text-sm text-danger/80">{t('namedKnowledge.notFound')}</p></div>;
+  if (loading) return <Page variant="focused"><div role="status" className="flex min-h-[24rem] items-center justify-center text-primary"><Loader2 className="animate-spin" size={42} /><span className="sr-only">{t('namedKnowledge.loading')}</span></div></Page>;
+  if (!place) return <Page variant="focused"><div className="mx-auto max-w-3xl rounded-2xl border border-danger/20 bg-danger/20 p-6"><h1 className="text-lg font-semibold text-danger">{t('namedKnowledge.locationUnavailable')}</h1><p className="mt-2 text-sm text-danger/80">{t('namedKnowledge.notFound')}</p></div></Page>;
 
-  return <main className="mx-auto max-w-5xl pb-12 pt-6"><div>
+  return <Page variant="focused"><div>
     <button onClick={() => navigate(-1)} className="mb-6 flex min-h-11 items-center gap-2 text-content-secondary hover:text-content-primary"><ArrowLeft size={18} />{t('namedKnowledge.back')}</button>
     <article className="rounded-2xl border border-line bg-surface-base/70 p-4 sm:p-6">
       <header className="flex items-start gap-3"><MapPin className="mt-1 shrink-0 text-primary" /><div><p className="text-xs font-semibold uppercase tracking-wide text-content-muted">{t(`namedKnowledge.types.${place.entity_type}`)}</p><h1 className="text-2xl font-bold text-content-primary sm:text-3xl">{place.name}</h1>{place.location_kind && <p className="mt-1 text-primary">{place.location_kind}</p>}</div></header>
@@ -50,5 +51,5 @@ export default function LocationDetailPage() {
       <MapMetadataPanel locationIdentifier={place.slug} />
       <footer className="mt-6 flex flex-wrap gap-3 text-xs text-content-muted">{place.last_synced_at && <span>{t('namedKnowledge.updated', { date: new Date(place.last_synced_at).toLocaleString() })}</span>}{place.source_url && <a href={place.source_url} target="_blank" rel="noreferrer" className="text-primary hover:text-primary">{t('namedKnowledge.source')}</a>}</footer>
     </article>
-  </div></main>;
+  </div></Page>;
 }

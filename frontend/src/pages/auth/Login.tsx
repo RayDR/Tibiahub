@@ -7,6 +7,7 @@ import { useTranslation } from 'react-i18next';
 import { Users, KeyRound, ShieldAlert } from 'lucide-react';
 import AppCard from '../../components/ui/AppCard';
 import AppButton from '../../components/ui/AppButton';
+import { Page } from '../../components/ui';
 
 export default function Login() {
     const { t } = useTranslation();
@@ -56,7 +57,7 @@ export default function Login() {
     };
 
     return (
-        <div className="flex items-center justify-center min-h-[calc(100vh-200px)]">
+        <Page className="grid min-h-[70vh] place-items-center">
             <AppCard className="w-full max-w-md p-8 shadow-xl">
                 <div className="text-center mb-8">
                     <h2 className="text-3xl font-bold text-primary font-serif tracking-wider">{t('auth.guildAccess')}</h2>
@@ -123,6 +124,6 @@ export default function Login() {
                     </Link>
                 </p>
             </AppCard>
-        </div>
+        </Page>
     );
 }
