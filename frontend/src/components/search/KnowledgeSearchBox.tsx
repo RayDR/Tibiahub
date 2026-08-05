@@ -3,6 +3,7 @@ import {
   KeyboardEvent,
   useEffect,
   useId,
+  useRef,
   useState,
 } from 'react';
 import type { LucideIcon } from 'lucide-react';
@@ -53,6 +54,9 @@ interface KnowledgeSearchBoxProps {
   query: string;
   onSectionChange: (section: KnowledgeSearchSection) => void;
   onQueryChange: (query: string) => void;
+  onSuggestionSelect?: (
+    suggestion: KnowledgeSuggestion,
+  ) => void;
   showSectionSelect?: boolean;
   submitLabel?: string;
   externalSuggestions?: KnowledgeSuggestion[];
@@ -406,6 +410,7 @@ export default function KnowledgeSearchBox({
   query,
   onSectionChange,
   onQueryChange,
+  onSuggestionSelect,
   showSectionSelect = true,
   submitLabel,
   externalSuggestions,
@@ -415,6 +420,7 @@ export default function KnowledgeSearchBox({
   const { t } = useTranslation();
   const navigate = useNavigate();
   const listId = useId();
+  const closeOnBlurRef = useRef(true);
 
   const [suggestions, setSuggestions] = useState<
     KnowledgeSuggestion[]
@@ -492,6 +498,10 @@ export default function KnowledgeSearchBox({
   ) => {
     setOpen(false);
     setActiveIndex(-1);
+    if (onSuggestionSelect) {
+      onSuggestionSelect(suggestion);
+      return;
+    }
     navigate(suggestion.to);
   };
 
@@ -595,7 +605,25 @@ export default function KnowledgeSearchBox({
     if (event.key === 'Escape') {
       setOpen(false);
       setActiveIndex(-1);
+      return;
     }
+
+    if (
+      event.key === 'Enter' &&
+      open &&
+      activeIndex >= 0 &&
+      suggestions[activeIndex]
+    ) {
+      event.preventDefault();
+      openSuggestion(suggestions[activeIndex]);
+    }
+  };
+
+  const clearQuery = () => {
+    onQueryChange('');
+    setSuggestions([]);
+    setOpen(false);
+    setActiveIndex(-1);
   };
 
   return (
@@ -658,8 +686,8 @@ export default function KnowledgeSearchBox({
           <input
             className={`app-input w-full pl-9 ${
               compact
-                ? 'h-9 py-1 text-sm'
-                : ''
+                ? 'h-9 py-1 pr-10 text-sm'
+                : 'pr-10'
             }`}
             value={query}
             autoComplete="off"
@@ -677,6 +705,10 @@ export default function KnowledgeSearchBox({
               }
             }}
             onBlur={() => {
+              if (!closeOnBlurRef.current) {
+                closeOnBlurRef.current = true;
+                return;
+              }
               window.setTimeout(() => setOpen(false), 120);
             }}
             onKeyDown={handleKeyboard}
@@ -687,6 +719,18 @@ export default function KnowledgeSearchBox({
               'home.assistantPreview.placeholder',
             )}
           />
+
+          {query.trim().length > 0 ? (
+            <button
+              type="button"
+              title={t('cyclopedia.filters.clearSearch')}
+              aria-label={t('cyclopedia.filters.clearSearch')}
+              onClick={clearQuery}
+              className="absolute right-2 top-1/2 grid size-7 -translate-y-1/2 place-items-center rounded-md text-content-muted transition hover:bg-surface-hover hover:text-content-primary"
+            >
+              <span aria-hidden="true">×</span>
+            </button>
+          ) : null}
         </label>
 
         {open ? (
@@ -723,9 +767,21 @@ export default function KnowledgeSearchBox({
                 role="option"
                 aria-selected={index === activeIndex}
                 onMouseEnter={() => setActiveIndex(index)}
-                onMouseDown={(event) => {
+                onPointerDown={(event) => {
                   event.preventDefault();
+                  closeOnBlurRef.current = false;
+                }}
+                onClick={() => {
                   openSuggestion(suggestion);
+                }}
+                onKeyDown={(event) => {
+                  if (
+                    event.key === 'Enter' ||
+                    event.key === ' '
+                  ) {
+                    event.preventDefault();
+                    openSuggestion(suggestion);
+                  }
                 }}
                 className={`flex w-full items-center gap-3 rounded-xl px-3 py-2 text-left transition ${
                   index === activeIndex

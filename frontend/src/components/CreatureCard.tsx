@@ -7,9 +7,16 @@ import ImageWithFallback from './ImageWithFallback';
 interface CreatureCardProps {
   creature: CreatureSimple;
   index: number;
+  linkState?: unknown;
+  onNavigate?: () => void;
 }
 
-const CreatureCard: React.FC<CreatureCardProps> = ({ creature, index }) => {
+const CreatureCard: React.FC<CreatureCardProps> = ({
+  creature,
+  index,
+  linkState,
+  onNavigate,
+}) => {
   const location = useLocation();
   // Staggered animation delay
   const style = { animationDelay: `${index * 50}ms` };
@@ -18,7 +25,12 @@ const CreatureCard: React.FC<CreatureCardProps> = ({ creature, index }) => {
   return (
     <Link
       to={`/creatures/${creaturePath}`}
-      state={{ from: `${location.pathname}${location.search}` }}
+      state={
+        linkState ?? {
+          from: `${location.pathname}${location.search}`,
+        }
+      }
+      onClick={() => onNavigate?.()}
       className="group relative bg-surface-base/40 border border-line/50 rounded-xl overflow-hidden hover:border-primary/50 hover:shadow-lg hover:shadow-primary/10 transition-all duration-300 flex flex-col animate-fade-in-up"
       style={style}
     >
