@@ -270,8 +270,19 @@ staged_dist="$evidence_dir/frontend-dist-new"
 rollback_armed=0
 on_error() {
   local exit_code=$?
+  local failed_line="${BASH_LINENO[0]:-unknown}"
+  local failed_function="${FUNCNAME[1]:-main}"
+  local failed_command="${BASH_COMMAND:-unknown}"
   trap - ERR
-  printf 'failed_at=%s\nexit_code=%s\n' "$(date -u +%Y%m%dT%H%M%SZ)" "$exit_code" >"$evidence_dir/FAILED"
+
+  {
+    printf 'failed_at=%s\n' "$(date -u +%Y%m%dT%H%M%SZ)"
+    printf 'exit_code=%s\n' "$exit_code"
+    printf 'failed_line=%s\n' "$failed_line"
+    printf 'failed_function=%q\n' "$failed_function"
+    printf 'failed_command=%q\n' "$failed_command"
+  } >"$evidence_dir/FAILED"
+
   chmod 600 "$evidence_dir/FAILED"
   if [[ "$rollback_armed" == 1 ]]; then
     if TIBIAHUB_DEPLOY_LOCK_HELD=1 "$ROOT/deploy/scripts/rollback.sh" \
