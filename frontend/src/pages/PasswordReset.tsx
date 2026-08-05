@@ -43,7 +43,7 @@ export default function PasswordReset() {
     finally { setBusy(false); }
   };
 
-  return <Page className="grid min-h-[70vh] place-items-center py-8"><Card className="w-full max-w-md p-5 sm:p-7">
+  return <Page className="grid min-h-[70vh] place-items-center"><Card className="w-full max-w-md p-5 sm:p-7">
     <header className="text-center"><Shield className="mx-auto size-10 text-primary"/><h1 className="mt-3 text-2xl font-semibold">{t(`passwordRecovery.${step}.title`)}</h1><p className="mt-1 text-sm text-content-muted">{t(`passwordRecovery.${step}.help`)}</p></header>
     {error ? <p role="alert" className="mt-4 rounded-lg border border-danger/30 p-3 text-sm text-danger">{error}</p> : null}
     {step === 'request' ? <form onSubmit={requestReset} className="mt-6 space-y-4">

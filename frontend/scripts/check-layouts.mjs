@@ -18,6 +18,49 @@ const navigation = source('src/components/Navigation.tsx');
 const overlay = source('src/components/ui/Overlay.tsx');
 const main = source('src/main.tsx');
 const members = source('src/pages/guild/Members.tsx');
+const publicPageFiles = [
+  'src/pages/HomePage.tsx',
+  'src/pages/CreaturesPage.tsx',
+  'src/pages/HuntRecommendationsPage.tsx',
+  'src/pages/CreatureDetailPage.tsx',
+  'src/pages/QuestDetailPage.tsx',
+  'src/pages/NpcDetailPage.tsx',
+  'src/pages/LocationDetailPage.tsx',
+  'src/pages/Profile.tsx',
+  'src/pages/MemberProfile.tsx',
+  'src/pages/auth/Login.tsx',
+  'src/pages/auth/Register.tsx',
+  'src/pages/PasswordReset.tsx',
+  'src/pages/VerifyEmail.tsx',
+  'src/pages/NotFound.tsx',
+];
+
+const publicRootAllowlist = {
+  maxWidth: new Set(),
+  horizontalPadding: new Set(),
+  verticalPadding: new Set(),
+};
+
+const rootTagRegex = /return\s*\(\s*<([A-Za-z0-9_.]+)([^>]*)>/gms;
+const classAttrRegex = /className="([^"]*)"/;
+const maxWidthRegex = /\b(?:mx-auto|max-w-(?:\[[^\]]+\]|[^\s"']+))/;
+const horizontalPaddingRegex = /\bpx-(?:\[[^\]]+\]|\d+)/;
+const verticalPaddingRegex = /\b(?:py-(?:\[[^\]]+\]|\d+)|pt-(?:\[[^\]]+\]|\d+)|pb-(?:\[[^\]]+\]|\d+))/;
+
+function readRootClassEntries(text) {
+  const entries = [];
+  for (const match of text.matchAll(rootTagRegex)) {
+    const tag = match[1];
+    const attrs = match[2] || '';
+    const classMatch = attrs.match(classAttrRegex);
+    entries.push({
+      tag,
+      className: classMatch ? classMatch[1] : '',
+      attrs,
+    });
+  }
+  return entries;
+}
 
 for (const token of ['app-shell-main', 'app-mobile-nav', 'app-context-bar', 'workspace-nav', 'workspace-content', 'responsive-card-list', 'responsive-data-table']) {
   if (!css.includes(`.${token}`)) failures.push(`design-system.css is missing .${token}`);
@@ -32,6 +75,41 @@ if (!overlay.includes("event.key === 'Escape'") || !overlay.includes("event.key 
 if (!main.includes('MotionConfig') || !main.includes("motion === 'reduced'") || !css.includes('[data-motion="enhanced"]') || !css.includes('[data-density="compact"]')) failures.push('global motion or density integration is incomplete');
 if (!members.includes('responsive-card-list') || !members.includes('responsive-data-table')) failures.push('member data lacks mobile cards and desktop table');
 if (/max-h-\[[^\]]+\]\s+overflow-y-auto/.test(members)) failures.push('member view has forced inner vertical scrolling');
+if (!css.includes('--app-content-max-width') || !css.includes('--app-nav-clearance') || !css.includes('--app-sticky-offset')) failures.push('shared app layout tokens are missing (content width/nav clearance/sticky offset)');
+if (!css.includes('.app-sticky-offset')) failures.push('shared sticky offset utility class is missing');
+if (navigation.includes('max-w-[90rem]') || navigation.includes('px-2 pt-2 sm:px-4')) failures.push('navigation still hardcodes shell width/gutters instead of using shared Container');
+if (!navigation.includes('<Container')) failures.push('navigation does not use the shared Container primitive');
+
+for (const file of publicPageFiles) {
+  const text = source(file);
+  if (!text.includes('<Page')) failures.push(`${file}: public page root should use Page`);
+
+  const roots = readRootClassEntries(text);
+  for (const root of roots) {
+    if (!root.className) continue;
+    const isPageRoot = root.tag === 'Page';
+    const hasMaxWidth = maxWidthRegex.test(root.className);
+    const hasHorizontalPadding = horizontalPaddingRegex.test(root.className);
+    const hasVerticalPadding = verticalPaddingRegex.test(root.className);
+
+    if (hasMaxWidth && !publicRootAllowlist.maxWidth.has(file)) {
+      failures.push(`${file}: root class duplicates page shell width (${root.className})`);
+    }
+    if (isPageRoot && hasHorizontalPadding && !publicRootAllowlist.horizontalPadding.has(file)) {
+      failures.push(`${file}: root Page duplicates horizontal gutter (${root.className})`);
+    }
+    if (isPageRoot && hasVerticalPadding && !publicRootAllowlist.verticalPadding.has(file)) {
+      failures.push(`${file}: root Page duplicates vertical page spacing (${root.className})`);
+    }
+  }
+
+  for (const match of text.matchAll(/className="([^"]*)"/g)) {
+    const className = match[1];
+    if (className.includes('sticky') && /top-\[[^\]]+\]/.test(className)) {
+      failures.push(`${file}: sticky top offset uses hardcoded value (${className})`);
+    }
+  }
+}
 
 const allowedText = new Set(['Tibia', 'Hub', 'TibiaWiki']);
 for (const file of coreFiles) {

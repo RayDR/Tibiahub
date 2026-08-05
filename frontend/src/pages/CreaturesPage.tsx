@@ -36,6 +36,7 @@ import { CreatureSimple, HuntZone, ItemSearchResult, QuestSearchResult } from '.
 import PageHeader from '../components/ui/PageHeader';
 import AppTabs from '../components/ui/AppTabs';
 import AppCard from '../components/ui/AppCard';
+import { Page } from '../components/ui';
 import { cyclopediaSections, modeToTab, tabToMode } from '../config/cyclopediaSections';
 import { iconByCategory } from '../components/icons/CategoryIcons';
 import { useAuth } from '../context/AuthContext';
@@ -1278,7 +1279,7 @@ const CreaturesPage: React.FC = () => {
   }, [initialLoaded]); // eslint-disable-line react-hooks/exhaustive-deps
 
   return (
-    <div className="mx-auto w-full max-w-6xl py-6 sm:py-8">
+    <Page className="space-y-6">
       <div className="contents">
         <div className="ds-enter mb-5">
           <PageHeader
@@ -1293,7 +1294,7 @@ const CreaturesPage: React.FC = () => {
           ref={stickySearchRef}
           className={`mx-auto mb-5 w-full transition-all duration-200 ${
             isSearchCompact
-              ? 'sticky top-[4.5rem] z-40 sm:top-[4.75rem]'
+              ? 'app-sticky-offset sticky z-40'
               : 'relative z-20'
           }`}
         >
@@ -1601,7 +1602,7 @@ const CreaturesPage: React.FC = () => {
         ) : null}
       </div>
 
-      <div className="pb-12 pt-6">
+      <div>
         {loading && (
           <div className="flex justify-center py-20">
             <Loader2 className="animate-spin text-primary" size={48} />
@@ -1868,7 +1869,7 @@ const CreaturesPage: React.FC = () => {
           </div>
         )}
       </div>
-    </div>
+    </Page>
   );
 };
 

@@ -1,9 +1,10 @@
 import { Link } from 'react-router-dom';
 import { Skull, CornerDownLeft } from 'lucide-react';
+import { Page } from '../components/ui';
 
 export default function NotFound() {
     return (
-        <div className="min-h-screen bg-surface-base flex items-center justify-center p-4 relative overflow-hidden">
+        <Page className="relative grid min-h-[70vh] place-items-center overflow-hidden p-4">
             {/* Background Texture */}
             <div className="absolute inset-0 bg-[url('https://tibiamaps.io/images/map-preview.png')] opacity-5 pointer-events-none mix-blend-overlay"></div>
 
@@ -36,6 +37,6 @@ export default function NotFound() {
                     Error 404: Page Not Found
                 </div>
             </div>
-        </div>
+        </Page>
     );
 }
