@@ -1,15 +1,19 @@
 """Hunt Zones API endpoints."""
-import hashlib
 from typing import List, Optional
 from fastapi import APIRouter, Depends, HTTPException, Query
 from fastapi import Request, Response
 from sqlalchemy.orm import Session, selectinload
 
 from app.core.config import settings
-from app.db.database import get_db
+from app.db.database import SessionLocal, get_db
 from app.models.spawn_location import SpawnLocation
 from app.models import HuntZone as HuntZoneModel
 from app.schemas import HuntZone, HuntZoneCreate, HuntRecommendation
+from app.api.v1.local_media import (
+    LocalMediaDescriptor,
+    build_local_media_file_response,
+    resolve_local_media_descriptor,
+)
 from app.services.entity_metadata_service import EntityMetadataService
 from app.services.text_utils import normalize_search_text
 from app.services.hunt_service import HuntRecommendationService
@@ -124,36 +128,37 @@ async def get_hunt_zone(zone_id: int, db: Session = Depends(get_db)):
 
 
 @router.get("/{zone_id}/map-image")
-async def get_hunt_zone_map_image(zone_id: int, request: Request, db: Session = Depends(get_db)):
+def get_hunt_zone_map_image(zone_id: int, request: Request):
     """Serve hunt-zone map image from local MediaAsset cache (local-first)."""
-    zone = db.query(HuntZoneModel).filter(HuntZoneModel.id == zone_id).first()
-    if not zone:
-        raise HTTPException(status_code=404, detail="Hunt zone not found")
+    descriptor = _resolve_hunt_zone_media_descriptor(zone_id)
 
-    asset_key = media_svc.build_zone_asset_key(zone)
-    # Public requests must never perform provider downloads.
-    # Missing assets are populated exclusively by sync/admin workers.
-    asset = media_svc.get_asset(
-        db,
-        asset_key,
-    )
-
-    if not asset or asset.status != "cached":
-        placeholder = _placeholder_map_svg(zone.name)
+    if descriptor.status != "cached":
+        placeholder = _placeholder_map_svg(descriptor.fallback_label)
         return Response(
             content=placeholder,
             media_type="image/svg+xml",
             headers={
                 "Cache-Control": "public, max-age=3600",
                 "X-Image-Source": "placeholder",
-                "X-Image-Status": getattr(asset, "status", "missing") if asset else "missing",
-                "X-Asset-Key": asset_key,
+                "X-Image-Status": descriptor.status,
+                "X-Asset-Key": descriptor.asset_key,
             },
         )
 
-    content = asset.read_bytes()
-    if not content:
-        placeholder = _placeholder_map_svg(zone.name)
+    response = build_local_media_file_response(
+        request,
+        descriptor,
+        default_media_type="image/png",
+        cache_max_age_seconds=settings.IMAGE_CACHE_MAX_AGE_SECONDS,
+        extra_headers={
+            "X-Image-Source": "local-media-asset",
+            "X-Image-Status": "cached",
+            "X-Asset-Key": descriptor.asset_key,
+        },
+    )
+
+    if response is None:
+        placeholder = _placeholder_map_svg(descriptor.fallback_label)
         return Response(
             content=placeholder,
             media_type="image/svg+xml",
@@ -161,32 +166,39 @@ async def get_hunt_zone_map_image(zone_id: int, request: Request, db: Session = 
                 "Cache-Control": "public, max-age=3600",
                 "X-Image-Source": "placeholder",
                 "X-Image-Status": "missing",
-                "X-Asset-Key": asset_key,
+                "X-Asset-Key": descriptor.asset_key,
             },
         )
 
-    etag = asset.sha256_hash[:20] if asset.sha256_hash else hashlib.sha1(content).hexdigest()
-    if request.headers.get("if-none-match") == etag:
-        return Response(
-            status_code=304,
-            headers={
-                "ETag": etag,
-                "Cache-Control": f"public, max-age={settings.IMAGE_CACHE_MAX_AGE_SECONDS}",
-            },
+    return response
+
+
+def _resolve_hunt_zone_media_descriptor(zone_id: int) -> LocalMediaDescriptor:
+    """Resolve hunt-zone map media metadata in a short-lived DB session."""
+
+    def _resolver(db: Session) -> LocalMediaDescriptor:
+        zone = db.query(HuntZoneModel).filter(HuntZoneModel.id == zone_id).first()
+        if not zone:
+            raise HTTPException(status_code=404, detail="Hunt zone not found")
+
+        asset_key = media_svc.build_zone_asset_key(zone)
+        # Public requests must never perform provider downloads.
+        # Missing assets are populated exclusively by sync/admin workers.
+        asset = media_svc.get_asset(db, asset_key)
+
+        return LocalMediaDescriptor(
+            local_path=(str(asset.local_path) if asset and asset.local_path else None),
+            content_type=(asset.content_type if asset else None),
+            size_bytes=(asset.size_bytes if asset else None),
+            asset_hash=(asset.sha256_hash if asset else None),
+            asset_key=asset_key,
+            status=(getattr(asset, "status", "missing") if asset else "missing"),
+            fallback_label=zone.name or "Unknown Zone",
         )
 
-    media_type = asset.content_type or "image/png"
-    return Response(
-        content=content,
-        media_type=media_type,
-        headers={
-            "Content-Type": media_type,
-            "Content-Length": str(len(content)),
-            "Cache-Control": f"public, max-age={settings.IMAGE_CACHE_MAX_AGE_SECONDS}",
-            "ETag": etag,
-            "X-Image-Source": "local-media-asset",
-            "X-Asset-Key": asset_key,
-        },
+    return resolve_local_media_descriptor(
+        _resolver,
+        session_factory=SessionLocal,
     )
 
 
