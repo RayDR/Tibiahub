@@ -123,6 +123,39 @@ const normalizeSelectedValue = (value: string) =>
     ? value
     : '';
 
+const COMPACT_ACTIVATE_MARGIN_PX = 8;
+const COMPACT_RELEASE_MARGIN_PX = 44;
+
+const readStickyOffsetPx = (): number => {
+  const rootStyle = window.getComputedStyle(
+    document.documentElement,
+  );
+  const raw = rootStyle
+    .getPropertyValue('--app-sticky-offset')
+    .trim();
+
+  if (!raw) return 0;
+
+  if (raw.endsWith('px')) {
+    const value = Number.parseFloat(raw);
+    return Number.isFinite(value) ? value : 0;
+  }
+
+  if (raw.endsWith('rem') || raw.endsWith('em')) {
+    const value = Number.parseFloat(raw);
+    const rootFontSize = Number.parseFloat(
+      rootStyle.fontSize || '16',
+    );
+    if (!Number.isFinite(value) || !Number.isFinite(rootFontSize)) {
+      return 0;
+    }
+    return value * rootFontSize;
+  }
+
+  const fallback = Number.parseFloat(raw);
+  return Number.isFinite(fallback) ? fallback : 0;
+};
+
 const previewStorageKey = (mode: SearchMode) => `cyclopedia_recent_${mode}`;
 
 const loadRecentPreviewCards = (mode: SearchMode): CyclopediaPreviewCard[] => {
@@ -269,6 +302,7 @@ const CreaturesPage: React.FC = () => {
   const syncingFromUrlRef = useRef(false);
   const activeRequestRef = useRef<AbortController | null>(null);
   const stickySearchRef = useRef<HTMLDivElement | null>(null);
+  const resultsStartRef = useRef<HTMLDivElement | null>(null);
   const loadMoreSentinelRef = useRef<HTMLDivElement | null>(null);
   const loadMoreLockRef = useRef(false);
   const lastSearchSignatureRef = useRef<string>('');
@@ -1283,14 +1317,29 @@ const CreaturesPage: React.FC = () => {
       window.requestAnimationFrame(() => {
         scheduled = false;
 
-        const shouldCompact =
-          window.scrollY > 180;
+        const boundary =
+          resultsStartRef.current;
+        if (!boundary) {
+          return;
+        }
 
-        setIsSearchCompact((current) =>
-          current === shouldCompact
-            ? current
-            : shouldCompact,
-        );
+        const boundaryTop =
+          boundary.getBoundingClientRect().top;
+        const stickyOffsetPx =
+          readStickyOffsetPx();
+        const compactAt =
+          stickyOffsetPx +
+          COMPACT_ACTIVATE_MARGIN_PX;
+        const expandAt =
+          stickyOffsetPx +
+          COMPACT_RELEASE_MARGIN_PX;
+
+        setIsSearchCompact((current) => {
+          if (current) {
+            return boundaryTop < expandAt;
+          }
+          return boundaryTop <= compactAt;
+        });
       });
     };
 
@@ -1318,7 +1367,14 @@ const CreaturesPage: React.FC = () => {
         updateCompactState,
       );
     };
-  }, [mode]);
+  }, [
+    mode,
+    showCategories,
+    creatureCategory,
+    selectedResult,
+    loading,
+    hasActiveQuery,
+  ]);
 
   useEffect(() => {
     if (!isSearchCompact) {
@@ -1441,21 +1497,36 @@ const CreaturesPage: React.FC = () => {
 
         <div
           ref={stickySearchRef}
-          className={`mx-auto mb-5 w-full transition-all duration-200 ${
+          className={`mx-auto mb-5 w-full motion-reduce:transition-none transition-[top,transform] ${
+            isSearchCompact
+              ? 'duration-[400ms] ease-out'
+              : 'duration-150 ease-in'
+          } ${
             isSearchCompact
               ? 'app-sticky-offset sticky z-40'
               : 'relative z-20'
           }`}
         >
           <AppCard
-            className={`flex flex-col shadow-2xl ${
+            className={`flex flex-col shadow-2xl motion-reduce:transition-none transition-[padding,background-color,border-color,box-shadow,gap,opacity,transform] ${
+              isSearchCompact
+                ? 'duration-[400ms] ease-out'
+                : 'duration-150 ease-in'
+            } ${
               isSearchCompact
                 ? 'gap-1 border-primary/20 bg-surface-overlay/95 p-1 backdrop-blur-xl'
                 : 'gap-2 p-2'
             }`}
           >
-            {!isSearchCompact &&
-              (
+            <div
+              className={`overflow-hidden motion-reduce:transition-none transition-[max-height,opacity,transform,margin] ${
+                isSearchCompact
+                  ? 'pointer-events-none max-h-0 -translate-y-1 opacity-0 duration-[400ms] ease-out'
+                  : 'max-h-[20rem] translate-y-0 opacity-100 duration-150 ease-in'
+              }`}
+              aria-hidden={isSearchCompact}
+            >
+              {(
                 mode === 'creatures' ||
                 mode === 'bosses'
               ) &&
@@ -1473,6 +1544,7 @@ const CreaturesPage: React.FC = () => {
                   onNavigate={persistCyclopediaState}
                 />
               ) : null}
+            </div>
             <div
               className={
                 isSearchCompact
@@ -1633,10 +1705,16 @@ const CreaturesPage: React.FC = () => {
               </>
             )}
 
-            {!isSearchCompact &&
-              (mode === 'creatures' ||
-                mode === 'bosses') && (
-              <div className="space-y-2">
+            {(mode === 'creatures' ||
+              mode === 'bosses') && (
+              <div
+                className={`space-y-2 overflow-hidden motion-reduce:transition-none transition-[max-height,opacity,transform,margin] ${
+                  isSearchCompact
+                    ? 'pointer-events-none max-h-0 -translate-y-1 opacity-0 duration-[400ms] ease-out'
+                    : 'max-h-[40rem] translate-y-0 opacity-100 duration-150 ease-in'
+                }`}
+                aria-hidden={isSearchCompact}
+              >
                 {mode === 'creatures' && (
                   <div className="flex justify-end">
                     <button
@@ -1807,6 +1885,12 @@ const CreaturesPage: React.FC = () => {
       </div>
 
       <div>
+        <div
+          ref={resultsStartRef}
+          className="h-0"
+          aria-hidden="true"
+        />
+
         {!loading &&
         (mode === 'creatures' || mode === 'bosses') ? (
           <div className="mb-4 grid gap-3 rounded-xl border border-line bg-surface-base/50 p-3 md:grid-cols-[minmax(0,1fr)_14rem_auto] md:items-center">
