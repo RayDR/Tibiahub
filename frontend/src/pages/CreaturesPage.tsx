@@ -7,7 +7,6 @@ import { AlertTriangle,
   ArrowUpAZ,
   Crown,
   Loader2,
-  ScrollText,
   Search,
   X,
 } from 'lucide-react';
@@ -1626,7 +1625,13 @@ const CreaturesPage: React.FC = () => {
 
         {!loading && (
           <>
-            <div className="grid grid-cols-1 gap-6 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4">
+            <div
+              className={
+                mode === 'quests'
+                  ? 'grid grid-cols-1 gap-4 lg:grid-cols-2'
+                  : 'grid grid-cols-1 gap-6 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4'
+              }
+            >
             {(mode === 'creatures' || mode === 'bosses') && creatures.map((creature, index) => (
               <CreatureCard key={creature.id} creature={creature} index={index} />
             ))}
@@ -1667,34 +1672,135 @@ const CreaturesPage: React.FC = () => {
               </AppCard>
             ))}
 
-            {mode === 'quests' && quests.map((quest, index) => (
-              <AppCard key={`${quest.id || quest.name}-${index}`} className="ds-enter p-5">
-                <div className="mb-3 flex items-start gap-3">
-                  <div className="flex h-12 w-12 items-center justify-center rounded-lg bg-surface-base/60 text-primary">
-                    <ScrollText size={22} />
-                  </div>
-                  <div>
-                    <div className="text-xl font-bold text-primary">{quest.name}</div>
-                    {quest.group_name ? (
-                      <div className="mt-1 inline-flex rounded-md border border-primary/30 bg-primary/10 px-2 py-0.5 text-[11px] text-primary">
-                        {t('cyclopedia.quests.group')}: {quest.group_name}
+            {mode === 'quests' &&
+              quests.map((quest, index) => {
+                const detailIdentifier =
+                  quest.id ?? quest.slug;
+
+                const questGroup =
+                  quest.group_name ||
+                  quest.category ||
+                  quest.quest_type;
+
+                return (
+                  <AppCard
+                    key={
+                      quest.id ||
+                      quest.slug ||
+                      `${quest.name}-${index}`
+                    }
+                    className="ds-enter overflow-hidden p-0"
+                  >
+                    <div className="flex items-start gap-4 p-4 sm:p-5">
+                      <ImageWithFallback
+                        src={
+                          tabMedia.quests ||
+                          null
+                        }
+                        alt={quest.name}
+                        className="size-14 object-contain [image-rendering:pixelated]"
+                        containerClassName="grid size-16 shrink-0 place-items-center rounded-xl border border-line bg-surface-base/60"
+                        fallbackLabel={
+                          quest.name
+                        }
+                      />
+
+                      <div className="min-w-0 flex-1">
+                        <div className="flex flex-wrap items-start justify-between gap-2">
+                          <h3 className="min-w-0 text-lg font-bold leading-tight text-content-primary">
+                            {quest.name}
+                          </h3>
+
+                          {questGroup ? (
+                            <span className="shrink-0 rounded-full border border-primary/30 bg-primary/10 px-2 py-1 text-[10px] font-semibold uppercase tracking-wide text-primary">
+                              {questGroup}
+                            </span>
+                          ) : null}
+                        </div>
+
+                        <p className="mt-2 line-clamp-3 text-sm leading-relaxed text-content-secondary">
+                          {quest.description ||
+                            t(
+                              'cyclopedia.quests.noDetails',
+                            )}
+                        </p>
+
+                        <div className="mt-4 grid gap-2 text-xs text-content-muted sm:grid-cols-2">
+                          <div className="rounded-lg border border-line/70 bg-surface-base/40 px-3 py-2">
+                            {t(
+                              'cyclopedia.quests.levelRange',
+                              {
+                                min:
+                                  quest.min_level ??
+                                  t(
+                                    'common.notAvailable',
+                                  ),
+                                max:
+                                  quest.max_level ??
+                                  t(
+                                    'common.notAvailable',
+                                  ),
+                              },
+                            )}
+                          </div>
+
+                          <div className="rounded-lg border border-line/70 bg-surface-base/40 px-3 py-2">
+                            <span className="font-semibold text-content-secondary">
+                              {t(
+                                'cyclopedia.quests.npc',
+                              )}
+                              :
+                            </span>{' '}
+                            {quest.npc ||
+                              t(
+                                'cyclopedia.states.unknown',
+                              )}
+                          </div>
+
+                          <div className="rounded-lg border border-line/70 bg-surface-base/40 px-3 py-2 sm:col-span-2">
+                            <span className="font-semibold text-content-secondary">
+                              {t(
+                                'cyclopedia.quests.location',
+                              )}
+                              :
+                            </span>{' '}
+                            {quest.location ||
+                              t(
+                                'cyclopedia.states.unknown',
+                              )}
+                          </div>
+                        </div>
                       </div>
-                    ) : null}
-                    <div className="text-xs text-content-muted">{t('cyclopedia.quests.levelRange', { min: quest.min_level ?? t('common.notAvailable'), max: quest.max_level ?? t('common.notAvailable') })}</div>
-                  </div>
-                </div>
-                <p className="mb-3 text-sm text-content-secondary">{quest.description || t('cyclopedia.quests.noDetails')}</p>
-                <div className="text-xs text-content-muted">{t('cyclopedia.quests.npc')}: {quest.npc || t('cyclopedia.states.unknown')} · {t('cyclopedia.quests.location')}: {quest.location || t('cyclopedia.states.unknown')}</div>
-                <div className="mt-4 flex items-center gap-3">
-                  {quest.id ? (
-                    <Link to={`/quests/${quest.id}`} className="text-xs text-primary hover:text-primary">{t('cyclopedia.quests.openDetail')}</Link>
-                  ) : null}
-                  {quest.source_url && (
-                    <a href={quest.source_url} target="_blank" rel="noreferrer" className="text-xs text-primary hover:text-primary">{t('cyclopedia.items.sourcePage')}</a>
-                  )}
-                </div>
-              </AppCard>
-            ))}
+                    </div>
+
+                    <div className="flex flex-wrap items-center gap-4 border-t border-line bg-surface-base/30 px-4 py-3 text-xs sm:px-5">
+                      {detailIdentifier != null ? (
+                        <Link
+                          to={`/quests/${detailIdentifier}`}
+                          className="font-semibold text-primary hover:underline"
+                        >
+                          {t(
+                            'cyclopedia.quests.openDetail',
+                          )}
+                        </Link>
+                      ) : null}
+
+                      {quest.source_url ? (
+                        <a
+                          href={quest.source_url}
+                          target="_blank"
+                          rel="noreferrer"
+                          className="text-content-muted hover:text-primary"
+                        >
+                          {t(
+                            'cyclopedia.items.sourcePage',
+                          )}
+                        </a>
+                      ) : null}
+                    </div>
+                  </AppCard>
+                );
+              })}
 
             {mode === 'zones' && zones.map((zone) => (
               <AppCard key={zone.id} className="ds-enter overflow-hidden">
