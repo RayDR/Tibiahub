@@ -20,7 +20,7 @@ from app.models.maintenance_sync import MaintenanceHold
 from app.models.user import User
 from app.core import security
 from jose import JWTError, jwt
-from sqlalchemy.exc import SQLAlchemyError
+from sqlalchemy.exc import SQLAlchemyError, TimeoutError as SATimeoutError
 
 
 logger = logging.getLogger("app.slow_requests")
@@ -64,6 +64,24 @@ app = FastAPI(
     version="1.0.0",
     lifespan=lifespan
 )
+
+
+@app.exception_handler(SATimeoutError)
+async def database_pool_timeout_handler(_request, exc: SATimeoutError):
+    logger.error(
+        "database_pool_timeout code=database_busy category=sqlalchemy_timeout error_type=%s",
+        type(exc).__name__,
+    )
+    return JSONResponse(
+        status_code=503,
+        headers={"Retry-After": "5"},
+        content={
+            "detail": {
+                "code": "database_busy",
+                "message": "Database is temporarily busy. Please retry shortly.",
+            }
+        },
+    )
 
 # CORS Configuration
 app.add_middleware(

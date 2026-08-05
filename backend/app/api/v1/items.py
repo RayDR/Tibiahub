@@ -1,5 +1,4 @@
 """Items/Loot API endpoints."""
-import hashlib
 from difflib import SequenceMatcher
 from typing import List
 
@@ -9,12 +8,17 @@ from sqlalchemy import or_
 from sqlalchemy.orm import Session, joinedload
 
 from app.core.config import settings
-from app.db.database import get_db
+from app.db.database import SessionLocal, get_db
 from app.models.creature import Creature
 from app.models import Loot as LootModel
 from app.models.external_data import Item as ExternalItemModel
 from app.models.spawn_location import SpawnLocation
 from app.schemas import ItemDetail, ItemDropCreature, ItemSearchResult
+from app.api.v1.local_media import (
+    LocalMediaDescriptor,
+    build_local_media_file_response,
+    resolve_local_media_descriptor,
+)
 from app.services.entity_metadata_service import EntityMetadataService
 from app.services import media_asset_service as media_svc
 from app.services.text_utils import normalize_search_text
@@ -37,79 +41,87 @@ def _placeholder_svg(label: str) -> bytes:
 
 
 @router.get("/{item_id}/image")
-async def get_item_image(
+def get_item_image(
     item_id: int,
     request: Request,
     include_placeholder: bool = Query(True, alias="placeholder"),
-    db: Session = Depends(get_db),
 ):
     """Serve loot/item image from local MediaAsset cache (local-first)."""
-    item = (
-        db.query(ExternalItemModel)
-        .filter(
-            ExternalItemModel.id == item_id,
-            ExternalItemModel.knowledge_entity_id.isnot(None),
-        )
-        .first()
-    )
-    loot = None if item else db.query(LootModel).filter(LootModel.id == item_id).first()
-    if not item and not loot:
-        loot = db.query(LootModel).filter(LootModel.external_id == str(item_id)).first()
-    if not item and not loot:
-        raise HTTPException(status_code=404, detail="Item not found")
+    descriptor = _resolve_item_media_descriptor(item_id)
 
-    label = item.name if item else loot.item_name
-    asset_key = (
-        f"item:knowledge:{item.knowledge_entity_id}"
-        if item
-        else media_svc.build_loot_asset_key(loot)
-    )
-    # Public requests must never perform provider downloads.
-    # Missing assets are populated exclusively by sync/admin workers.
-    asset = media_svc.get_asset(
-        db,
-        asset_key,
-    )
-
-    if not asset or asset.status != "cached":
+    if descriptor.status != "cached":
         return _unavailable_item_image(
-            label=label,
-            asset_key=asset_key,
+            label=descriptor.fallback_label,
+            asset_key=descriptor.asset_key,
             include_placeholder=include_placeholder,
-            status=(
-                getattr(asset, "status", "missing")
-                if asset
-                else "missing"
-            ),
+            status=descriptor.status,
         )
 
-    content = asset.read_bytes()
-    if not content:
-        return _unavailable_item_image(
-            label=label,
-            asset_key=asset_key,
-            include_placeholder=include_placeholder,
-        )
-
-    etag = asset.sha256_hash[:20] if asset.sha256_hash else hashlib.sha1(content).hexdigest()
-    if request.headers.get("if-none-match") == etag:
-        return Response(status_code=304, headers={
-            "ETag": etag,
-            "Cache-Control": f"public, max-age={settings.IMAGE_CACHE_MAX_AGE_SECONDS}",
-        })
-
-    media_type = asset.content_type or "image/gif"
-    return Response(
-        content=content,
-        media_type=media_type,
-        headers={
-            "Content-Type": media_type,
-            "Content-Length": str(len(content)),
-            "Cache-Control": f"public, max-age={settings.IMAGE_CACHE_MAX_AGE_SECONDS}",
-            "ETag": etag,
+    response = build_local_media_file_response(
+        request,
+        descriptor,
+        default_media_type="image/gif",
+        cache_max_age_seconds=settings.IMAGE_CACHE_MAX_AGE_SECONDS,
+        extra_headers={
             "X-Image-Source": "local-media-asset",
-            "X-Asset-Key": asset_key,
+            "X-Image-Status": "cached",
+            "X-Asset-Key": descriptor.asset_key,
         },
+    )
+
+    if response is None:
+        return _unavailable_item_image(
+            label=descriptor.fallback_label,
+            asset_key=descriptor.asset_key,
+            include_placeholder=include_placeholder,
+            status="missing",
+        )
+
+    return response
+
+
+def _resolve_item_media_descriptor(item_id: int) -> LocalMediaDescriptor:
+    """Resolve item media metadata in a short-lived DB session."""
+
+    def _resolver(db: Session) -> LocalMediaDescriptor:
+        item = (
+            db.query(ExternalItemModel)
+            .filter(
+                ExternalItemModel.id == item_id,
+                ExternalItemModel.knowledge_entity_id.isnot(None),
+            )
+            .first()
+        )
+        loot = None if item else db.query(LootModel).filter(LootModel.id == item_id).first()
+        if not item and not loot:
+            loot = db.query(LootModel).filter(LootModel.external_id == str(item_id)).first()
+        if not item and not loot:
+            raise HTTPException(status_code=404, detail="Item not found")
+
+        label = item.name if item else (loot.item_name or "Unknown Item")
+        asset_key = (
+            f"item:knowledge:{item.knowledge_entity_id}"
+            if item
+            else media_svc.build_loot_asset_key(loot)
+        )
+
+        # Public requests must never perform provider downloads.
+        # Missing assets are populated exclusively by sync/admin workers.
+        asset = media_svc.get_asset(db, asset_key)
+
+        return LocalMediaDescriptor(
+            local_path=(str(asset.local_path) if asset and asset.local_path else None),
+            content_type=(asset.content_type if asset else None),
+            size_bytes=(asset.size_bytes if asset else None),
+            asset_hash=(asset.sha256_hash if asset else None),
+            asset_key=asset_key,
+            status=(getattr(asset, "status", "missing") if asset else "missing"),
+            fallback_label=label,
+        )
+
+    return resolve_local_media_descriptor(
+        _resolver,
+        session_factory=SessionLocal,
     )
 
 

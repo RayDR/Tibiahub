@@ -32,6 +32,7 @@ def _engine_options(config: Settings, url: URL) -> dict[str, Any]:
         common.update(
             pool_size=config.DATABASE_POOL_SIZE,
             max_overflow=config.DATABASE_MAX_OVERFLOW,
+            pool_timeout=config.DATABASE_POOL_TIMEOUT_SECONDS,
             connect_args={
                 "connect_timeout": config.DATABASE_CONNECT_TIMEOUT_SECONDS,
                 "options": (

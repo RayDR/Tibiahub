@@ -40,6 +40,7 @@ class Settings(BaseSettings):
     DATABASE_URL: SecretStr | None = None
     DATABASE_POOL_SIZE: int = Field(5, ge=1, le=50)
     DATABASE_MAX_OVERFLOW: int = Field(10, ge=0, le=100)
+    DATABASE_POOL_TIMEOUT_SECONDS: int = Field(5, ge=1, le=60)
     DATABASE_POOL_RECYCLE_SECONDS: int = Field(1800, ge=60)
     DATABASE_CONNECT_TIMEOUT_SECONDS: int = Field(10, ge=1, le=60)
     DATABASE_STATEMENT_TIMEOUT_MS: int = Field(30_000, ge=1_000)

@@ -1,5 +1,4 @@
 """Creatures API endpoints."""
-import hashlib
 import logging
 from pathlib import Path
 import re
@@ -9,13 +8,18 @@ from fastapi import APIRouter, Depends, HTTPException, Query, Request, Response
 from fastapi.responses import FileResponse
 from sqlalchemy.orm import Session
 
-from app.db.database import get_db
+from app.db.database import SessionLocal, get_db
 from app.models import Creature as CreatureModel
 from app.models.settings import SystemSettings as SettingsModel
 from app.schemas import Creature, CreatureCreate, CreatureSimple
 from app.services.creature_storage_service import get_cached_creature_by_id, get_cached_creature_by_name, list_cached_creatures, resolve_cached_creature
 from app.services.entity_metadata_service import EntityMetadataService
 from app.services import media_asset_service as media_svc
+from app.api.v1.local_media import (
+    LocalMediaDescriptor,
+    build_local_media_file_response,
+    resolve_local_media_descriptor,
+)
 from app.core.config import settings
 
 router = APIRouter(prefix="/creatures", tags=["creatures"])
@@ -95,7 +99,7 @@ async def get_cyclopedia_category_images(db: Session = Depends(get_db)):
 
 
 @router.get("/category-images/file/{file_name}")
-async def get_cyclopedia_category_image_file(file_name: str):
+def get_cyclopedia_category_image_file(file_name: str):
     """Serve locally uploaded category image files."""
     safe_name = Path(file_name).name
     target = (_CATEGORY_IMAGE_DIR / safe_name).resolve()
@@ -378,62 +382,69 @@ async def create_creature(
 
 
 @router.get("/{creature_id}/image")
-async def get_creature_image(
+def get_creature_image(
     creature_id: int,
     request: Request,
     include_placeholder: bool = Query(True, alias="placeholder"),
-    db: Session = Depends(get_db),
 ):
     """Serve creature image from local MediaAsset cache (local-first)."""
-    creature = get_cached_creature_by_id(db, creature_id)
-    if not creature:
-        raise HTTPException(status_code=404, detail="Creature not found in local cache")
+    descriptor = _resolve_creature_media_descriptor(creature_id)
 
-    asset_key = media_svc.build_creature_asset_key(creature)
-    # Public requests must never perform provider downloads.
-    # Missing assets are populated exclusively by sync/admin workers.
-    asset = media_svc.get_asset(
-        db,
-        asset_key,
+    if descriptor.status != "cached":
+        return _unavailable_creature_image(
+            label=descriptor.fallback_label,
+            asset_key=descriptor.asset_key,
+            include_placeholder=include_placeholder,
+            status=descriptor.status,
+        )
+
+    response = build_local_media_file_response(
+        request,
+        descriptor,
+        default_media_type="image/gif",
+        cache_max_age_seconds=settings.IMAGE_CACHE_MAX_AGE_SECONDS,
+        extra_headers={
+            "X-Image-Source": "local-media-asset",
+            "X-Image-Status": "cached",
+            "X-Asset-Key": descriptor.asset_key,
+        },
     )
 
-    if not asset or asset.status != "cached":
+    if response is None:
         return _unavailable_creature_image(
-            label=creature.name,
-            asset_key=asset_key,
+            label=descriptor.fallback_label,
+            asset_key=descriptor.asset_key,
             include_placeholder=include_placeholder,
-            status=(
-                getattr(asset, "status", "missing")
-                if asset
-                else "missing"
-            ),
+            status="missing",
         )
 
-    content = asset.read_bytes()
-    if not content:
-        return _unavailable_creature_image(
-            label=creature.name,
+    return response
+
+
+def _resolve_creature_media_descriptor(creature_id: int) -> LocalMediaDescriptor:
+    """Resolve creature media metadata in a short-lived DB session."""
+
+    def _resolver(db: Session) -> LocalMediaDescriptor:
+        creature = get_cached_creature_by_id(db, creature_id)
+        if not creature:
+            raise HTTPException(status_code=404, detail="Creature not found in local cache")
+
+        asset_key = media_svc.build_creature_asset_key(creature)
+        # Public requests must never perform provider downloads.
+        # Missing assets are populated exclusively by sync/admin workers.
+        asset = media_svc.get_asset(db, asset_key)
+
+        return LocalMediaDescriptor(
+            local_path=(str(asset.local_path) if asset and asset.local_path else None),
+            content_type=(asset.content_type if asset else None),
+            size_bytes=(asset.size_bytes if asset else None),
+            asset_hash=(asset.sha256_hash if asset else None),
             asset_key=asset_key,
-            include_placeholder=include_placeholder,
+            status=(getattr(asset, "status", "missing") if asset else "missing"),
+            fallback_label=creature.name or "Unknown Creature",
         )
 
-    etag = asset.sha256_hash[:20] if asset.sha256_hash else hashlib.sha1(content).hexdigest()
-    if request.headers.get("if-none-match") == etag:
-        return Response(status_code=304, headers={
-            "ETag": etag,
-            "Cache-Control": f"public, max-age={settings.IMAGE_CACHE_MAX_AGE_SECONDS}",
-        })
-
-    media_type = asset.content_type or "image/gif"
-    return Response(
-        content=content,
-        media_type=media_type,
-        headers={
-            "Content-Type": media_type,
-            "Content-Length": str(len(content)),
-            "Cache-Control": f"public, max-age={settings.IMAGE_CACHE_MAX_AGE_SECONDS}",
-            "ETag": etag,
-            "X-Image-Source": "local-media-asset",
-            "X-Asset-Key": asset_key,
-        },
+    return resolve_local_media_descriptor(
+        _resolver,
+        session_factory=SessionLocal,
     )
