@@ -18,6 +18,8 @@ interface CompactEntityStripProps {
   items: CompactEntityStripItem[];
   variant: 'rail' | 'chips';
   nudgeSessionKey?: string;
+  linkState?: unknown | ((item: CompactEntityStripItem) => unknown);
+  onNavigate?: () => void;
 }
 
 interface DragState {
@@ -26,6 +28,8 @@ interface DragState {
   startX: number;
   scrollLeft: number;
   moved: boolean;
+  captureStarted: boolean;
+  suppressClick: boolean;
 }
 
 export default function CompactEntityStrip({
@@ -33,6 +37,8 @@ export default function CompactEntityStrip({
   items,
   variant,
   nudgeSessionKey,
+  linkState,
+  onNavigate,
 }: CompactEntityStripProps) {
   const containerRef =
     useRef<HTMLDivElement | null>(null);
@@ -43,6 +49,8 @@ export default function CompactEntityStrip({
     startX: 0,
     scrollLeft: 0,
     moved: false,
+    captureStarted: false,
+    suppressClick: false,
   });
 
   useEffect(() => {
@@ -145,6 +153,10 @@ export default function CompactEntityStrip({
   const startDrag = (
     event: ReactPointerEvent<HTMLDivElement>,
   ) => {
+    if (variant !== 'rail') {
+      return;
+    }
+
     if (
       event.pointerType !== 'mouse' ||
       event.button !== 0
@@ -160,14 +172,18 @@ export default function CompactEntityStrip({
       startX: event.clientX,
       scrollLeft: target.scrollLeft,
       moved: false,
+      captureStarted: false,
+      suppressClick: false,
     };
-
-    target.setPointerCapture(event.pointerId);
   };
 
   const moveDrag = (
     event: ReactPointerEvent<HTMLDivElement>,
   ) => {
+    if (variant !== 'rail') {
+      return;
+    }
+
     const drag = dragRef.current;
 
     if (
@@ -179,17 +195,29 @@ export default function CompactEntityStrip({
 
     const delta = event.clientX - drag.startX;
 
-    if (Math.abs(delta) > 4) {
+    if (Math.abs(delta) > 6) {
       drag.moved = true;
+      if (!drag.captureStarted) {
+        drag.captureStarted = true;
+        event.currentTarget.setPointerCapture(
+          event.pointerId,
+        );
+      }
     }
 
-    event.currentTarget.scrollLeft =
-      drag.scrollLeft - delta;
+    if (drag.moved) {
+      event.currentTarget.scrollLeft =
+        drag.scrollLeft - delta;
+    }
   };
 
   const finishDrag = (
     event: ReactPointerEvent<HTMLDivElement>,
   ) => {
+    if (variant !== 'rail') {
+      return;
+    }
+
     const drag = dragRef.current;
 
     if (
@@ -199,9 +227,14 @@ export default function CompactEntityStrip({
       return;
     }
 
+    if (drag.moved) {
+      drag.suppressClick = true;
+    }
+
     drag.active = false;
 
     if (
+      drag.captureStarted &&
       event.currentTarget.hasPointerCapture(
         event.pointerId,
       )
@@ -238,10 +271,10 @@ export default function CompactEntityStrip({
         onPointerUp={finishDrag}
         onPointerCancel={finishDrag}
         onClickCapture={(event) => {
-          if (dragRef.current.moved) {
+          if (dragRef.current.suppressClick) {
             event.preventDefault();
             event.stopPropagation();
-            dragRef.current.moved = false;
+            dragRef.current.suppressClick = false;
           }
         }}
         className={[
@@ -264,10 +297,16 @@ export default function CompactEntityStrip({
           <Link
             key={item.id}
             to={item.to}
+            state={
+              typeof linkState === 'function'
+                ? linkState(item)
+                : linkState
+            }
             draggable={false}
             onDragStart={(event) =>
               event.preventDefault()
             }
+            onClick={() => onNavigate?.()}
             title={item.name}
             className={
               variant === 'rail'

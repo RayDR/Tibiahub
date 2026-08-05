@@ -261,6 +261,14 @@ i18n
                             "ascending": "Ascending",
                             "descending": "Descending"
                         },
+                        "filters": {
+                            "clearSearch": "Clear search",
+                            "clearCategory": "Clear category",
+                            "categoryLabel": "Category: {{category}}",
+                            "selectedResult": "Selected result: {{value}}",
+                            "clearSelectedResult": "Clear selected result",
+                            "resultCount": "{{count}} results"
+                        },
                         "cards": {
                             "recent": "Recent searches",
                             "yourRecent": "Continue Where You Left Off", "mostVisited": "Most visited by you", "visits": "{{count}} visits",
@@ -1117,6 +1125,14 @@ i18n
                             "difficulty": "Ordenar por dificultad",
                             "ascending": "Ascendente",
                             "descending": "Descendente"
+                        },
+                        "filters": {
+                            "clearSearch": "Limpiar búsqueda",
+                            "clearCategory": "Limpiar categoría",
+                            "categoryLabel": "Categoría: {{category}}",
+                            "selectedResult": "Resultado seleccionado: {{value}}",
+                            "clearSelectedResult": "Quitar resultado seleccionado",
+                            "resultCount": "{{count}} resultados"
                         },
                         "cards": {
                             "recent": "Búsquedas recientes",

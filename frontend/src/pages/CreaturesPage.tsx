@@ -1,6 +1,7 @@
 import React, { useEffect, useMemo, useRef, useState } from 'react';
 import {
   Link,
+  useNavigate,
   useSearchParams } from 'react-router-dom';
 import { AlertTriangle,
   ArrowDownAZ,
@@ -48,6 +49,11 @@ import KnowledgeSearchBox, {
   type KnowledgeSearchSection,
   type KnowledgeSuggestion,
 } from '../components/search/KnowledgeSearchBox';
+import {
+  buildCyclopediaPath,
+  createCyclopediaRouteState,
+  saveCyclopediaReturnTarget,
+} from '../utils/cyclopediaNavigation';
 
 type SearchMode = KnowledgeSearchSection;
 type CreatureSort = 'name' | 'experience' | 'hitpoints' | 'difficulty';
@@ -63,6 +69,59 @@ interface CyclopediaPreviewCard {
   imageUrl?: string;
   createdAt?: string;
 }
+
+type SelectedSuggestionKind =
+  | 'item'
+  | 'zone'
+  | 'quest';
+
+interface SelectedSuggestion {
+  kind: SelectedSuggestionKind;
+  query: string;
+}
+
+const SELECTED_SEPARATOR = ':';
+
+const encodeSelectedSuggestion = (
+  kind: SelectedSuggestionKind,
+  query: string,
+) => {
+  const normalized = query.trim();
+  if (!normalized) return '';
+  return `${kind}${SELECTED_SEPARATOR}${encodeURIComponent(normalized)}`;
+};
+
+const decodeSelectedSuggestion = (
+  value: string,
+): SelectedSuggestion | null => {
+  if (!value) return null;
+
+  const index = value.indexOf(SELECTED_SEPARATOR);
+  if (index <= 0) return null;
+
+  const kind = value.slice(0, index) as SelectedSuggestionKind;
+  const raw = value.slice(index + 1);
+
+  if (!['item', 'zone', 'quest'].includes(kind)) {
+    return null;
+  }
+
+  try {
+    const query = decodeURIComponent(raw).trim();
+    if (!query) return null;
+    return {
+      kind,
+      query,
+    };
+  } catch {
+    return null;
+  }
+};
+
+const normalizeSelectedValue = (value: string) =>
+  decodeSelectedSuggestion(value)
+    ? value
+    : '';
 
 const previewStorageKey = (mode: SearchMode) => `cyclopedia_recent_${mode}`;
 
@@ -159,6 +218,7 @@ function CreatureCategoryMedia({
 const CreaturesPage: React.FC = () => {
   const PAGE_SIZE = 20;
   const { t } = useTranslation();
+  const navigate = useNavigate();
   const [searchParams, setSearchParams] = useSearchParams();
 
   // ── Initialize mode directly from URL to avoid Effect 2 clobbering the
@@ -169,10 +229,8 @@ const CreaturesPage: React.FC = () => {
     return (tabToMode(tabParam) as SearchMode) || 'creatures';
   });
 
-  // Tracks whether mode was just set from a URL navigation (Effect 1) so
-  // Effect 2 doesn't immediately push a redundant URL update.
-  const urlSyncedRef = useRef(true);
   const [searchTerm, setSearchTerm] = useState(() => new URLSearchParams(window.location.search).get('q') || '');
+  const [selectedResult, setSelectedResult] = useState(() => normalizeSelectedValue(new URLSearchParams(window.location.search).get('selected') || ''));
   const [creatureSort, setCreatureSort] = useState<CreatureSort>('name');
   const [sortOrder, setSortOrder] = useState<SortOrder>('asc');
   const [creatureCategory, setCreatureCategory] = useState<CreatureCategory>('');
@@ -208,14 +266,23 @@ const CreaturesPage: React.FC = () => {
   const [mobileSearchOpen, setMobileSearchOpen] =
     useState(false);
   const [snapshotReadyTick, setSnapshotReadyTick] = useState(0);
+  const syncingFromUrlRef = useRef(false);
   const activeRequestRef = useRef<AbortController | null>(null);
   const stickySearchRef = useRef<HTMLDivElement | null>(null);
   const loadMoreSentinelRef = useRef<HTMLDivElement | null>(null);
   const loadMoreLockRef = useRef(false);
   const lastSearchSignatureRef = useRef<string>('');
   const pendingScrollRestoreRef = useRef<number | null>(null);
-  const applyingSnapshotRef = useRef(false);
+  const inPageTabSwitchRef = useRef(false);
   const { isAuthenticated } = useAuth();
+
+  const selectedSuggestion = useMemo(
+    () => decodeSelectedSuggestion(selectedResult),
+    [selectedResult],
+  );
+
+  const effectiveSearchTerm =
+    searchTerm.trim() || selectedSuggestion?.query || '';
 
   const searchSuggestions = useMemo<
     KnowledgeSuggestion[]
@@ -236,16 +303,17 @@ const CreaturesPage: React.FC = () => {
     if (mode === 'items') {
       return items.slice(0, 20).map((item) => {
         const imageId = item.image_item_id ?? item.id;
+        const selected = encodeSelectedSuggestion(
+          'item',
+          item.item_name,
+        );
 
         return {
           key: `item:${item.normalized_name}`,
           section: mode,
           kind: 'item',
           label: item.item_name,
-          to:
-            `/cyclopedia?tab=items&q=${encodeURIComponent(
-              item.item_name,
-            )}`,
+          to: `/cyclopedia?tab=items&selected=${encodeURIComponent(selected)}`,
           imageUrl:
             imageId != null
               ? `/api/v1/items/${imageId}/image` +
@@ -264,9 +332,7 @@ const CreaturesPage: React.FC = () => {
         to:
           quest.id != null
             ? `/quests/${quest.id}`
-            : `/cyclopedia?tab=quests&q=${encodeURIComponent(
-                quest.name,
-              )}`,
+            : `/cyclopedia?tab=quests&selected=${encodeURIComponent(encodeSelectedSuggestion('quest', quest.name))}`,
       }));
     }
 
@@ -275,10 +341,7 @@ const CreaturesPage: React.FC = () => {
       section: mode,
       kind: 'zone',
       label: zone.name,
-      to:
-        `/cyclopedia?tab=zones&q=${encodeURIComponent(
-          zone.name,
-        )}`,
+      to: `/cyclopedia?tab=zones&selected=${encodeURIComponent(encodeSelectedSuggestion('zone', zone.name))}`,
       imageUrl: `/api/v1/hunt-zones/${zone.id}/map-image`,
     }));
   }, [creatures, items, mode, quests, zones]);
@@ -624,11 +687,7 @@ const CreaturesPage: React.FC = () => {
                 count: item.drops.length,
               },
             ),
-            to:
-              '/cyclopedia?tab=items&q=' +
-              encodeURIComponent(
-                item.item_name,
-              ),
+            to: `/cyclopedia?tab=items&selected=${encodeURIComponent(encodeSelectedSuggestion('item', item.item_name))}`,
             imageUrl:
               `/api/v1/items/` +
               `${item.image_item_id}/image` +
@@ -654,42 +713,26 @@ const CreaturesPage: React.FC = () => {
     };
   }, [mode, isAuthenticated, t]);
 
-  useEffect(() => {
-    const snapshot = loadSnapshot(mode);
-    applyingSnapshotRef.current = true;
-
-    if (snapshot) {
-      setSearchTerm(snapshot.searchTerm || '');
-      setCreatureSort((snapshot.sort as CreatureSort) || 'name');
-      setSortOrder((snapshot.order as SortOrder) || 'asc');
-      setCreatureCategory(mode === 'creatures' ? (snapshot.category as CreatureCategory) || '' : '');
-      pendingScrollRestoreRef.current = typeof snapshot.scrollY === 'number' ? snapshot.scrollY : null;
-    } else {
-      setSearchTerm('');
-      setCreatureSort('name');
-      setSortOrder('asc');
-      setCreatureCategory('');
-      pendingScrollRestoreRef.current = null;
-    }
-
-    const token = window.setTimeout(() => {
-      applyingSnapshotRef.current = false;
-      setSnapshotReadyTick((value) => value + 1);
-    }, 0);
-
-    return () => window.clearTimeout(token);
-  }, [mode]);
-
   // On mount: check if we have a scroll-restore snapshot from a prior navigation
   useEffect(() => {
     // Fire-and-forget version check — invalidates cache if server data changed
     void checkAndInvalidateIfStale();
-    // Restore scroll position for the current tab if we navigated back
+  }, []);
+
+  useEffect(() => {
+    if (inPageTabSwitchRef.current) {
+      inPageTabSwitchRef.current = false;
+      pendingScrollRestoreRef.current = null;
+      setSnapshotReadyTick((value) => value + 1);
+      return;
+    }
+
     const snapshot = loadSnapshot(mode);
-    if (snapshot && snapshot.scrollY > 0) {
+    if (snapshot?.scrollY && snapshot.scrollY > 0) {
       pendingScrollRestoreRef.current = snapshot.scrollY;
     }
-  }, []);
+    setSnapshotReadyTick((value) => value + 1);
+  }, [mode]);
 
   const toggleCategories = () => {
     setShowCategories((current) => {
@@ -700,7 +743,7 @@ const CreaturesPage: React.FC = () => {
   };
 
   async function performSearch(reset: boolean = true) {
-    const normalized = searchTerm.trim();
+    const normalized = effectiveSearchTerm.trim();
     const nextSkip = reset ? 0 : skip;
     const requiresRemoteFetch = mode === 'creatures'
       ? true
@@ -1037,47 +1080,72 @@ const CreaturesPage: React.FC = () => {
     }
   }
 
-  // Effect 1: URL → mode. Fires when the user navigates to a different tab via
-  // the navbar dropdown or browser history while the component is already mounted.
+  // Keep state synchronized when users navigate with direct URLs/back-forward.
   useEffect(() => {
+    syncingFromUrlRef.current = true;
+
     const tabParam = (searchParams.get('tab') || searchParams.get('section') || '').toLowerCase();
-    const nextMode = tabToMode(tabParam);
-    if (nextMode && nextMode !== mode) {
-      urlSyncedRef.current = true; // tell Effect 2 not to re-push the URL
-      setMode(nextMode);
-    }
-  }, [searchParams]);
-
-  // Keep direct links from Home and browser history synchronized.
-  useEffect(() => {
+    const nextMode = (tabToMode(tabParam) as SearchMode) || 'creatures';
     const nextQuery = searchParams.get('q') || '';
+    const nextSelected = normalizeSelectedValue(searchParams.get('selected') || '');
+    const nextCategory = nextMode === 'creatures' ? (searchParams.get('category') as CreatureCategory) || '' : '';
+    const nextSortParam = searchParams.get('sort') as CreatureSort | null;
+    const nextOrderParam = searchParams.get('order') as SortOrder | null;
+    const nextSort = nextSortParam && ['name', 'experience', 'hitpoints', 'difficulty'].includes(nextSortParam)
+      ? nextSortParam
+      : 'name';
+    const nextOrder = nextOrderParam === 'desc' ? 'desc' : 'asc';
 
-    setSearchTerm((current) =>
-      current === nextQuery ? current : nextQuery,
-    );
+    setMode(nextMode);
+    setSearchTerm(nextQuery);
+    setSelectedResult(nextSelected);
+    setCreatureCategory(nextCategory);
+    setCreatureSort(nextSort);
+    setSortOrder(nextOrder);
+
+    const token = window.setTimeout(() => {
+      syncingFromUrlRef.current = false;
+      setSnapshotReadyTick((value) => value + 1);
+    }, 0);
+
+    return () => window.clearTimeout(token);
   }, [searchParams]);
 
-  // Effect 2: mode → URL. Only fires when the user clicks an in-page tab
-  // (not when Effect 1 already updated the URL). Skipped on first render
-  // because mode was initialized from URL in useState.
+  // Keep URL synchronized with current page state (replace to avoid keypress history spam).
   useEffect(() => {
-    if (urlSyncedRef.current) {
-      urlSyncedRef.current = false;
-      return;
+    if (syncingFromUrlRef.current) return;
+
+    const nextPath = buildCyclopediaPath({
+      tab: modeToTab(mode),
+      q: searchTerm,
+      selected: selectedResult,
+      category: mode === 'creatures' ? creatureCategory : '',
+      sort: (mode === 'creatures' || mode === 'bosses') && creatureSort !== 'name' ? creatureSort : undefined,
+      order: (mode === 'creatures' || mode === 'bosses') && sortOrder !== 'asc' ? sortOrder : undefined,
+    });
+
+    const nextQuery = nextPath.split('?')[1] || '';
+    const nextParams = new URLSearchParams(nextQuery);
+    const currentParams = new URLSearchParams(searchParams);
+    currentParams.delete('section');
+
+    if (nextParams.toString() !== currentParams.toString()) {
+      setSearchParams(nextParams, { replace: true });
     }
-    const urlTab = (searchParams.get('tab') || '').toLowerCase();
-    const modeTab = modeToTab(mode);
-    if (urlTab !== modeTab) {
-      const next = new URLSearchParams(searchParams);
-      next.set('tab', modeTab);
-      next.delete('section');
-      setSearchParams(next, { replace: true });
-    }
-  }, [mode, searchParams, setSearchParams]);
+  }, [
+    mode,
+    searchTerm,
+    selectedResult,
+    creatureCategory,
+    creatureSort,
+    sortOrder,
+    searchParams,
+    setSearchParams,
+  ]);
 
   // Effect 3: debounced search. Cache check is done inside performSearch.
   useEffect(() => {
-    if (applyingSnapshotRef.current) return;
+    if (syncingFromUrlRef.current) return;
     const timer = setTimeout(() => {
       void performSearch(true);
     }, 450);
@@ -1085,7 +1153,7 @@ const CreaturesPage: React.FC = () => {
       clearTimeout(timer);
       activeRequestRef.current?.abort();
     };
-  }, [searchTerm, mode, creatureSort, sortOrder, creatureCategory, snapshotReadyTick]);
+  }, [searchTerm, selectedResult, mode, creatureSort, sortOrder, creatureCategory, snapshotReadyTick]);
 
   // Persist scroll position + state when navigating away (e.g. to creature detail).
   useEffect(() => {
@@ -1094,6 +1162,7 @@ const CreaturesPage: React.FC = () => {
         saveSnapshot({
           mode,
           searchTerm,
+          selected: selectedResult,
           category: creatureCategory,
           sort: creatureSort,
           order: sortOrder,
@@ -1109,6 +1178,7 @@ const CreaturesPage: React.FC = () => {
       saveSnapshot({
         mode,
         searchTerm,
+        selected: selectedResult,
         category: creatureCategory,
         sort: creatureSort,
         order: sortOrder,
@@ -1116,10 +1186,89 @@ const CreaturesPage: React.FC = () => {
         savedAt: Date.now(),
       });
     };
-  }, [mode, searchTerm, creatureCategory, creatureSort, sortOrder]);
+  }, [mode, searchTerm, selectedResult, creatureCategory, creatureSort, sortOrder]);
 
-  const hasActiveQuery = searchTerm.trim().length > 0 || (mode === 'creatures' && !!creatureCategory);
+  const hasActiveQuery = searchTerm.trim().length > 0 || selectedResult.trim().length > 0 || (mode === 'creatures' && !!creatureCategory);
   const isEmpty = hasActiveQuery && !loading && creatures.length === 0 && items.length === 0 && quests.length === 0 && zones.length === 0;
+
+  const cyclopediaPath = useMemo(
+    () =>
+      buildCyclopediaPath({
+        tab: modeToTab(mode),
+        q: searchTerm,
+        selected: selectedResult,
+        category: mode === 'creatures' ? creatureCategory : '',
+        sort: (mode === 'creatures' || mode === 'bosses') && creatureSort !== 'name' ? creatureSort : undefined,
+        order: (mode === 'creatures' || mode === 'bosses') && sortOrder !== 'asc' ? sortOrder : undefined,
+      }),
+    [mode, searchTerm, selectedResult, creatureCategory, creatureSort, sortOrder],
+  );
+
+  const cyclopediaRouteState = useMemo(
+    () => createCyclopediaRouteState(cyclopediaPath),
+    [cyclopediaPath],
+  );
+
+  const persistCyclopediaState = () => {
+    saveSnapshot({
+      mode,
+      searchTerm,
+      selected: selectedResult,
+      category: creatureCategory,
+      sort: creatureSort,
+      order: sortOrder,
+      scrollY: window.scrollY,
+      savedAt: Date.now(),
+    });
+    saveCyclopediaReturnTarget(cyclopediaPath);
+  };
+
+  const handleQueryChange = (value: string) => {
+    setSearchTerm(value);
+    if (value.trim() && selectedResult) {
+      setSelectedResult('');
+    }
+  };
+
+  const handleSuggestionSelect = (
+    suggestion: KnowledgeSuggestion,
+  ) => {
+    const isQuestDetail =
+      suggestion.kind === 'quest' &&
+      suggestion.to.startsWith('/quests/');
+
+    if (
+      suggestion.kind === 'creature' ||
+      suggestion.kind === 'boss' ||
+      isQuestDetail
+    ) {
+      persistCyclopediaState();
+      navigate(suggestion.to, {
+        state: cyclopediaRouteState,
+      });
+      return;
+    }
+
+    if (suggestion.kind === 'item') {
+      setSelectedResult(
+        encodeSelectedSuggestion('item', suggestion.label),
+      );
+    } else if (suggestion.kind === 'zone') {
+      setSelectedResult(
+        encodeSelectedSuggestion('zone', suggestion.label),
+      );
+    } else {
+      setSelectedResult(
+        encodeSelectedSuggestion('quest', suggestion.label),
+      );
+    }
+
+    setSearchTerm('');
+  };
+
+  useEffect(() => {
+    saveCyclopediaReturnTarget(cyclopediaPath);
+  }, [cyclopediaPath]);
 
   useEffect(() => {
     let scheduled = false;
@@ -1320,6 +1469,8 @@ const CreaturesPage: React.FC = () => {
                     mostVisitedPreviewCards
                   }
                   variant="chips"
+                  linkState={cyclopediaRouteState}
+                  onNavigate={persistCyclopediaState}
                 />
               ) : null}
             <div
@@ -1339,8 +1490,16 @@ const CreaturesPage: React.FC = () => {
                 iconOnly={isSearchCompact}
                 activeKey={mode}
                 onChange={(key) => {
-                  urlSyncedRef.current = false;
-                  setMode(key as SearchMode);
+                  const nextMode = key as SearchMode;
+                  inPageTabSwitchRef.current = true;
+                  setMode(nextMode);
+                  setSearchTerm('');
+                  setSelectedResult('');
+                  setCreatureCategory('');
+                  setCreatureSort('name');
+                  setSortOrder('asc');
+                  pendingScrollRestoreRef.current = null;
+                  setMobileSearchOpen(false);
                 }}
                 items={cyclopediaSections.map(
                   (section) => ({
@@ -1397,10 +1556,17 @@ const CreaturesPage: React.FC = () => {
                 section={mode}
                 query={searchTerm}
                 onSectionChange={(nextMode) => {
-                  urlSyncedRef.current = false;
+                  inPageTabSwitchRef.current = true;
                   setMode(nextMode);
+                  setSearchTerm('');
+                  setSelectedResult('');
+                  setCreatureCategory('');
+                  setCreatureSort('name');
+                  setSortOrder('asc');
+                  pendingScrollRestoreRef.current = null;
                 }}
-                onQueryChange={setSearchTerm}
+                onQueryChange={handleQueryChange}
+                onSuggestionSelect={handleSuggestionSelect}
                 showSectionSelect={false}
                 externalSuggestions={
                   searchSuggestions
@@ -1416,13 +1582,17 @@ const CreaturesPage: React.FC = () => {
                     onSectionChange={(
                       nextMode,
                     ) => {
-                      urlSyncedRef.current =
-                        false;
+                      inPageTabSwitchRef.current = true;
                       setMode(nextMode);
+                      setSearchTerm('');
+                      setSelectedResult('');
+                      setCreatureCategory('');
+                      setCreatureSort('name');
+                      setSortOrder('asc');
+                      pendingScrollRestoreRef.current = null;
                     }}
-                    onQueryChange={
-                      setSearchTerm
-                    }
+                    onQueryChange={handleQueryChange}
+                    onSuggestionSelect={handleSuggestionSelect}
                     showSectionSelect={false}
                     externalSuggestions={
                       searchSuggestions
@@ -1440,13 +1610,17 @@ const CreaturesPage: React.FC = () => {
                       onSectionChange={(
                         nextMode,
                       ) => {
-                        urlSyncedRef.current =
-                          false;
+                        inPageTabSwitchRef.current = true;
                         setMode(nextMode);
+                        setSearchTerm('');
+                        setSelectedResult('');
+                        setCreatureCategory('');
+                        setCreatureSort('name');
+                        setSortOrder('asc');
+                        pendingScrollRestoreRef.current = null;
                       }}
-                      onQueryChange={
-                        setSearchTerm
-                      }
+                      onQueryChange={handleQueryChange}
+                      onSuggestionSelect={handleSuggestionSelect}
                       showSectionSelect={false}
                       externalSuggestions={
                         searchSuggestions
@@ -1564,25 +1738,51 @@ const CreaturesPage: React.FC = () => {
                     <Crown size={14} /> {t('cyclopedia.helpers.bosses')}
                   </div>
                 )}
-
-                <div className="grid gap-2 sm:grid-cols-2 md:grid-cols-2">
-                <select value={creatureSort} onChange={(event) => setCreatureSort(event.target.value as CreatureSort)} className="app-input">
-                  <option value="name">{t('cyclopedia.sort.name')}</option>
-                  <option value="experience">{t('cyclopedia.sort.experience')}</option>
-                  <option value="hitpoints">{t('cyclopedia.sort.hitpoints')}</option>
-                  <option value="difficulty">{t('cyclopedia.sort.difficulty')}</option>
-                </select>
-                <button onClick={() => setSortOrder((current) => current === 'asc' ? 'desc' : 'asc')} className="app-button-ghost inline-flex items-center justify-center gap-2">
-                  {sortOrder === 'asc' ? <ArrowDownAZ size={16} /> : <ArrowUpAZ size={16} />}
-                  {sortOrder === 'asc' ? t('cyclopedia.sort.ascending') : t('cyclopedia.sort.descending')}
-                </button>
-              </div>
               </div>
             )}
+
+            {(mode === 'creatures' && creatureCategory) || selectedSuggestion ? (
+              <div className="flex flex-wrap items-center gap-2 px-1 pb-1">
+                {mode === 'creatures' && creatureCategory ? (
+                  <span className="inline-flex min-h-9 items-center gap-2 rounded-full border border-primary/30 bg-primary/10 px-3 text-xs font-semibold text-primary">
+                    {t('cyclopedia.filters.categoryLabel', {
+                      category: creatureCategory,
+                    })}
+                    <button
+                      type="button"
+                      title={t('cyclopedia.filters.clearCategory')}
+                      aria-label={t('cyclopedia.filters.clearCategory')}
+                      onClick={() => setCreatureCategory('')}
+                      className="rounded p-0.5 text-primary transition hover:bg-primary/20"
+                    >
+                      <X className="size-3.5" />
+                    </button>
+                  </span>
+                ) : null}
+
+                {selectedSuggestion ? (
+                  <span className="inline-flex min-h-9 items-center gap-2 rounded-full border border-info/30 bg-info/10 px-3 text-xs font-semibold text-info">
+                    {t('cyclopedia.filters.selectedResult', {
+                      value: selectedSuggestion.query,
+                    })}
+                    <button
+                      type="button"
+                      title={t('cyclopedia.filters.clearSelectedResult')}
+                      aria-label={t('cyclopedia.filters.clearSelectedResult')}
+                      onClick={() => setSelectedResult('')}
+                      className="rounded p-0.5 text-info transition hover:bg-info/20"
+                    >
+                      <X className="size-3.5" />
+                    </button>
+                  </span>
+                ) : null}
+              </div>
+            ) : null}
           </AppCard>
         </div>
 
         {!searchTerm.trim() &&
+        !selectedResult.trim() &&
         !creatureCategory ? (
           mode === 'creatures' ? (
             <CompactEntityStrip
@@ -1592,17 +1792,49 @@ const CreaturesPage: React.FC = () => {
               items={topPreviewCards}
               variant="rail"
               nudgeSessionKey="popular-creatures"
+              linkState={cyclopediaRouteState}
+              onNavigate={persistCyclopediaState}
             />
           ) : (
             <CyclopediaDiscovery
               mode={mode}
               primaryItems={topPreviewCards}
+              linkState={cyclopediaRouteState}
+              onNavigate={persistCyclopediaState}
             />
           )
         ) : null}
       </div>
 
       <div>
+        {!loading &&
+        (mode === 'creatures' || mode === 'bosses') ? (
+          <div className="mb-4 grid gap-3 rounded-xl border border-line bg-surface-base/50 p-3 md:grid-cols-[minmax(0,1fr)_14rem_auto] md:items-center">
+            <div className="min-w-0 text-sm text-content-secondary">
+              {mode === 'creatures' && creatureCategory ? (
+                <span className="inline-flex items-center rounded bg-surface px-2 py-1 text-xs font-semibold text-content-secondary">
+                  {t('cyclopedia.filters.categoryLabel', { category: creatureCategory })}
+                </span>
+              ) : null}
+              <p className="mt-1 text-xs text-content-muted">
+                {t('cyclopedia.filters.resultCount', { count: creatures.length })}
+              </p>
+            </div>
+
+            <select value={creatureSort} onChange={(event) => setCreatureSort(event.target.value as CreatureSort)} className="app-input">
+              <option value="name">{t('cyclopedia.sort.name')}</option>
+              <option value="experience">{t('cyclopedia.sort.experience')}</option>
+              <option value="hitpoints">{t('cyclopedia.sort.hitpoints')}</option>
+              <option value="difficulty">{t('cyclopedia.sort.difficulty')}</option>
+            </select>
+
+            <button onClick={() => setSortOrder((current) => current === 'asc' ? 'desc' : 'asc')} className="app-button-ghost inline-flex items-center justify-center gap-2">
+              {sortOrder === 'asc' ? <ArrowDownAZ size={16} /> : <ArrowUpAZ size={16} />}
+              {sortOrder === 'asc' ? t('cyclopedia.sort.ascending') : t('cyclopedia.sort.descending')}
+            </button>
+          </div>
+        ) : null}
+
         {loading && (
           <div className="flex justify-center py-20">
             <Loader2 className="animate-spin text-primary" size={48} />
@@ -1634,11 +1866,11 @@ const CreaturesPage: React.FC = () => {
               }
             >
             {(mode === 'creatures' || mode === 'bosses') && creatures.map((creature, index) => (
-              <CreatureCard key={creature.id} creature={creature} index={index} />
+              <CreatureCard key={creature.id} creature={creature} index={index} linkState={cyclopediaRouteState} onNavigate={persistCyclopediaState} />
             ))}
 
             {mode === 'items' &&
-              searchTerm.trim().length > 1 &&
+              effectiveSearchTerm.trim().length > 1 &&
               items.map((item, index) => (
               <AppCard key={`${item.normalized_name}-${index}`} className="ds-enter p-5">
                 <div className="mb-4 flex items-start gap-3">
@@ -1778,6 +2010,8 @@ const CreaturesPage: React.FC = () => {
                       {detailIdentifier != null ? (
                         <Link
                           to={`/quests/${detailIdentifier}`}
+                          state={cyclopediaRouteState}
+                          onClick={() => persistCyclopediaState()}
                           className="font-semibold text-primary hover:underline"
                         >
                           {t(

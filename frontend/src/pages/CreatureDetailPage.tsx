@@ -23,6 +23,7 @@ import { useAuth } from "../context/AuthContext";
 import { activityApi } from "../services/activity";
 import MapMetadataPanel from "../components/MapMetadataPanel";
 import { Page } from "../components/ui";
+import { resolveCyclopediaReturnTarget } from "../utils/cyclopediaNavigation";
 
 const formatNumber = (
   value: number | null | undefined,
@@ -107,7 +108,10 @@ const CreatureDetailPage: React.FC = () => {
         }
 
         if (canonicalSlug && canonicalSlug !== slug) {
-          navigate(`/creatures/${canonicalSlug}`, { replace: true });
+          navigate(`/creatures/${canonicalSlug}`, {
+            replace: true,
+            state: location.state,
+          });
         }
       } catch (error: any) {
         console.error("Failed to load creature details", error);
@@ -117,7 +121,7 @@ const CreatureDetailPage: React.FC = () => {
       }
     };
     void fetchCreature();
-  }, [slug, navigate, isAuthenticated, t]);
+  }, [slug, navigate, location, isAuthenticated, t]);
 
   if (loading) {
     return (
@@ -161,7 +165,10 @@ const CreatureDetailPage: React.FC = () => {
       ? accessRequirements
       : creature.related_tasks || [];
 
-  const backTarget = (location.state as { from?: string } | null)?.from;
+  const backTarget = resolveCyclopediaReturnTarget(
+    (location.state as { from?: string } | null)?.from,
+    '/cyclopedia?tab=creatures',
+  );
 
   return (
     <Page>
@@ -170,15 +177,7 @@ const CreatureDetailPage: React.FC = () => {
         <div className="relative z-10">
           <button
             onClick={() => {
-              if (backTarget) {
-                navigate(backTarget);
-                return;
-              }
-              if (window.history.length > 1) {
-                navigate(-1);
-                return;
-              }
-              navigate("/cyclopedia");
+              navigate(backTarget);
             }}
             className="group mb-6 flex items-center gap-2 text-content-secondary transition-colors hover:text-content-primary"
           >

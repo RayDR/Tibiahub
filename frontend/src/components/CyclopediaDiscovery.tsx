@@ -58,6 +58,8 @@ interface ContextCard {
 interface CyclopediaDiscoveryProps {
   mode: DiscoveryMode;
   primaryItems: PrimaryPreview[];
+  linkState?: unknown;
+  onNavigate?: () => void;
 }
 
 const fallbackIcons: Record<ContextKind, LucideIcon> = {
@@ -118,6 +120,14 @@ function contextualImageUrl(
 
 function contextualLink(item: DiscoveryCard): string {
   const type = item.entity_type || '';
+  const selectedKind =
+    type === 'item'
+      ? 'item'
+      : type === 'hunt_zone'
+        ? 'zone'
+        : type === 'quest'
+          ? 'quest'
+          : null;
 
   const tab =
     type === 'quest'
@@ -130,10 +140,12 @@ function contextualLink(item: DiscoveryCard): string {
             ? 'bosses'
             : 'creatures';
 
-  return (
-    `/cyclopedia?tab=${tab}&q=` +
-    encodeURIComponent(item.name)
-  );
+  if (selectedKind) {
+    const selected = `${selectedKind}:${encodeURIComponent(item.name)}`;
+    return `/cyclopedia?tab=${tab}&selected=${encodeURIComponent(selected)}`;
+  }
+
+  return `/cyclopedia?tab=${tab}`;
 }
 
 function contextualSubtitle(
@@ -302,17 +314,13 @@ function normalizePrimaryLink(
   mode: DiscoveryMode,
 ): string {
   if (mode === 'items') {
-    return (
-      '/cyclopedia?tab=items&q=' +
-      encodeURIComponent(item.name)
-    );
+    const selected = `item:${encodeURIComponent(item.name)}`;
+    return `/cyclopedia?tab=items&selected=${encodeURIComponent(selected)}`;
   }
 
   if (mode === 'zones') {
-    return (
-      '/cyclopedia?tab=zones&q=' +
-      encodeURIComponent(item.name)
-    );
+    const selected = `zone:${encodeURIComponent(item.name)}`;
+    return `/cyclopedia?tab=zones&selected=${encodeURIComponent(selected)}`;
   }
 
   return item.to;
@@ -321,6 +329,8 @@ function normalizePrimaryLink(
 export default function CyclopediaDiscovery({
   mode,
   primaryItems,
+  linkState,
+  onNavigate,
 }: CyclopediaDiscoveryProps) {
   const { t } = useTranslation();
   const [data, setData] =
@@ -411,6 +421,8 @@ export default function CyclopediaDiscovery({
           <ContextGroup
             items={primaryCards}
             columns="wide"
+            linkState={linkState}
+            onNavigate={onNavigate}
           />
         ) : null}
 
@@ -419,6 +431,8 @@ export default function CyclopediaDiscovery({
             title={t('cyclopedia.discovery.trending')}
             items={related}
             columns="compact"
+            linkState={linkState}
+            onNavigate={onNavigate}
           />
         ) : null}
       </div>
@@ -430,10 +444,14 @@ function ContextGroup({
   title,
   items,
   columns,
+  linkState,
+  onNavigate,
 }: {
   title?: string;
   items: ContextCard[];
   columns: 'wide' | 'compact';
+  linkState?: unknown;
+  onNavigate?: () => void;
 }) {
   return (
     <article className="rounded-2xl bg-surface-raised p-5 shadow-sm">
@@ -454,6 +472,8 @@ function ContextGroup({
           <Link
             key={item.id}
             to={item.to}
+            state={linkState}
+            onClick={() => onNavigate?.()}
             className="group flex min-w-0 items-center gap-3 rounded-xl bg-surface p-3 transition hover:bg-surface-active"
           >
             <ContextMedia item={item} />

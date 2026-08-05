@@ -18,6 +18,10 @@ const navigation = source('src/components/Navigation.tsx');
 const overlay = source('src/components/ui/Overlay.tsx');
 const main = source('src/main.tsx');
 const members = source('src/pages/guild/Members.tsx');
+const cyclopedia = source('src/pages/CreaturesPage.tsx');
+const compactStrip = source('src/components/CompactEntityStrip.tsx');
+const searchBox = source('src/components/search/KnowledgeSearchBox.tsx');
+const cyclopediaNavUtils = source('src/utils/cyclopediaNavigation.ts');
 const publicPageFiles = [
   'src/pages/HomePage.tsx',
   'src/pages/CreaturesPage.tsx',
@@ -79,6 +83,13 @@ if (!css.includes('--app-content-max-width') || !css.includes('--app-nav-clearan
 if (!css.includes('.app-sticky-offset')) failures.push('shared sticky offset utility class is missing');
 if (navigation.includes('max-w-[90rem]') || navigation.includes('px-2 pt-2 sm:px-4')) failures.push('navigation still hardcodes shell width/gutters instead of using shared Container');
 if (!navigation.includes('<Container')) failures.push('navigation does not use the shared Container primitive');
+
+if (!compactStrip.includes('Math.abs(delta) > 6') || !compactStrip.includes('drag.suppressClick = true')) failures.push('compact strip drag threshold/click suppression guard is incomplete');
+if (!compactStrip.includes("if (variant !== 'rail')")) failures.push('compact strip applies drag behavior outside rail variant');
+if (!searchBox.includes('onSuggestionSelect') || !searchBox.includes('cyclopedia.filters.clearSearch')) failures.push('search box controlled suggestion callback or clear-search control is missing');
+if (!cyclopedia.includes("setSearchTerm('')") || !cyclopedia.includes("setSelectedResult('')") || !cyclopedia.includes("setCreatureCategory('')")) failures.push('cyclopedia tab-switch reset contract (q/selected/category) is incomplete');
+if (!cyclopedia.includes('handleSuggestionSelect') || !cyclopedia.includes("selected: selectedResult")) failures.push('cyclopedia selected-suggestion state separation is incomplete');
+if (!cyclopediaNavUtils.includes('tab') || !cyclopediaNavUtils.includes('q') || !cyclopediaNavUtils.includes('selected') || !cyclopediaNavUtils.includes('category') || !cyclopediaNavUtils.includes('sort') || !cyclopediaNavUtils.includes('order')) failures.push('cyclopedia return-target helper is missing full tab/filter/sort state coverage');
 
 for (const file of publicPageFiles) {
   const text = source(file);

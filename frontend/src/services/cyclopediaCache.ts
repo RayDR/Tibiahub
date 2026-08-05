@@ -108,6 +108,7 @@ const SNAPSHOT_PREFIX = 'cyclopedia_snap_';
 export interface CyclopediaSnapshot {
   mode: string;
   searchTerm: string;
+  selected: string;
   category: string;
   sort: string;
   order: string;
