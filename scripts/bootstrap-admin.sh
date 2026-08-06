@@ -1,6 +1,12 @@
 #!/usr/bin/env bash
+if [[ "${BASH_SOURCE[0]}" != "$0" ]]; then
+  echo "bootstrap-admin.sh must be executed, not sourced." >&2
+  return 1 2>/dev/null || exit 1
+fi
 set -Eeuo pipefail
-source "$(dirname "$0")/postgres-common.sh"
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+# shellcheck source=lib/postgres.sh
+source "$SCRIPT_DIR/lib/postgres.sh"
 
 bootstrap_secrets_file="${TIBIAHUB_BOOTSTRAP_SECRETS_FILE:-/forge/tibiahub-secrets/bootstrap.env}"
 load_tibiahub_environment

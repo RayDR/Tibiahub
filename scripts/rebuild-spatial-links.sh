@@ -1,18 +1,24 @@
 #!/usr/bin/env bash
+if [[ "${BASH_SOURCE[0]}" != "$0" ]]; then
+  echo "rebuild-spatial-links.sh must be executed, not sourced." >&2
+  return 1 2>/dev/null || exit 1
+fi
 set -Eeuo pipefail
-source "$(dirname "$0")/postgres-common.sh"
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+# shellcheck source=lib/postgres.sh
+source "$SCRIPT_DIR/lib/postgres.sh"
 
 case "${1:-}" in
   --dry-run)
-    [[ $# -eq 1 ]] || { echo "Usage: $0 --dry-run | --execute --confirm-tibiahub" >&2; exit 2; }
+    [[ $# -eq 1 ]] || { echo "Usage: $0 --dry-run | --execute --confirm-rebuild-spatial-links" >&2; exit 2; }
     mode=--dry-run
     ;;
   --execute)
-    [[ $# -eq 2 && "${2:-}" == "--confirm-tibiahub" ]] || { echo "Execution requires --execute --confirm-tibiahub" >&2; exit 2; }
+    [[ $# -eq 2 && "${2:-}" == "--confirm-rebuild-spatial-links" ]] || { echo "Execution requires --execute --confirm-rebuild-spatial-links" >&2; exit 2; }
     mode=--execute
     ;;
   *)
-    echo "Usage: $0 --dry-run | --execute --confirm-tibiahub" >&2
+    echo "Usage: $0 --dry-run | --execute --confirm-rebuild-spatial-links" >&2
     exit 2
     ;;
 esac

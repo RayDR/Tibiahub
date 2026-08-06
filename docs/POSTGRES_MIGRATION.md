@@ -21,7 +21,7 @@ Production does not read `backend/.env`. It reads `/forge/tibiahub-secrets/runti
 Generate the runtime, provisioning, and bootstrap files without printing their values:
 
 ```bash
-./scripts/generate-tibiahub-secrets.sh --confirm-create-tibiahub-secrets
+./scripts/tibiahub-ops.sh secrets generate --confirm-generate-secrets
 ```
 
 The generator never overwrites an existing file. Administration mode is explicit:
@@ -39,7 +39,7 @@ Peer administration is preferred where exact passwordless sudo permission is ava
 
 ```bash
 cd /forge/tibiahub
-./scripts/provision-postgres.sh --confirm-provision-tibiahub
+./scripts/tibiahub-ops.sh db provision --confirm-provision-tibiahub
 ```
 
 The generated runtime file already contains the matching application connection. Apply the schema:
@@ -58,7 +58,7 @@ No account is created implicitly. The generated bootstrap file contains one pass
 
 ```bash
 cd /forge/tibiahub
-./scripts/bootstrap-admin.sh
+./scripts/tibiahub-ops.sh admin bootstrap --confirm-bootstrap-admin
 ```
 
 ## Exact deployment sequence
@@ -66,7 +66,7 @@ cd /forge/tibiahub
 1. Confirm PostgreSQL 16+ is available only on localhost.
 2. Preserve the previous runtime file outside the repository, if it exists: `install -m 600 backend/tibia_bestiary.db /var/backups/tibiahub/tibia_bestiary-pre-postgres.db`. Do not delete the original automatically.
 3. Generate the external secret files and securely fill only the two blank elevated PostgreSQL fields.
-4. Run `scripts/provision-postgres.sh --confirm-provision-tibiahub`.
+4. Run `scripts/tibiahub-ops.sh db provision --confirm-provision-tibiahub`.
 5. Run `cd backend && venv/bin/alembic -c alembic.ini upgrade head` exactly once.
 6. Run the explicit bootstrap-admin wrapper above when the database is empty.
 7. Start only the API: `pm2 start ecosystem.config.js --only tibiahub-api`.
@@ -80,21 +80,23 @@ cd /forge/tibiahub
 Backups use PostgreSQL custom format and default to `/var/backups/tibiahub`:
 
 ```bash
-./scripts/backup-postgres.sh
-./scripts/verify-postgres.sh
+./scripts/tibiahub-ops.sh db backup
+./scripts/tibiahub-ops.sh db verify --dry-run
+./scripts/tibiahub-ops.sh db revision
+./scripts/tibiahub-ops.sh db revision heads
 ```
 
 Restore is destructive within the configured TibiaHub database and requires an exact confirmation plus an explicit file:
 
 ```bash
-./scripts/restore-postgres.sh --confirm-restore-tibiahub /var/backups/tibiahub/tibiahub-TIMESTAMP.dump
+./scripts/tibiahub-ops.sh db restore --confirm-restore-tibiahub /var/backups/tibiahub/tibiahub-TIMESTAMP.dump
 ```
 
 A full reset is never automatic. It validates the local dialect and exact database name, can stop only TibiaHub API/scheduler processes, preserves a legacy SQLite copy when present, recreates only the configured TibiaHub database, and applies Alembic head:
 
 ```bash
 export STOP_TIBIAHUB_SERVICES=1
-./scripts/reset-postgres.sh --confirm-reset-tibiahub
+./scripts/tibiahub-ops.sh db reset --confirm-reset-tibiahub
 ```
 
 ## Startup and readiness
@@ -117,12 +119,20 @@ The integration fixture destroys only the public schema in that clearly named te
 ## Rollback
 
 1. Stop `tibiahub-raffle-scheduler`, then `tibiahub-api`.
-2. Back up the failed state with `scripts/backup-postgres.sh` if it may aid diagnosis.
-3. Restore the last known-good custom dump with the explicit restore command.
+2. Back up the failed state with `scripts/tibiahub-ops.sh db backup` if it may aid diagnosis.
+3. Restore the last known-good custom dump with `scripts/tibiahub-ops.sh db restore --confirm-restore-tibiahub <dump>`.
 4. Check out the matching application release and run its documented Alembic target; never stamp a revision to hide a mismatch.
-5. Run `scripts/verify-postgres.sh`, start the API, confirm `/ready`, then start the scheduler and frontend.
+5. Run `scripts/tibiahub-ops.sh db verify --dry-run`, start the API, confirm `/ready`, then start the scheduler and frontend.
 
 The old SQLite files are preservation artifacts, not an automatic runtime rollback path. Provider/Cyclopedia content may be rebuilt in the next sync stage; Stage 1 intentionally contains no general SQLite-to-PostgreSQL ETL.
+
+## Operations consolidation
+
+Use `scripts/tibiahub-ops.sh` as the primary operational entrypoint for database, deploy, spatial, services, and diagnostics workflows.
+
+- Script inventory and replacement mapping: `docs/operations-script-inventory.md`
+- Day-to-day command reference: `docs/operations.md`
+- Full operator runbook: `docs/operations-user-guide.md`
 
 ## Deferred operational migrations
 
