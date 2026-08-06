@@ -64,10 +64,10 @@ def test_postgres_scripts_do_not_put_credentials_in_command_arguments():
 
 
 def test_peer_admin_mode_uses_non_interactive_sudo_without_fallback():
-    common = (ROOT / "scripts" / "postgres-common.sh").read_text(encoding="utf-8")
+    common = (ROOT / "scripts" / "lib" / "postgres.sh").read_text(encoding="utf-8")
     assert "sudo -n -u postgres psql" in common
     assert "no fallback was attempted" in common
-    assert 'TIBIAHUB_POSTGRES_ADMIN_MODE" == "peer"' in common
+    assert 'TIBIAHUB_POSTGRES_ADMIN_MODE:-}" == "peer"' in common
 
 
 def test_pm2_configuration_contains_only_the_non_secret_file_path():
@@ -76,3 +76,21 @@ def test_pm2_configuration_contains_only_the_non_secret_file_path():
     assert "DATABASE_URL" not in ecosystem
     assert "PGPASSWORD" not in ecosystem
     assert "SECRET_KEY" not in ecosystem
+
+
+def test_wrappers_source_shared_postgres_library_directly():
+    wrappers = [
+        ROOT / "scripts" / "backup-postgres.sh",
+        ROOT / "scripts" / "bootstrap-admin.sh",
+        ROOT / "scripts" / "provision-postgres.sh",
+        ROOT / "scripts" / "rebuild-spatial-links.sh",
+        ROOT / "scripts" / "reset-postgres.sh",
+        ROOT / "scripts" / "restore-postgres.sh",
+        ROOT / "scripts" / "verify-postgis.sh",
+        ROOT / "scripts" / "verify-postgres.sh",
+        ROOT / "scripts" / "verify-spatial-consistency.sh",
+    ]
+    for wrapper in wrappers:
+        text = wrapper.read_text(encoding="utf-8")
+        assert "source \"$SCRIPT_DIR/lib/postgres.sh\"" in text
+        assert "postgres-common.sh" not in text

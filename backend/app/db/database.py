@@ -59,6 +59,7 @@ def create_database_engine(
     if "poolclass" in overrides:
         options.pop("pool_size", None)
         options.pop("max_overflow", None)
+        options.pop("pool_timeout", None)
     options.update(overrides)
     return create_engine(engine_url, **options)
 

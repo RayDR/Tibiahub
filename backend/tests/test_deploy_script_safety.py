@@ -7,6 +7,7 @@ from pathlib import Path
 ROOT = Path(__file__).resolve().parents[2]
 DEPLOY = ROOT / "deploy" / "scripts" / "deploy.sh"
 ROLLBACK = ROOT / "deploy" / "scripts" / "rollback.sh"
+OPS = ROOT / "scripts" / "tibiahub-ops.sh"
 README = ROOT / "deploy" / "README.md"
 ALLOWED_SERVICES = {
     "tibiahub-api",
@@ -47,7 +48,7 @@ def test_deploy_requires_lock_clean_exact_develop_and_expected_head():
         "migration_heads",
         "require_local_tibiahub_target",
         "TIBIAHUB_DATABASE_NAME=tibiahub",
-        "restore_ownership_violations",
+        "run_alembic_read_only check",
     ):
         assert required in script
     assert "master" not in script.lower()
@@ -105,7 +106,14 @@ def test_pm2_operations_are_bounded_to_the_declared_tibiahub_services():
     for forbidden in ("pm2 restart all", "pm2 stop all", "pm2 delete all", "pm2 kill"):
         assert forbidden not in combined
     assert combined.count("env -i") == 2
-    assert 'pm2 startOrReload "$ROOT/ecosystem.config.js" --only "$1"' in combined
+    assert 'pm2 startOrReload "$ROOT/ecosystem.config.js" --only "$service"' in combined
+
+
+def test_entrypoints_refuse_being_sourced():
+    for script in (DEPLOY, ROLLBACK, OPS):
+        text = _text(script)
+        assert '[[ "${BASH_SOURCE[0]}" != "$0" ]]' in text
+        assert "must be executed, not sourced" in text
 
 
 def test_scripts_do_not_embed_or_print_database_credentials():

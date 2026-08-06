@@ -1,6 +1,12 @@
 #!/usr/bin/env bash
+if [[ "${BASH_SOURCE[0]}" != "$0" ]]; then
+  echo "provision-postgres.sh must be executed, not sourced." >&2
+  return 1 2>/dev/null || exit 1
+fi
 set -Eeuo pipefail
-source "$(dirname "$0")/postgres-common.sh"
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+# shellcheck source=lib/postgres.sh
+source "$SCRIPT_DIR/lib/postgres.sh"
 
 if [[ "${1:-}" != "--confirm-provision-tibiahub" || $# -ne 1 ]]; then
   echo "Usage: $0 --confirm-provision-tibiahub" >&2
