@@ -227,7 +227,7 @@ function CreatureCategoryMedia({
   return (
     <span
       title={label}
-      className="grid size-14 shrink-0 place-items-center overflow-hidden rounded-xl bg-primary/10 text-primary"
+      className="grid size-9 shrink-0 place-items-center overflow-hidden rounded-lg bg-primary/10 text-primary sm:size-14 sm:rounded-xl"
     >
       {source ? (
         <img
@@ -239,7 +239,7 @@ function CreatureCategoryMedia({
           onError={() =>
             setSourceIndex((current) => current + 1)
           }
-          className="size-13 object-contain p-1 [image-rendering:pixelated]"
+          className="size-8 object-contain p-0.5 [image-rendering:pixelated] sm:size-13 sm:p-1"
         />
       ) : (
         fallback
@@ -1711,7 +1711,7 @@ const CreaturesPage: React.FC = () => {
                 className={`space-y-2 overflow-hidden motion-reduce:transition-none transition-[max-height,opacity,transform,margin] ${
                   isSearchCompact
                     ? 'pointer-events-none max-h-0 -translate-y-1 opacity-0 duration-[400ms] ease-out'
-                    : 'max-h-[40rem] translate-y-0 opacity-100 duration-150 ease-in'
+                    : 'max-h-[100rem] translate-y-0 opacity-100 duration-150 ease-in'
                 }`}
                 aria-hidden={isSearchCompact}
               >
@@ -1728,7 +1728,7 @@ const CreaturesPage: React.FC = () => {
                 )}
 
                 {mode === 'creatures' && showCategories && (
-                  <div className="grid grid-cols-2 gap-3 sm:grid-cols-3 lg:grid-cols-6">
+                  <div className="grid grid-cols-5 gap-1.5 sm:grid-cols-3 sm:gap-3 lg:grid-cols-6">
                     {CREATURE_CATEGORIES.map((category) => {
                       const active =
                         creatureCategory === category;
@@ -1772,16 +1772,18 @@ const CreaturesPage: React.FC = () => {
                         <button
                           key={category || 'all'}
                           type="button"
+                          aria-label={label}
+                          title={label}
                           onClick={() =>
                             setCreatureCategory(category)
                           }
-                          className={`app-stone-panel group min-h-[6.5rem] rounded-xl px-3 py-3 text-left transition ${
+                          className={`app-stone-panel group h-16 min-h-0 rounded-lg p-1 text-center transition sm:h-auto sm:min-h-[6.5rem] sm:rounded-xl sm:px-3 sm:py-3 sm:text-left ${
                             active
                               ? 'ring-1 ring-primary text-content-primary'
                               : 'text-content-muted hover:text-content-primary'
                           }`}
                         >
-                          <div className="flex items-center gap-3">
+                          <div className="flex h-full items-center justify-center sm:h-auto sm:justify-start sm:gap-3">
                             <CreatureCategoryMedia
                               sources={mediaSources}
                               label={label}
@@ -1790,7 +1792,7 @@ const CreaturesPage: React.FC = () => {
                               }
                             />
 
-                            <span className="min-w-0">
+                            <span className="hidden min-w-0 sm:block">
                               <span className="block truncate text-sm font-semibold">
                                 {label}
                               </span>
