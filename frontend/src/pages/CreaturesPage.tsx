@@ -58,8 +58,8 @@ import {
 type SearchMode = KnowledgeSearchSection;
 type CreatureSort = 'name' | 'experience' | 'hitpoints' | 'difficulty';
 type SortOrder = 'asc' | 'desc';
-type CreatureCategory = '' | 'Amphibic' | 'Aquatic' | 'Bird' | 'Construct' | 'Demon' | 'Dragon' | 'Elemental' | 'Fey' | 'Giant' | 'Human' | 'Humanoid' | 'Lycanthrope' | 'Magical' | 'Mammal' | 'Undead' | 'Beast';
-const CREATURE_CATEGORIES: CreatureCategory[] = ['', 'Amphibic', 'Aquatic', 'Bird', 'Construct', 'Demon', 'Dragon', 'Elemental', 'Fey', 'Giant', 'Human', 'Humanoid', 'Lycanthrope', 'Magical', 'Mammal', 'Undead', 'Beast'];
+type CreatureCategory = '' | 'Amphibic' | 'Aquatic' | 'Bird' | 'Construct' | 'Demon' | 'Dragon' | 'Elemental' | 'Extra Dimensional' | 'Fey' | 'Giant' | 'Human' | 'Humanoid' | 'Inkborn' | 'Lycanthrope' | 'Magical' | 'Mammal' | 'Plant' | 'Reptile' | 'Slime' | 'Undead' | 'Vermin';
+const CREATURE_CATEGORIES: CreatureCategory[] = ['', 'Amphibic', 'Aquatic', 'Bird', 'Construct', 'Demon', 'Dragon', 'Elemental', 'Extra Dimensional', 'Fey', 'Giant', 'Human', 'Humanoid', 'Inkborn', 'Lycanthrope', 'Magical', 'Mammal', 'Plant', 'Reptile', 'Slime', 'Undead', 'Vermin'];
 
 interface CyclopediaPreviewCard {
   id: string;

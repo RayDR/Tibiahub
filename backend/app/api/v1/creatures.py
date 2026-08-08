@@ -13,6 +13,7 @@ from app.models import Creature as CreatureModel
 from app.models.settings import SystemSettings as SettingsModel
 from app.schemas import Creature, CreatureCreate, CreatureSimple
 from app.services.creature_storage_service import get_cached_creature_by_id, get_cached_creature_by_name, list_cached_creatures, resolve_cached_creature
+from app.services.creature_category_service import resolve_creature_category
 from app.services.entity_metadata_service import EntityMetadataService
 from app.services import media_asset_service as media_svc
 from app.api.v1.local_media import (
@@ -122,8 +123,6 @@ async def get_creature_category_previews(
         .filter(
             CreatureModel.is_hidden == False,
             CreatureModel.is_boss == False,
-            CreatureModel.classification.isnot(None),
-            CreatureModel.classification != "",
         )
         .all()
     )
@@ -131,8 +130,16 @@ async def get_creature_category_previews(
     ranked: dict[str, list[tuple[tuple, dict]]] = {}
 
     for creature in creatures:
+        effective_category = resolve_creature_category(
+            bestiary_class=creature.bestiary_class,
+            creature_class=creature.creature_class,
+            classification=creature.classification,
+        )
+        if effective_category is None:
+            continue
+
         category_key = _normalize_category_key(
-            creature.classification or ""
+            effective_category
         )
         name_key = _normalize_category_key(creature.name or "")
 
