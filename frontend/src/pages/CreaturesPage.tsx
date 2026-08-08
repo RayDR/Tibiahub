@@ -194,6 +194,13 @@ const mergeUniqueCreatures = (current: CreatureSimple[], incoming: CreatureSimpl
   return merged;
 };
 
+const normalizeCategoryKey = (value: string): string =>
+  value
+    .trim()
+    .toLowerCase()
+    .replace(/[^a-z0-9]+/g, '_')
+    .replace(/^_+|_+$/g, '');
+
 const isLocalCategoryMediaUrl = (
   value?: string,
 ): value is string =>
@@ -1734,9 +1741,10 @@ const CreaturesPage: React.FC = () => {
                         creatureCategory === category;
                       const CategoryIcon =
                         iconByCategory(category);
-                      const categoryKey = (
-                        category || 'all'
-                      ).toLowerCase();
+                      const categoryKey =
+                        normalizeCategoryKey(
+                          category || 'all',
+                        );
 
                       const configuredImage =
                         categoryImages[categoryKey];
