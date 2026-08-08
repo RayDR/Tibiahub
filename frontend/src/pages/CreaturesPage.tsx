@@ -61,6 +61,20 @@ type SortOrder = 'asc' | 'desc';
 type CreatureCategory = '' | 'Amphibic' | 'Aquatic' | 'Bird' | 'Construct' | 'Demon' | 'Dragon' | 'Elemental' | 'Extra Dimensional' | 'Fey' | 'Giant' | 'Human' | 'Humanoid' | 'Inkborn' | 'Lycanthrope' | 'Magical' | 'Mammal' | 'Plant' | 'Reptile' | 'Slime' | 'Undead' | 'Vermin';
 const CREATURE_CATEGORIES: CreatureCategory[] = ['', 'Amphibic', 'Aquatic', 'Bird', 'Construct', 'Demon', 'Dragon', 'Elemental', 'Extra Dimensional', 'Fey', 'Giant', 'Human', 'Humanoid', 'Inkborn', 'Lycanthrope', 'Magical', 'Mammal', 'Plant', 'Reptile', 'Slime', 'Undead', 'Vermin'];
 
+const normalizeCreatureCategory = (
+  value: string | null,
+): CreatureCategory => {
+  const normalized = (value || '').trim().toLowerCase();
+  if (!normalized) return '';
+
+  return (
+    CREATURE_CATEGORIES.find(
+      (category) =>
+        category.toLowerCase() === normalized,
+    ) || ''
+  );
+};
+
 interface CyclopediaPreviewCard {
   id: string;
   name: string;
@@ -1129,7 +1143,12 @@ const CreaturesPage: React.FC = () => {
     const nextMode = (tabToMode(tabParam) as SearchMode) || 'creatures';
     const nextQuery = searchParams.get('q') || '';
     const nextSelected = normalizeSelectedValue(searchParams.get('selected') || '');
-    const nextCategory = nextMode === 'creatures' ? (searchParams.get('category') as CreatureCategory) || '' : '';
+    const nextCategory =
+      nextMode === 'creatures'
+        ? normalizeCreatureCategory(
+            searchParams.get('category'),
+          )
+        : '';
     const nextSortParam = searchParams.get('sort') as CreatureSort | null;
     const nextOrderParam = searchParams.get('order') as SortOrder | null;
     const nextSort = nextSortParam && ['name', 'experience', 'hitpoints', 'difficulty'].includes(nextSortParam)
