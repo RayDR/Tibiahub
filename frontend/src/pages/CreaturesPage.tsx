@@ -39,6 +39,12 @@ import AppTabs from '../components/ui/AppTabs';
 import AppCard from '../components/ui/AppCard';
 import { Page } from '../components/ui';
 import { cyclopediaSections, modeToTab, tabToMode } from '../config/cyclopediaSections';
+import {
+  CREATURE_CATEGORIES,
+  normalizeCategoryKey,
+  normalizeCreatureCategory,
+  type CreatureCategory,
+} from '../config/creatureCategories';
 import { iconByCategory } from '../components/icons/CategoryIcons';
 import { useAuth } from '../context/AuthContext';
 import { activityApi } from '../services/activity';
@@ -58,23 +64,6 @@ import {
 type SearchMode = KnowledgeSearchSection;
 type CreatureSort = 'name' | 'experience' | 'hitpoints' | 'difficulty';
 type SortOrder = 'asc' | 'desc';
-type CreatureCategory = '' | 'Amphibic' | 'Aquatic' | 'Bird' | 'Construct' | 'Demon' | 'Dragon' | 'Elemental' | 'Extra Dimensional' | 'Fey' | 'Giant' | 'Human' | 'Humanoid' | 'Inkborn' | 'Lycanthrope' | 'Magical' | 'Mammal' | 'Plant' | 'Reptile' | 'Slime' | 'Undead' | 'Vermin';
-const CREATURE_CATEGORIES: CreatureCategory[] = ['', 'Amphibic', 'Aquatic', 'Bird', 'Construct', 'Demon', 'Dragon', 'Elemental', 'Extra Dimensional', 'Fey', 'Giant', 'Human', 'Humanoid', 'Inkborn', 'Lycanthrope', 'Magical', 'Mammal', 'Plant', 'Reptile', 'Slime', 'Undead', 'Vermin'];
-
-const normalizeCreatureCategory = (
-  value: string | null,
-): CreatureCategory => {
-  const normalized = (value || '').trim().toLowerCase();
-  if (!normalized) return '';
-
-  return (
-    CREATURE_CATEGORIES.find(
-      (category) =>
-        category.toLowerCase() === normalized,
-    ) || ''
-  );
-};
-
 interface CyclopediaPreviewCard {
   id: string;
   name: string;
@@ -207,13 +196,6 @@ const mergeUniqueCreatures = (current: CreatureSimple[], incoming: CreatureSimpl
   }
   return merged;
 };
-
-const normalizeCategoryKey = (value: string): string =>
-  value
-    .trim()
-    .toLowerCase()
-    .replace(/[^a-z0-9]+/g, '_')
-    .replace(/^_+|_+$/g, '');
 
 const isLocalCategoryMediaUrl = (
   value?: string,
