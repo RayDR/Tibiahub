@@ -68,12 +68,13 @@ export const iconByCategory = (category: string) => {
     case 'demon':
       return DemonCategoryIcon;
     case 'dragon':
+    case 'reptile':
       return DragonCategoryIcon;
-    case 'beast':
     case 'mammal':
     case 'bird':
     case 'amphibic':
     case 'aquatic':
+    case 'vermin':
       return BeastCategoryIcon;
     case 'undead':
       return UndeadCategoryIcon;

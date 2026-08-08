@@ -8,6 +8,10 @@ from sqlalchemy.orm import Session, selectinload
 from sqlalchemy import case, func, or_
 
 from app.models import Creature, HuntZone, Loot, SpawnLocation
+from app.services.creature_category_service import (
+    canonicalize_creature_category,
+    creature_category_expression,
+)
 from app.services.entity_metadata_service import EntityMetadataService
 from app.services.text_utils import normalize_search_text, slugify
 
@@ -298,7 +302,15 @@ def list_cached_creatures(
                 else_=2,
             )
     if category:
-        query = query.filter(Creature.classification.ilike(category))
+        canonical_category = canonicalize_creature_category(
+            category
+        )
+        if canonical_category is None:
+            return []
+        query = query.filter(
+            creature_category_expression()
+            == canonical_category
+        )
     if is_boss is not None:
         query = query.filter(Creature.is_boss == is_boss)
     if not include_hidden:
