@@ -63,6 +63,44 @@ export const ElementalCategoryIcon: React.FC<IconProps> = ({ className = '' }) =
   </svg>
 );
 
+export const HumanoidCategoryIcon: React.FC<IconProps> = ({ className = '' }) => (
+  <svg viewBox="0 0 24 24" className={`${base} ${className}`} fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+    <circle cx="12" cy="7" r="3" />
+    <path d="M6 20c0-5 2-8 6-8s6 3 6 8" />
+  </svg>
+);
+
+export const MagicalCategoryIcon: React.FC<IconProps> = ({ className = '' }) => (
+  <svg viewBox="0 0 24 24" className={`${base} ${className}`} fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+    <path d="M12 3l1.6 4.4L18 9l-4.4 1.6L12 15l-1.6-4.4L6 9l4.4-1.6L12 3z" />
+    <path d="M18 15l.8 2.2L21 18l-2.2.8L18 21l-.8-2.2L15 18l2.2-.8L18 15z" />
+  </svg>
+);
+
+export const PlantCategoryIcon: React.FC<IconProps> = ({ className = '' }) => (
+  <svg viewBox="0 0 24 24" className={`${base} ${className}`} fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+    <path d="M12 21V9" />
+    <path d="M12 12C7 12 5 9 5 5c4 0 7 2 7 7z" />
+    <path d="M12 15c5 0 7-3 7-7-4 0-7 2-7 7z" />
+  </svg>
+);
+
+export const SlimeCategoryIcon: React.FC<IconProps> = ({ className = '' }) => (
+  <svg viewBox="0 0 24 24" className={`${base} ${className}`} fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+    <path d="M5 17c0-5 2-10 7-13 5 3 7 8 7 13 0 2-2 3-4 3H9c-2 0-4-1-4-3z" />
+    <circle cx="10" cy="14" r="1" fill="currentColor" />
+    <circle cx="15" cy="14" r="1" fill="currentColor" />
+  </svg>
+);
+
+export const DimensionalCategoryIcon: React.FC<IconProps> = ({ className = '' }) => (
+  <svg viewBox="0 0 24 24" className={`${base} ${className}`} fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+    <circle cx="12" cy="12" r="7" />
+    <path d="M12 5c3 2 4 4 4 7s-1 5-4 7c-3-2-4-4-4-7s1-5 4-7z" />
+    <path d="M5 12h14" />
+  </svg>
+);
+
 export const iconByCategory = (category: string) => {
   switch ((category || '').toLowerCase()) {
     case 'demon':
@@ -82,6 +120,21 @@ export const iconByCategory = (category: string) => {
       return ConstructCategoryIcon;
     case 'elemental':
       return ElementalCategoryIcon;
+    case 'human':
+    case 'humanoid':
+    case 'giant':
+    case 'lycanthrope':
+      return HumanoidCategoryIcon;
+    case 'magical':
+    case 'fey':
+    case 'inkborn':
+      return MagicalCategoryIcon;
+    case 'plant':
+      return PlantCategoryIcon;
+    case 'slime':
+      return SlimeCategoryIcon;
+    case 'extra dimensional':
+      return DimensionalCategoryIcon;
     default:
       return CreatureCategoryIcon;
   }
