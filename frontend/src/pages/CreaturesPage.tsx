@@ -287,6 +287,9 @@ const CreaturesPage: React.FC = () => {
   const [categoryPreviews, setCategoryPreviews] = useState<
     Record<string, CreatureCategoryPreview[]>
   >({});
+  const [categoryCounts, setCategoryCounts] = useState<
+    Record<string, number>
+  >({});
   const [, setRecentPreviewCards] = useState<
     CyclopediaPreviewCard[]
   >([]);
@@ -417,15 +420,18 @@ const CreaturesPage: React.FC = () => {
     void Promise.all([
       creaturesApi.getCategoryImages(controller.signal),
       creaturesApi.getCategoryPreviews(controller.signal),
+      creaturesApi.getCategoryCounts(controller.signal),
     ])
-      .then(([images, previews]) => {
+      .then(([images, previews, counts]) => {
         setCategoryImages(images || {});
         setCategoryPreviews(previews || {});
+        setCategoryCounts(counts || {});
       })
       .catch(() => {
         if (!controller.signal.aborted) {
           setCategoryImages({});
           setCategoryPreviews({});
+          setCategoryCounts({});
         }
       });
 
@@ -1747,6 +1753,9 @@ const CreaturesPage: React.FC = () => {
                           category || 'all',
                         );
 
+                      const categoryCount =
+                        categoryCounts[categoryKey] ?? 0;
+
                       const configuredImage =
                         categoryImages[categoryKey];
 
@@ -1786,12 +1795,16 @@ const CreaturesPage: React.FC = () => {
                           onClick={() =>
                             setCreatureCategory(category)
                           }
-                          className={`app-stone-panel group h-16 min-h-0 rounded-lg p-1 text-center transition sm:h-auto sm:min-h-[6.5rem] sm:rounded-xl sm:px-3 sm:py-3 sm:text-left ${
+                          className={`app-stone-panel group relative h-16 min-h-0 rounded-lg p-1 text-center transition sm:h-auto sm:min-h-[6.5rem] sm:rounded-xl sm:px-3 sm:py-3 sm:text-left ${
                             active
                               ? 'ring-1 ring-primary text-content-primary'
                               : 'text-content-muted hover:text-content-primary'
                           }`}
                         >
+                          <span className="absolute right-1 top-1 rounded-full bg-surface-overlay/90 px-1.5 py-0.5 text-[9px] font-semibold leading-none text-content-secondary sm:hidden">
+                            {categoryCount.toLocaleString()}
+                          </span>
+
                           <div className="flex h-full items-center justify-center sm:h-auto sm:justify-start sm:gap-3">
                             <CreatureCategoryMedia
                               sources={mediaSources}
@@ -1813,6 +1826,8 @@ const CreaturesPage: React.FC = () => {
                                   : t(
                                       'cyclopedia.categories.overview',
                                     )}
+                                {' · '}
+                                {categoryCount.toLocaleString()}
                               </span>
                             </span>
                           </div>

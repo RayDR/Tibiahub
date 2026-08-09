@@ -6,6 +6,7 @@ from typing import List, Optional
 
 from fastapi import APIRouter, Depends, HTTPException, Query, Request, Response
 from fastapi.responses import FileResponse
+from sqlalchemy import func
 from sqlalchemy.orm import Session
 
 from app.db.database import SessionLocal, get_db
@@ -13,7 +14,11 @@ from app.models import Creature as CreatureModel
 from app.models.settings import SystemSettings as SettingsModel
 from app.schemas import Creature, CreatureCreate, CreatureSimple
 from app.services.creature_storage_service import get_cached_creature_by_id, get_cached_creature_by_name, list_cached_creatures, resolve_cached_creature
-from app.services.creature_category_service import resolve_creature_category
+from app.services.creature_category_service import (
+    CANONICAL_CREATURE_CATEGORIES,
+    creature_category_expression,
+    resolve_creature_category,
+)
 from app.services.entity_metadata_service import EntityMetadataService
 from app.services import media_asset_service as media_svc
 from app.api.v1.local_media import (
@@ -185,6 +190,60 @@ async def get_creature_category_previews(
         ]
         for category_key, candidates in ranked.items()
     }
+
+    response.headers["Cache-Control"] = (
+        "public, max-age=3600, stale-while-revalidate=86400"
+    )
+
+    return result
+
+
+@router.get("/category-counts")
+async def get_creature_category_counts(
+    response: Response,
+    db: Session = Depends(get_db),
+):
+    """Return visible non-boss creature counts by canonical category."""
+    category_expression = creature_category_expression()
+
+    filters = (
+        CreatureModel.is_hidden == False,
+        CreatureModel.is_boss == False,
+    )
+
+    total = (
+        db.query(func.count(CreatureModel.id))
+        .filter(*filters)
+        .scalar()
+        or 0
+    )
+
+    rows = (
+        db.query(
+            category_expression.label("category"),
+            func.count(CreatureModel.id),
+        )
+        .filter(*filters)
+        .group_by(category_expression)
+        .all()
+    )
+
+    result = {
+        "all": int(total),
+        **{
+            _normalize_category_key(category): 0
+            for category in CANONICAL_CREATURE_CATEGORIES
+        },
+    }
+
+    for category, count in rows:
+        if category is None:
+            continue
+
+        key = _normalize_category_key(category)
+
+        if key in result:
+            result[key] = int(count or 0)
 
     response.headers["Cache-Control"] = (
         "public, max-age=3600, stale-while-revalidate=86400"
