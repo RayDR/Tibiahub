@@ -12,6 +12,8 @@ from app.models import Creature, Loot
 from app.services.creature_recovery_service import (
     CreatureRecoveryCandidate,
     build_category_recovery_plan,
+    category_coverage,
+    clear_legacy_beast_classifications,
     enqueue_category_recovery,
     remove_malformed_loot,
 )
