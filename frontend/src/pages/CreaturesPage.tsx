@@ -417,23 +417,31 @@ const CreaturesPage: React.FC = () => {
   useEffect(() => {
     const controller = new AbortController();
 
-    void Promise.all([
+    void Promise.allSettled([
       creaturesApi.getCategoryImages(controller.signal),
       creaturesApi.getCategoryPreviews(controller.signal),
       creaturesApi.getCategoryCounts(controller.signal),
-    ])
-      .then(([images, previews, counts]) => {
-        setCategoryImages(images || {});
-        setCategoryPreviews(previews || {});
-        setCategoryCounts(counts || {});
-      })
-      .catch(() => {
-        if (!controller.signal.aborted) {
-          setCategoryImages({});
-          setCategoryPreviews({});
-          setCategoryCounts({});
-        }
-      });
+    ]).then(([images, previews, counts]) => {
+      if (controller.signal.aborted) return;
+
+      setCategoryImages(
+        images.status === 'fulfilled'
+          ? images.value || {}
+          : {},
+      );
+
+      setCategoryPreviews(
+        previews.status === 'fulfilled'
+          ? previews.value || {}
+          : {},
+      );
+
+      setCategoryCounts(
+        counts.status === 'fulfilled'
+          ? counts.value || {}
+          : {},
+      );
+    });
 
     return () => controller.abort();
   }, []);
