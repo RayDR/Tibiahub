@@ -96,6 +96,16 @@ export const creaturesApi = {
     return response.data || {};
   },
 
+  getCategoryCounts: async (
+    signal?: AbortSignal,
+  ): Promise<Record<string, number>> => {
+    const response = await api.get(
+      '/creatures/category-counts',
+      { signal },
+    );
+    return response.data || {};
+  },
+
   getById: async (id: number): Promise<Creature> => {
     const response = await api.get(`/creatures/${id}`);
     return response.data;
