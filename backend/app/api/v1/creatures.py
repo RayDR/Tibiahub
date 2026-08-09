@@ -84,6 +84,12 @@ def _normalize_category_key(value: str) -> str:
     return normalized or "uncategorized"
 
 
+_CANONICAL_CATEGORY_KEYS = {
+    _normalize_category_key(category)
+    for category in CANONICAL_CREATURE_CATEGORIES
+}
+
+
 def _get_category_images(db: Session) -> dict[str, str]:
     rows = (
         db.query(SettingsModel)
@@ -93,7 +99,10 @@ def _get_category_images(db: Session) -> dict[str, str]:
     mapping: dict[str, str] = {}
     for row in rows:
         key = row.key[len(_CATEGORY_IMAGE_KEY_PREFIX):]
-        if key and row.value:
+        if (
+            key in _CANONICAL_CATEGORY_KEYS
+            and row.value
+        ):
             mapping[key] = row.value
     return mapping
 
