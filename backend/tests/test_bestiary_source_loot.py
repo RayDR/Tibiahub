@@ -1,4 +1,7 @@
-from app.services.bestiary_source import _extract_loot_items
+from app.services.bestiary_source import (
+    _extract_loot_items,
+    _infer_classification,
+)
 
 
 def test_loot_amount_annotations_preserve_real_item_names():
@@ -37,3 +40,24 @@ def test_loot_amount_annotations_preserve_real_item_names():
 
     assert items[1]["rarity"] == "Rare"
     assert items[2]["rarity"] == "Semi-Rare"
+
+
+
+def test_legacy_beast_is_not_synthesized():
+    assert (
+        _infer_classification(
+            name="Dire Wolf",
+            creature_class=None,
+            bestiary_class=None,
+        )
+        is None
+    )
+
+    assert (
+        _infer_classification(
+            name="Demon",
+            creature_class=None,
+            bestiary_class=None,
+        )
+        == "Demon"
+    )

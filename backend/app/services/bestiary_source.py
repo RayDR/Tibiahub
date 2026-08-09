@@ -40,7 +40,6 @@ CLASSIFICATION_KEYWORDS = {
     "Humanoid": ["human", "humanoid", "orc", "barbarian", "pirate", "minotaur"],
     "Undead": ["undead", "skeleton", "ghoul", "vampire", "lich", "zombie"],
     "Demon": ["demon", "hellspawn"],
-    "Beast": ["beast", "mammal", "animal", "boar", "bear", "wolf", "tiger", "lion"],
     "Dragon": ["dragon", "drake", "wyrm", "wyvern", "hydra"],
     "Elemental": ["elemental", "fire", "ice", "earth", "energy", "stone golem"],
     "Construct": ["construct", "golem", "automaton", "machine"],

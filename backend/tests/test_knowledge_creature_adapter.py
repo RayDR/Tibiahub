@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import json
 from copy import deepcopy
+from dataclasses import replace
 from datetime import UTC, datetime
 from pathlib import Path
 from uuid import uuid4
@@ -515,6 +516,78 @@ def test_renormalize_job_uses_stored_document_without_provider_fetch():
         assert db.query(KnowledgeDocument).count() == 1
     assert fixture_client.detail_calls == 1
     engine.dispose()
+
+
+
+def test_partial_detail_repairs_mediawiki_identity_without_overwriting_content(
+    creature_registry,
+    db,
+):
+    adapter = TibiaWikiCreatureAdapter(
+        FixtureCreatureClient()
+    )
+
+    result = adapter.fetch(
+        request(
+            "creature_detail",
+            payload={
+                "external_id": "321",
+                "page_title": "Demon",
+            },
+        )
+    )
+
+    normalization = adapter.normalize(
+        result.documents[0],
+        normalization_context(),
+    )
+
+    canonical_data = dict(
+        normalization.canonical_data or {}
+    )
+    canonical_data["is_partial"] = True
+
+    normalization = replace(
+        normalization,
+        canonical_data=canonical_data,
+    )
+
+    existing = Creature(
+        name="Demon",
+        normalized_name=normalize_search_text("Demon"),
+        slug="demon",
+        external_id="123456789",
+        source_name="tibiawiki",
+        hitpoints=9999,
+        experience=8888,
+        is_boss=False,
+        protected_fields=[],
+    )
+    db.add(existing)
+    db.flush()
+
+    KnowledgeNormalizationService.apply(
+        db,
+        normalization,
+    )
+    db.flush()
+
+    refreshed = (
+        db.query(Creature)
+        .filter_by(
+            normalized_name=normalize_search_text("Demon")
+        )
+        .one()
+    )
+
+    assert refreshed.external_id == "321"
+    assert refreshed.knowledge_entity_id is not None
+
+    # Existing non-empty content remains untouched because this
+    # normalization is explicitly partial.
+    assert refreshed.hitpoints == 9999
+    assert refreshed.experience == 8888
+
 
 
 def test_worker_defers_provider_fetch_to_respect_registered_rate_limit():
