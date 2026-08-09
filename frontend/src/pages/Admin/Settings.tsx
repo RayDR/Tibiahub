@@ -2,6 +2,10 @@ import { useState, useEffect } from 'react';
 import { guildManagementApi } from '../../services/guildManagement';
 import { Settings as SettingsIcon, Save, RefreshCw, CheckCircle, XCircle } from 'lucide-react';
 import EmailDiagnosticsPanel from '../../components/admin/EmailDiagnosticsPanel';
+import {
+    CREATURE_CATEGORIES,
+    normalizeCategoryKey,
+} from '../../config/creatureCategories';
 
 interface SystemSettings {
     tibia_validation_enabled: boolean;
@@ -13,10 +17,12 @@ interface SystemSettings {
     cyclopedia_category_images: Record<string, string>;
 }
 
-const CREATURE_CATEGORY_KEYS = [
-    'amphibic', 'aquatic', 'bird', 'construct', 'demon', 'dragon', 'elemental',
-    'fey', 'giant', 'human', 'humanoid', 'lycanthrope', 'magical', 'mammal', 'undead', 'beast',
-];
+const CREATURE_CATEGORY_KEYS = CREATURE_CATEGORIES
+    .filter((category) => category !== '')
+    .map((category) => ({
+        category,
+        key: normalizeCategoryKey(category),
+    }));
 
 export default function AdminSettings() {
     const [settings, setSettings] = useState<SystemSettings | null>(null);
@@ -213,13 +219,13 @@ export default function AdminSettings() {
                     <p className="text-sm text-content-secondary mb-4">Set URL or upload local file for each creature category card.</p>
 
                     <div className="grid gap-4 sm:grid-cols-2">
-                        {CREATURE_CATEGORY_KEYS.map((category) => (
-                            <div key={category} className="rounded-lg border border-line bg-surface-base/50 p-3">
-                                <div className="mb-2 text-sm font-medium text-content-primary capitalize">{category}</div>
+                        {CREATURE_CATEGORY_KEYS.map(({ category, key }) => (
+                            <div key={key} className="rounded-lg border border-line bg-surface-base/50 p-3">
+                                <div className="mb-2 text-sm font-medium text-content-primary">{category}</div>
                                 <input
                                     type="text"
-                                    value={settings.cyclopedia_category_images?.[category] || ''}
-                                    onChange={(e) => updateCategoryImage(category, e.target.value)}
+                                    value={settings.cyclopedia_category_images?.[key] || ''}
+                                    onChange={(e) => updateCategoryImage(key, e.target.value)}
                                     placeholder="https://... or /api/v1/creatures/category-images/file/..."
                                     className="w-full bg-surface-base border border-line rounded-md px-3 py-2 text-content-primary focus:border-danger focus:outline-none"
                                 />
@@ -229,7 +235,7 @@ export default function AdminSettings() {
                                         type="file"
                                         accept="image/*"
                                         className="hidden"
-                                        onChange={(e) => handleCategoryFileUpload(category, e.target.files?.[0])}
+                                        onChange={(e) => handleCategoryFileUpload(key, e.target.files?.[0])}
                                     />
                                 </label>
                             </div>
