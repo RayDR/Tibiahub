@@ -23,6 +23,9 @@ from app.models.workspace_audit import WorkspaceAudit
 from app.api.v1.endpoints.auth import get_current_admin_user, get_current_user
 from app.core.permissions import is_global_admin
 from app.services.media_asset_service import UnsafeMediaError, validate_raster_image
+from app.services.creature_category_service import (
+    CANONICAL_CREATURE_CATEGORIES,
+)
 from app.services.tibia_validation_service import TibiaValidationService
 from app.services.tibia_api import TibiaAPIError, get_guild_info
 from app.services.guild_roster_service import GuildRosterService, GuildRosterSyncError
@@ -48,6 +51,22 @@ _CATEGORY_IMAGE_DIR = Path("backend/storage/category-images")
 def _normalize_category_key(value: str) -> str:
     normalized = re.sub(r"[^a-z0-9]+", "_", (value or "").strip().lower()).strip("_")
     return normalized or "uncategorized"
+
+
+_CANONICAL_CATEGORY_KEYS = {
+    _normalize_category_key(category)
+    for category in CANONICAL_CREATURE_CATEGORIES
+}
+
+
+def _canonical_category_key(value: str) -> str:
+    category_key = _normalize_category_key(value)
+    if category_key not in _CANONICAL_CATEGORY_KEYS:
+        raise HTTPException(
+            status_code=400,
+            detail=f"Invalid Cyclopedia category: {value}",
+        )
+    return category_key
 
 
 def _looks_like_test_account(user: User) -> bool:
@@ -113,7 +132,7 @@ def _save_category_images(db: Session, payload: dict[str, str]) -> None:
 
     normalized_payload: dict[str, str] = {}
     for category, url in (payload or {}).items():
-        category_key = _normalize_category_key(category)
+        category_key = _canonical_category_key(category)
         image_url = (url or "").strip()
         if not image_url:
             continue
@@ -389,6 +408,10 @@ def update_system_settings(
     """
     from app.models.settings import SystemSettings as SettingsModel
     from app.services.discord import set_discord_webhook
+
+    if settings_update.cyclopedia_category_images is not None:
+        for category in settings_update.cyclopedia_category_images:
+            _canonical_category_key(category)
     
     if settings_update.tibia_validation_enabled is not None:
         config.settings.TIBIA_VALIDATION_ENABLED = settings_update.tibia_validation_enabled
@@ -477,7 +500,7 @@ async def upload_category_image(
     except UnsafeMediaError as exc:
         raise HTTPException(status_code=400, detail=str(exc)) from exc
 
-    category_key = _normalize_category_key(category)
+    category_key = _canonical_category_key(category)
     _CATEGORY_IMAGE_DIR.mkdir(parents=True, exist_ok=True)
     digest = hashlib.sha256(raw).hexdigest()[:12]
     filename = f"{category_key}_{digest}{ext}"
