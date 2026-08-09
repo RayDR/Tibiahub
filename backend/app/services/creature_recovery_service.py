@@ -237,7 +237,7 @@ def enqueue_category_recovery(
                 payload=payload,
                 priority=120,
                 max_attempts=5,
-                trigger="repair",
+                trigger="manual",
                 allow_completed_recreate=True,
             ),
         )
