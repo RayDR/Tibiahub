@@ -1237,6 +1237,17 @@ const CreaturesPage: React.FC = () => {
   }, [mode, searchTerm, selectedResult, creatureCategory, creatureSort, sortOrder]);
 
   const hasActiveQuery = searchTerm.trim().length > 0 || selectedResult.trim().length > 0 || (mode === 'creatures' && !!creatureCategory);
+
+  const creatureResultCount =
+    mode === 'creatures' &&
+    !effectiveSearchTerm.trim()
+      ? categoryCounts[
+          normalizeCategoryKey(
+            creatureCategory || 'all',
+          )
+        ] ?? creatures.length
+      : creatures.length;
+
   const isEmpty = hasActiveQuery && !loading && creatures.length === 0 && items.length === 0 && quests.length === 0 && zones.length === 0;
 
   const cyclopediaPath = useMemo(
@@ -1927,7 +1938,7 @@ const CreaturesPage: React.FC = () => {
                 </span>
               ) : null}
               <p className="mt-1 text-xs text-content-muted">
-                {t('cyclopedia.filters.resultCount', { count: creatures.length })}
+                {t('cyclopedia.filters.resultCount', { count: creatureResultCount })}
               </p>
             </div>
 
