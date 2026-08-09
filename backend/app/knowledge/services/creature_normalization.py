@@ -229,13 +229,24 @@ def _bridge_creature(db: Session, entity: KnowledgeEntity, dto: CreatureKnowledg
     protected = set(creature.protected_fields or [])
     canonical_changed = False
 
-    def assign(field: str, value, *, provided: str | None = None) -> None:
+    def assign(
+        field: str,
+        value,
+        *,
+        provided: str | None = None,
+        preserve_existing_on_partial: bool = True,
+    ) -> None:
         nonlocal canonical_changed
         if field in protected or value in (None, "", []):
             return
         if provided is not None and provided not in dto.provided_fields:
             return
-        if dto.is_partial and not created and getattr(creature, field) not in (None, "", []):
+        if (
+            preserve_existing_on_partial
+            and dto.is_partial
+            and not created
+            and getattr(creature, field) not in (None, "", [])
+        ):
             return
         if getattr(creature, field) != value:
             setattr(creature, field, value)
@@ -247,8 +258,16 @@ def _bridge_creature(db: Session, entity: KnowledgeEntity, dto: CreatureKnowledg
     assign("name", dto.canonical_name)
     assign("normalized_name", normalize_search_text(dto.canonical_name))
     assign("slug", dto.slug)
-    assign("external_id", dto.external_id)
-    assign("source_name", "tibiawiki")
+    assign(
+        "external_id",
+        dto.external_id,
+        preserve_existing_on_partial=False,
+    )
+    assign(
+        "source_name",
+        "tibiawiki",
+        preserve_existing_on_partial=False,
+    )
     assign("source_url", dto.source_reference, provided="source_reference")
     assign("article", dto.article, provided="article")
     assign("plural", dto.plural, provided="plural")

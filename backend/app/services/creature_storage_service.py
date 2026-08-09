@@ -74,7 +74,14 @@ def upsert_creature_payload(db: Session, payload: dict[str, Any]) -> Creature:
     creature.name = payload.get("name") or creature.name
     creature.normalized_name = normalized_name
     creature.slug = payload.get("slug") or slugify(creature.name)
-    creature.external_id = str(payload.get("id")) if payload.get("id") is not None else creature.external_id
+    incoming_external_id = payload.get("external_id")
+    if incoming_external_id not in (None, ""):
+        creature.external_id = str(incoming_external_id)
+    elif creature.external_id is None and payload.get("id") is not None:
+        # Legacy bestiary payloads use a deterministic compatibility ID.
+        # Keep it only until Knowledge normalization supplies the real
+        # MediaWiki page ID; never overwrite that stable identity later.
+        creature.external_id = str(payload["id"])
     creature.source_name = payload.get("source_name") or creature.source_name or "tibiawiki"
     creature.source_url = payload.get("source_url") or creature.source_url
 
