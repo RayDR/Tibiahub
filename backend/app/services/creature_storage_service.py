@@ -129,8 +129,15 @@ def upsert_creature_payload(db: Session, payload: dict[str, Any]) -> Creature:
         loot.external_id = str(loot_payload.get("id")) if loot_payload.get("id") is not None else loot.external_id
         loot.rarity = loot_payload.get("rarity") or loot.rarity
         loot.percentage = loot_payload.get("percentage") if loot_payload.get("percentage") is not None else loot.percentage
-        loot.min_amount = loot_payload.get("min_amount") or loot.min_amount or 1
-        loot.max_amount = loot_payload.get("max_amount") or loot.max_amount or 1
+        if loot_payload.get("min_amount") is not None:
+            loot.min_amount = loot_payload["min_amount"]
+        elif loot.min_amount is None:
+            loot.min_amount = 1
+
+        if loot_payload.get("max_amount") is not None:
+            loot.max_amount = loot_payload["max_amount"]
+        elif loot.max_amount is None:
+            loot.max_amount = 1
         loot.item_value = loot_payload.get("item_value") if loot_payload.get("item_value") is not None else loot.item_value
         loot.item_type = loot_payload.get("item_type") or loot.item_type
         if not getattr(loot, "item_image_locked", False):

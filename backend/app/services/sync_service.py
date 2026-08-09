@@ -930,7 +930,7 @@ class SyncService:
                         if _FORCE_FAIL_NAME and _FORCE_FAIL_NAME in name.lower():
                             raise RuntimeError(f"Injected sync failure for '{name}'")
                         payload = await asyncio.wait_for(get_creature_detail_by_name(name), timeout=timeout_seconds)
-                        if only_bosses and not bool(payload.get("is_boss")):
+                        if bool(payload.get("is_boss")) != only_bosses:
                             success = True
                             break
                         # Isolate each provider record. A malformed record must

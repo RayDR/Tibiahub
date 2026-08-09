@@ -146,16 +146,37 @@ def _extract_links(value: str) -> List[str]:
     return [item.strip() for item in cleaned.split(",") if item.strip()]
 
 
+_LOOT_AMOUNT_TOKEN_RE = re.compile(
+    r"^\d+(?:\s*-\s*\d+)?\s*[?+]?$"
+)
+
+
+def _is_loot_amount_token(value: str) -> bool:
+    return bool(
+        _LOOT_AMOUNT_TOKEN_RE.fullmatch(
+            (value or "").strip()
+        )
+    )
+
+
 def _parse_amount(raw_value: Optional[str]) -> tuple[int, int]:
     if not raw_value:
         return 1, 1
-    match = re.match(r"^(\d+)\s*-\s*(\d+)$", raw_value)
+
+    value = raw_value.strip()
+
+    match = re.match(
+        r"^(\d+)\s*-\s*(\d+)",
+        value,
+    )
     if match:
         return int(match.group(1)), int(match.group(2))
-    digits = re.search(r"(\d+)", raw_value)
-    if digits:
-        amount = int(digits.group(1))
+
+    match = re.match(r"^(\d+)", value)
+    if match:
+        amount = int(match.group(1))
         return amount, amount
+
     return 1, 1
 
 
@@ -166,7 +187,7 @@ def _extract_loot_items(wikitext: str) -> List[Dict[str, Any]]:
         if not parts:
             continue
 
-        if re.match(r"^\d+(?:\s*-\s*\d+)?$", parts[0]):
+        if _is_loot_amount_token(parts[0]):
             amount_raw = parts[0]
             item_name = parts[1] if len(parts) > 1 else "Unknown"
             rarity = parts[2] if len(parts) > 2 else None
