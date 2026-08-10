@@ -16,6 +16,7 @@ from sqlalchemy.orm import Session
 
 from app.knowledge.models import (
     ACTIVE_KNOWLEDGE_JOB_STATES,
+    KNOWLEDGE_JOB_TRIGGERS,
     KnowledgeEntityType,
     KnowledgeJob,
     KnowledgeJobAttempt,
@@ -79,6 +80,12 @@ def _utc(value: datetime | None = None) -> datetime:
 class KnowledgeJobService:
     @staticmethod
     def enqueue(db: Session, command: EnqueueKnowledgeJob) -> EnqueueResult:
+        if command.trigger not in KNOWLEDGE_JOB_TRIGGERS:
+            raise ValueError(
+                "Knowledge job trigger must be one of: "
+                + ", ".join(KNOWLEDGE_JOB_TRIGGERS)
+            )
+
         provider = db.get(KnowledgeProvider, command.provider_id)
         if provider is None:
             raise ValueError("Provider is not registered")

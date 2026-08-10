@@ -1,9 +1,20 @@
+from types import SimpleNamespace
+from uuid import uuid4
+
+import pytest
+
 from app.core.config import settings
+from app.knowledge.services.jobs import (
+    EnqueueKnowledgeJob,
+    KnowledgeJobService,
+)
 from app.models import Creature, Loot
 from app.services.creature_recovery_service import (
+    CreatureRecoveryCandidate,
     build_category_recovery_plan,
     category_coverage,
     clear_legacy_beast_classifications,
+    enqueue_category_recovery,
     remove_malformed_loot,
 )
 from app.services.creature_storage_service import (
@@ -209,3 +220,85 @@ def test_direct_sync_preserves_existing_stable_external_id(
     )
 
     assert creature.external_id == "654"
+
+
+
+def test_invalid_knowledge_job_trigger_is_rejected_before_database_insert(
+    db,
+):
+    with pytest.raises(
+        ValueError,
+        match="Knowledge job trigger",
+    ):
+        KnowledgeJobService.enqueue(
+            db,
+            EnqueueKnowledgeJob(
+                provider_id="unused-provider",
+                job_type="test",
+                trigger="repair",
+            ),
+        )
+
+
+def test_category_recovery_uses_valid_manual_trigger(
+    db,
+    monkeypatch,
+):
+    commands = []
+
+    def fake_enqueue(_db, command):
+        commands.append(command)
+        return SimpleNamespace(
+            job=SimpleNamespace(id=uuid4()),
+            created=True,
+        )
+
+    monkeypatch.setattr(
+        KnowledgeJobService,
+        "enqueue",
+        staticmethod(fake_enqueue),
+    )
+
+    plan = [
+        CreatureRecoveryCandidate(
+            creature_id=1,
+            creature_name="Stored Creature",
+            mode="renormalize",
+            external_id="123",
+        ),
+        CreatureRecoveryCandidate(
+            creature_id=2,
+            creature_name="Missing Creature",
+            mode="detail",
+        ),
+    ]
+
+    result = enqueue_category_recovery(
+        db,
+        plan,
+    )
+
+    assert result.total == 2
+    assert result.renormalize == 1
+    assert result.detail == 1
+    assert result.created == 2
+
+    assert [
+        command.job_type
+        for command in commands
+    ] == [
+        "creature_renormalize",
+        "creature_detail",
+    ]
+
+    assert {
+        command.trigger
+        for command in commands
+    } == {"manual"}
+
+    assert commands[0].payload == {
+        "external_id": "123",
+    }
+    assert commands[1].payload == {
+        "page_title": "Missing Creature",
+    }
