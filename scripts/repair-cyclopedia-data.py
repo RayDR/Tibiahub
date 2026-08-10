@@ -22,6 +22,7 @@ from app.services.creature_recovery_service import (
     category_coverage,
     clear_legacy_beast_classifications,
     enqueue_category_recovery,
+    hide_non_creature_catalog_rows,
     latest_creature_documents_by_name,
     list_unresolved_creatures,
     remove_malformed_loot,
@@ -105,6 +106,10 @@ def main() -> int:
         return 0
 
     with SessionLocal.begin() as db:
+        non_creature_pages_hidden = (
+            hide_non_creature_catalog_rows(db)
+        )
+
         legacy_beast_cleared = (
             clear_legacy_beast_classifications(db)
         )
@@ -124,6 +129,8 @@ def main() -> int:
         )
 
     print(
+        f"non_creature_pages_hidden="
+        f"{non_creature_pages_hidden} "
         f"legacy_beast_cleared={legacy_beast_cleared} "
         f"malformed_loot_removed={malformed_loot_removed} "
         f"malformed_loot_affected_creatures="

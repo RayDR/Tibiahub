@@ -577,6 +577,17 @@ async def cache_media_asset(
     asset = db.query(MediaAsset).filter(MediaAsset.asset_key == asset_key).first()
     if asset and asset.status == "cached" and asset.file_exists() and not force_refetch:
         return MediaFetchOutcome(asset=asset, result="cached")
+
+    if asset and asset.status == "missing" and not force_refetch:
+        return MediaFetchOutcome(
+            asset=asset,
+            result="skipped",
+            error_category="unsupported_resource",
+            safe_message=asset.error_message,
+            retryable=False,
+            safe_url=asset.source_url,
+        )
+
     if asset and asset.status == "failed" and not (force_refetch or retry_failed):
         if asset.last_fetched_at:
             fetched_at = asset.last_fetched_at
@@ -617,6 +628,14 @@ async def cache_media_asset(
             category, status, retryable, safe_message = "unsupported_resource", None, False, SAFE_MESSAGES["unsupported_resource"]
         else:
             category, status, retryable, safe_message = classify_exception(exc)
+        permanent_missing = (
+            category in {
+                "unsupported_resource",
+                "provider_not_found",
+            }
+            and retryable is False
+        )
+
         request_url = None
         if isinstance(exc, httpx.HTTPStatusError) and exc.request:
             request_url = str(exc.request.url)
@@ -626,7 +645,11 @@ async def cache_media_asset(
             if asset is None:
                 asset = MediaAsset(asset_key=asset_key, source_url=sanitize_url(source_url))
                 db.add(asset)
-            asset.status = "failed"
+            asset.status = (
+                "missing"
+                if permanent_missing
+                else "failed"
+            )
             asset.error_message = safe_message
             asset.last_fetched_at = datetime.now(UTC)
             db.commit()
@@ -636,8 +659,17 @@ async def cache_media_asset(
             asset_key, category, status, parsed.hostname or "unknown", parsed.path or "/",
         )
         return MediaFetchOutcome(
-            asset=asset, result="failed", error_category=category, safe_message=safe_message,
-            http_status=status, retryable=retryable, safe_url=safe_url,
+            asset=asset,
+            result=(
+                "skipped"
+                if permanent_missing
+                else "failed"
+            ),
+            error_category=category,
+            safe_message=safe_message,
+            http_status=status,
+            retryable=retryable,
+            safe_url=safe_url,
         )
 
 def get_asset(db: Session, asset_key: str) -> Optional[MediaAsset]:

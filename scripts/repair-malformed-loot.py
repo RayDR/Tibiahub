@@ -17,7 +17,7 @@ from app.models import Loot
 
 
 AMOUNT_TOKEN = re.compile(
-    r"^\d+(?:\s*-\s*\d+)?\s*[?+]?$"
+    r"^\d+(?:\s*-\s*(?:\d+|\?))?\s*[?+]?$"
 )
 
 
@@ -71,8 +71,10 @@ def main() -> None:
             )
 
             if (
-                source_host == provider_host
-                and image_host == provider_host
+                (
+                    source_host == provider_host
+                    or image_host == provider_host
+                )
                 and (
                     not raw
                     or str(
