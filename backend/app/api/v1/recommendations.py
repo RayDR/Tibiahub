@@ -26,7 +26,7 @@ router = APIRouter()
 async def get_solo_recommendations(
     vocation: Vocation = Query(..., description="Player vocation"),
     level: int = Query(..., ge=8, le=2000, description="Player level"),
-    goal: str = Query("exp", regex="^(exp|profit|balanced)$", description="Hunting goal"),
+    goal: str = Query("exp", pattern="^(exp|profit|balanced)$", description="Hunting goal"),
     limit: int = Query(10, ge=1, le=50, description="Maximum results"),
     db: Session = Depends(get_db)
 ):
@@ -78,7 +78,7 @@ async def get_solo_recommendations(
 @router.post("/party")
 async def get_party_recommendations(
     party_composition: List[dict],  # [{"vocation": "knight", "level": 100}, ...]
-    goal: str = Query("exp", regex="^(exp|profit|balanced)$"),
+    goal: str = Query("exp", pattern="^(exp|profit|balanced)$"),
     limit: int = Query(10, ge=1, le=50),
     db: Session = Depends(get_db)
 ):
