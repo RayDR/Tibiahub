@@ -146,7 +146,7 @@ def _extract_links(value: str) -> List[str]:
 
 
 _LOOT_AMOUNT_TOKEN_RE = re.compile(
-    r"^\d+(?:\s*-\s*\d+)?\s*[?+]?$"
+    r"^\d+(?:\s*-\s*(?:\d+|\?))?\s*[?+]?$"
 )
 
 

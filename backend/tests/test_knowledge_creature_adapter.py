@@ -219,18 +219,36 @@ def test_adapter_classifies_partial_and_rejects_unsafe_text():
     assert invalid.valid is False and invalid.safe_errors == ("unsafe_text",)
 
 
-def test_partial_detail_is_preserved_but_not_normalized(db, creature_registry):
-    adapter = TibiaWikiCreatureAdapter(FixtureCreatureClient())
+def test_partial_detail_normalizes_identity(db, creature_registry):
+    adapter = TibiaWikiCreatureAdapter(
+        FixtureCreatureClient()
+    )
     document = KnowledgeDocumentDTO(
         "tibiawiki",
         "creature:321",
         fixture("tibiawiki_creature_partial.json"),
-        metadata={"document_kind": "creature_detail"},
+        metadata={
+            "document_kind": "creature_detail",
+        },
     )
-    normalized = adapter.normalize(document, normalization_context())
-    assert normalized.action == "noop"
-    assert normalized.warnings == ("partial_creature_detail_not_normalized",)
-    assert db.query(KnowledgeEntity).count() == 0
+
+    normalized = adapter.normalize(
+        document,
+        normalization_context(),
+    )
+
+    assert normalized.action == "upsert"
+    assert normalized.external_id == "321"
+    assert normalized.warnings == (
+        "partial_creature_detail",
+    )
+
+    dto = CreatureKnowledgeDTO.from_canonical_data(
+        normalized.canonical_data
+    )
+
+    assert dto.canonical_name == "Demon"
+    assert dto.is_partial is True
 
 
 def test_adapter_rejects_oversized_payload():

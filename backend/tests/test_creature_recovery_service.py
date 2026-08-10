@@ -15,6 +15,7 @@ from app.services.creature_recovery_service import (
     category_coverage,
     clear_legacy_beast_classifications,
     enqueue_category_recovery,
+    hide_non_creature_catalog_rows,
     remove_malformed_loot,
 )
 from app.services.creature_storage_service import (
@@ -302,3 +303,67 @@ def test_category_recovery_uses_valid_manual_trigger(
     assert commands[1].payload == {
         "page_title": "Missing Creature",
     }
+
+
+
+def test_non_creature_catalog_pages_are_hidden(db):
+    navigation = make_creature(
+        "Bestiary/Classes"
+    )
+    real_creature = make_creature(
+        "Real Creature"
+    )
+
+    db.add_all(
+        [navigation, real_creature]
+    )
+    db.flush()
+
+    changed = hide_non_creature_catalog_rows(db)
+
+    assert changed == 1
+    assert navigation.is_hidden is True
+    assert real_creature.is_hidden is False
+
+
+def test_unknown_upper_bound_loot_placeholder_is_removed(
+    db,
+):
+    creature = make_creature(
+        "Malformed Loot Creature"
+    )
+    db.add(creature)
+    db.flush()
+
+    base = (
+        settings.TIBIAWIKI_BASE_PAGE_URL
+        .rstrip("/")
+    )
+
+    malformed = Loot(
+        creature_id=creature.id,
+        item_name="1-?",
+        normalized_name="1",
+        item_image_url=(
+            f"{base}/Special:FilePath/"
+            "1-%3F.gif"
+        ),
+        raw_data={
+            "item_name": "1-?",
+        },
+    )
+
+    db.add(malformed)
+    db.flush()
+
+    removed, affected = remove_malformed_loot(db)
+    db.flush()
+
+    assert removed == 1
+    assert affected == 1
+    assert (
+        db.query(Loot)
+        .filter_by(item_name="1-?")
+        .count()
+        == 0
+    )

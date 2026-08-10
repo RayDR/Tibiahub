@@ -61,3 +61,32 @@ def test_legacy_beast_is_not_synthesized():
         )
         == "Demon"
     )
+
+
+def test_unknown_loot_upper_bound_is_not_parsed_as_item_name():
+    raw = """
+    {{Loot Table|
+    {{Loot Item|1-?|Gold Coin}}
+    {{Loot Item|0-?|Platinum Coin}}
+    }}
+    """
+
+    items = _extract_loot_items(raw)
+
+    assert [
+        item["item_name"]
+        for item in items
+    ] == [
+        "Gold Coin",
+        "Platinum Coin",
+    ]
+
+    assert (
+        items[0]["min_amount"],
+        items[0]["max_amount"],
+    ) == (1, 1)
+
+    assert (
+        items[1]["min_amount"],
+        items[1]["max_amount"],
+    ) == (0, 0)

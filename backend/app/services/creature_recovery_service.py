@@ -19,11 +19,14 @@ from app.models import Creature, Loot
 from app.services.creature_category_service import (
     resolve_creature_category,
 )
+from app.services.creature_source_policy import (
+    is_non_creature_catalog_title,
+)
 from app.services.text_utils import normalize_search_text
 
 
 AMOUNT_TOKEN_RE = re.compile(
-    r"^\d+(?:\s*-\s*\d+)?\s*[?+]?$"
+    r"^\d+(?:\s*-\s*(?:\d+|\?))?\s*[?+]?$"
 )
 
 
@@ -259,6 +262,37 @@ def enqueue_category_recovery(
     )
 
 
+def hide_non_creature_catalog_rows(
+    db: Session,
+) -> int:
+    rows = (
+        db.query(Creature)
+        .filter(
+            Creature.source_name == "tibiawiki",
+            Creature.is_hidden == False,
+        )
+        .all()
+    )
+
+    changed = 0
+
+    for row in rows:
+        if not is_non_creature_catalog_title(
+            row.name
+        ):
+            continue
+
+        if "is_hidden" in set(
+            row.protected_fields or []
+        ):
+            continue
+
+        row.is_hidden = True
+        changed += 1
+
+    return changed
+
+
 def clear_legacy_beast_classifications(
     db: Session,
 ) -> int:
@@ -338,8 +372,10 @@ def malformed_loot_rows(
         )
 
         if (
-            source_host == provider_host
-            and image_host == provider_host
+            (
+                source_host == provider_host
+                or image_host == provider_host
+            )
             and (
                 not raw
                 or str(

@@ -91,6 +91,7 @@ class SyncService:
         "hunt_zones_failed",
         "images_cached",
         "images_failed",
+        "images_skipped",
         "total_processed",
     ]
 
@@ -818,6 +819,7 @@ class SyncService:
                 "summary": {
                     "images_cached": int(result.get("succeeded") or 0),
                     "images_failed": int(result.get("errors") or 0),
+                    "images_skipped": int(result.get("skipped") or 0),
                 },
             }
 
@@ -1398,7 +1400,15 @@ class SyncService:
         force_refetch: bool = False,
     ) -> dict[str, Any]:
         groups: list[list[tuple[str, str, Any, str, str, str]]] = [[], [], []]
-        for creature in db.query(Creature).filter(Creature.image_url.isnot(None)).order_by(Creature.id).all():
+        for creature in (
+            db.query(Creature)
+            .filter(
+                Creature.image_url.isnot(None),
+                Creature.is_hidden == False,
+            )
+            .order_by(Creature.id)
+            .all()
+        ):
             source = media_asset_service.build_creature_source_url(creature)
             if source:
                 groups[0].append(("creature_image", "creature", creature, creature.name, media_asset_service.build_creature_asset_key(creature), source))
@@ -1425,7 +1435,13 @@ class SyncService:
             if limit is not None and limit > 0:
                 queued = queued[:limit]
 
-        counters = {"created": 0, "updated": 0, "cached": 0, "errors": 0}
+        counters = {
+            "created": 0,
+            "updated": 0,
+            "cached": 0,
+            "skipped": 0,
+            "errors": 0,
+        }
         categories: dict[str, int] = defaultdict(int)
         samples: list[dict[str, Any]] = []
         phase = db.query(SyncJobPhase).filter_by(job_id=job.id, phase_key="images").one_or_none() if job else None
@@ -1438,16 +1454,31 @@ class SyncService:
                 counters["errors"] += 1
                 category = outcome.error_category or "download_failed"
                 categories[category] += 1
+
                 if job:
                     record_sync_error(
-                        db, job_id=job.id, phase_key="images", entity_type=entity_type,
-                        external_id=str(entity.id), entity_name=entity_name, category=category,
-                        message=outcome.safe_message, provider=None, source_url=outcome.safe_url or source_url,
-                        http_status=outcome.http_status, retryable=outcome.retryable,
-                        checkpoint_offset=index, attempt=phase.attempt_count if phase else 1,
+                        db,
+                        job_id=job.id,
+                        phase_key="images",
+                        entity_type=entity_type,
+                        external_id=str(entity.id),
+                        entity_name=entity_name,
+                        category=category,
+                        message=outcome.safe_message,
+                        provider=None,
+                        source_url=outcome.safe_url or source_url,
+                        http_status=outcome.http_status,
+                        retryable=outcome.retryable,
+                        checkpoint_offset=index,
+                        attempt=phase.attempt_count if phase else 1,
                     )
+
+            elif outcome.result == "skipped":
+                counters["skipped"] += 1
+
             else:
                 counters[outcome.result] += 1
+
                 if outcome.asset:
                     entity.image_asset_id = outcome.asset.id
                     db.add(entity)

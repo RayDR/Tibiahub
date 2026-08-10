@@ -43,6 +43,19 @@ from app.services.text_utils import slugify
 MAX_ITEM_PAYLOAD_BYTES = MAX_CREATURE_PAYLOAD_BYTES
 MAX_ITEM_CATALOG_BATCH = 50
 _UNSAFE_TEXT = re.compile(r"<\s*script\b|javascript\s*:|\bon(?:error|load)\s*=", re.I)
+_INVALID_ITEM_PLACEHOLDER_NAME_RE = re.compile(
+    r"^\d+\s*-\s*\?$"
+)
+
+
+def _is_invalid_item_placeholder_name(
+    value: str | None,
+) -> bool:
+    return bool(
+        _INVALID_ITEM_PLACEHOLDER_NAME_RE.fullmatch(
+            str(value or "").strip()
+        )
+    )
 
 
 class TibiaWikiItemClient(Protocol):
@@ -326,7 +339,14 @@ class TibiaWikiItemAdapter:
         for member in members:
             external_id = str(member.get("pageid") or "").strip() if isinstance(member, dict) else ""
             title = str(member.get("title") or "").strip() if isinstance(member, dict) else ""
-            if not external_id or not title or ":" in title or title.lower() == "items" or title.lower().startswith("list of "):
+            if (
+                not external_id
+                or not title
+                or ":" in title
+                or title.lower() == "items"
+                or title.lower().startswith("list of ")
+                or _is_invalid_item_placeholder_name(title)
+            ):
                 invalid_members += 1
                 continue
             children.append(
@@ -431,6 +451,15 @@ class TibiaWikiItemAdapter:
         if document.metadata.get("document_kind") != "item_detail":
             return KnowledgeNormalizationResult(action="noop")
         external_id, _page_title, _wikitext, dto = _item_parts(document.raw_json)
+
+        if _is_invalid_item_placeholder_name(
+            dto.canonical_name
+        ):
+            return KnowledgeNormalizationResult(
+                action="noop",
+                warnings=("invalid_item_placeholder_name",),
+            )
+
         if not dto.sufficient_detail:
             return KnowledgeNormalizationResult(
                 action="noop",

@@ -29,6 +29,9 @@ from app.knowledge.services.failures import (
     ProviderTimeoutError,
 )
 from app.services.bestiary_source import _build_creature_payload
+from app.services.creature_source_policy import (
+    is_non_creature_catalog_title,
+)
 
 
 MAX_CREATURE_PAYLOAD_BYTES = 2 * 1024 * 1024
@@ -204,7 +207,12 @@ class TibiaWikiCreatureAdapter:
         for member in members:
             external_id = str(member.get("pageid") or "").strip() if isinstance(member, dict) else ""
             title = str(member.get("title") or "").strip() if isinstance(member, dict) else ""
-            if not external_id or not title or ":" in title:
+            if (
+                not external_id
+                or not title
+                or ":" in title
+                or is_non_creature_catalog_title(title)
+            ):
                 invalid_members += 1
                 continue
             children.append(
@@ -299,12 +307,19 @@ class TibiaWikiCreatureAdapter:
         if document.metadata.get("document_kind") != "creature_detail":
             return KnowledgeNormalizationResult(action="noop")
         external_id, page_title, _wikitext, payload = _detail_parts(document.raw_json)
-        dto = CreatureKnowledgeDTO.from_tibiawiki_payload(payload, external_id=external_id, page_title=page_title)
-        if not dto.sufficient_detail:
+
+        if is_non_creature_catalog_title(page_title):
             return KnowledgeNormalizationResult(
                 action="noop",
-                warnings=("partial_creature_detail_not_normalized",),
+                warnings=("non_creature_catalog_page",),
             )
+
+        dto = CreatureKnowledgeDTO.from_tibiawiki_payload(
+            payload,
+            external_id=external_id,
+            page_title=page_title,
+        )
+
         return KnowledgeNormalizationResult(
             action="upsert",
             candidate=CanonicalEntityCandidate(
@@ -315,7 +330,7 @@ class TibiaWikiCreatureAdapter:
                 source_priority=20,
                 search_weight=1.0,
             ),
-            warnings=("partial_creature_detail",) if not dto.sufficient_detail else (),
+            warnings=("partial_creature_detail",) if dto.is_partial else (),
             provider_code=self.provider_code,
             external_id=dto.external_id,
             canonical_data=dto.to_canonical_data(),

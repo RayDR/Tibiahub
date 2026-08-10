@@ -526,3 +526,26 @@ def test_item_admin_controls_require_admin_confirmation_and_audit(client, db, it
     created = client.post("/api/v1/admin/knowledge/jobs", headers=admin_headers, json=payload)
     assert created.status_code == 201 and created.json()["item"]["job_type"] == "item_catalog"
     assert db.query(WorkspaceAudit).filter_by(action="knowledge_job_enqueued").count() == 1
+
+
+def test_placeholder_amount_item_name_is_not_normalized():
+    adapter = TibiaWikiItemAdapter(
+        FixtureItemClient()
+    )
+
+    raw = _variant_raw(
+        external_id=999,
+        title="Malformed Placeholder",
+        game_item_id=999,
+        canonical_name="1-?",
+    )
+
+    normalized = adapter.normalize(
+        _document(raw),
+        normalization_context(),
+    )
+
+    assert normalized.action == "noop"
+    assert normalized.warnings == (
+        "invalid_item_placeholder_name",
+    )
