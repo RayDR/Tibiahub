@@ -1,7 +1,7 @@
 """Pydantic schemas for API validation."""
 from __future__ import annotations
 
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, ConfigDict, Field
 from typing import List, Optional
 from enum import Enum
 from datetime import datetime
@@ -31,8 +31,7 @@ class ElementCreate(ElementBase):
 class Element(ElementBase):
     id: int
     
-    class Config:
-        from_attributes = True
+    model_config = ConfigDict(from_attributes=True)
 
 
 # Loot Schemas
@@ -57,8 +56,7 @@ class Loot(LootBase):
     id: int
     creature_id: Optional[int] = None
     
-    class Config:
-        from_attributes = True
+    model_config = ConfigDict(from_attributes=True)
 
 
 
@@ -118,8 +116,7 @@ class HuntZoneSimple(BaseModel):
     difficulty: Optional[str] = None
     source_url: Optional[str] = None
     
-    class Config:
-        from_attributes = True
+    model_config = ConfigDict(from_attributes=True)
 
 
 class HuntZone(HuntZoneBase):
@@ -127,8 +124,7 @@ class HuntZone(HuntZoneBase):
     creatures: List[CreatureSimple] = []
     last_synced_at: Optional[datetime] = None
     
-    class Config:
-        from_attributes = True
+    model_config = ConfigDict(from_attributes=True)
 
 
 # Spawn Location Schemas
@@ -148,8 +144,7 @@ class SpawnLocation(SpawnLocationBase):
     hunt_zone_id: int
     hunt_zone: Optional[HuntZoneSimple] = None
     
-    class Config:
-        from_attributes = True
+    model_config = ConfigDict(from_attributes=True)
 
 
 # Creature Schemas
@@ -207,8 +202,7 @@ class CreatureSimple(BaseModel):
     image_url: Optional[str] = None
     source_url: Optional[str] = None
     
-    class Config:
-        from_attributes = True
+    model_config = ConfigDict(from_attributes=True)
 
 
 class LootWithCreature(Loot):
@@ -229,8 +223,7 @@ class Creature(CreatureBase):
     weaknesses: List[Element] = []
     resistances: List[Element] = []
     
-    class Config:
-        from_attributes = True
+    model_config = ConfigDict(from_attributes=True)
 
 
 # Hunt Recommendation Schema
