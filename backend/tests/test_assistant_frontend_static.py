@@ -19,6 +19,15 @@ def test_home_uses_functional_assistant_with_loading_and_failure_states():
     assert "'/assistant/'" in service
 
 
+def test_assistant_transport_timeout_exceeds_backend_without_changing_global_timeout():
+    assistant_service = read("frontend/src/services/assistant.ts")
+    global_service = read("frontend/src/services/api.ts")
+    assert "ASSISTANT_REQUEST_TIMEOUT_MS = 75000" in assistant_service
+    assert "timeout: ASSISTANT_REQUEST_TIMEOUT_MS" in assistant_service
+    assert "REQUEST_TIMEOUT_MS = 10000" in global_service
+    assert "timeout: REQUEST_TIMEOUT_MS" in global_service
+
+
 def test_structured_response_renders_entity_links_routes_and_maps():
     message = read("frontend/src/components/assistant/AssistantMessage.tsx")
     entity = read("frontend/src/components/assistant/AssistantEntity.tsx")

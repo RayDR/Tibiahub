@@ -48,7 +48,7 @@ export default function AssistantEntity({
       <div className="p-5">
         {metadata.length > 0 ? <dl className="grid gap-2 sm:grid-cols-2">
           {metadata.map(([key, value]) => <div key={key} className="rounded-lg bg-surface-base/60 p-3">
-            <dt className="text-xs capitalize text-content-muted">{key.replaceAll('_', ' ')}</dt>
+            <dt className="text-xs capitalize text-content-muted">{key.split('_').join(' ')}</dt>
             <dd className="mt-1 text-sm text-content-primary">{String(value)}</dd>
           </div>)}
         </dl> : <p className="text-sm text-content-secondary">{t('assistant.entity.noCompactDetails')}</p>}

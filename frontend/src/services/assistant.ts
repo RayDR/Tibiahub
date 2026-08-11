@@ -1,7 +1,7 @@
 import api from './api';
 import type { AssistantRequest, AssistantResponse } from '../types/assistant';
 
-export const ASSISTANT_REQUEST_TIMEOUT_MS = 30000;
+export const ASSISTANT_REQUEST_TIMEOUT_MS = 75000;
 
 export const assistantApi = {
   ask: async (payload: AssistantRequest, signal?: AbortSignal): Promise<AssistantResponse> => {
