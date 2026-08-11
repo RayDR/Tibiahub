@@ -18,9 +18,14 @@ from app.knowledge.models import KnowledgeEntity, KnowledgeEntityAlias, Knowledg
 from app.knowledge.schemas import KnowledgeEntityCreate
 from app.knowledge.services.entities import DuplicateKnowledgeAliasError, DuplicateKnowledgeEntityError, KnowledgeEntityService
 from app.knowledge.services.failures import InvalidNormalizationContractError
+from app.knowledge.services.graph import KnowledgeGraphService
 from app.knowledge.services.item_relationships import exact_entity_candidates
 from app.knowledge.services.npc_location_normalization import sync_access_destination
-from app.knowledge.services.quest_relationships import ensure_access, upsert_quest_relation
+from app.knowledge.services.quest_relationships import (
+    ensure_access,
+    ensure_access_destination_location,
+    upsert_quest_relation,
+)
 from app.models.external_data import QuestMission, TibiaWikiQuest
 from app.services.entity_metadata_service import EntityMetadataService
 from app.services.text_utils import normalize_search_text
@@ -212,8 +217,21 @@ def _missions(db: Session, quest: TibiaWikiQuest, dto: QuestKnowledgeDTO, provid
 
 
 def _relationships(db: Session, entity: KnowledgeEntity, dto: QuestKnowledgeDTO, missions: dict[int, QuestMission], provider: str) -> dict[str, int]:
-    counts = {"relations_created": 0, "relations_resolved": 0, "relations_unresolved": 0, "relations_ambiguous": 0}
+    counts = {
+        "relations_created": 0,
+        "relations_resolved": 0,
+        "relations_unresolved": 0,
+        "relations_ambiguous": 0,
+        "relations_superseded": 0,
+    }
     document = f"quest:{dto.external_id}"
+    for access in dto.access_unlocks:
+        if access.destination_name:
+            ensure_access_destination_location(
+                db,
+                destination_name=access.destination_name,
+                quest_external_id=dto.external_id,
+            )
     references = [
         ("requires_quest", "quest", value.name, "required_quests") for value in dto.required_quests
     ] + [("unlocks_quest", "quest", value.name, "unlocked_quests") for value in dto.unlocked_quests]
@@ -234,10 +252,24 @@ def _relationships(db: Session, entity: KnowledgeEntity, dto: QuestKnowledgeDTO,
             source_document_ref=document,
         )
         references.append(("unlocks_access", "access", access.name, "access_unlocks", access_entity.uuid))
+    quest_relation_ids: set[UUID] = set()
     for entry in references:
         relation_type, target_type, name, context, *explicit = entry
         row, created = upsert_quest_relation(db, provider_id=provider, quest_entity_uuid=entity.uuid, scope_key="quest", relation_type=relation_type, target_entity_type=target_type, target_name=name, source_document_id=document, source_context=context, explicit_entity_uuid=explicit[0] if explicit else None)
+        quest_relation_ids.add(row.id)
         counts["relations_created"] += int(created); counts[f"relations_{row.resolution_state}"] += 1
+    counts["relations_superseded"] += KnowledgeGraphService.reconcile_provider(
+        db,
+        source_entity_id=entity.uuid,
+        source_scope="quest",
+        provider_id=provider,
+        relationship_types={
+            "requires_quest", "prerequisite_for", "requires_item", "rewards_item",
+            "involves_creature", "involves_boss", "starts_at_npc", "references_npc",
+            "occurs_at_location", "unlocks_access",
+        },
+        current_ids=quest_relation_ids,
+    )
     for mission in dto.missions:
         row = missions[mission.sequence]; scope = f"mission:{row.identity_key}"
         mission_refs = [("requires_item", "item", x.name, "required_items") for x in mission.required_items]
@@ -245,9 +277,22 @@ def _relationships(db: Session, entity: KnowledgeEntity, dto: QuestKnowledgeDTO,
         mission_refs += [("involves_creature", "creature", x.name, "related_creatures") for x in mission.related_creatures]
         mission_refs += [("involves_npc", "npc", x.name, "related_npcs") for x in mission.related_npcs]
         mission_refs += [("occurs_at_location", "location", x.name, "locations") for x in mission.locations]
+        mission_relation_ids: set[UUID] = set()
         for relation_type, target_type, name, context in mission_refs:
             relation, created = upsert_quest_relation(db, provider_id=provider, quest_entity_uuid=entity.uuid, mission_id=row.id, scope_key=scope, relation_type=relation_type, target_entity_type=target_type, target_name=name, source_document_id=document, source_context=f"mission.{context}")
+            mission_relation_ids.add(relation.id)
             counts["relations_created"] += int(created); counts[f"relations_{relation.resolution_state}"] += 1
+        counts["relations_superseded"] += KnowledgeGraphService.reconcile_provider(
+            db,
+            source_entity_id=entity.uuid,
+            source_scope=f"mission:{row.id}",
+            provider_id=provider,
+            relationship_types={
+                "mission_requires_item", "mission_rewards_item", "mission_involves_creature",
+                "mission_references_npc", "mission_occurs_at_location",
+            },
+            current_ids=mission_relation_ids,
+        )
     return counts
 
 

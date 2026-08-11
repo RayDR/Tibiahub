@@ -37,8 +37,9 @@ from app.knowledge.registry import EntityTypeRegistry, ProviderRegistry
 from app.knowledge.schemas import KnowledgeEntityCreate
 from app.knowledge.services import EnqueueKnowledgeJob, KnowledgeEntityService, KnowledgeJobService
 from app.knowledge.services.normalization import KnowledgeNormalizationService
+from app.knowledge.services.quest_relationships import upsert_quest_relation
 from app.knowledge.workers.knowledge_worker import KnowledgeWorker
-from app.models import Creature, Item, QuestMission, TibiaWikiQuest
+from app.models import Creature, Item, QuestMission, TibiaWikiLocation, TibiaWikiQuest
 from app.models.workspace_audit import WorkspaceAudit
 from tests.conftest import make_user
 
@@ -220,6 +221,66 @@ def test_relationships_resolve_exactly_retain_ambiguity_and_create_access(db, qu
     assert db.query(KnowledgeRelationship).filter_by(source_entity_id=applied.entity_uuid, is_current=True).count() == count
     assert db.query(KnowledgeQuestRelation).count() == 0
     assert item_two.uuid != item_one.uuid
+
+
+def test_access_reward_creates_reference_backed_location_and_reconciles_false_item_edge(db, quest_registry):
+    raw = {
+        "parse": {
+            "pageid": 98526,
+            "title": "Within the Tides Quest",
+            "links": [{"*": "Marapur", "ns": 0, "exists": ""}],
+            "wikitext": {
+                "*": """{{Infobox Quest
+| name = Within the Tides Quest
+| reward = Access to [[Marapur]], [[Colourful Water Lily]]
+| location = [[Asura Palace]], [[Marapur]]
+| premium = yes
+}}""",
+            },
+        },
+    }
+    adapter = TibiaWikiQuestAdapter(FixtureQuestClient())
+    normalized = adapter.normalize(detail_document(raw), context())
+    dto = QuestKnowledgeDTO.from_canonical_data(normalized.canonical_data)
+    assert [value.name for value in dto.rewarded_items] == ["Colourful Water Lily"]
+    assert [(value.name, value.destination_name) for value in dto.access_unlocks] == [
+        ("Marapur Access", "Marapur"),
+    ]
+
+    applied = KnowledgeNormalizationService.apply(db, normalized)
+    location = db.query(TibiaWikiLocation).filter_by(name="Marapur").one()
+    assert location.source_name == "tibiawiki_reference"
+    assert location.provider_metadata["reference_only"] is True
+    access = db.query(KnowledgeAccess).one()
+    assert access.destination_name == "Marapur"
+
+    stale, _created = upsert_quest_relation(
+        db,
+        provider_id="tibiawiki",
+        quest_entity_uuid=applied.entity_uuid,
+        scope_key="quest",
+        relation_type="rewards_item",
+        target_entity_type="item",
+        target_name="Marapur",
+        source_document_id="quest:98526",
+        source_context="legacy_reward_parser",
+    )
+    assert stale.is_current is True
+    second = KnowledgeNormalizationService.apply(db, normalized)
+    assert second.status == "unchanged"
+    assert stale.is_current is False and stale.resolution_state == "superseded"
+
+    current = db.query(KnowledgeRelationship).filter_by(
+        source_entity_id=applied.entity_uuid,
+        is_current=True,
+    ).all()
+    by_type_and_name = {
+        (row.relationship_type_code, row.target_entity.canonical_name if row.target_entity else row.unresolved_name)
+        for row in current
+    }
+    assert ("occurs_at_location", "Marapur") in by_type_and_name
+    assert ("unlocks_access", "Marapur Access") in by_type_and_name
+    assert ("rewards_item", "Marapur") not in by_type_and_name
 
 
 def test_local_quest_api_orders_missions_filters_and_never_needs_network(client, db, quest_registry, monkeypatch):

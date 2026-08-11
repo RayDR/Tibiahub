@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+from hashlib import sha256
 from dataclasses import dataclass
 from uuid import UUID
 
@@ -16,7 +17,8 @@ from app.knowledge.services.item_relationships import exact_entity_candidates
 from app.knowledge.services.npc_location_normalization import exact_place_candidates
 from app.knowledge.services.graph import KnowledgeGraphService, RelationshipInput
 from app.models import Creature
-from app.services.text_utils import slugify
+from app.models.external_data import TibiaWikiLocation
+from app.services.text_utils import normalize_search_text, slugify
 
 
 @dataclass(frozen=True, slots=True)
@@ -50,6 +52,64 @@ def _resolve(db: Session, entity_type: str, name: str) -> tuple[KnowledgeEntity 
     if len(matches) == 1:
         return matches[0], "resolved"
     return None, "ambiguous" if len(matches) > 1 else "unresolved"
+
+
+def ensure_access_destination_location(
+    db: Session,
+    *,
+    destination_name: str,
+    quest_external_id: str,
+) -> KnowledgeEntity | None:
+    """Create a low-priority place identity from an explicit provider link.
+
+    This is intentionally limited to destination names parsed from an exact
+    ``Access to [[Place]]`` claim. It does not invent location attributes. A
+    later full location document resolves to and enriches the same entity.
+    """
+    candidates = exact_place_candidates(db, destination_name)
+    if len(candidates) == 1:
+        return candidates[0]
+    if candidates:
+        return None
+
+    normalized = normalize_name(destination_name)
+    if not normalized:
+        return None
+    identity_hash = sha256(normalized.encode("utf-8")).hexdigest()[:20]
+    entity = KnowledgeEntityService.create(
+        db,
+        KnowledgeEntityCreate(
+            entity_type="location",
+            canonical_name=destination_name,
+            language_neutral_id=f"location:tibiawiki-reference:{identity_hash}",
+            source_priority=80,
+            search_weight=0.5,
+        ),
+    )
+    db.add(
+        TibiaWikiLocation(
+            name=destination_name,
+            normalized_name=normalize_search_text(destination_name),
+            slug=entity.slug,
+            external_id=f"reference:{identity_hash}",
+            source_name="tibiawiki_reference",
+            knowledge_entity_id=entity.uuid,
+            npcs=[],
+            creatures=[],
+            quests=[],
+            sublocations=[],
+            provider_metadata={
+                "reference_only": True,
+                "source_entity_type": "quest",
+                "source_external_id": quest_external_id,
+            },
+            supplied_fields=["canonical_name", "slug"],
+            protected_fields=[],
+            data_version=1,
+        )
+    )
+    db.flush()
+    return entity
 
 
 def ensure_access(

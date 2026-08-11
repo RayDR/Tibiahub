@@ -85,6 +85,11 @@ def _prepare_fake_alembic_tree(tmp_path: Path, *, fail_current: bool = False) ->
     alembic_bin.mkdir(parents=True)
     (backend / "alembic.ini").write_text("[alembic]\n", encoding="utf-8")
 
+    # Runtime discovery now verifies the selected environment's Python before
+    # resolving sibling commands such as Alembic. Model a complete runtime,
+    # not only the command under test.
+    _write_executable(alembic_bin / "python", "#!/usr/bin/env bash\nexit 0\n")
+
     _write_executable(
         alembic_bin / "alembic",
         """#!/usr/bin/env bash

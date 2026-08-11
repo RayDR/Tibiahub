@@ -106,6 +106,19 @@ class Settings(BaseSettings):
     SYNC_WORKER_LEASE_SECONDS: int = Field(900, ge=60, le=3600)
     SYNC_WORKER_MAX_IDLE_SECONDS: int = Field(30, ge=1, le=3600)
 
+    # Read-only TibiaHub Assistant. Disabled until explicitly enabled through
+    # the external runtime configuration.
+    ASSISTANT_ENABLED: bool = False
+    ASSISTANT_MODEL: str = "gpt-5-mini"
+    ASSISTANT_MAX_TOOL_CALLS: int = Field(8, ge=1, le=20)
+    ASSISTANT_TIMEOUT_SECONDS: int = Field(25, ge=5, le=120)
+    ASSISTANT_MAX_MESSAGE_CHARS: int = Field(2000, ge=100, le=8000)
+    ASSISTANT_MAX_HISTORY_MESSAGES: int = Field(12, ge=0, le=24)
+    ASSISTANT_MAX_OUTPUT_TOKENS: int = Field(3000, ge=500, le=8000)
+    ASSISTANT_RATE_LIMIT_REQUESTS: int = Field(20, ge=1, le=200)
+    ASSISTANT_RATE_LIMIT_WINDOW_SECONDS: int = Field(60, ge=10, le=3600)
+    OPENAI_API_KEY: SecretStr | None = None
+
     @model_validator(mode="after")
     def validate_database(self) -> "Settings":
         if not self.DATABASE_URL:
