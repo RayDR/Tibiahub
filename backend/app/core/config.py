@@ -111,7 +111,7 @@ class Settings(BaseSettings):
     ASSISTANT_ENABLED: bool = False
     ASSISTANT_MODEL: str = "gpt-5-mini"
     ASSISTANT_MAX_TOOL_CALLS: int = Field(8, ge=1, le=20)
-    ASSISTANT_TIMEOUT_SECONDS: int = Field(25, ge=5, le=120)
+    ASSISTANT_TIMEOUT_SECONDS: int = Field(60, ge=5, le=120)
     ASSISTANT_MAX_MESSAGE_CHARS: int = Field(2000, ge=100, le=8000)
     ASSISTANT_MAX_HISTORY_MESSAGES: int = Field(12, ge=0, le=24)
     ASSISTANT_MAX_OUTPUT_TOKENS: int = Field(3000, ge=500, le=8000)

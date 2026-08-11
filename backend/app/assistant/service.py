@@ -95,20 +95,30 @@ class AssistantService:
                     try:
                         execution = tools.execute(call.name, call.arguments)
                         output = execution.provider_payload()
+                        serialized_output = json.dumps(output, ensure_ascii=False, default=str)
+                        # Assistant tools are read-only. End SQLAlchemy's
+                        # autobegun transaction after every fully materialized
+                        # result so no connection remains checked out while
+                        # the next remote provider turn is awaited. rollback()
+                        # leaves this Session reusable by subsequent tools.
+                        self.db.rollback()
                     except SQLAlchemyError:
                         self.db.rollback()
                         evidence_key = f"tool_error:{total_calls}"
                         tools.evidence_keys.append(evidence_key)
                         tools.data_gaps.append("The requested local evidence could not be loaded.")
                         output = {"evidence_key": evidence_key, "error": "local_database_unavailable", "message": "The local TibiaHub query failed.", "data_gaps": ["The requested local evidence could not be loaded."]}
+                        serialized_output = json.dumps(output, ensure_ascii=False, default=str)
                     except (AssistantToolError, TypeError, ValueError) as exc:
+                        self.db.rollback()
                         evidence_key = f"tool_error:{total_calls}"
                         tools.evidence_keys.append(evidence_key)
                         tools.data_gaps.append("The requested local tool could not be completed.")
                         output = {"evidence_key": evidence_key, "error": "tool_request_invalid", "message": str(exc)[:500], "data_gaps": ["The requested local tool could not be completed."]}
+                        serialized_output = json.dumps(output, ensure_ascii=False, default=str)
                     input_items.append({
                         "type": "function_call_output", "call_id": call.id,
-                        "output": json.dumps(output, ensure_ascii=False, default=str),
+                        "output": serialized_output,
                     })
                 continue
             if turn.draft is None:
