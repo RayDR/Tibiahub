@@ -65,3 +65,4 @@ backend/storage/media/
 *.bak
 *.db-shm
 *.db-wal
+backend/runtime-current

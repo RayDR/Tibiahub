@@ -16,6 +16,8 @@ source "$ROOT/scripts/lib/postgres.sh"
 
 DEPLOY_ROOT="${TIBIAHUB_DEPLOY_ROOT:-/forge/tibiahub-backups/deployments}"
 LOCK_FILE="${TIBIAHUB_DEPLOY_LOCK_FILE:-$DEPLOY_ROOT/.deploy.lock}"
+RUNTIME_ROOT="${TIBIAHUB_RUNTIME_ROOT:-/forge/tibiahub-runtimes}"
+RUNTIME_LINK="$ROOT/backend/runtime-current"
 SERVICES=(
   tibiahub-api
   tibiahub-frontend
@@ -90,6 +92,12 @@ metadata_value() {
 
 previous_commit="$(metadata_value previous_commit)"
 previous_revision="$(metadata_value previous_revision)"
+previous_runtime="$(metadata_value previous_runtime)"
+
+if [[ -z "$previous_runtime" ]]; then
+  previous_runtime="$ROOT/backend/venv"
+fi
+
 [[ "$previous_commit" =~ ^[0-9a-fA-F]{40}$ && "$previous_revision" =~ ^[A-Za-z0-9_]+$ ]] || {
   ops_error "Rollback metadata is invalid."
   exit 2
@@ -145,6 +153,36 @@ stop_services() {
     fi
   done
 }
+
+restore_runtime() {
+  local temporary_link="$ROOT/backend/.runtime-current.rollback.$$"
+
+  case "$previous_runtime" in
+    "$ROOT/backend/venv"|"$RUNTIME_ROOT"/*)
+      ;;
+    *)
+      echo "Rollback runtime is outside an allowed path." >&2
+      return 1
+      ;;
+  esac
+
+  [[ -x "$previous_runtime/bin/python" ]] || {
+    echo "Rollback runtime is unavailable." >&2
+    return 1
+  }
+
+  if [[ -e "$RUNTIME_LINK" && ! -L "$RUNTIME_LINK" ]]; then
+    echo "Refusing to replace non-symlink runtime-current." >&2
+    return 1
+  fi
+
+  rm -f -- "$temporary_link"
+  ln -s "$previous_runtime" "$temporary_link"
+  mv -Tf "$temporary_link" "$RUNTIME_LINK"
+
+  export TIBIAHUB_PYTHON_RUNTIME="$previous_runtime"
+}
+
 
 restore_database() {
   local database_name
@@ -244,6 +282,7 @@ write_state() {
     printf 'deployed_commit=%s\n' "$previous_commit"
     printf 'alembic_revision=%s\n' "$previous_revision"
     printf 'snapshot_dir=%s\n' "$evidence_dir"
+    printf 'runtime_target=%s\n' "$previous_runtime"
     printf 'deployed_at=%s\n' "$rollback_at"
   } >"$state_tmp"
   chmod 600 "$state_tmp"
@@ -254,6 +293,7 @@ run_step "010-validate-snapshot" validate_snapshot
 run_step "020-load-runtime-target" load_runtime_and_target
 run_step "030-stop-services" stop_services
 run_step "040-checkout-previous-commit" git switch --detach "$previous_commit"
+run_step "045-restore-backend-runtime" restore_runtime
 run_step "050-restore-database" restore_database
 run_step "060-verify-revision" verify_revision
 run_step "070-restore-frontend" restore_frontend

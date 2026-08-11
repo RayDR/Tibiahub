@@ -449,7 +449,7 @@ async def create_creature(
     if existing:
         raise HTTPException(status_code=400, detail="Creature already exists")
 
-    db_creature = CreatureModel(**creature.dict())
+    db_creature = CreatureModel(**creature.model_dump())
     db.add(db_creature)
     db.commit()
     db.refresh(db_creature)

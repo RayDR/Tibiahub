@@ -16,6 +16,36 @@ TIBIAHUB_PROVISION_SECRETS_FILE="${TIBIAHUB_PROVISION_SECRETS_FILE:-/forge/tibia
 _tibiahub_env_loaded="${_TIBIAHUB_RUNTIME_ENV_LOADED:-0}"
 _tibiahub_admin_env_loaded="${_TIBIAHUB_ADMIN_ENV_LOADED:-0}"
 
+
+tibiahub_runtime_dir() {
+  local requested="${TIBIAHUB_PYTHON_RUNTIME:-}"
+
+  if [[ -n "$requested" ]]; then
+    [[ "$requested" == /* ]] || {
+      postgres_fail "TIBIAHUB_PYTHON_RUNTIME must be absolute."
+      return $?
+    }
+    [[ -x "$requested/bin/python" ]] || {
+      postgres_fail "Configured TibiaHub Python runtime is unavailable."
+      return $?
+    }
+    printf '%s\n' "$requested"
+    return 0
+  fi
+
+  if [[ -x "$TIBIAHUB_BACKEND/runtime-current/bin/python" ]]; then
+    printf '%s\n' "$TIBIAHUB_BACKEND/runtime-current"
+    return 0
+  fi
+
+  [[ -x "$TIBIAHUB_BACKEND/venv/bin/python" ]] || {
+    postgres_fail "No usable TibiaHub Python runtime was found."
+    return $?
+  }
+
+  printf '%s\n' "$TIBIAHUB_BACKEND/venv"
+}
+
 postgres_fail() {
   printf '%s\n' "$1" >&2
   return "${2:-2}"
@@ -155,13 +185,19 @@ require_postgres_admin_access() {
 }
 
 database_component() {
+  local runtime_dir
+  runtime_dir="$(tibiahub_runtime_dir)" || return $?
+
   APP_ENV="${APP_ENV:-production}" PYTHONPATH="$TIBIAHUB_BACKEND:$TIBIAHUB_ROOT" \
-    "$TIBIAHUB_BACKEND/venv/bin/python" "$TIBIAHUB_ROOT/scripts/postgres-target.py" "$1"
+    "$runtime_dir/bin/python" "$TIBIAHUB_ROOT/scripts/postgres-target.py" "$1"
 }
 
 postgres_exec() {
+  local runtime_dir
+  runtime_dir="$(tibiahub_runtime_dir)" || return $?
+
   PYTHONPATH="$TIBIAHUB_BACKEND:$TIBIAHUB_ROOT" APP_ENV="${APP_ENV:-production}" \
-    "$TIBIAHUB_BACKEND/venv/bin/python" "$TIBIAHUB_ROOT/scripts/postgres-command.py" "$@"
+    "$runtime_dir/bin/python" "$TIBIAHUB_ROOT/scripts/postgres-command.py" "$@"
 }
 
 require_local_tibiahub_target() {
@@ -194,7 +230,10 @@ require_local_tibiahub_target() {
 run_alembic() {
   load_tibiahub_environment || return $?
 
-  local alembic_bin="$TIBIAHUB_BACKEND/venv/bin/alembic"
+  local runtime_dir
+  runtime_dir="$(tibiahub_runtime_dir)" || return $?
+
+  local alembic_bin="$runtime_dir/bin/alembic"
   local alembic_config="$TIBIAHUB_BACKEND/alembic.ini"
   [[ -x "$alembic_bin" ]] || { postgres_fail "Alembic executable not found: $alembic_bin"; return $?; }
   [[ -f "$alembic_config" ]] || { postgres_fail "Alembic config not found: $alembic_config"; return $?; }

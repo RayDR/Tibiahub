@@ -19,7 +19,8 @@ from app.services.maintenance_mode_service import MaintenanceModeService
 from app.models.maintenance_sync import MaintenanceHold
 from app.models.user import User
 from app.core import security
-from jose import JWTError, jwt
+import jwt
+from jwt.exceptions import InvalidTokenError
 from sqlalchemy.exc import SQLAlchemyError, TimeoutError as SATimeoutError
 
 
@@ -108,7 +109,7 @@ def _maintenance_admin(request, db) -> bool:
     try:
         payload = jwt.decode(token, settings.secret_key, algorithms=[security.ALGORITHM])
         username = payload.get("sub")
-    except JWTError:
+    except InvalidTokenError:
         return False
     if not username:
         return False

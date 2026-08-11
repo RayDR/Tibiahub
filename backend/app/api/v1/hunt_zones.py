@@ -238,7 +238,7 @@ async def create_hunt_zone(
     if existing:
         raise HTTPException(status_code=400, detail="Hunt zone already exists")
     
-    db_zone = HuntZoneModel(**zone.dict())
+    db_zone = HuntZoneModel(**zone.model_dump())
     db.add(db_zone)
     db.commit()
     db.refresh(db_zone)

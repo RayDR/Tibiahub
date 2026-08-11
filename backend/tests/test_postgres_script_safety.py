@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import os
 import subprocess
+import sys
 from pathlib import Path
 
 
@@ -12,10 +13,16 @@ ECOSYSTEM = ROOT / "ecosystem.config.js"
 
 
 def run_reset(*args: str, environment: dict[str, str] | None = None):
+    env = (environment or os.environ.copy()).copy()
+    env.setdefault(
+        "TIBIAHUB_PYTHON_RUNTIME",
+        sys.prefix,
+    )
+
     return subprocess.run(
         [str(RESET), *args],
         cwd=ROOT,
-        env=environment or os.environ.copy(),
+        env=env,
         capture_output=True,
         text=True,
     )

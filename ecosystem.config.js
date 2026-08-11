@@ -3,7 +3,7 @@ module.exports = {
     {
       name: 'tibiahub-api',
       cwd: '/forge/tibiahub/backend',
-      script: 'venv/bin/python',
+      script: 'runtime-current/bin/python',
       args: 'main.py',
       instances: 1,
       autorestart: true,
@@ -42,7 +42,7 @@ module.exports = {
     {
       name: 'tibiahub-raffle-scheduler',
       cwd: '/forge/tibiahub/backend',
-      script: 'venv/bin/python',
+      script: 'runtime-current/bin/python',
       args: '-m app.workers.raffle_scheduler',
       instances: 1,
       autorestart: true,
@@ -61,7 +61,7 @@ module.exports = {
     {
       name: 'tibiahub-knowledge-worker',
       cwd: '/forge/tibiahub/backend',
-      script: 'venv/bin/python',
+      script: 'runtime-current/bin/python',
       args: '-m app.knowledge.workers.knowledge_worker',
       instances: 1,
       exec_mode: 'fork',
@@ -85,7 +85,7 @@ module.exports = {
     {
       name: 'tibiahub-email-worker',
       cwd: '/forge/tibiahub/backend',
-      script: 'venv/bin/python',
+      script: 'runtime-current/bin/python',
       args: '-m app.workers.email_worker',
       instances: 1,
       exec_mode: 'fork',
@@ -109,7 +109,7 @@ module.exports = {
     {
       name: 'tibiahub-sync-worker',
       cwd: '/forge/tibiahub/backend',
-      script: 'venv/bin/python',
+      script: 'runtime-current/bin/python',
       args: '-m app.workers.sync_worker',
       instances: 1,
       exec_mode: 'fork',

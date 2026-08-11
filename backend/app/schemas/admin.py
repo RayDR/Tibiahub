@@ -1,7 +1,7 @@
 """
 Schemas for admin endpoints
 """
-from pydantic import BaseModel, Field, field_validator
+from pydantic import BaseModel, Field, field_validator, ConfigDict
 from typing import List, Optional
 from datetime import datetime
 from app.core.password_policy import validate_password
@@ -46,8 +46,7 @@ class UserWithCharacters(BaseModel):
     created_at: datetime
     characters: List[dict] = []
     
-    class Config:
-        from_attributes = True
+    model_config = ConfigDict(from_attributes=True)
 
 
 class SystemSettings(BaseModel):

@@ -7,7 +7,8 @@ from fastapi.security import OAuth2PasswordRequestForm, OAuth2PasswordBearer
 from sqlalchemy import func
 from sqlalchemy.orm import Session
 from sqlalchemy.exc import OperationalError, SQLAlchemyError, TimeoutError as SATimeoutError
-from jose import jwt, JWTError
+import jwt
+from jwt.exceptions import InvalidTokenError
 
 from app.core import security, config
 from app.db.database import get_db
@@ -33,7 +34,7 @@ def get_current_user(token: str = Depends(oauth2_scheme), db: Session = Depends(
         if username is None:
             raise credentials_exception
         token_data = TokenData(username=username)
-    except JWTError:
+    except InvalidTokenError:
         raise credentials_exception
     
     user = db.query(User).filter(User.username == token_data.username).first()
