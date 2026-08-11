@@ -17,6 +17,11 @@ source "$ROOT/scripts/lib/postgres.sh"
 EXPECTED_REVISION="sync_errors_20260803"
 DEPLOY_ROOT="${TIBIAHUB_DEPLOY_ROOT:-/forge/tibiahub-backups/deployments}"
 LOCK_FILE="${TIBIAHUB_DEPLOY_LOCK_FILE:-$DEPLOY_ROOT/.deploy.lock}"
+RUNTIME_ROOT="${TIBIAHUB_RUNTIME_ROOT:-/forge/tibiahub-runtimes}"
+RUNTIME_LINK="$ROOT/backend/runtime-current"
+candidate_runtime=""
+previous_runtime=""
+runtime_is_ephemeral=0
 SERVICES=(
   tibiahub-api
   tibiahub-frontend
@@ -71,7 +76,7 @@ if [[ "$dry_run" -ne 1 && "$confirm" -ne 1 ]]; then
   usage
 fi
 
-ops_require_commands flock git pg_dump pg_restore sha256sum jq curl pm2 npm node bash awk sed find stat realpath || exit $?
+ops_require_commands flock git pg_dump pg_restore sha256sum jq curl pm2 npm node bash awk sed find stat realpath python3 || exit $?
 
 [[ "$DEPLOY_ROOT" == /* && ! -L "$DEPLOY_ROOT" ]] || {
   ops_error "Deployment root must be an absolute, non-symlink directory."
@@ -175,10 +180,132 @@ preflight_git_state() {
   }
 }
 
+prepare_candidate_runtime() {
+  local requirements_sha
+  local recorded_sha=""
+
+  requirements_sha="$(
+    sha256sum "$ROOT/backend/requirements.txt" |
+      awk '{print $1}'
+  )"
+
+  if [[ "$dry_run" == 1 ]]; then
+    candidate_runtime="$(
+      mktemp -d /tmp/tibiahub-runtime-dryrun-XXXXXX
+    )"
+    runtime_is_ephemeral=1
+  else
+    [[ "$RUNTIME_ROOT" == /* && ! -L "$RUNTIME_ROOT" ]] || {
+      echo "Runtime root must be an absolute, non-symlink directory." >&2
+      return 1
+    }
+
+    mkdir -p "$RUNTIME_ROOT"
+    chmod 700 "$RUNTIME_ROOT"
+
+    candidate_runtime="$RUNTIME_ROOT/$target_commit"
+
+    if [[ -f "$candidate_runtime/.requirements.sha256" ]]; then
+      recorded_sha="$(
+        cat "$candidate_runtime/.requirements.sha256"
+      )"
+    fi
+
+    if [[
+      "$recorded_sha" == "$requirements_sha"
+      && -x "$candidate_runtime/bin/python"
+      && -x "$candidate_runtime/bin/alembic"
+    ]]; then
+      export TIBIAHUB_PYTHON_RUNTIME="$candidate_runtime"
+      return 0
+    fi
+
+    rm -rf -- "$candidate_runtime"
+  fi
+
+  python3 -m venv "$candidate_runtime"
+
+  "$candidate_runtime/bin/python" -m pip install \
+    --disable-pip-version-check \
+    --no-input \
+    --requirement "$ROOT/backend/requirements.txt"
+
+  "$candidate_runtime/bin/python" -m pip check
+
+  "$candidate_runtime/bin/python" - <<'PY_RUNTIME'
+import alembic
+import fastapi
+import httpx
+import jwt
+import pydantic
+import pydantic_settings
+import sqlalchemy
+import uvicorn
+PY_RUNTIME
+
+  printf '%s\n' "$requirements_sha" \
+    >"$candidate_runtime/.requirements.sha256"
+
+  export TIBIAHUB_PYTHON_RUNTIME="$candidate_runtime"
+}
+
+
+capture_previous_runtime() {
+  if [[ -L "$RUNTIME_LINK" ]]; then
+    previous_runtime="$(realpath -e "$RUNTIME_LINK")"
+  elif [[ -e "$RUNTIME_LINK" ]]; then
+    echo "Backend runtime-current must be a symlink." >&2
+    return 1
+  else
+    previous_runtime="$ROOT/backend/venv"
+  fi
+
+  case "$previous_runtime" in
+    "$ROOT/backend/venv"|"$RUNTIME_ROOT"/*)
+      ;;
+    *)
+      echo "Previous backend runtime is outside an allowed path." >&2
+      return 1
+      ;;
+  esac
+
+  [[ -x "$previous_runtime/bin/python" ]] || {
+    echo "Previous backend runtime is unavailable." >&2
+    return 1
+  }
+}
+
+
+activate_candidate_runtime() {
+  local temporary_link="$ROOT/backend/.runtime-current.$$"
+
+  [[ "$candidate_runtime" == "$RUNTIME_ROOT"/* ]] || {
+    echo "Candidate runtime is outside the runtime root." >&2
+    return 1
+  }
+
+  [[ -x "$candidate_runtime/bin/python" ]] || {
+    echo "Candidate backend runtime is incomplete." >&2
+    return 1
+  }
+
+  if [[ -e "$RUNTIME_LINK" && ! -L "$RUNTIME_LINK" ]]; then
+    echo "Refusing to replace non-symlink runtime-current." >&2
+    return 1
+  fi
+
+  rm -f -- "$temporary_link"
+  ln -s "$candidate_runtime" "$temporary_link"
+  mv -Tf "$temporary_link" "$RUNTIME_LINK"
+
+  export TIBIAHUB_PYTHON_RUNTIME="$candidate_runtime"
+}
+
+
 preflight_alembic_head() {
   mapfile -t migration_heads < <(
     APP_ENV=test DATABASE_URL="sqlite+pysqlite:///:memory:" PYTHONPATH="$ROOT/backend:$ROOT" \
-      "$ROOT/backend/venv/bin/alembic" -c "$ROOT/backend/alembic.ini" heads | awk '{print $1}'
+      "$candidate_runtime/bin/alembic" -c "$ROOT/backend/alembic.ini" heads | awk '{print $1}'
   )
   [[ ${#migration_heads[@]} -eq 1 && "${migration_heads[0]}" == "$EXPECTED_REVISION" ]]
 }
@@ -199,16 +326,16 @@ preflight_production_revision_readable() {
 }
 
 preflight_backend_imports() {
-  PYTHONPATH="$ROOT/backend:$ROOT" APP_ENV="${APP_ENV:-production}" "$ROOT/backend/venv/bin/python" -c "import app.core.config"
+  PYTHONPATH="$ROOT/backend:$ROOT" APP_ENV="${APP_ENV:-production}" "$candidate_runtime/bin/python" -c "import app.core.config"
 }
 
 preflight_fastapi_import() {
-  PYTHONPATH="$ROOT/backend:$ROOT" APP_ENV="${APP_ENV:-production}" "$ROOT/backend/venv/bin/python" -c "import main"
+  PYTHONPATH="$ROOT/backend:$ROOT" APP_ENV="${APP_ENV:-production}" "$candidate_runtime/bin/python" -c "import main"
 }
 
 preflight_worker_imports() {
   PYTHONPATH="$ROOT/backend:$ROOT" APP_ENV="${APP_ENV:-production}" \
-    "$ROOT/backend/venv/bin/python" -c "import app.workers.sync_worker, app.workers.email_worker, app.workers.raffle_scheduler, app.knowledge.workers.knowledge_worker"
+    "$candidate_runtime/bin/python" -c "import app.workers.sync_worker, app.workers.email_worker, app.workers.raffle_scheduler, app.knowledge.workers.knowledge_worker"
 }
 
 preflight_frontend_build() {
@@ -341,6 +468,7 @@ metadata="$evidence_dir/metadata.env"
 staged_dist="$evidence_dir/frontend-dist-new"
 
 run_step "010-preflight-git-state" preflight_git_state
+run_step "015-preflight-backend-runtime" prepare_candidate_runtime
 run_step "020-preflight-alembic-head" preflight_alembic_head
 run_step "030-preflight-runtime-env" preflight_runtime_env
 run_step "040-preflight-db-target" preflight_db_target
@@ -358,6 +486,11 @@ run_step "140-preflight-alembic-check" run_alembic_read_only check
 if [[ "$dry_run" == 1 ]]; then
   touch "$evidence_dir/DRY_RUN_SUCCEEDED"
   ops_info "Dry-run preflight succeeded. Evidence: $evidence_dir"
+
+  if [[ "$runtime_is_ephemeral" == 1 ]]; then
+    rm -rf -- "$candidate_runtime"
+  fi
+
   trap - ERR
   exit 0
 fi
@@ -382,6 +515,8 @@ previous_commit="${state_previous_commit:-$provided_previous_commit}"
 }
 git cat-file -e "$previous_commit^{commit}"
 
+capture_previous_runtime
+
 previous_revision="$production_revision"
 [[ "$previous_revision" =~ ^[A-Za-z0-9_]+$ ]] || {
   ops_error "Unable to establish the current production Alembic revision safely."
@@ -393,6 +528,8 @@ previous_revision="$production_revision"
   printf 'previous_commit=%s\n' "$previous_commit"
   printf 'target_revision=%s\n' "$EXPECTED_REVISION"
   printf 'previous_revision=%s\n' "$previous_revision"
+  printf 'target_runtime=%s\n' "$candidate_runtime"
+  printf 'previous_runtime=%s\n' "$previous_runtime"
   printf 'started_at=%s\n' "$(ops_now_utc)"
 } >"$metadata"
 chmod 600 "$metadata"
@@ -424,6 +561,7 @@ run_step "190-build-rollback-frontend" build_previous_frontend
 
 rollback_armed=1
 run_step "200-stop-services" stop_services
+run_step "205-activate-backend-runtime" activate_candidate_runtime
 run_step "210-alembic-upgrade" run_alembic upgrade head
 
 resulting_revision="$(postgres_exec psql -X -A -t -v ON_ERROR_STOP=1 -c 'SELECT version_num FROM alembic_version')"
@@ -458,6 +596,7 @@ state_tmp="$DEPLOY_ROOT/.current.env.$$"
   printf 'deployed_commit=%s\n' "$target_commit"
   printf 'alembic_revision=%s\n' "$EXPECTED_REVISION"
   printf 'snapshot_dir=%s\n' "$evidence_dir"
+  printf 'runtime_target=%s\n' "$candidate_runtime"
   printf 'deployed_at=%s\n' "$completed_at"
 } >"$state_tmp"
 chmod 600 "$state_tmp"

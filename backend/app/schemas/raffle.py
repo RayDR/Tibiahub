@@ -4,7 +4,7 @@ from datetime import datetime
 from decimal import Decimal
 from typing import List, Literal, Optional
 
-from pydantic import BaseModel, Field, field_validator
+from pydantic import BaseModel, Field, field_validator, ConfigDict
 
 
 class RafflePrizeCreate(BaseModel):
@@ -91,8 +91,7 @@ class RaffleParticipantResponse(BaseModel):
     eligibility_override: Optional[bool] = None
     eligibility_override_reason: Optional[str] = None
 
-    class Config:
-        from_attributes = True
+    model_config = ConfigDict(from_attributes=True)
 
 
 class RafflePrizeResponse(BaseModel):
@@ -104,8 +103,7 @@ class RafflePrizeResponse(BaseModel):
     amount: Optional[Decimal] = None
     currency: Optional[str] = None
 
-    class Config:
-        from_attributes = True
+    model_config = ConfigDict(from_attributes=True)
 
 
 class RaffleWinnerResponse(BaseModel):

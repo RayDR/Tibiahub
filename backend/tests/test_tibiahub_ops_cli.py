@@ -136,7 +136,14 @@ def test_dry_run_prints_commands_and_remains_read_only(tmp_path: Path) -> None:
     assert "backup\\ with\\ spaces.dump" in joined_output
 
     log_lines = _mock_lines(Path(env["MOCK_LOG"]))
-    assert any("bash /forge/tibiahub/deploy/scripts/deploy.sh --dry-run" in line for line in log_lines)
+    expected_deploy = (
+        f"bash {ROOT / 'deploy' / 'scripts' / 'deploy.sh'} "
+        "--dry-run"
+    )
+    assert any(
+        expected_deploy in line
+        for line in log_lines
+    )
     forbidden_prefixes = ("pm2 ", "pg_restore ", "psql ", "alembic ", "git ", "rm ", "mv ", "cp ")
     assert not any(line.startswith(forbidden_prefixes) for line in log_lines)
 

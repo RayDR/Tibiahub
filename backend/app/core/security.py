@@ -1,6 +1,6 @@
 from datetime import UTC, datetime, timedelta
 from typing import Any, Union
-from jose import jwt
+import jwt
 import bcrypt
 import argon2
 from app.core.config import settings

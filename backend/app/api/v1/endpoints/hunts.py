@@ -213,7 +213,7 @@ async def create_hunt(
     current_user: User = Depends(get_current_admin_user)
 ):
     """Create a new hunt (admin only)"""
-    db_hunt = HuntCatalog(**hunt.dict())
+    db_hunt = HuntCatalog(**hunt.model_dump())
     db.add(db_hunt)
     db.commit()
     db.refresh(db_hunt)
@@ -231,7 +231,7 @@ async def update_hunt(
     if not db_hunt:
         raise HTTPException(status_code=404, detail="Hunt not found")
     
-    for key, value in hunt.dict(exclude_unset=True).items():
+    for key, value in hunt.model_dump(exclude_unset=True).items():
         setattr(db_hunt, key, value)
     
     db.commit()

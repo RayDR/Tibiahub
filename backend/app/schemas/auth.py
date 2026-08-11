@@ -1,4 +1,4 @@
-from pydantic import BaseModel, EmailStr, Field, field_validator
+from pydantic import BaseModel, EmailStr, Field, field_validator, ConfigDict
 from typing import Literal, Optional
 from datetime import datetime
 from app.core.password_policy import validate_password
@@ -63,5 +63,4 @@ class UserResponse(UserBase):
     achievement_points: Optional[int] = None
     tibia_status: Optional[str] = None
 
-    class Config:
-        from_attributes = True
+    model_config = ConfigDict(from_attributes=True)

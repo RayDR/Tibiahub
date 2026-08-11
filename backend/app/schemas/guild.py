@@ -1,4 +1,4 @@
-from pydantic import BaseModel
+from pydantic import BaseModel, ConfigDict
 from typing import Optional, List
 from datetime import datetime
 from app.models.guild import AnnouncementType, EventType, AttendanceStatus, RecruitmentStatus
@@ -20,8 +20,7 @@ class AnnouncementResponse(AnnouncementBase):
     created_at: datetime
     author: Optional[UserResponse] = None
 
-    class Config:
-        from_attributes = True
+    model_config = ConfigDict(from_attributes=True)
 
 # Event Schemas
 class EventBase(BaseModel):
@@ -41,8 +40,7 @@ class EventResponse(EventBase):
     created_at: datetime
     author: Optional[UserResponse] = None
 
-    class Config:
-        from_attributes = True
+    model_config = ConfigDict(from_attributes=True)
 
 # Attendance Schemas
 class AttendanceBase(BaseModel):
@@ -57,8 +55,7 @@ class AttendanceResponse(AttendanceBase):
     created_at: datetime
     user: Optional[UserResponse] = None
 
-    class Config:
-        from_attributes = True
+    model_config = ConfigDict(from_attributes=True)
 
 # Recruitment Schemas
 class RecruitmentBase(BaseModel):
@@ -79,8 +76,7 @@ class RecruitmentResponse(RecruitmentBase):
     created_at: datetime
     recruiter: Optional[UserResponse] = None
 
-    class Config:
-        from_attributes = True
+    model_config = ConfigDict(from_attributes=True)
 
 
 class GuildMemberSnapshotResponse(BaseModel):

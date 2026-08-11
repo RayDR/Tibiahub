@@ -126,3 +126,54 @@ def test_scripts_do_not_embed_or_print_database_credentials():
     assert "PGPASSWORD=" not in combined
     assert "cat $TIBIAHUB" not in combined
     assert "/forge/tibiahub-secrets/runtime.env" not in combined
+
+
+
+def test_backend_runtime_is_versioned_activated_and_rollback_safe():
+    deploy = _text(DEPLOY)
+    rollback = _text(ROLLBACK)
+    ecosystem = _text(
+        ROOT / "ecosystem.config.js"
+    )
+    postgres = _text(
+        ROOT / "scripts" / "lib" / "postgres.sh"
+    )
+    requirements = _text(
+        ROOT / "backend" / "requirements.txt"
+    )
+
+    assert "TIBIAHUB_RUNTIME_ROOT" in deploy
+    assert "015-preflight-backend-runtime" in deploy
+    assert "python3 -m venv" in deploy
+    assert "pip check" in deploy
+    assert ".requirements.sha256" in deploy
+    assert "205-activate-backend-runtime" in deploy
+    assert "previous_runtime" in deploy
+
+    assert (
+        deploy.index("015-preflight-backend-runtime")
+        < deploy.index("200-stop-services")
+    )
+    assert (
+        deploy.index("200-stop-services")
+        < deploy.index("205-activate-backend-runtime")
+        < deploy.index("210-alembic-upgrade")
+    )
+
+    assert "045-restore-backend-runtime" in rollback
+    assert "previous_runtime" in rollback
+    assert "runtime-current" in rollback
+
+    assert (
+        ecosystem.count(
+            "script: 'runtime-current/bin/python'"
+        )
+        == 5
+    )
+
+    assert "tibiahub_runtime_dir" in postgres
+    assert "TIBIAHUB_PYTHON_RUNTIME" in postgres
+    assert "runtime-current/bin/python" in postgres
+
+    assert "PyJWT[crypto]==2.13.0" in requirements
+    assert "python-jose" not in requirements

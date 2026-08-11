@@ -93,7 +93,7 @@ def get_events(
     # Enrich with creator and winner names
     result = []
     for event in events:
-        event_dict = EventSchema.from_orm(event).dict()
+        event_dict = EventSchema.from_orm(event).model_dump()
         event_dict['creator_name'] = event.creator.username if event.creator else None
         event_dict['winner_name'] = event.winner.username if event.winner else None
         event_dict['participant_count'] = len(event.participants)
@@ -101,7 +101,7 @@ def get_events(
         # Get participants with usernames
         participants = []
         for p in event.participants:
-            p_dict = ParticipantSchema.from_orm(p).dict()
+            p_dict = ParticipantSchema.from_orm(p).model_dump()
             p_dict['username'] = p.user.username if p.user else None
             participants.append(ParticipantSchema(**p_dict))
         
@@ -122,7 +122,7 @@ def get_event(
     if not event:
         raise HTTPException(status_code=404, detail="Event not found")
     
-    event_dict = EventSchema.from_orm(event).dict()
+    event_dict = EventSchema.from_orm(event).model_dump()
     event_dict['creator_name'] = event.creator.username if event.creator else None
     event_dict['winner_name'] = event.winner.username if event.winner else None
     
@@ -150,7 +150,7 @@ def get_event(
         event_dict['participant_count'] = len(event.participants)
         participants = []
         for p in event.participants:
-            p_dict = ParticipantSchema.from_orm(p).dict()
+            p_dict = ParticipantSchema.from_orm(p).model_dump()
             p_dict['username'] = p.user.username if p.user else None
             participants.append(ParticipantSchema(**p_dict))
         event_dict['participants'] = participants
@@ -166,7 +166,7 @@ def create_event(
 ):
     """Create a new event (admin only)"""
     new_event = Event(
-        **event.dict(),
+        **event.model_dump(),
         public_code=generate_unique_code(db, Event),
         creator_id=current_user.id
     )
@@ -175,7 +175,7 @@ def create_event(
     db.commit()
     db.refresh(new_event)
     
-    event_dict = EventSchema.from_orm(new_event).dict()
+    event_dict = EventSchema.from_orm(new_event).model_dump()
     event_dict['creator_name'] = current_user.username
     event_dict['participant_count'] = 0
     event_dict['participants'] = []
@@ -196,7 +196,7 @@ def update_event(
         raise HTTPException(status_code=404, detail="Event not found")
     _require_event_management(db, current_user, event)
     
-    update_data = event_update.dict(exclude_unset=True)
+    update_data = event_update.model_dump(exclude_unset=True)
     if "status" in update_data and update_data["status"] not in {"active", "disabled", "completed", "archived", "cancelled"}:
         raise HTTPException(status_code=400, detail="Invalid event status")
     if "archive_after_days" in update_data and update_data["archive_after_days"] is not None:
@@ -316,7 +316,7 @@ def join_event(
     db.commit()
     db.refresh(participant)
     
-    p_dict = ParticipantSchema.from_orm(participant).dict()
+    p_dict = ParticipantSchema.from_orm(participant).model_dump()
     p_dict['username'] = current_user.username
     
     return ParticipantSchema(**p_dict)
@@ -648,7 +648,7 @@ def get_public_event(
     if not event.is_public:
         raise HTTPException(status_code=403, detail="This event is not public.")
     
-    event_dict = EventSchema.from_orm(event).dict()
+    event_dict = EventSchema.from_orm(event).model_dump()
     event_dict['creator_name'] = event.creator.username if event.creator else None
     event_dict['winner_name'] = event.winner.username if event.winner else None
     

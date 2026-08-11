@@ -1,7 +1,7 @@
 """
 Schemas for Events and Raffles
 """
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, Field, ConfigDict
 from typing import List, Optional
 from datetime import datetime
 
@@ -17,8 +17,7 @@ class EventParticipant(EventParticipantBase):
     joined_at: datetime
     username: Optional[str] = None
     
-    class Config:
-        from_attributes = True
+    model_config = ConfigDict(from_attributes=True)
 
 
 class EventBase(BaseModel):
@@ -81,8 +80,7 @@ class Event(EventBase):
     created_at: datetime
     updated_at: datetime
     
-    class Config:
-        from_attributes = True
+    model_config = ConfigDict(from_attributes=True)
 
 
 class DrawWinnerResponse(BaseModel):
@@ -112,5 +110,4 @@ class PublicParticipant(PublicParticipantBase):
     is_auto_loaded: bool
     created_at: datetime
     
-    class Config:
-        from_attributes = True
+    model_config = ConfigDict(from_attributes=True)

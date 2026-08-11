@@ -66,3 +66,24 @@ On failure, deployment preserves:
 Rollback preserves `ROLLBACK_FAILED_INFO` on rollback-step failure.
 
 Alembic downgrade is never used for rollback.
+
+
+## Versioned backend Python runtime
+
+Backend dependencies are built into a commit-specific virtual environment
+under `/forge/tibiahub-runtimes/<commit>` during deployment preflight.
+
+The active runtime is selected atomically through
+`backend/runtime-current`. PM2 backend services execute Python from that
+link instead of modifying the legacy `backend/venv` in place.
+
+A candidate runtime must install the pinned `backend/requirements.txt`,
+pass `pip check`, import the required runtime packages, and complete all
+normal deployment preflights before services are stopped.
+
+Deployment metadata records both the candidate and previous runtime.
+Rollback restores the prior runtime link together with the prior commit,
+database snapshot, frontend build, and PM2 process state.
+
+The legacy `backend/venv` remains a compatibility fallback for deployments
+created before versioned runtimes were introduced.
