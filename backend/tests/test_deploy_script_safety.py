@@ -106,7 +106,17 @@ def test_pm2_operations_are_bounded_to_the_declared_tibiahub_services():
     for forbidden in ("pm2 restart all", "pm2 stop all", "pm2 delete all", "pm2 kill"):
         assert forbidden not in combined
     assert combined.count("env -i") == 2
-    assert 'pm2 startOrReload "$ROOT/ecosystem.config.js" --only "$service"' in combined
+
+    # Service definitions must be recreated rather than reloaded so PM2
+    # cannot retain a stale executable path across runtime migrations.
+    assert "startOrReload" not in combined
+    assert (
+        combined.count(
+            'pm2 start "$ROOT/ecosystem.config.js" --only "$service"'
+        )
+        == 2
+    )
+    assert combined.count('pm2 delete "$service"') >= 2
 
 
 def test_entrypoints_refuse_being_sourced():

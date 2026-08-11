@@ -215,8 +215,16 @@ restore_frontend() {
 
 pm2_start_service() {
   local service="$1"
+
+  # PM2 reloads an existing process using its previously registered
+  # executable path. Recreate the bounded TibiaHub service so changes
+  # such as venv/bin/python -> runtime-current/bin/python take effect.
+  if pm2 describe "$service" >/dev/null 2>&1; then
+    pm2 delete "$service"
+  fi
+
   env -i HOME="$HOME" USER="${USER:-}" PATH="$PATH" PM2_HOME="${PM2_HOME:-$HOME/.pm2}" \
-    pm2 startOrReload "$ROOT/ecosystem.config.js" --only "$service" --update-env
+    pm2 start "$ROOT/ecosystem.config.js" --only "$service"
 }
 
 pm2_service_online() {
