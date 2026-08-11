@@ -87,3 +87,5 @@ database snapshot, frontend build, and PM2 process state.
 
 The legacy `backend/venv` remains a compatibility fallback for deployments
 created before versioned runtimes were introduced.
+
+PM2 service definitions are recreated during deployment and rollback so executable-path changes are applied instead of reloading a stale registered runtime.
