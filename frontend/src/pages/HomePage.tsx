@@ -8,15 +8,13 @@ import {
   MapPin,
   Shield,
   Sparkles,
-  Swords,
 } from 'lucide-react';
 import { Link } from 'react-router-dom';
 import { useTranslation } from 'react-i18next';
 
 import { Card, Page, PageHeader, Section } from '../components/ui';
-import KnowledgeSearchBox, {
-  type KnowledgeSearchSection,
-} from '../components/search/KnowledgeSearchBox';
+import type { KnowledgeSearchSection } from '../components/search/KnowledgeSearchBox';
+import AssistantChat from '../components/assistant/AssistantChat';
 import { activityApi, type UserActivityEntry } from '../services/activity';
 import {
   creaturesApi,
@@ -61,9 +59,6 @@ export default function HomePage() {
   const { t, i18n } = useTranslation();
   const { isAuthenticated, user } = useAuth();
 
-  const [section, setSection] =
-    useState<KnowledgeSearchSection>('creatures');
-  const [query, setQuery] = useState('');
   const [activity, setActivity] = useState<UserActivityEntry[]>([]);
   const [clearingHistory, setClearingHistory] = useState(false);
   const [capabilityArt, setCapabilityArt] = useState<
@@ -237,27 +232,6 @@ export default function HomePage() {
     },
   ];
 
-  const starterSearches = [
-    {
-      key: 'hunt',
-      section: 'creatures' as const,
-      query: t('home.assistantPreview.prompts.huntQuery'),
-      label: t('home.assistantPreview.prompts.hunt'),
-    },
-    {
-      key: 'item',
-      section: 'items' as const,
-      query: t('home.assistantPreview.prompts.itemQuery'),
-      label: t('home.assistantPreview.prompts.item'),
-    },
-    {
-      key: 'quest',
-      section: 'quests' as const,
-      query: t('home.assistantPreview.prompts.questQuery'),
-      label: t('home.assistantPreview.prompts.quest'),
-    },
-  ];
-
   const clearActivity = async () => {
     setClearingHistory(true);
 
@@ -281,119 +255,26 @@ export default function HomePage() {
         <div className="pointer-events-none absolute -right-24 -top-24 size-96 rounded-full bg-primary/10 blur-3xl" />
         <div className="pointer-events-none absolute -bottom-40 left-1/3 size-80 rounded-full bg-accent/10 blur-3xl" />
 
-        <div className="relative grid gap-8 lg:grid-cols-[minmax(0,1.35fr)_minmax(18rem,.65fr)] lg:items-start">
-          <div className="min-w-0">
-            <div className="mb-4 inline-flex items-center gap-2 rounded-full border border-primary/30 bg-primary/10 px-3 py-1 text-xs font-semibold text-primary">
-              <Sparkles className="size-3.5" />
-              {t('home.assistantPreview.status')}
-            </div>
-
-            <PageHeader
-              className="mb-5"
-              eyebrow={t('home.assistantPreview.eyebrow')}
-              title={
-                isAuthenticated
-                  ? t(
-                      'home.assistantPreview.titleAuthenticated',
-                      { username: user?.username || '' },
-                    )
-                  : t('home.assistantPreview.titleGuest')
-              }
-              subtitle={t('home.assistantPreview.subtitle')}
-            />
-
-            <KnowledgeSearchBox
-              section={section}
-              query={query}
-              onSectionChange={setSection}
-              onQueryChange={setQuery}
-            />
-
-            <p className="mt-2 text-xs text-content-muted">
-              {t('home.assistantPreview.localOnly')}
-            </p>
-
-            <div
-              className="mt-4 flex flex-wrap gap-2"
-              aria-label={t(
-                'home.assistantPreview.quickFilters',
-              )}
-            >
-              {searchOptions.map((option) => {
-                const Icon = option.icon;
-                const active = section === option.key;
-                const useTibiaSprite =
-                  option.artUrl &&
-                  ['creatures', 'bosses', 'items'].includes(
-                    option.key,
-                  );
-
-                return (
-                  <button
-                    key={option.key}
-                    type="button"
-                    title={option.help}
-                    aria-pressed={active}
-                    onClick={() => setSection(option.key)}
-                    className={
-                      active
-                        ? 'app-button-secondary app-button-sm border-primary/50 bg-primary/10 text-primary'
-                        : 'app-button-ghost app-button-sm'
-                    }
-                  >
-                    {useTibiaSprite ? (
-                      <img
-                        src={option.artUrl}
-                        alt=""
-                        aria-hidden="true"
-                        className="size-5 object-contain [image-rendering:pixelated]"
-                      />
-                    ) : (
-                      <Icon
-                        className="size-3.5"
-                        aria-hidden="true"
-                      />
-                    )}
-                    {option.title}
-                  </button>
-                );
-              })}
-            </div>
+        <div className="relative min-w-0">
+          <div className="mb-4 inline-flex items-center gap-2 rounded-full border border-primary/30 bg-primary/10 px-3 py-1 text-xs font-semibold text-primary">
+            <Sparkles className="size-3.5" />
+            {t('home.assistantPreview.status')}
           </div>
 
-          <aside className="rounded-2xl border border-line bg-surface-overlay p-4 sm:p-5">
-            <div className="flex items-center gap-2">
-              <Swords className="size-5 text-accent" />
-              <h2 className="font-semibold">
-                {t('home.assistantPreview.promptTitle')}
-              </h2>
-            </div>
-
-            <p className="mt-1 text-sm text-content-secondary">
-              {t('home.assistantPreview.promptHelp')}
-            </p>
-
-            <div className="mt-4 space-y-2">
-              {starterSearches.map((prompt) => (
-                <button
-                  key={prompt.key}
-                  type="button"
-                  onClick={() => {
-                    setSection(prompt.section);
-                    setQuery(prompt.query);
-                  }}
-                  className="group flex w-full items-center justify-between gap-3 rounded-xl border border-line bg-surface-raised px-3 py-3 text-left text-sm transition hover:border-primary/50 hover:bg-surface-active"
-                >
-                  <span>{prompt.label}</span>
-                  <ArrowRight className="size-4 shrink-0 text-primary transition-transform group-hover:translate-x-1 motion-reduce:transform-none" />
-                </button>
-              ))}
-            </div>
-
-            <p className="mt-4 rounded-xl bg-accent/10 p-3 text-xs text-content-secondary">
-              {t('home.assistantPreview.futureHelp')}
-            </p>
-          </aside>
+          <PageHeader
+            className="mb-5"
+            eyebrow={t('home.assistantPreview.eyebrow')}
+            title={
+              isAuthenticated
+                ? t(
+                    'home.assistantPreview.titleAuthenticated',
+                    { username: user?.username || '' },
+                  )
+                : t('home.assistantPreview.titleGuest')
+            }
+            subtitle={t('home.assistantPreview.subtitle')}
+          />
+          <AssistantChat />
         </div>
       </section>
 

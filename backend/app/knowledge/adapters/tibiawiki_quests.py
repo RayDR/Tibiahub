@@ -119,6 +119,35 @@ def _item_values(raw: str | None) -> tuple[QuestItemReference, ...]:
     return tuple(deduped.values())
 
 
+def _access_values(
+    access_raw: str | None,
+    rewards_raw: str | None,
+) -> tuple[QuestAccessReference, ...]:
+    """Extract only explicit provider access claims.
+
+    TibiaWiki commonly records access as ``Access to [[Place]]`` in the
+    reward field instead of using a dedicated access parameter. Requiring the
+    linked destination keeps this conservative and prevents ordinary reward
+    prose from becoming an access fact.
+    """
+    values = [QuestAccessReference(name=value.name) for value in _name_values(access_raw)]
+    seen = {(normalize_name(value.name), normalize_name(value.destination_name or "")) for value in values}
+    for match in re.finditer(r"\baccess\s+to\s+\[\[([^\]|#]+)(?:\|[^\]]+)?\]\]", rewards_raw or "", re.I):
+        destination = _strip_markup(match.group(1)).strip()
+        if not destination:
+            continue
+        value = QuestAccessReference(
+            name=f"{destination} Access",
+            description=f"Access to {destination}",
+            destination_name=destination,
+        )
+        identity = (normalize_name(value.name), normalize_name(destination))
+        if identity not in seen:
+            values.append(value)
+            seen.add(identity)
+    return tuple(values)
+
+
 def _sections(wikitext: str) -> list[tuple[int, str, list[str]]]:
     result: list[tuple[int, str, list[str]]] = []
     current: tuple[int, str, list[str]] | None = None
@@ -251,6 +280,17 @@ def _quest_parts(raw: dict[str, Any]) -> tuple[str, str, str, QuestKnowledgeDTO]
     locations_raw, locations_supplied = _first(params, "locations", "location", "startinglocation")
     access_raw, access_supplied = _first(params, "access", "accessunlocks", "unlocksaccess")
     missions, unparsed_sections, saw_mission_section = _parse_missions(wikitext)
+    access_unlocks = _access_values(access_raw, rewards_raw)
+    access_destinations = {
+        normalize_name(value.destination_name)
+        for value in access_unlocks
+        if value.destination_name
+    }
+    rewarded_items = tuple(
+        value
+        for value in _item_values(rewards_raw)
+        if normalize_name(value.name) not in access_destinations
+    )
     child_links = _candidate_quest_links(raw, page_title)
     is_group = bool(child_links) and not missions
     image_raw, image_supplied = _first(params, "image")
@@ -267,7 +307,7 @@ def _quest_parts(raw: dict[str, Any]) -> tuple[str, str, str, QuestKnowledgeDTO]
         "required_items": required_items_supplied, "rewarded_items": rewards_supplied,
         "required_quests": required_quests_supplied, "unlocked_quests": unlocked_quests_supplied,
         "required_creatures": creatures_supplied, "bosses": bosses_supplied,
-        "locations": locations_supplied, "access_unlocks": access_supplied,
+        "locations": locations_supplied, "access_unlocks": access_supplied or bool(access_unlocks),
         "missions": saw_mission_section, "image_reference": image_supplied,
         "source_reference": True, "slug": True, "is_group": bool(child_links),
     }
@@ -280,11 +320,11 @@ def _quest_parts(raw: dict[str, Any]) -> tuple[str, str, str, QuestKnowledgeDTO]
         premium_required=premium, repeatable=repeatable, solo_possible=solo,
         description=description, summary=summary, is_group=is_group,
         starting_npcs=_name_values(starting_raw), related_npcs=_name_values(related_npcs_raw),
-        required_items=_item_values(required_items_raw), rewarded_items=_item_values(rewards_raw),
+        required_items=_item_values(required_items_raw), rewarded_items=rewarded_items,
         required_quests=_name_values(required_quests_raw), unlocked_quests=_name_values(unlocked_quests_raw),
         required_creatures=_name_values(creatures_raw), bosses=_name_values(bosses_raw),
         locations=_name_values(locations_raw),
-        access_unlocks=tuple(QuestAccessReference(name=value.name) for value in _name_values(access_raw)),
+        access_unlocks=access_unlocks,
         missions=missions, image_reference=image_reference, source_reference=_build_wiki_page_url(page_title),
         provider_metadata={"page_title": page_title, "template_parameters": sorted(params), "unparsed_sections": unparsed_sections, "child_quest_links": child_links},
         supplied_fields=supplied_fields,
