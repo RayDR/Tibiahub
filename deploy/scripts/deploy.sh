@@ -14,7 +14,7 @@ source "$ROOT/scripts/lib/ops-common.sh"
 # shellcheck source=../../scripts/lib/postgres.sh
 source "$ROOT/scripts/lib/postgres.sh"
 
-EXPECTED_REVISION="sync_errors_20260803"
+EXPECTED_REVISION="hunt_analyzer_20260812"
 DEPLOY_ROOT="${TIBIAHUB_DEPLOY_ROOT:-/forge/tibiahub-backups/deployments}"
 LOCK_FILE="${TIBIAHUB_DEPLOY_LOCK_FILE:-$DEPLOY_ROOT/.deploy.lock}"
 RUNTIME_ROOT="${TIBIAHUB_RUNTIME_ROOT:-/forge/tibiahub-runtimes}"
@@ -325,6 +325,87 @@ preflight_production_revision_readable() {
   [[ "$production_revision" =~ ^[A-Za-z0-9_]+$ ]]
 }
 
+
+preflight_alembic_upgrade_path() {
+  if [[ "$production_revision" == "$EXPECTED_REVISION" ]]; then
+    # If production is already at HEAD, Alembic check is valid here.
+    run_alembic_read_only check
+    return 0
+  fi
+
+  (
+    cd "$ROOT/backend"
+
+    PYTHONPATH="$ROOT/backend:$ROOT" \
+      "$candidate_runtime/bin/python" - \
+      "$ROOT/backend/alembic.ini" \
+      "$production_revision" \
+      "$EXPECTED_REVISION" <<'PY_ALEMBIC_PATH'
+import sys
+
+from alembic.config import Config
+from alembic.script import ScriptDirectory
+
+config_path, current_revision, expected_revision = sys.argv[1:4]
+
+try:
+    config = Config(config_path)
+    script = ScriptDirectory.from_config(config)
+
+    current = script.get_revision(current_revision)
+    expected = script.get_revision(expected_revision)
+
+    if current is None:
+        raise RuntimeError(
+            f"Production Alembic revision does not exist in this release: "
+            f"{current_revision}"
+        )
+
+    if expected is None:
+        raise RuntimeError(
+            f"Expected Alembic revision does not exist in this release: "
+            f"{expected_revision}"
+        )
+
+    if script.get_current_head() != expected_revision:
+        raise RuntimeError(
+            f"Expected revision {expected_revision} is not the single "
+            f"Alembic HEAD."
+        )
+
+    revisions = list(
+        script.iterate_revisions(
+            expected_revision,
+            current_revision,
+        )
+    )
+
+    if not revisions:
+        raise RuntimeError(
+            f"No upgrade path exists from {current_revision} "
+            f"to {expected_revision}."
+        )
+
+    path = [current_revision] + [
+        revision.revision
+        for revision in reversed(revisions)
+    ]
+
+    print(
+        "Validated Alembic upgrade path: "
+        + " -> ".join(path)
+    )
+
+except Exception as exc:
+    print(
+        f"Unsafe Alembic upgrade path: {exc}",
+        file=sys.stderr,
+    )
+    raise SystemExit(1)
+PY_ALEMBIC_PATH
+  )
+}
+
 preflight_backend_imports() {
   PYTHONPATH="$ROOT/backend:$ROOT" APP_ENV="${APP_ENV:-production}" "$candidate_runtime/bin/python" -c "import app.core.config"
 }
@@ -489,7 +570,7 @@ run_step "100-preflight-pm2-config" preflight_pm2_config
 run_step "110-preflight-alembic-heads" run_alembic_read_only heads
 run_step "120-preflight-alembic-current" run_alembic_read_only current
 run_step "130-preflight-alembic-history" run_alembic_read_only history
-run_step "140-preflight-alembic-check" run_alembic_read_only check
+run_step "140-preflight-alembic-upgrade-path" preflight_alembic_upgrade_path
 
 if [[ "$dry_run" == 1 ]]; then
   touch "$evidence_dir/DRY_RUN_SUCCEEDED"
@@ -578,6 +659,8 @@ resulting_revision="${resulting_revision//$'\n'/}"
   ops_error "Production did not reach the expected Alembic revision."
   false
 }
+
+run_step "215-post-migrate-alembic-check" run_alembic_read_only check
 
 if [[ -e "$ROOT/frontend/dist" && ! -d "$ROOT/frontend/dist" ]]; then
   ops_error "Refusing to replace a non-directory frontend dist path."
