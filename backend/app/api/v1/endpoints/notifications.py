@@ -1,6 +1,6 @@
 from datetime import UTC, datetime
 
-from fastapi import APIRouter, Depends, HTTPException
+from fastapi import APIRouter, Depends, HTTPException, Query
 from pydantic import BaseModel, ConfigDict
 from sqlalchemy import func
 from sqlalchemy.orm import Session
@@ -33,9 +33,8 @@ class NotificationResponse(BaseModel):
 
 
 @router.get("", response_model=list[NotificationResponse])
-def list_notifications(limit: int = 30, db: Session = Depends(get_db), current_user: User = Depends(get_current_active_user)):
-    limit = max(1, min(limit, 100))
-    return db.query(InternalNotification).filter(InternalNotification.recipient_user_id == current_user.id).order_by(InternalNotification.created_at.desc()).limit(limit).all()
+def list_notifications(skip: int = Query(0, ge=0), limit: int = Query(20, ge=1, le=100), db: Session = Depends(get_db), current_user: User = Depends(get_current_active_user)):
+    return db.query(InternalNotification).filter(InternalNotification.recipient_user_id == current_user.id).order_by(InternalNotification.created_at.desc()).offset(skip).limit(limit).all()
 
 
 @router.get("/unread-count")

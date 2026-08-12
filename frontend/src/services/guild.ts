@@ -41,6 +41,7 @@ export interface GuildMember {
     snapshot_at: string;
     linked_user_id?: number;
     linked_username?: string;
+    linked_email?: string;
     public_profile_url?: string;
     account_identity_known: boolean;
 }

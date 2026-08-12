@@ -22,19 +22,26 @@ from app.schemas import Vocation
 router = APIRouter()
 
 
-def _zone_payload(rec):
+def _zone_payload(rec, engine=None, player_level=None):
     zone = rec['zone']
     location_x = zone.location_x if zone.location_x is not None else zone.map_x
     location_y = zone.location_y if zone.location_y is not None else zone.map_y
+    profile = engine.recommendation_profile(zone, player_level) if engine and player_level is not None else {}
     return {
         "zone_id": zone.id, "zone_name": zone.name, "zone_slug": zone.slug,
         "score": round(rec['score'], 2), "reasons": rec['reasons'],
+        "is_preselected": bool(rec.get("is_preselected")),
         "avg_exp_hour": zone.avg_exp_hour, "avg_profit_hour": zone.avg_profit_hour,
         "rate_basis": "stored_local_average" if zone.avg_exp_hour or zone.avg_profit_hour else None,
         "min_level": zone.min_level, "max_level": zone.max_level, "difficulty": zone.difficulty,
         "requires_premium": zone.requires_premium, "requires_quest": zone.requires_quest,
         "quest_name": zone.quest_name, "city": zone.city, "region": zone.region, "size": zone.size,
         "recommended_party_size": zone.recommended_party_size,
+        "suggested_level": profile.get("suggested_level") or zone.recommended_level,
+        "effective_min_level": profile.get("minimum_level") or zone.min_level,
+        "level_fit": profile.get("level_fit"), "danger": profile.get("danger"),
+        "raw_creature_exp": profile.get("raw_experience"),
+        "profile_basis": profile.get("profile_basis"),
         "map_image_url": f"/api/v1/hunt-zones/{zone.id}/map-image?placeholder=false" if zone.map_asset_id else None,
         "map_bounds": zone.map_bounds, "location_x": location_x,
         "location_y": location_y, "location_z": zone.location_z if zone.location_z is not None else zone.map_z,
@@ -48,6 +55,7 @@ async def get_solo_recommendations(
     level: int = Query(..., ge=8, le=2000, description="Player level"),
     goal: str = Query("exp", pattern="^(exp|profit|balanced)$", description="Hunting goal"),
     limit: int = Query(10, ge=1, le=50, description="Maximum results"),
+    zone: Optional[str] = Query(None, max_length=150, description="Optional zone identifier to inspect in context"),
     db: Session = Depends(get_db)
 ):
     """
@@ -70,7 +78,8 @@ async def get_solo_recommendations(
         vocation=vocation,
         level=level,
         goal=goal,
-        limit=limit
+        limit=limit,
+        preferred_zone=zone,
     )
     
     return {
@@ -78,7 +87,7 @@ async def get_solo_recommendations(
         "level": level,
         "goal": goal,
         "recommendations": [
-            _zone_payload(rec)
+            _zone_payload(rec, engine, level)
             for rec in recommendations
         ]
     }
@@ -146,7 +155,7 @@ async def get_party_recommendations(
         "vocations": [m['vocation'] for m in normalized_party],
         "goal": goal,
         "recommendations": [
-            {**_zone_payload(rec), "composition_fit": rec['synergy_bonus']}
+            {**_zone_payload(rec, engine, int(sum(m['level'] for m in normalized_party) / len(normalized_party))), "composition_fit": rec['synergy_bonus']}
             for rec in recommendations
         ]
     }

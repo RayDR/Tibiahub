@@ -90,6 +90,7 @@ class GuildMemberSnapshotResponse(BaseModel):
     snapshot_at: datetime
     linked_user_id: Optional[int] = None
     linked_username: Optional[str] = None
+    linked_email: Optional[str] = None
     public_profile_url: Optional[str] = None
     account_identity_known: bool = False
 

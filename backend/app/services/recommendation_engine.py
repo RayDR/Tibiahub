@@ -11,6 +11,7 @@ This service provides intelligent recommendations based on:
 Algorithm considers multiple factors to suggest optimal hunting spots.
 """
 
+import math
 from typing import List, Dict, Optional, Any
 from sqlalchemy import or_
 from sqlalchemy.orm import Session, selectinload
@@ -86,7 +87,8 @@ class RecommendationEngine:
         vocation: Vocation,
         level: int,
         goal: str = 'exp',  # 'exp', 'profit', 'balanced'
-        limit: int = 10
+        limit: int = 10,
+        preferred_zone: str | None = None,
     ) -> List[Dict[str, Any]]:
         """
         Get hunt zone recommendations for solo player
@@ -116,6 +118,9 @@ class RecommendationEngine:
         
         for zone in zones:
             score = self._calculate_solo_score(zone, vocation, level, goal)
+            preferred_key = (preferred_zone or "").strip().casefold()
+            if preferred_key and preferred_key in {str(zone.id), (zone.slug or "").casefold(), zone.name.casefold()}:
+                score += 120
             
             if score > 0:
                 recommendations.append({
@@ -124,6 +129,7 @@ class RecommendationEngine:
                     'reasons': self._generate_reasons(zone, vocation, level, goal, is_party=False),
                     'estimated_exp': self._estimate_exp(zone, level, vocation),
                     'estimated_profit': self._estimate_profit(zone, level, vocation),
+                    'is_preselected': bool(preferred_key and preferred_key in {str(zone.id), (zone.slug or "").casefold(), zone.name.casefold()}),
                 })
         
         # Sort by score descending
@@ -196,7 +202,8 @@ class RecommendationEngine:
         goal: str
     ) -> float:
         """Calculate recommendation score for solo hunting"""
-        score = 0.0
+        profile = self._spawn_profile(zone)
+        score = 10.0
         
         # Check if zone is recommended for vocation
         vocation_name = vocation.value if isinstance(vocation, Vocation) else str(vocation)
@@ -204,14 +211,22 @@ class RecommendationEngine:
         if hasattr(zone, vocation_field) and getattr(zone, vocation_field):
             score += 50
         
-        # Level appropriateness (bell curve)
-        level_diff = abs(zone.min_level - level)
-        if level_diff <= 10:
-            score += 30
-        elif level_diff <= 20:
-            score += 20
-        elif level_diff <= 30:
-            score += 10
+        # Level appropriateness. Imported TibiaWiki locations often have no curated
+        # level metadata (min_level=0). In that case use the creatures that are
+        # actually connected to the zone instead of silently assigning a zero score.
+        target_level = self._target_level(zone, profile)
+        level_diff = abs(target_level - level)
+        score += max(0, 42 - level_diff * 0.55)
+        if level < target_level - 35:
+            score -= min(35, (target_level - level - 35) * 0.65)
+        elif level > target_level + 75:
+            score -= min(28, (level - target_level - 75) * 0.35)
+
+        # A known spawn is useful recommendation evidence even when hourly rates and
+        # vocation flags have not yet been curated.
+        score += min(18, profile["creature_count"] * 2.5)
+        if profile["raw_experience"]:
+            score += min(18, math.log10(profile["raw_experience"] + 1) * 3.5)
         
         # Goal-based scoring
         if goal == 'exp' and zone.avg_exp_hour:
@@ -242,7 +257,8 @@ class RecommendationEngine:
         goal: str
     ) -> float:
         """Calculate recommendation score for party hunting"""
-        base_score = 0.0
+        profile = self._spawn_profile(zone)
+        base_score = 10.0
         
         # Check vocations match
         vocation_matches = 0
@@ -261,13 +277,78 @@ class RecommendationEngine:
         
         # Level appropriateness
         avg_level = sum(m['level'] for m in party) / len(party)
-        level_diff = abs(zone.min_level - avg_level)
+        level_diff = abs(self._target_level(zone, profile) - avg_level)
         if level_diff <= 15:
             base_score += 30
         elif level_diff <= 30:
             base_score += 15
         
+        base_score += min(15, profile["creature_count"] * 2)
         return max(0, base_score)
+
+    @staticmethod
+    def _spawn_profile(zone: HuntZone) -> Dict[str, Any]:
+        """Build a conservative, explainable profile from unique non-boss spawns."""
+        creatures = []
+        seen = set()
+        for spawn in zone.creature_spawns:
+            creature = spawn.creature
+            if not creature or creature.id in seen or creature.is_boss:
+                continue
+            seen.add(creature.id)
+            creatures.append(creature)
+        if not creatures:
+            return {"creature_count": 0, "raw_experience": 0, "suggested_level": 8, "danger": "unknown"}
+
+        threats = sorted(max(1, int(((c.hitpoints or 0) + (c.experience or 0)) / 30)) for c in creatures)
+        # The upper quartile is less vulnerable to one exceptional creature than max.
+        threat = threats[min(len(threats) - 1, int((len(threats) - 1) * 0.75))]
+        suggested = max(8, min(1000, threat))
+        if suggested < 35:
+            danger = "low"
+        elif suggested < 90:
+            danger = "moderate"
+        elif suggested < 180:
+            danger = "high"
+        else:
+            danger = "extreme"
+        return {
+            "creature_count": len(creatures),
+            "raw_experience": sum(max(0, c.experience or 0) for c in creatures),
+            "suggested_level": suggested,
+            "danger": danger,
+        }
+
+    def _target_level(self, zone: HuntZone, profile: Dict[str, Any]) -> int:
+        if zone.recommended_level and zone.recommended_level > 0:
+            return zone.recommended_level
+        if zone.min_level and zone.min_level > 0:
+            return zone.min_level
+        return profile["suggested_level"]
+
+    def recommendation_profile(self, zone: HuntZone, player_level: int) -> Dict[str, Any]:
+        profile = self._spawn_profile(zone)
+        target = self._target_level(zone, profile)
+        minimum = zone.min_level if zone.min_level and zone.min_level > 0 else max(8, target - 20)
+        maximum = zone.max_level if zone.max_level and zone.max_level > 0 else None
+        if player_level < minimum:
+            level_fit = "below_range"
+        elif maximum is not None and player_level > maximum:
+            level_fit = "too_low"
+        elif player_level > target + 75:
+            level_fit = "too_low"
+        elif abs(player_level - target) <= 30:
+            level_fit = "strong"
+        else:
+            level_fit = "viable"
+        return {
+            **profile,
+            "minimum_level": minimum,
+            "suggested_level": target,
+            "level_fit": level_fit,
+            "danger": (zone.danger_rating or zone.difficulty or profile["danger"]).lower(),
+            "profile_basis": "curated" if (zone.recommended_level or (zone.min_level and zone.min_level > 0)) else "spawn_profile",
+        }
     
     def _calculate_synergy(self, vocations: tuple) -> float:
         """Calculate party synergy bonus"""
@@ -288,8 +369,12 @@ class RecommendationEngine:
         vocation_field = f"{vocation_name}s_recommended"
         if hasattr(zone, vocation_field) and getattr(zone, vocation_field):
             reasons.append(f"Recommended for {vocation_name}s")
+
+        profile = self.recommendation_profile(zone, level)
+        if profile["profile_basis"] == "spawn_profile":
+            reasons.append(f"Matched from {profile['creature_count']} known creature spawns")
         
-        level_diff = zone.min_level - level
+        level_diff = profile["minimum_level"] - level
         if level_diff <= 0:
             reasons.append("Suitable for your level")
         elif level_diff <= 10:

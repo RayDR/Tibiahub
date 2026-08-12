@@ -36,16 +36,19 @@ export default function AdminUsers() {
   const [saving, setSaving] = useState<number | null>(null);
   const [grantSaving, setGrantSaving] = useState<number | null>(null);
   const [error, setError] = useState(false);
+  const [hasMore, setHasMore] = useState(false);
+  const [loadingMore, setLoadingMore] = useState(false);
 
   useEffect(() => {
     let active = true;
     Promise.all([
-      guildManagementApi.getUsers(0, 500, { include_inactive: true, exclude_test_accounts: false }),
+      guildManagementApi.getUsers(0, 50, { include_inactive: true, exclude_test_accounts: false }),
       guildManagementApi.getManageableGuilds(),
     ])
       .then(([loadedUsers, context]) => {
         if (!active) return;
         setUsers(loadedUsers);
+        setHasMore(loadedUsers.length === 50);
         setGuilds(context.guilds);
         setSelectedGuild(context.guilds[0] || '');
       })
@@ -53,6 +56,19 @@ export default function AdminUsers() {
       .finally(() => active && setLoading(false));
     return () => { active = false; };
   }, []);
+
+  const loadMore = async () => {
+    setLoadingMore(true);
+    try {
+      const rows = await guildManagementApi.getUsers(users.length, 50, { include_inactive: true, exclude_test_accounts: false });
+      setUsers((current) => [...current, ...rows]);
+      setHasMore(rows.length === 50);
+    } catch {
+      showError(t('workspace.errors.tryAgain'));
+    } finally {
+      setLoadingMore(false);
+    }
+  };
 
   useEffect(() => {
     if (!selectedGuild) {
@@ -166,86 +182,24 @@ export default function AdminUsers() {
             </div>
           </section>
 
-          <div className="grid gap-3">
-            {users.map(user => {
-              const userGrantCount = new Set(
-                grants.filter(row => row.user_id === user.id).map(row => row.capability),
-              ).size;
-              const hasGrants = userGrantCount > 0;
-              const permissionBusy = loadingGrants || grantSaving === user.id || !selectedGuild;
-              return (
-                <article key={user.id} className="admin-panel rounded-xl p-4">
-                  <div className="flex flex-wrap items-start justify-between gap-3">
-                    <div className="flex items-center gap-3">
-                      <div className="grid size-10 shrink-0 place-items-center overflow-hidden rounded-full bg-surface-raised">{user.avatar_url ? <img src={user.avatar_url} alt="" className="size-full object-cover" /> : <Shield className="size-4 text-content-muted" />}</div><div>
-                      <h2 className="font-semibold">{user.display_name || user.username}</h2>
-                      <p className="text-sm text-content-muted">
-                        {user.email || user.username} · {user.guild_name || t('workspace.common.noGuild')}
-                      </p>
-                    </div></div>
-                    <span className={`rounded-full px-2 py-1 text-xs ${user.is_active ? 'bg-success/15 text-success' : 'bg-danger/15 text-danger'}`}>
-                      {user.is_active ? t('workspace.users.active') : t('workspace.users.inactive')}
-                    </span>
-                  </div>
-                  <div className="mt-4 grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
-                    {([
-                      ['is_superuser', Shield, t('workspace.users.admin')],
-                      ['is_moderator', MessagesSquare, t('workspace.users.moderator')],
-                      ['is_writer', PenLine, t('workspace.users.writer')],
-                    ] as const).map(([key, Icon, label]) => (
-                      <label key={key} className="admin-secondary flex min-h-11 items-center gap-2 rounded-lg px-3">
-                        <input
-                          type="checkbox"
-                          checked={Boolean(user[key])}
-                          disabled={saving === user.id}
-                          onChange={event => void update(user, { [key]: event.target.checked })}
-                        />
-                        <Icon className="h-4 w-4 text-primary" /><span>{label}</span>
-                      </label>
-                    ))}
-                  </div>
-                  {selectedGuild && (
-                    <div className="admin-secondary mt-4 flex flex-wrap items-center justify-between gap-3 rounded-lg p-3">
-                      <div>
-                        <p className="text-sm font-medium">{t('workspace.adminUsers.selectedGuildPermissions', { guild: selectedGuild })}</p>
-                        <p className="text-xs text-content-muted">
-                          {loadingGrants
-                            ? t('workspace.adminUsers.loadingGrants')
-                            : t('workspace.adminUsers.activeGrantCount', { count: userGrantCount, total: SUPPORTED_CAPABILITY_COUNT })}
-                        </p>
-                      </div>
-                      <div className="flex flex-wrap gap-2">
-                        <button
-                          type="button"
-                          disabled={permissionBusy || !user.is_active || userGrantCount === SUPPORTED_CAPABILITY_COUNT}
-                          onClick={() => void grantAll(user)}
-                          className="app-button-primary"
-                        >
-                          {grantSaving === user.id ? <Loader2 className="h-4 w-4 animate-spin" /> : <Shield className="h-4 w-4" />}
-                          {t('workspace.adminUsers.grantAll')}
-                        </button>
-                        <button
-                          type="button"
-                          disabled={permissionBusy || !hasGrants}
-                          onClick={() => void revokeAll(user)}
-                          className="app-button-danger"
-                        >
-                          <ShieldOff className="h-4 w-4" />
-                          {t('workspace.adminUsers.revokeAll')}
-                        </button>
-                      </div>
-                    </div>
-                  )}
-                  {user.email && <div className="mt-3 flex flex-wrap gap-2"><button type="button" className="app-button-secondary app-button-sm" disabled={saving === user.id} onClick={() => void queueAccountEmail(user, 'verify')}>{t('identity.admin.resendVerification')}</button><button type="button" className="app-button-secondary app-button-sm" disabled={saving === user.id} onClick={() => void queueAccountEmail(user, 'reset')}>{t('identity.admin.sendReset')}</button></div>}
-                  {saving === user.id && (
-                    <p className="mt-2 flex items-center gap-2 text-xs text-content-muted">
-                      <Save className="h-3 w-3 animate-pulse" />{t('workspace.users.saving')}
-                    </p>
-                  )}
-                </article>
-              );
-            })}
+          <div className="overflow-x-auto rounded-xl border border-line">
+            <table className="w-full min-w-[72rem] text-left text-sm">
+              <thead className="bg-surface-raised text-xs uppercase tracking-wide text-content-muted"><tr><th className="p-3">User</th><th className="p-3">Status</th><th className="p-3">Roles</th><th className="p-3">Guild permissions</th><th className="p-3">Actions</th></tr></thead>
+              <tbody className="divide-y divide-line">{users.map(user => {
+                const userGrantCount = new Set(grants.filter(row => row.user_id === user.id).map(row => row.capability)).size;
+                const hasGrants = userGrantCount > 0;
+                const permissionBusy = loadingGrants || grantSaving === user.id || !selectedGuild;
+                return <tr key={user.id} className="align-top hover:bg-surface-hover/40">
+                  <td className="p-3"><div className="flex items-center gap-3"><div className="grid size-9 shrink-0 place-items-center overflow-hidden rounded-full bg-surface-raised">{user.avatar_url ? <img src={user.avatar_url} alt="" className="size-full object-cover" /> : <Shield className="size-4 text-content-muted" />}</div><div><strong className="text-content-primary">{user.display_name || user.username}</strong><p className="text-xs text-content-muted">{user.email || user.username}</p><p className="text-xs text-content-muted">{user.guild_name || t('workspace.common.noGuild')}</p></div></div></td>
+                  <td className="p-3"><span className={`rounded-full px-2 py-1 text-xs ${user.is_active ? 'bg-success/15 text-success' : 'bg-danger/15 text-danger'}`}>{user.is_active ? t('workspace.users.active') : t('workspace.users.inactive')}</span>{saving === user.id ? <Save className="ml-2 inline size-3 animate-pulse" /> : null}</td>
+                  <td className="p-3"><div className="grid gap-1">{([['is_superuser', Shield, t('workspace.users.admin')], ['is_moderator', MessagesSquare, t('workspace.users.moderator')], ['is_writer', PenLine, t('workspace.users.writer')]] as const).map(([key, Icon, label]) => <label key={key} className="flex items-center gap-2"><input type="checkbox" checked={Boolean(user[key])} disabled={saving === user.id} onChange={event => void update(user, { [key]: event.target.checked })} /><Icon className="size-3.5 text-primary" /><span>{label}</span></label>)}</div></td>
+                  <td className="p-3"><p className="mb-2 text-xs text-content-muted">{loadingGrants ? t('workspace.adminUsers.loadingGrants') : t('workspace.adminUsers.activeGrantCount', { count: userGrantCount, total: SUPPORTED_CAPABILITY_COUNT })}</p><div className="flex gap-1.5"><button type="button" disabled={permissionBusy || !user.is_active || userGrantCount === SUPPORTED_CAPABILITY_COUNT} onClick={() => void grantAll(user)} className="app-button-primary app-button-sm">{grantSaving === user.id ? <Loader2 className="size-4 animate-spin" /> : <Shield className="size-4" />}{t('workspace.adminUsers.grantAll')}</button><button type="button" disabled={permissionBusy || !hasGrants} onClick={() => void revokeAll(user)} className="app-button-danger app-button-sm"><ShieldOff className="size-4" />{t('workspace.adminUsers.revokeAll')}</button></div></td>
+                  <td className="p-3">{user.email ? <div className="grid gap-1.5"><button type="button" className="app-button-secondary app-button-sm" disabled={saving === user.id} onClick={() => void queueAccountEmail(user, 'verify')}>{t('identity.admin.resendVerification')}</button><button type="button" className="app-button-secondary app-button-sm" disabled={saving === user.id} onClick={() => void queueAccountEmail(user, 'reset')}>{t('identity.admin.sendReset')}</button></div> : '—'}</td>
+                </tr>;
+              })}</tbody>
+            </table>
           </div>
+          {hasMore ? <div className="flex justify-center"><button type="button" className="app-button-secondary" disabled={loadingMore} onClick={() => void loadMore()}>{loadingMore ? <Loader2 className="size-4 animate-spin" /> : null}{loadingMore ? t('common.loading') : 'Load more users'}</button></div> : null}
         </>
       )}
     </div>

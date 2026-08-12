@@ -15,7 +15,9 @@ import KnowledgeCategoryIcon, { categoryForTab } from './knowledge/KnowledgeCate
 interface NavigationItem {
   path: string;
   label: string;
+  shortLabel?: string;
   icon: typeof Home;
+  iconOnly?: boolean;
 }
 
 export default function Navigation() {
@@ -35,10 +37,10 @@ export default function Navigation() {
   const primaryItems: NavigationItem[] = [
     { path: '/', label: t('nav.home'), icon: Home },
     { path: '/cyclopedia', label: t('nav.search'), icon: BookOpen },
-    { path: '/planner', label: t('nav.planner'), icon: Compass },
-    { path: '/map', label: t('nav.map'), icon: Map },
+    { path: '/planner', label: t('nav.planner'), shortLabel: 'Planner', icon: Compass },
+    { path: '/map', label: t('nav.map'), shortLabel: 'Map', icon: Map },
     ...(isAuthenticated ? [{ path: '/guild', label: t('nav.guild'), icon: Shield }] : []),
-    ...(user?.is_superuser ? [{ path: '/admin', label: t('nav.admin'), icon: Settings }] : []),
+    ...(user?.is_superuser ? [{ path: '/admin', label: t('nav.admin'), icon: Settings, iconOnly: true }] : []),
   ];
 
   useEffect(() => {
@@ -69,7 +71,7 @@ export default function Navigation() {
               <span className="hidden font-serif text-sm font-bold text-content-primary sm:inline"><span className="text-primary">Tibia</span>Hub</span>
             </Link>
 
-            <nav className="hidden min-w-0 items-center gap-1 md:flex" aria-label={t('shell.primaryNavigation')}>
+            <nav className="hidden min-w-0 items-center gap-1 lg:flex" aria-label={t('shell.primaryNavigation')}>
               {primaryItems.map(item => {
                 const Icon = item.icon;
                 if (item.path === '/cyclopedia') {
@@ -81,7 +83,7 @@ export default function Navigation() {
                     </div> : null}
                   </div>;
                 }
-                return <Link key={item.path} to={item.path} className="app-nav-link flex min-h-11 items-center gap-2 rounded-lg px-3" data-active={isActive(item.path)}><Icon className="size-4" /><span>{item.label}</span></Link>;
+                return <Link key={item.path} to={item.path} title={item.iconOnly ? item.label : undefined} aria-label={item.iconOnly ? item.label : undefined} className="app-nav-link flex min-h-11 items-center gap-2 rounded-lg px-3" data-active={isActive(item.path)}><Icon className="size-4" />{item.iconOnly ? <span className="sr-only">{item.label}</span> : <span><span className="xl:hidden">{item.shortLabel || item.label}</span><span className="hidden xl:inline">{item.label}</span></span>}</Link>;
               })}
             </nav>
 
@@ -95,9 +97,9 @@ export default function Navigation() {
         </Container>
       </header>
 
-      <nav className="app-mobile-nav fixed inset-x-0 bottom-0 z-sticky border-t border-line bg-surface-overlay px-1 pt-1 backdrop-blur-md md:hidden" aria-label={t('shell.mobileNavigation')}>
+      <nav className="app-mobile-nav fixed inset-x-0 bottom-0 z-sticky border-t border-line bg-surface-overlay px-1 pt-1 backdrop-blur-md lg:hidden" aria-label={t('shell.mobileNavigation')}>
         <div className="app-mobile-nav-grid mx-auto max-w-xl" style={{ '--mobile-nav-count': primaryItems.length } as React.CSSProperties}>
-          {primaryItems.map(item => { const Icon = item.icon; return <Link key={item.path} to={item.path} className="app-mobile-nav-link" data-active={isActive(item.path)} aria-current={isActive(item.path) ? 'page' : undefined}><Icon className="size-5" /><span className="max-w-full truncate px-1">{item.label}</span></Link>; })}
+          {primaryItems.map(item => { const Icon = item.icon; return <Link key={item.path} to={item.path} className="app-mobile-nav-link" data-active={isActive(item.path)} aria-label={item.iconOnly ? item.label : undefined} aria-current={isActive(item.path) ? 'page' : undefined}><Icon className="size-5" /><span className={item.iconOnly ? 'sr-only' : 'max-w-full truncate px-1'}>{item.shortLabel || item.label}</span></Link>; })}
         </div>
       </nav>
     </>

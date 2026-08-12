@@ -163,9 +163,10 @@ export const huntZonesApi = {
     level: number,
     limit: number = 10,
     goal: 'exp' | 'profit' | 'balanced' = 'exp',
+    zone?: string,
   ): Promise<any> => {
     const response = await api.get('/recommendations/solo', {
-      params: { vocation, level, limit, goal },
+      params: { vocation, level, limit, goal, zone },
     });
     return response.data;
   },
@@ -184,8 +185,8 @@ export const huntZonesApi = {
 
 // Items API
 export const itemsApi = {
-  search: async (search: string, limit: number = 50, signal?: AbortSignal): Promise<ItemSearchResult[]> => {
-    const response = await api.get('/items/', { params: { search, limit }, signal });
+  search: async (search: string, limit: number = 50, signal?: AbortSignal, skip: number = 0): Promise<ItemSearchResult[]> => {
+    const response = await api.get('/items/', { params: { search, limit, skip }, signal });
     return response.data;
   },
 
@@ -213,6 +214,11 @@ export const itemsApi = {
     const response = await api.get('/items/popular', { params: { limit }, signal });
     return response.data;
   },
+
+  getTrending: async (limit: number = 12, signal?: AbortSignal): Promise<ItemSearchResult[]> => {
+    const response = await api.get('/items/trending', { params: { limit }, signal });
+    return response.data;
+  },
 };
 
 export const questsApi = {
@@ -236,8 +242,8 @@ export const questsApi = {
     return response.data;
   },
 
-  search: async (search: string, limit: number = 50, signal?: AbortSignal, include_groups: boolean = false): Promise<QuestSearchResult[]> => {
-    const response = await api.get('/quests/', { params: { search, limit, include_groups }, signal });
+  search: async (search: string, limit: number = 50, signal?: AbortSignal, include_groups: boolean = false, skip: number = 0): Promise<QuestSearchResult[]> => {
+    const response = await api.get('/quests/', { params: { search, limit, include_groups, skip }, signal });
     return response.data;
   },
 

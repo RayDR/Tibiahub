@@ -1,9 +1,9 @@
 import React, { lazy, Suspense, useEffect, useRef, useState } from 'react';
 import { huntZonesApi } from '../services/api';
-import { Plus, Trash2, Users, Map, Swords, TrendingUp, User, Shield, Zap, Sparkles, Scroll, Eye, X, Crown, Coins } from 'lucide-react';
+import { Plus, Trash2, Users, Map, Swords, TrendingUp, User, Shield, Zap, Sparkles, Scroll, Eye, X, Crown, Coins, Skull, Gauge } from 'lucide-react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { HuntZone } from '../types';
-import { Link } from 'react-router-dom';
+import { Link, useSearchParams } from 'react-router-dom';
 import { useTranslation } from 'react-i18next';
 import { faCompass } from '@fortawesome/free-solid-svg-icons';
 import PageHeader from '../components/ui/PageHeader';
@@ -50,11 +50,20 @@ interface RecommendationItem {
   avg_exp_hour?: number;
   avg_profit_hour?: number;
   rate_basis?: string;
+  suggested_level?: number;
+  effective_min_level?: number;
+  level_fit?: 'below_range' | 'too_low' | 'strong' | 'viable';
+  danger?: string;
+  raw_creature_exp?: number;
+  profile_basis?: 'curated' | 'spawn_profile';
+  is_preselected?: boolean;
   creatures?: Array<{ id: number; name: string; slug?: string; is_boss?: boolean }>;
 }
 
 const HuntRecommendationsPage: React.FC = () => {
   const { t } = useTranslation();
+  const [searchParams] = useSearchParams();
+  const preferredZone = searchParams.get('zone') || undefined;
   const [mode, setMode] = useState<'solo' | 'party'>('solo');
 
   // Solo State
@@ -100,7 +109,7 @@ const HuntRecommendationsPage: React.FC = () => {
     setSelectedRecommendation(null);
     try {
       if (mode === 'solo') {
-        const data = await huntZonesApi.getRecommendations(soloVocation as any, soloLevel, 10, goal);
+        const data = await huntZonesApi.getRecommendations(soloVocation as any, soloLevel, 10, goal, preferredZone);
         setRecommendations({ ...data, is_solo: true });
       } else {
         const payload = party.map(m => ({ vocation: m.vocation, level: Number(m.level) }));
@@ -377,6 +386,7 @@ const HuntRecommendationsPage: React.FC = () => {
 
           {recommendations && (
             <div className="space-y-6">
+              {preferredZone ? <div className="rounded-xl border border-info/30 bg-info/10 p-3 text-sm text-info">Showing <strong>{preferredZone.split('-').join(' ')}</strong> in context with the strongest alternatives for this character.</div> : null}
 
               {/* Stats Summary */}
               {!recommendations.is_solo && (
@@ -400,20 +410,19 @@ const HuntRecommendationsPage: React.FC = () => {
                     animate={{ opacity: 1, y: 0 }}
                     transition={{ delay: i * 0.1 }}
                     key={rec.zone_id}
-                    className="group bg-surface-base/80 border border-line hover:border-primary/50 rounded-2xl p-6 backdrop-blur transition-all hover:shadow-xl hover:shadow-surface-base/50"
+                    className={`group bg-surface-base/80 border rounded-2xl p-6 backdrop-blur transition-all hover:shadow-xl hover:shadow-surface-base/50 ${rec.level_fit === 'too_low' || rec.level_fit === 'below_range' ? 'border-danger/35' : i < 3 ? 'border-success/45 ring-1 ring-success/10' : 'border-line hover:border-primary/50'}`}
                   >
                     <div className="flex justify-between items-start mb-4">
                       <div>
                         <h3 className="text-2xl font-serif font-bold text-content-primary group-hover:text-primary transition-colors">
                           {rec.zone_name}
                         </h3>
-                        <div className="flex gap-2 mt-2">
-                          <span className={`px-2 py-0.5 rounded text-xs font-bold border ${REC_COLORS[rec.difficulty ?? ''] || 'bg-surface text-content-secondary border-line'}`}>
-                            {rec.difficulty}
-                          </span>
+                        <div className="mt-2 flex flex-wrap gap-2">
+                          {rec.danger ? <span className={`px-2 py-0.5 rounded text-xs font-bold border ${['extreme', 'hard', 'high'].includes(rec.danger.toLowerCase()) ? 'border-danger/30 bg-danger/10 text-danger' : 'border-line bg-surface text-content-secondary'}`}><Gauge size={11} className="mr-1 inline" />{rec.danger}</span> : null}
                           <span className="px-2 py-0.5 rounded text-xs font-bold bg-surface-base text-content-secondary border border-line">
-                            Lvl {rec.min_level}+
+                            Lvl {rec.effective_min_level ?? rec.min_level ?? '?'}+ · suggested {rec.suggested_level ?? '?'}
                           </span>
+                          {rec.is_preselected ? <span className="rounded border border-info/30 bg-info/10 px-2 py-0.5 text-xs font-bold text-info">Selected zone</span> : rec.level_fit === 'too_low' || rec.level_fit === 'below_range' ? <span className="inline-flex items-center gap-1 rounded border border-danger/30 bg-danger/10 px-2 py-0.5 text-xs font-bold text-danger"><Skull size={11} />{rec.level_fit === 'too_low' ? 'Below your range' : 'Above your level'}</span> : i < 3 ? <span className="rounded border border-success/30 bg-success/10 px-2 py-0.5 text-xs font-bold text-success">Best fit</span> : null}
                         </div>
                       </div>
                       <div className="text-right">
@@ -422,7 +431,7 @@ const HuntRecommendationsPage: React.FC = () => {
                       </div>
                     </div>
 
-                    <div className="mb-4 grid gap-2 sm:grid-cols-3">
+                    <div className="mb-4 grid gap-2 sm:grid-cols-2 xl:grid-cols-4">
                       <div className="rounded-lg border border-line bg-surface-base/60 px-3 py-2">
                         <div className="text-[10px] uppercase tracking-wide text-content-muted">{t('plannerPolish.recordedExp')}</div>
                         <div className="text-sm font-semibold text-success">{formatRate(rec.avg_exp_hour)}</div>
@@ -435,6 +444,14 @@ const HuntRecommendationsPage: React.FC = () => {
                         <div className="text-[10px] uppercase tracking-wide text-content-muted">Access</div>
                         <div className="text-sm font-semibold text-content-primary">{[rec.requires_premium ? 'Premium' : null, rec.requires_quest ? rec.quest_name || 'Quest required' : null].filter(Boolean).join(' · ') || 'No recorded restrictions'}</div>
                       </div>
+                      <div className="rounded-lg border border-line bg-surface-base/60 px-3 py-2">
+                        <div className="text-[10px] uppercase tracking-wide text-content-muted">Raw creature EXP</div>
+                        <div className="text-sm font-semibold text-info">{rec.raw_creature_exp ? rec.raw_creature_exp.toLocaleString() : 'Not recorded'}</div>
+                      </div>
+                    </div>
+
+                    <div className="mb-4 text-xs text-content-muted">
+                      {[rec.city || rec.region, rec.size ? `${rec.size} zone` : null, rec.profile_basis === 'spawn_profile' ? 'Level fit inferred from known spawns' : null].filter(Boolean).join(' · ')}
                     </div>
 
                     {/* Reasons */}

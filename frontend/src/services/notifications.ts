@@ -13,7 +13,7 @@ export interface SchedulerHealth {
 }
 
 export const notificationApi = {
-  async list(): Promise<InternalNotification[]> { return (await api.get('/notifications')).data; },
+  async list(skip = 0, limit = 20): Promise<InternalNotification[]> { return (await api.get('/notifications', { params: { skip, limit } })).data; },
   async unreadCount(): Promise<number> { return (await api.get('/notifications/unread-count')).data.unread_count; },
   async markRead(id: number): Promise<void> { await api.post(`/notifications/${id}/read`); },
   async markAllRead(): Promise<void> { await api.post('/notifications/read-all'); },

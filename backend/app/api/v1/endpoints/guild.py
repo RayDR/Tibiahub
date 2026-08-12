@@ -150,7 +150,7 @@ def _member_identity_map(db: Session, guild_name: str) -> dict[str, GuildRosterC
     return {row.normalized_character_name: row for row in rows}
 
 
-def _snapshot_response(row: GuildMemberSnapshot, identities: dict[str, GuildRosterCharacter]) -> GuildMemberSnapshotResponse:
+def _snapshot_response(row: GuildMemberSnapshot, identities: dict[str, GuildRosterCharacter], *, current_user: User | None = None, can_view_private_identity: bool = False) -> GuildMemberSnapshotResponse:
     identity = identities.get(" ".join(row.character_name.split()).casefold())
     linked = identity.linked_user if identity and identity.linked_user and identity.linked_user.is_active else None
     return GuildMemberSnapshotResponse(
@@ -159,6 +159,7 @@ def _snapshot_response(row: GuildMemberSnapshot, identities: dict[str, GuildRost
         snapshot_at=row.snapshot_at,
         linked_user_id=linked.id if linked else None,
         linked_username=linked.username if linked else None,
+        linked_email=linked.email if linked and current_user and (linked.id == current_user.id or can_view_private_identity) else None,
         public_profile_url=f"/members/{linked.username}" if linked else None,
         account_identity_known=linked is not None,
     )
@@ -500,7 +501,8 @@ async def get_guild_members_snapshot(
             raise HTTPException(status_code=503, detail=f"Guild members unavailable: {str(exc)}") from exc
 
     identities = _member_identity_map(db, guild_name)
-    members = [_snapshot_response(row, identities) for row in rows]
+    can_view_private_identity = is_global_admin(current_user) or can_manage_guild_members(current_user, guild_name, db)
+    members = [_snapshot_response(row, identities, current_user=current_user, can_view_private_identity=can_view_private_identity) for row in rows]
     return GuildMemberSnapshotPayload(guild_name=guild_name, source=source, members=members)
 
 
@@ -528,5 +530,6 @@ async def sync_guild_members_snapshot(
 
     rows = _latest_snapshot_rows(db, guild_name)
     identities = _member_identity_map(db, guild_name)
-    members = [_snapshot_response(row, identities) for row in rows]
+    can_view_private_identity = is_global_admin(current_user) or can_manage_guild_members(current_user, guild_name, db)
+    members = [_snapshot_response(row, identities, current_user=current_user, can_view_private_identity=can_view_private_identity) for row in rows]
     return GuildMemberSnapshotPayload(guild_name=guild_name, source="live", members=members)

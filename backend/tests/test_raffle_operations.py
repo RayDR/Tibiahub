@@ -94,6 +94,23 @@ def test_notification_deduplication_ownership_and_read(db, client):
     assert client.get("/api/v1/notifications/unread-count", headers=auth(admin)).json() == {"unread_count": 0}
 
 
+def test_notifications_support_incremental_pages(db, client):
+    user = make_user(db, username="notify_pages")
+    for index in range(25):
+        db.add(InternalNotification(
+            recipient_user_id=user.id, notification_type="test", title_key="test.title",
+            message_key="test.message", interpolation={}, deduplication_key=f"page:{index}",
+            created_at=datetime.now(UTC) + timedelta(seconds=index),
+        ))
+    db.commit()
+    first = client.get("/api/v1/notifications", params={"skip": 0, "limit": 20}, headers=auth(user))
+    second = client.get("/api/v1/notifications", params={"skip": 20, "limit": 20}, headers=auth(user))
+    assert first.status_code == second.status_code == 200
+    assert len(first.json()) == 20
+    assert len(second.json()) == 5
+    assert {row["id"] for row in first.json()}.isdisjoint({row["id"] for row in second.json()})
+
+
 @pytest.mark.asyncio
 async def test_permanent_failure_is_not_retried(db, monkeypatch):
     admin = make_user(db, username="scheduler_failure_admin", is_superuser=True)

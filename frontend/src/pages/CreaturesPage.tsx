@@ -198,6 +198,16 @@ const mergeUniqueCreatures = (current: CreatureSimple[], incoming: CreatureSimpl
   return merged;
 };
 
+const rawZoneExperience = (zone: HuntZone): number => {
+  const seen = new Set<number>();
+  return (zone.creature_spawns || []).reduce((total, spawn) => {
+    const creature = spawn.creature;
+    if (!creature || seen.has(creature.id)) return total;
+    seen.add(creature.id);
+    return total + Math.max(0, creature.experience || 0);
+  }, 0);
+};
+
 const isLocalCategoryMediaUrl = (
   value?: string,
 ): value is string =>
@@ -298,8 +308,10 @@ const CreaturesPage: React.FC = () => {
     CyclopediaPreviewCard[]
   >([]);
   const [topPreviewCards, setTopPreviewCards] = useState<CyclopediaPreviewCard[]>([]);
+  const [lootTrendingPreviewCards, setLootTrendingPreviewCards] = useState<CyclopediaPreviewCard[]>([]);
   const [isSearchCompact, setIsSearchCompact] =
     useState(false);
+  const [isSearchPreparing, setIsSearchPreparing] = useState(false);
   const [mobileSearchOpen, setMobileSearchOpen] =
     useState(false);
   const [snapshotReadyTick, setSnapshotReadyTick] = useState(0);
@@ -309,6 +321,8 @@ const CreaturesPage: React.FC = () => {
   const resultsStartRef = useRef<HTMLDivElement | null>(null);
   const loadMoreSentinelRef = useRef<HTMLDivElement | null>(null);
   const loadMoreLockRef = useRef(false);
+  const compactTimerRef = useRef<number | null>(null);
+  const lastScrollYRef = useRef(0);
   const lastSearchSignatureRef = useRef<string>('');
   const pendingScrollRestoreRef = useRef<number | null>(null);
   const inPageTabSwitchRef = useRef(false);
@@ -446,6 +460,7 @@ const CreaturesPage: React.FC = () => {
     const loadLandingCards = async () => {
       if (mounted) {
         setMostVisitedPreviewCards([]);
+        setLootTrendingPreviewCards([]);
       }
 
       const localRecent = loadRecentPreviewCards(mode);
@@ -620,18 +635,10 @@ const CreaturesPage: React.FC = () => {
           const data = await creaturesApi.getPopularBosses(12, controller.signal);
           top = data.map((c) => ({ id: `boss:${c.id}`, name: c.name, subtitle: c.difficulty || t('cyclopedia.cards.boss'), to: `/creatures/${c.slug || c.id}`, imageUrl: `/api/v1/creatures/${c.id}/image` }));
         } else if (mode === 'items') {
-          const data = (
-            await itemsApi.getPopular(
-              12,
-              controller.signal,
-            )
-          )
-            .filter(
-              (item) =>
-                item.image_item_id != null &&
-                item.drops.length > 0,
-            )
-            .slice(0, 12);
+          const [data, trendingData] = await Promise.all([
+            itemsApi.getPopular(12, controller.signal),
+            itemsApi.getTrending(12, controller.signal),
+          ]);
 
           top = data.map((item) => ({
             id: `item:${item.normalized_name}`,
@@ -639,15 +646,21 @@ const CreaturesPage: React.FC = () => {
             subtitle: t(
               'cyclopedia.cards.drops',
               {
-                count: item.drops.length,
+                count: item.drops?.length || 0,
               },
             ),
             to: `/items/${item.slug || item.normalized_name.split(' ').join('-')}`,
             imageUrl:
               `/api/v1/items/` +
-              `${item.image_item_id}/image` +
-              '?placeholder=false',
+              `${item.image_item_id ?? item.id}/image`,
           }));
+          setLootTrendingPreviewCards(trendingData.map((item) => ({
+            id: `trending-item:${item.normalized_name}`,
+            name: item.item_name,
+            subtitle: t('cyclopedia.cards.drops', { count: item.drops?.length || 0 }),
+            to: `/items/${item.slug || item.normalized_name.split(' ').join('-')}`,
+            imageUrl: `/api/v1/items/${item.image_item_id ?? item.id}/image`,
+          })));
         } else if (mode === 'quests') {
           const data = await questsApi.getHighlights(5, controller.signal);
           top = data.map((q) => ({ id: `quest:${q.id || q.name}`, name: q.name, subtitle: q.group_name || t('cyclopedia.cards.quest'), to: q.slug || q.id ? `/quests/${q.slug || q.id}` : '/cyclopedia?tab=quests' }));
@@ -914,14 +927,15 @@ const CreaturesPage: React.FC = () => {
       } else if (mode === 'items') {
         let data: ItemSearchResult[] = [];
         if (normalized.length > 1) {
-          data = await itemsApi.search(normalized, 20, controller.signal);
-          setItems(data);
+          data = await itemsApi.search(normalized, PAGE_SIZE, controller.signal, nextSkip);
+          setItems((current) => reset ? data : [...current, ...data.filter((row) => !current.some((existing) => existing.normalized_name === row.normalized_name))]);
         } else if (normalized.length > 0) {
           setItems([]);
         } else {
           setItems([]);
         }
-        setHasMore(false);
+        setSkip(nextSkip + data.length);
+        setHasMore(data.length === PAGE_SIZE);
         setCreatures([]);
         setQuests([]);
         setZones([]);
@@ -932,16 +946,17 @@ const CreaturesPage: React.FC = () => {
           to: '/cyclopedia?tab=items',
           imageUrl: i.image_item_id ? `/api/v1/items/${i.image_item_id}/image` : undefined,
         }));
-        if (reset) _cacheResult = { creatures: [], items: data, quests: [], zones: [], hasMore: false, usedHighlightsSource: false };
+        if (reset) _cacheResult = { creatures: [], items: data, quests: [], zones: [], hasMore: data.length === PAGE_SIZE, usedHighlightsSource: false };
       } else if (mode === 'quests') {
         let data: QuestSearchResult[] = [];
         if (normalized.length > 1) {
-          data = await questsApi.search(normalized, 30, controller.signal);
+          data = await questsApi.search(normalized, PAGE_SIZE, controller.signal, false, nextSkip);
         } else {
           data = [];
         }
-        setQuests(data);
-        setHasMore(false);
+        setQuests((current) => reset ? data : [...current, ...data.filter((row) => !current.some((existing) => (existing.id || existing.slug || existing.name) === (row.id || row.slug || row.name)))]);
+        setSkip(nextSkip + data.length);
+        setHasMore(data.length === PAGE_SIZE);
         setCreatures([]);
         setItems([]);
         setZones([]);
@@ -951,13 +966,14 @@ const CreaturesPage: React.FC = () => {
           subtitle: q.group_name || t('cyclopedia.cards.quest'),
           to: q.slug || q.id ? `/quests/${q.slug || q.id}` : '/cyclopedia?tab=quests',
         }));
-        if (reset) _cacheResult = { creatures: [], items: [], quests: data, zones: [], hasMore: false, usedHighlightsSource: false };
+        if (reset) _cacheResult = { creatures: [], items: [], quests: data, zones: [], hasMore: data.length === PAGE_SIZE, usedHighlightsSource: false };
       } else {
         const data = normalized
-          ? await huntZonesApi.getAll({ search: normalized || undefined, limit: 20 }, controller.signal)
+          ? await huntZonesApi.getAll({ search: normalized || undefined, skip: nextSkip, limit: PAGE_SIZE }, controller.signal)
           : [];
-        setZones(data);
-        setHasMore(false);
+        setZones((current) => reset ? data : [...current, ...data.filter((row) => !current.some((existing) => existing.id === row.id))]);
+        setSkip(nextSkip + data.length);
+        setHasMore(data.length === PAGE_SIZE);
         setCreatures([]);
         setItems([]);
         setQuests([]);
@@ -968,7 +984,7 @@ const CreaturesPage: React.FC = () => {
           to: `/hunt-zones/${z.slug || z.id}`,
           imageUrl: `/api/v1/hunt-zones/${z.id}/map-image`,
         }));
-        if (reset) _cacheResult = { creatures: [], items: [], quests: [], zones: data, hasMore: false, usedHighlightsSource: false };
+        if (reset) _cacheResult = { creatures: [], items: [], quests: [], zones: data, hasMore: data.length === PAGE_SIZE, usedHighlightsSource: false };
       }
 
       // Write to in-memory cache for fast tab switching
@@ -1244,6 +1260,14 @@ const CreaturesPage: React.FC = () => {
   useEffect(() => {
     let scheduled = false;
 
+    const cancelPendingCompact = () => {
+      if (compactTimerRef.current != null) {
+        window.clearTimeout(compactTimerRef.current);
+        compactTimerRef.current = null;
+      }
+      setIsSearchPreparing(false);
+    };
+
     const updateCompactState = () => {
       if (scheduled) {
         return;
@@ -1254,8 +1278,8 @@ const CreaturesPage: React.FC = () => {
       window.requestAnimationFrame(() => {
         scheduled = false;
 
-        const boundary =
-          resultsStartRef.current;
+        const resultBlocks = document.querySelectorAll<HTMLElement>('[data-cyclopedia-result]');
+        const boundary = resultBlocks[1] || resultsStartRef.current;
         if (!boundary) {
           return;
         }
@@ -1271,12 +1295,24 @@ const CreaturesPage: React.FC = () => {
           stickyOffsetPx +
           COMPACT_RELEASE_MARGIN_PX;
 
-        setIsSearchCompact((current) => {
-          if (current) {
-            return boundaryTop < expandAt;
-          }
-          return boundaryTop <= compactAt;
-        });
+        const scrollY = window.scrollY;
+        const upwardDelta = lastScrollYRef.current - scrollY;
+        lastScrollYRef.current = scrollY;
+
+        if (upwardDelta > 6 || boundaryTop >= expandAt) {
+          cancelPendingCompact();
+          setIsSearchCompact(false);
+          return;
+        }
+
+        if (boundaryTop <= compactAt && !isSearchCompact && compactTimerRef.current == null) {
+          setIsSearchPreparing(true);
+          compactTimerRef.current = window.setTimeout(() => {
+            compactTimerRef.current = null;
+            setIsSearchCompact(true);
+            setIsSearchPreparing(false);
+          }, 170);
+        }
       });
     };
 
@@ -1294,6 +1330,7 @@ const CreaturesPage: React.FC = () => {
     );
 
     return () => {
+      cancelPendingCompact();
       window.removeEventListener(
         'scroll',
         updateCompactState,
@@ -1311,6 +1348,7 @@ const CreaturesPage: React.FC = () => {
     selectedResult,
     loading,
     hasActiveQuery,
+    isSearchCompact,
   ]);
 
   useEffect(() => {
@@ -1329,10 +1367,7 @@ const CreaturesPage: React.FC = () => {
       loading ||
       loadingMore ||
       errorMessage ||
-      (
-        mode !== 'creatures' &&
-        mode !== 'bosses'
-      )
+      !effectiveSearchTerm.trim()
     ) {
       return undefined;
     }
@@ -1364,6 +1399,9 @@ const CreaturesPage: React.FC = () => {
     errorMessage,
     mode,
     creatures.length,
+    items.length,
+    quests.length,
+    zones.length,
     skip,
     searchTerm,
     creatureCategory,
@@ -1434,7 +1472,7 @@ const CreaturesPage: React.FC = () => {
 
         <div
           ref={stickySearchRef}
-          className={`mx-auto mb-5 w-full motion-reduce:transition-none transition-[top,transform] ${
+          className={`mx-auto mb-5 w-full motion-reduce:transition-none transition-[top,transform,opacity] ${
             isSearchCompact
               ? 'duration-[400ms] ease-out'
               : 'duration-150 ease-in'
@@ -1442,7 +1480,7 @@ const CreaturesPage: React.FC = () => {
             isSearchCompact
               ? 'app-sticky-offset sticky z-40'
               : 'relative z-20'
-          }`}
+          } ${isSearchPreparing ? 'pointer-events-none opacity-0 duration-150' : 'opacity-100'}`}
         >
           <AppCard
             className={`flex flex-col shadow-2xl motion-reduce:transition-none transition-[padding,background-color,border-color,box-shadow,gap,opacity,transform] ${
@@ -1819,14 +1857,10 @@ const CreaturesPage: React.FC = () => {
               onNavigate={persistCyclopediaState}
             />
           ) : mode === 'items' ? (
-            <CompactEntityStrip
-              title={t('cyclopedia.discovery.popularLoot')}
-              items={topPreviewCards}
-              variant="rail"
-              nudgeSessionKey="popular-loot"
-              linkState={cyclopediaRouteState}
-              onNavigate={persistCyclopediaState}
-            />
+            <div className="space-y-4 rounded-2xl border border-line bg-surface-raised/60 p-4">
+              <CompactEntityStrip title={t('cyclopedia.discovery.popularLoot')} items={topPreviewCards} variant="rail" nudgeSessionKey="popular-loot" linkState={cyclopediaRouteState} onNavigate={persistCyclopediaState} />
+              <CompactEntityStrip title={t('cyclopedia.discovery.trendingLoot')} items={lootTrendingPreviewCards} variant="rail" nudgeSessionKey="trending-loot" linkState={cyclopediaRouteState} onNavigate={persistCyclopediaState} />
+            </div>
           ) : mode === 'quests' ? (
             <QuestLibraryShelves
               linkState={cyclopediaRouteState}
@@ -1909,13 +1943,13 @@ const CreaturesPage: React.FC = () => {
               }
             >
             {(mode === 'creatures' || mode === 'bosses') && creatures.map((creature, index) => (
-              <CreatureCard key={creature.id} creature={creature} index={index} linkState={cyclopediaRouteState} onNavigate={persistCyclopediaState} />
+              <div key={creature.id} data-cyclopedia-result className="contents"><CreatureCard creature={creature} index={index} linkState={cyclopediaRouteState} onNavigate={persistCyclopediaState} /></div>
             ))}
 
             {mode === 'items' &&
               effectiveSearchTerm.trim().length > 1 &&
               items.map((item, index) => (
-              <AppCard key={`${item.normalized_name}-${index}`} className="ds-enter overflow-hidden p-0">
+              <AppCard key={`${item.normalized_name}-${index}`} data-cyclopedia-result className="ds-enter overflow-hidden p-0">
                 <div className="flex items-start gap-4 p-4 sm:p-5">
                   <ImageWithFallback
                     src={item.image_item_id ? `/api/v1/items/${item.image_item_id}/image?placeholder=false` : item.item_image_url || null}
@@ -1954,6 +1988,7 @@ const CreaturesPage: React.FC = () => {
 
                 return (
                   <AppCard
+                    data-cyclopedia-result
                     key={
                       quest.id ||
                       quest.slug ||
@@ -2059,7 +2094,7 @@ const CreaturesPage: React.FC = () => {
               })}
 
             {mode === 'zones' && zones.map((zone) => (
-              <AppCard key={zone.id} className="ds-enter overflow-hidden">
+              <AppCard key={zone.id} data-cyclopedia-result className="ds-enter overflow-hidden">
                 <div className="relative h-40 bg-surface-base">
                   {(zone.map_image_url || zone.map_asset_id) && !mapPreviewFailed[zone.id] ? (
                     <img
@@ -2081,6 +2116,8 @@ const CreaturesPage: React.FC = () => {
                     {(zone.recommended_level ?? zone.min_level ?? 0) > 0 ? <KnowledgeBadge tone="primary">{t('cyclopedia.zones.level', { level: zone.recommended_level ?? zone.min_level })}</KnowledgeBadge> : null}
                     {zone.difficulty ? <KnowledgeBadge>{zone.difficulty}</KnowledgeBadge> : null}
                   </div>
+                  <div className="mt-4 grid grid-cols-2 gap-2 text-xs"><div className="rounded-lg border border-line bg-surface-base/50 p-2"><span className="block text-content-muted">{t('cyclopedia.zones.rawExp')}</span><strong>{rawZoneExperience(zone) ? rawZoneExperience(zone).toLocaleString() : t('cyclopedia.zones.notRecorded')}</strong></div><div className="rounded-lg border border-line bg-surface-base/50 p-2"><span className="block text-content-muted">{t('cyclopedia.zones.profit')}</span><strong>{zone.avg_profit_hour ? `${zone.avg_profit_hour.toLocaleString()} gp/h` : zone.profit_rating || t('cyclopedia.zones.notRecorded')}</strong></div><div className="rounded-lg border border-line bg-surface-base/50 p-2"><span className="block text-content-muted">{t('cyclopedia.zones.suggested')}</span><strong>{(zone.recommended_level ?? zone.min_level ?? 0) > 0 ? t('cyclopedia.zones.level', { level: zone.recommended_level ?? zone.min_level }) : t('cyclopedia.zones.needsAnalysis')}</strong></div><div className="rounded-lg border border-line bg-surface-base/50 p-2"><span className="block text-content-muted">{t('cyclopedia.zones.danger')}</span><strong>{zone.danger_rating || zone.difficulty || t('cyclopedia.zones.notRecorded')}</strong></div></div>
+                  <Link to={`/planner?zone=${encodeURIComponent(zone.slug || String(zone.id))}`} className="app-button-secondary app-button-sm mt-4">{t('cyclopedia.zones.comparePlanner')}</Link>
                 </div>
               </AppCard>
             ))}
@@ -2088,10 +2125,7 @@ const CreaturesPage: React.FC = () => {
           </>
         )}
 
-        {(mode === 'creatures' ||
-          mode === 'bosses') &&
-        hasMore &&
-        creatures.length > 0 ? (
+        {hasMore && (creatures.length + items.length + quests.length + zones.length) > 0 ? (
           <div
             ref={loadMoreSentinelRef}
             className="h-px w-full"

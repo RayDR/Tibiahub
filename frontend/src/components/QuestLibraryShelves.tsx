@@ -87,8 +87,8 @@ export default function QuestLibraryShelves({ linkState, onNavigate }: Props) {
 
   const shelves = useMemo(() => {
     const used = new Set<string>();
-    const personal = unique([...(history.length ? history : fallback), ...fallback], used, 8);
     const allTime = unique(popular, used, 8);
+    const personal = unique([...(history.length ? history : fallback), ...fallback], used, 8);
     const recent = unique([...trending, ...fallback], used, 8);
     return { personal, allTime, recent };
   }, [fallback, history, popular, trending]);
@@ -104,28 +104,31 @@ export default function QuestLibraryShelves({ linkState, onNavigate }: Props) {
           <h2 className="text-xl font-semibold text-content-primary">{t('cyclopedia.discovery.questLibrary')}</h2>
         </div>
       </div>
-      <div className="grid gap-4 lg:grid-cols-[minmax(0,.8fr)_minmax(0,1.25fr)_minmax(0,.8fr)] lg:items-start">
-        <QuestShelf title={t('cyclopedia.discovery.allTimePopular')} icon={BookOpen} items={shelves.allTime} linkState={linkState} onNavigate={onNavigate} />
-        <QuestShelf title={history.length ? t('cyclopedia.discovery.forYou') : t('cyclopedia.discovery.libraryPicks')} icon={Library} items={shelves.personal} featured linkState={linkState} onNavigate={onNavigate} />
-        <QuestShelf title={t('cyclopedia.discovery.questTrends')} icon={history.length ? Clock3 : Flame} items={shelves.recent} linkState={linkState} onNavigate={onNavigate} />
+      <div className="space-y-4">
+        <QuestShelf title={t('cyclopedia.discovery.allTimePopular')} icon={BookOpen} items={shelves.allTime} horizontal linkState={linkState} onNavigate={onNavigate} />
+        <div className="grid gap-4 lg:grid-cols-[minmax(0,7fr)_minmax(16rem,3fr)] lg:items-start">
+          <QuestShelf title={history.length ? t('cyclopedia.discovery.forYou') : t('cyclopedia.discovery.libraryPicks')} icon={Library} items={shelves.personal} featured horizontal linkState={linkState} onNavigate={onNavigate} />
+          <QuestShelf title={t('cyclopedia.discovery.questTrends')} icon={history.length ? Clock3 : Flame} items={shelves.recent} linkState={linkState} onNavigate={onNavigate} />
+        </div>
       </div>
     </section>
   );
 }
 
-function QuestShelf({ title, icon: Icon, items, featured = false, linkState, onNavigate }: {
+function QuestShelf({ title, icon: Icon, items, featured = false, horizontal = false, linkState, onNavigate }: {
   title: string;
   icon: typeof BookOpen;
   items: QuestCard[];
   featured?: boolean;
+  horizontal?: boolean;
   linkState?: unknown;
   onNavigate?: () => void;
 }) {
   if (!items.length) return null;
-  return <article className={`min-w-0 rounded-2xl border p-4 ${featured ? 'border-primary/25 bg-primary/[0.045] lg:-mt-2 lg:p-5' : 'border-line bg-surface-base/50'}`}>
+  return <article className={`relative min-w-0 overflow-hidden rounded-2xl border p-4 after:absolute after:inset-x-3 after:bottom-2 after:h-1 after:rounded-full after:bg-gradient-to-r after:from-primary-active/50 after:via-primary/35 after:to-primary-active/50 ${featured ? 'border-primary/25 bg-primary/[0.045] lg:p-5' : 'border-line bg-surface-base/50'}`}>
     <h3 className="mb-3 flex items-center gap-2 text-sm font-semibold text-content-primary"><Icon className="size-4 text-primary" />{title}</h3>
-    <div className="flex snap-x gap-2 overflow-x-auto overscroll-x-contain pb-1 [scrollbar-width:thin] lg:grid lg:max-h-[23rem] lg:overflow-y-auto lg:overflow-x-hidden">
-      {items.map((item) => <Link key={keyFor(item)} to={`/quests/${item.slug || item.id}`} state={linkState} onClick={() => onNavigate?.()} className={`group flex shrink-0 snap-start items-center gap-3 rounded-xl border border-line bg-surface-raised p-3 transition hover:border-primary/50 hover:bg-surface-active ${featured ? 'w-[16rem] lg:w-auto' : 'w-[13rem] lg:w-auto'}`}>
+    <div className={`flex snap-x gap-2 overflow-x-auto overscroll-x-contain pb-3 [scrollbar-width:thin] ${horizontal ? '' : 'lg:grid lg:max-h-[23rem] lg:overflow-y-auto lg:overflow-x-hidden'}`}>
+      {items.map((item, index) => <Link key={keyFor(item)} to={`/quests/${item.slug || item.id}`} state={linkState} onClick={() => onNavigate?.()} className={`group flex shrink-0 snap-start items-center gap-3 rounded-r-xl rounded-l-sm border border-line border-l-4 bg-surface-raised p-3 shadow-sm transition hover:-translate-y-0.5 hover:border-primary/50 hover:bg-surface-active ${featured ? 'w-[16rem]' : 'w-[13rem]'} ${!horizontal ? 'lg:w-auto' : ''} ${index % 3 === 0 ? 'border-l-primary-active/55' : index % 3 === 1 ? 'border-l-primary/45' : 'border-l-accent/45'}`}>
         <KnowledgeCategoryMedia category="quests" label={item.name} className={featured ? 'size-14' : 'size-11'} mediaClassName={featured ? 'size-13 p-0.5' : 'size-10 p-0.5'} />
         <span className="min-w-0"><strong className="line-clamp-2 text-sm text-content-primary">{item.name}</strong>{item.subtitle ? <small className="mt-1 block truncate text-xs text-content-muted">{item.subtitle}</small> : null}</span>
       </Link>)}
