@@ -51,17 +51,17 @@ function readBounds(bounds: Record<string, unknown> | null | undefined) {
     : null;
 }
 
-function MapControls({ imageBounds, resetLabel, zoomInLabel, zoomOutLabel }: {
+function MapControls({ map, imageBounds, resetLabel, zoomInLabel, zoomOutLabel }: {
+  map: L.Map | null;
   imageBounds: LatLngBoundsExpression;
   resetLabel: string;
   zoomInLabel: string;
   zoomOutLabel: string;
 }) {
-  const map = useMap();
-  return <div className="absolute right-3 top-3 z-[500] flex flex-col gap-1">
-    <button type="button" title={zoomInLabel} aria-label={zoomInLabel} onClick={() => map.zoomIn()} className="grid size-10 place-items-center rounded-lg border border-line bg-surface-overlay text-content-primary shadow"><Plus size={17} /></button>
-    <button type="button" title={zoomOutLabel} aria-label={zoomOutLabel} onClick={() => map.zoomOut()} className="grid size-10 place-items-center rounded-lg border border-line bg-surface-overlay text-content-primary shadow"><Minus size={17} /></button>
-    <button type="button" title={resetLabel} aria-label={resetLabel} onClick={() => map.fitBounds(imageBounds, { padding: [12, 12] })} className="grid size-10 place-items-center rounded-lg border border-line bg-surface-overlay text-content-primary shadow"><RotateCcw size={16} /></button>
+  return <div className="absolute right-3 top-3 z-[1000] flex flex-col gap-1">
+    <button type="button" disabled={!map} title={zoomInLabel} aria-label={zoomInLabel} onClick={() => { if (map) map.zoomIn(); }} className="grid size-10 place-items-center rounded-lg border border-line bg-surface-overlay text-content-primary shadow"><Plus size={17} /></button>
+    <button type="button" disabled={!map} title={zoomOutLabel} aria-label={zoomOutLabel} onClick={() => { if (map) map.zoomOut(); }} className="grid size-10 place-items-center rounded-lg border border-line bg-surface-overlay text-content-primary shadow"><Minus size={17} /></button>
+    <button type="button" disabled={!map} title={resetLabel} aria-label={resetLabel} onClick={() => { if (map) map.fitBounds(imageBounds, { padding: [12, 12] }); }} className="grid size-10 place-items-center rounded-lg border border-line bg-surface-overlay text-content-primary shadow"><RotateCcw size={16} /></button>
   </div>;
 }
 
@@ -90,6 +90,7 @@ export default function TibiaMapViewer({
 }: TibiaMapViewerProps) {
   const [loaded, setLoaded] = useState<LoadedMap | null>(null);
   const [loading, setLoading] = useState(Boolean(imageUrl));
+  const [map, setMap] = useState<L.Map | null>(null);
 
   useEffect(() => {
     const controller = new AbortController();
@@ -161,13 +162,13 @@ export default function TibiaMapViewer({
   if (!loaded || !imageBounds) return <div className="rounded-xl border border-line bg-surface-base/60 px-4 py-5 text-sm text-content-muted">{emptyMessage}</div>;
 
   return <div className={`relative w-full overflow-hidden rounded-xl border border-line bg-surface-base ${fill ? 'h-full min-h-[28rem]' : 'h-[clamp(17rem,50vw,30rem)]'}`} aria-label={label}>
-    <MapContainer crs={L.CRS.Simple} bounds={imageBounds} maxBounds={imageBounds} maxBoundsViscosity={0.85} minZoom={-4} maxZoom={4} zoomControl={false} scrollWheelZoom touchZoom dragging attributionControl={false} className="h-full w-full">
+    <MapContainer ref={setMap} crs={L.CRS.Simple} bounds={imageBounds} maxBounds={imageBounds} maxBoundsViscosity={0.85} minZoom={-4} maxZoom={4} zoomControl={false} scrollWheelZoom touchZoom dragging attributionControl={false} className="h-full w-full">
       <ImageOverlay url={loaded.objectUrl} bounds={imageBounds} opacity={1} />
       {trustworthyRegions.map((region) => <Rectangle key={`${region.label}:${region.minX}:${region.minY}`} bounds={region.position} pathOptions={{ color: 'var(--primary)', fillColor: 'var(--primary)', fillOpacity: 0.18, weight: 2 }}><Popup>{region.label}</Popup></Rectangle>)}
       {trustworthyMarkers.map((marker) => <CircleMarker key={`${marker.x}:${marker.y}:${marker.label}`} center={marker.position} radius={8} pathOptions={{ color: 'var(--warning)', fillColor: 'var(--warning)', fillOpacity: 0.75 }}><Popup>{marker.label}</Popup></CircleMarker>)}
       <Recenter position={trustworthyMarkers[0]?.position} />
-      <MapControls imageBounds={imageBounds} resetLabel={resetLabel} zoomInLabel={zoomInLabel} zoomOutLabel={zoomOutLabel} />
     </MapContainer>
+    <MapControls map={map} imageBounds={imageBounds} resetLabel={resetLabel} zoomInLabel={zoomInLabel} zoomOutLabel={zoomOutLabel} />
     {floor != null ? <div className="pointer-events-none absolute bottom-3 left-3 z-[500] rounded-lg border border-line bg-surface-overlay px-3 py-1.5 text-xs font-semibold text-content-primary">{floorLabel || floor}</div> : null}
   </div>;
 }

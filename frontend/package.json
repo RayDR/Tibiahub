@@ -10,6 +10,7 @@
     "check:appearance": "node scripts/check-appearance-persistence.mjs",
     "check:assistant": "node scripts/check-assistant-interactions.mjs",
     "check:public-beta": "node scripts/check-public-beta-static.mjs",
+    "check:patch-1": "node scripts/check-public-beta-patch-1.mjs",
     "check:cyclopedia": "node scripts/check-cyclopedia-interactions.mjs",
     "check:layouts": "node scripts/check-layouts.mjs",
     "check:i18n": "node scripts/check-i18n.mjs",

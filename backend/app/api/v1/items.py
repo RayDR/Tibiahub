@@ -1,5 +1,6 @@
 """Items/Loot API endpoints."""
 from difflib import SequenceMatcher
+from datetime import UTC, datetime, timedelta
 from typing import List
 
 from fastapi import APIRouter, Depends, Query
@@ -18,6 +19,7 @@ from app.models.external_data import (
     TibiaWikiQuest,
 )
 from app.models.spawn_location import SpawnLocation
+from app.models.entity_metadata import EntityMetadata
 from app.schemas import ItemDetail, ItemDropCreature, ItemRelatedEntity, ItemSearchResult
 from app.api.v1.local_media import (
     LocalMediaDescriptor,
@@ -397,6 +399,42 @@ async def get_popular_items(
         )
         results.extend(_build_canonical_item_result(db, row) for row in fallback)
     return results[:limit]
+
+
+@router.get("/trending", response_model=List[ItemSearchResult])
+async def get_trending_items(
+    limit: int = Query(12, ge=1, le=30),
+    db: Session = Depends(get_db),
+):
+    """Return recently active canonical loot, with a deterministic local fallback."""
+    cutoff = datetime.now(UTC) - timedelta(days=30)
+    metadata = (
+        db.query(EntityMetadata)
+        .filter(
+            EntityMetadata.entity_type == "item",
+            EntityMetadata.entity_id.isnot(None),
+            EntityMetadata.search_count > 0,
+            EntityMetadata.last_viewed_at >= cutoff,
+        )
+        .order_by(EntityMetadata.last_viewed_at.desc(), EntityMetadata.search_count.desc(), EntityMetadata.id.asc())
+        .limit(limit * 2)
+        .all()
+    )
+    ids = [row.entity_id for row in metadata if row.entity_id is not None]
+    rows = db.query(ExternalItemModel).filter(
+        ExternalItemModel.id.in_(ids),
+        ExternalItemModel.knowledge_entity_id.isnot(None),
+    ).all() if ids else []
+    by_id = {row.id: row for row in rows}
+    ordered = [by_id[item_id] for item_id in ids if item_id in by_id]
+    if len(ordered) < limit:
+        seen = {row.id for row in ordered}
+        fallback = db.query(ExternalItemModel).filter(
+            ExternalItemModel.knowledge_entity_id.isnot(None),
+            ExternalItemModel.id.notin_(seen) if seen else True,
+        ).order_by(ExternalItemModel.updated_at.desc().nullslast(), ExternalItemModel.id.desc()).limit(limit - len(ordered)).all()
+        ordered.extend(fallback)
+    return [_build_canonical_item_result(db, row) for row in ordered[:limit]]
 
 
 @router.get("/", response_model=List[ItemSearchResult])

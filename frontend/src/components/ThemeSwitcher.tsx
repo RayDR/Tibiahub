@@ -42,7 +42,7 @@ export default function ThemeSwitcher() {
         className="group flex items-center gap-2 rounded-lg px-3 py-2 text-sm text-content-secondary transition-colors hover:bg-surface-hover hover:text-primary"
       >
         <CurrentIcon className="size-4 transition-transform group-hover:rotate-6" aria-hidden="true" />
-        <span className="hidden text-xs font-medium md:inline">{t(`themes.${theme}.name`)}</span>
+        <span className="hidden text-xs font-medium xl:inline">{t(`themes.${theme}.name`)}</span>
       </button>
 
       {isOpen ? (

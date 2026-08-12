@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+from datetime import UTC, datetime, timedelta
 from typing import List
 
 from fastapi import APIRouter, Depends, HTTPException, Query, Response
@@ -54,6 +55,8 @@ def _quest_activity_shelf(db: Session, *, limit: int, recent: bool) -> list[Ques
         EntityMetadata.entity_id.isnot(None),
         EntityMetadata.search_count > 0,
     )
+    if recent:
+        metadata_query = metadata_query.filter(EntityMetadata.last_viewed_at >= datetime.now(UTC) - timedelta(days=7))
     order = (
         (EntityMetadata.last_viewed_at.desc().nullslast(), EntityMetadata.search_count.desc())
         if recent

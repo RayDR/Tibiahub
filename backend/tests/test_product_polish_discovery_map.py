@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+from datetime import UTC, datetime, timedelta
+
 from app.knowledge.models.core import KnowledgeEntity, KnowledgeEntityType
 from app.models.creature import Creature
 from app.models.entity_metadata import EntityMetadata
@@ -34,14 +36,18 @@ def test_popular_loot_uses_real_local_activity_order(client, db):
     db.add_all([first, second])
     db.flush()
     db.add_all([
-        EntityMetadata(entity_type="item", entity_key="first relic", display_name=first.name, entity_id=first.id, search_count=2),
-        EntityMetadata(entity_type="item", entity_key="second relic", display_name=second.name, entity_id=second.id, search_count=9),
+        EntityMetadata(entity_type="item", entity_key="first relic", display_name=first.name, entity_id=first.id, search_count=2, last_viewed_at=datetime.now(UTC)),
+        EntityMetadata(entity_type="item", entity_key="second relic", display_name=second.name, entity_id=second.id, search_count=9, last_viewed_at=datetime.now(UTC) - timedelta(days=1)),
     ])
     db.flush()
 
     response = client.get("/api/v1/items/popular", params={"limit": 2})
     assert response.status_code == 200
     assert [row["slug"] for row in response.json()] == ["second-relic", "first-relic"]
+
+    trending = client.get("/api/v1/items/trending", params={"limit": 2})
+    assert trending.status_code == 200
+    assert [row["slug"] for row in trending.json()] == ["first-relic", "second-relic"]
 
 
 def test_quest_shelves_are_local_and_activity_ranked(client, db):
@@ -113,6 +119,25 @@ def test_planner_returns_stored_rates_access_spawns_and_stable_map_links(client,
 
     invalid_party = client.post("/api/v1/recommendations/party", json=[])
     assert invalid_party.status_code == 422
+
+
+def test_planner_falls_back_to_spawn_profile_when_zone_metadata_is_empty(client, db):
+    zone = HuntZone(name="Fallback Grounds", slug="fallback-grounds", normalized_name="fallback grounds", min_level=0)
+    creature = Creature(name="Fallback Beast", slug="fallback-beast", normalized_name="fallback beast", hitpoints=1500, experience=1500, is_hidden=False)
+    db.add_all([zone, creature])
+    db.flush()
+    db.add(SpawnLocation(creature_id=creature.id, hunt_zone_id=zone.id))
+    db.flush()
+
+    response = client.get("/api/v1/recommendations/solo", params={"vocation": "knight", "level": 100, "goal": "exp", "limit": 50})
+    assert response.status_code == 200
+    row = next(value for value in response.json()["recommendations"] if value["zone_id"] == zone.id)
+    assert row["profile_basis"] == "spawn_profile"
+    assert row["suggested_level"] == 100
+    assert row["raw_creature_exp"] == 1500
+    assert row["level_fit"] == "strong"
+    assert row["danger"] == "high"
+    assert any("known creature spawns" in reason for reason in row["reasons"])
 
 
 def test_category_registry_prefers_cached_gif_over_earlier_static_creature(client, db):

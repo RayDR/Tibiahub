@@ -374,12 +374,12 @@ h6 {
     --app-nav-clearance: 5.75rem;
     --app-sticky-offset: 5.75rem;
   }
-  .app-shell-main { padding-top: var(--app-nav-clearance); padding-bottom: 0; }
   .responsive-card-list { display: none; }
   .responsive-data-table { display: block; }
 }
 
 @media (min-width: 1024px) {
+  .app-shell-main { padding-top: var(--app-nav-clearance); padding-bottom: 0; }
   .workspace-sidebar { position: sticky; top: 6.75rem; align-self: start; }
   .workspace-nav { display: grid; margin: 0; overflow: visible; padding: var(--space-2); border: 1px solid var(--border); border-radius: var(--radius-xl); background: rgb(var(--ds-surface) / 0.72); box-shadow: var(--elevation-1); }
   .workspace-nav-link { width: 100%; }
