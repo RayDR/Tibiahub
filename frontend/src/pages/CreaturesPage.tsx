@@ -128,7 +128,6 @@ const normalizeSelectedValue = (value: string) =>
     : '';
 
 const COMPACT_ACTIVATE_MARGIN_PX = 8;
-const COMPACT_RELEASE_MARGIN_PX = 44;
 
 const readStickyOffsetPx = (): number => {
   const rootStyle = window.getComputedStyle(
@@ -311,18 +310,18 @@ const CreaturesPage: React.FC = () => {
   const [lootTrendingPreviewCards, setLootTrendingPreviewCards] = useState<CyclopediaPreviewCard[]>([]);
   const [isSearchCompact, setIsSearchCompact] =
     useState(false);
-  const [isSearchPreparing, setIsSearchPreparing] = useState(false);
   const [mobileSearchOpen, setMobileSearchOpen] =
     useState(false);
   const [snapshotReadyTick, setSnapshotReadyTick] = useState(0);
   const syncingFromUrlRef = useRef(false);
   const activeRequestRef = useRef<AbortController | null>(null);
   const stickySearchRef = useRef<HTMLDivElement | null>(null);
+  const searchOriginRef = useRef<HTMLDivElement | null>(null);
   const resultsStartRef = useRef<HTMLDivElement | null>(null);
   const loadMoreSentinelRef = useRef<HTMLDivElement | null>(null);
   const loadMoreLockRef = useRef(false);
-  const compactTimerRef = useRef<number | null>(null);
   const lastScrollYRef = useRef(0);
+  const scrollingDownRef = useRef(false);
   const lastSearchSignatureRef = useRef<string>('');
   const pendingScrollRestoreRef = useRef<number | null>(null);
   const inPageTabSwitchRef = useRef(false);
@@ -1258,88 +1257,37 @@ const CreaturesPage: React.FC = () => {
   }, [cyclopediaPath]);
 
   useEffect(() => {
-    let scheduled = false;
-
-    const cancelPendingCompact = () => {
-      if (compactTimerRef.current != null) {
-        window.clearTimeout(compactTimerRef.current);
-        compactTimerRef.current = null;
-      }
-      setIsSearchPreparing(false);
-    };
-
-    const updateCompactState = () => {
-      if (scheduled) {
-        return;
-      }
-
-      scheduled = true;
-
-      window.requestAnimationFrame(() => {
-        scheduled = false;
-
-        const resultBlocks = document.querySelectorAll<HTMLElement>('[data-cyclopedia-result]');
-        const boundary = resultBlocks[1] || resultsStartRef.current;
-        if (!boundary) {
-          return;
-        }
-
-        const boundaryTop =
-          boundary.getBoundingClientRect().top;
-        const stickyOffsetPx =
-          readStickyOffsetPx();
-        const compactAt =
-          stickyOffsetPx +
-          COMPACT_ACTIVATE_MARGIN_PX;
-        const expandAt =
-          stickyOffsetPx +
-          COMPACT_RELEASE_MARGIN_PX;
-
-        const scrollY = window.scrollY;
-        const upwardDelta = lastScrollYRef.current - scrollY;
-        lastScrollYRef.current = scrollY;
-
-        if (upwardDelta > 6 || boundaryTop >= expandAt) {
-          cancelPendingCompact();
+    let frame = 0;
+    lastScrollYRef.current = window.scrollY;
+    const updateDirectionAndRelease = () => {
+      if (frame) return;
+      frame = window.requestAnimationFrame(() => {
+        frame = 0;
+        const nextY = window.scrollY;
+        const delta = nextY - lastScrollYRef.current;
+        if (Math.abs(delta) > 2) scrollingDownRef.current = delta > 0;
+        lastScrollYRef.current = nextY;
+        // The fixed origin sentinel never changes height, so leaving compact mode
+        // cannot move the document or retrigger the second-result boundary.
+        if (isSearchCompact && !scrollingDownRef.current && searchOriginRef.current && searchOriginRef.current.getBoundingClientRect().top >= readStickyOffsetPx()) {
           setIsSearchCompact(false);
-          return;
-        }
-
-        if (boundaryTop <= compactAt && !isSearchCompact && compactTimerRef.current == null) {
-          setIsSearchPreparing(true);
-          compactTimerRef.current = window.setTimeout(() => {
-            compactTimerRef.current = null;
-            setIsSearchCompact(true);
-            setIsSearchPreparing(false);
-          }, 170);
         }
       });
     };
+    window.addEventListener('scroll', updateDirectionAndRelease, { passive: true });
 
-    updateCompactState();
-
-    window.addEventListener(
-      'scroll',
-      updateCompactState,
-      { passive: true },
-    );
-
-    window.addEventListener(
-      'resize',
-      updateCompactState,
-    );
+    const resultBlocks = document.querySelectorAll<HTMLElement>('[data-cyclopedia-result]');
+    const boundary = resultBlocks[1] || resultsStartRef.current;
+    const stickyOffset = readStickyOffsetPx() + COMPACT_ACTIVATE_MARGIN_PX;
+    const observer = boundary ? new IntersectionObserver(([entry]) => {
+      if (!entry.isIntersecting && entry.boundingClientRect.top <= stickyOffset && scrollingDownRef.current) setIsSearchCompact(true);
+    }, { rootMargin: `-${stickyOffset}px 0px 0px 0px`, threshold: 0 }) : null;
+    if (boundary && observer) observer.observe(boundary);
 
     return () => {
-      cancelPendingCompact();
-      window.removeEventListener(
-        'scroll',
-        updateCompactState,
-      );
-
-      window.removeEventListener(
-        'resize',
-        updateCompactState,
-      );
+      if (frame) window.cancelAnimationFrame(frame);
+      observer?.disconnect();
+      window.removeEventListener('scroll', updateDirectionAndRelease);
     };
   }, [
     mode,
@@ -1470,23 +1418,24 @@ const CreaturesPage: React.FC = () => {
           />
         </div>
 
+        <div ref={searchOriginRef} className="h-0 w-full" aria-hidden="true" />
         <div
           ref={stickySearchRef}
           className={`mx-auto mb-5 w-full motion-reduce:transition-none transition-[top,transform,opacity] ${
             isSearchCompact
               ? 'duration-[400ms] ease-out'
-              : 'duration-150 ease-in'
+              : 'transition-none'
           } ${
             isSearchCompact
               ? 'app-sticky-offset sticky z-40'
               : 'relative z-20'
-          } ${isSearchPreparing ? 'pointer-events-none opacity-0 duration-150' : 'opacity-100'}`}
+          } opacity-100`}
         >
           <AppCard
             className={`flex flex-col shadow-2xl motion-reduce:transition-none transition-[padding,background-color,border-color,box-shadow,gap,opacity,transform] ${
               isSearchCompact
                 ? 'duration-[400ms] ease-out'
-                : 'duration-150 ease-in'
+                : 'transition-none'
             } ${
               isSearchCompact
                 ? 'gap-1 border-primary/20 bg-surface-overlay/95 p-1 backdrop-blur-xl'
@@ -1497,7 +1446,7 @@ const CreaturesPage: React.FC = () => {
               className={`overflow-hidden motion-reduce:transition-none transition-[max-height,opacity,transform,margin] ${
                 isSearchCompact
                   ? 'pointer-events-none max-h-0 -translate-y-1 opacity-0 duration-[400ms] ease-out'
-                  : 'max-h-[20rem] translate-y-0 opacity-100 duration-150 ease-in'
+                  : 'max-h-[20rem] translate-y-0 opacity-100 transition-none'
               }`}
               aria-hidden={isSearchCompact}
             >

@@ -31,6 +31,8 @@ from app.models.guild_member_snapshot import GuildMemberSnapshot
 from app.models.guild_management import GuildDirectory, GuildManagementGrant, GuildRosterCharacter
 from app.models.email_delivery import EmailOutbox, EmailWorkerHeartbeat
 from app.models.workspace_audit import WorkspaceAudit
+from app.models.world_map import WorldMapFloor, WorldMapMarker
+from app.models.hunt_analyzer import HuntAnalyzerSubmission
 from app.models.maintenance_sync import MaintenanceHold, SyncJobPhase, SyncWorkerHeartbeat
 from app.models.leadership import (
     GuildLeadershipRole, GuildLeadershipOpening, GuildLeadershipApplication,
@@ -108,6 +110,7 @@ __all__ = [
     "GuildRosterCharacter",
     "MediaAsset",
     "WorkspaceAudit",
+    "WorldMapFloor", "WorldMapMarker", "HuntAnalyzerSubmission",
     "MaintenanceHold", "SyncJobPhase", "SyncWorkerHeartbeat",
     "GuildLeadershipRole", "GuildLeadershipOpening", "GuildLeadershipApplication",
     "GuildLeadershipAssignment", "GuildLeadershipApplicationHistory",

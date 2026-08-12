@@ -9,6 +9,7 @@ from app.models.external_data import Item, TibiaWikiQuest
 from app.models.hunt_zone import HuntZone
 from app.models.media_asset import MediaAsset
 from app.models.spawn_location import SpawnLocation
+from app.models.world_map import WorldMapFloor, WorldMapMarker
 
 
 def _entity(db, kind: str, name: str) -> KnowledgeEntity:
@@ -75,21 +76,33 @@ def test_public_map_returns_real_zone_geometry_and_honest_related_context(client
         map_asset_id=None,
     )
     creature = Creature(name="Ground Walker", slug="ground-walker", normalized_name="ground walker", hitpoints=100, experience=100, is_hidden=False)
-    db.add_all([asset, zone, creature])
+    floor = WorldMapFloor(
+        provider="tibiamaps/tibia-map-data", upstream_commit="a" * 40,
+        upstream_url="https://github.com/tibiamaps/tibia-map-data", license_name="MIT", attribution="fixture",
+        floor=7, map_path="/tmp/floor-07-map.png", pathfinding_path="/tmp/floor-07-path.png",
+        map_sha256="b" * 64, pathfinding_sha256="c" * 64, width=2560, height=2048,
+        min_x=31744, min_y=30976, max_x=34304, max_y=33024, source_metadata={}, is_current=True,
+    )
+    db.add_all([asset, zone, creature, floor])
     db.flush()
+    db.add(WorldMapMarker(floor_id=floor.id, source_index=1, description="Mapped Grounds", normalized_description="mapped grounds", icon="star", x=32120, y=32220, floor=7, raw_data={}))
     zone.map_asset_id = asset.id
     db.add(SpawnLocation(creature_id=creature.id, hunt_zone_id=zone.id))
     db.flush()
 
     bootstrap = client.get("/api/v1/map/bootstrap")
     assert bootstrap.status_code == 200
-    assert bootstrap.json()["base_map"]["image_url"].startswith("/api/v1/hunt-zones/")
+    assert bootstrap.json()["world_map"]["image_url"] == "/api/v1/map/floors/7/image"
+    assert bootstrap.json()["world_map"]["upstream_commit"] == "a" * 40
     search = client.get("/api/v1/map/search", params={"q": "Ground Walker", "layers": "creature"})
     assert search.status_code == 200
     result = search.json()["items"][0]
     assert result["name"] == "Ground Walker"
-    assert result["geometry_status"] == "mapped"
-    assert result["related_hunt_zones"][0]["slug"] == "mapped-grounds"
+    assert result["geometry_status"] == "knowledge_only"
+    context = client.get("/api/v1/map/hunt-zones/mapped-grounds/context").json()
+    assert context["hunt_zone"]["geometry_source"] == "tibiamaps_marker"
+    assert (context["hunt_zone"]["x"], context["hunt_zone"]["y"]) == (32120, 32220)
+    assert context["creatures"][0]["geometry_status"] == "knowledge_only"
 
 
 def test_planner_returns_stored_rates_access_spawns_and_stable_map_links(client, db):
@@ -112,13 +125,24 @@ def test_planner_returns_stored_rates_access_spawns_and_stable_map_links(client,
     assert row["avg_profit_hour"] == 170000
     assert row["rate_basis"] == "stored_local_average"
     assert row["location_x"] == 0
-    assert row["map_image_url"].endswith("placeholder=false")
+    assert row["map_image_url"] is None
     assert row["requires_premium"] is True
     assert row["creatures"][0]["slug"] == "planner-beast"
+    assert row["creatures"][0]["image_url"].startswith("/api/v1/creatures/")
     assert any("knight" in reason for reason in row["reasons"])
 
     invalid_party = client.post("/api/v1/recommendations/party", json=[])
     assert invalid_party.status_code == 422
+
+
+def test_planner_recommendations_are_incrementally_paginated(client, db):
+    for index in range(8):
+        db.add(HuntZone(name=f"Paged Hunt {index}", slug=f"paged-hunt-{index}", normalized_name=f"paged hunt {index}", min_level=80, max_level=180, knights_recommended=True))
+    db.flush()
+    first = client.get("/api/v1/recommendations/solo", params={"vocation": "knight", "level": 120, "limit": 3, "skip": 0}).json()
+    second = client.get("/api/v1/recommendations/solo", params={"vocation": "knight", "level": 120, "limit": 3, "skip": 3}).json()
+    assert len(first["recommendations"]) == 3 and first["has_more"] is True
+    assert {row["zone_id"] for row in first["recommendations"]}.isdisjoint({row["zone_id"] for row in second["recommendations"]})
 
 
 def test_planner_falls_back_to_spawn_profile_when_zone_metadata_is_empty(client, db):

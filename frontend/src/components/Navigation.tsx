@@ -37,8 +37,8 @@ export default function Navigation() {
   const primaryItems: NavigationItem[] = [
     { path: '/', label: t('nav.home'), icon: Home },
     { path: '/cyclopedia', label: t('nav.search'), icon: BookOpen },
-    { path: '/planner', label: t('nav.planner'), shortLabel: 'Planner', icon: Compass },
-    { path: '/map', label: t('nav.map'), shortLabel: 'Map', icon: Map },
+    { path: '/planner', label: t('nav.planner'), shortLabel: t('nav.planner'), icon: Compass },
+    { path: '/map', label: t('nav.map'), shortLabel: t('nav.map'), icon: Map },
     ...(isAuthenticated ? [{ path: '/guild', label: t('nav.guild'), icon: Shield }] : []),
     ...(user?.is_superuser ? [{ path: '/admin', label: t('nav.admin'), icon: Settings, iconOnly: true }] : []),
   ];
