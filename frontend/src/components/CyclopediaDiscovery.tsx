@@ -120,32 +120,11 @@ function contextualImageUrl(
 
 function contextualLink(item: DiscoveryCard): string {
   const type = item.entity_type || '';
-  const selectedKind =
-    type === 'item'
-      ? 'item'
-      : type === 'hunt_zone'
-        ? 'zone'
-        : type === 'quest'
-          ? 'quest'
-          : null;
-
-  const tab =
-    type === 'quest'
-      ? 'quests'
-      : type === 'item'
-        ? 'items'
-        : type === 'hunt_zone'
-          ? 'zones'
-          : type === 'boss'
-            ? 'bosses'
-            : 'creatures';
-
-  if (selectedKind) {
-    const selected = `${selectedKind}:${encodeURIComponent(item.name)}`;
-    return `/cyclopedia?tab=${tab}&selected=${encodeURIComponent(selected)}`;
-  }
-
-  return `/cyclopedia?tab=${tab}`;
+  if (type === 'item') return `/items/${item.slug || item.name.trim().toLocaleLowerCase().split(' ').join('-')}`;
+  if (type === 'hunt_zone') return `/hunt-zones/${item.slug || item.id}`;
+  if (type === 'quest') return `/quests/${item.slug || item.id}`;
+  if (type === 'creature' || type === 'boss') return `/creatures/${item.slug || item.id}`;
+  return '/cyclopedia';
 }
 
 function contextualSubtitle(
@@ -166,21 +145,15 @@ function contextualSubtitle(
     item.entity_type === 'hunt_zone' &&
     item.recommended_level
   ) {
-    return `${item.city || t('common.unknown')} · ${t(
-      'cyclopedia.zones.level',
-      {
-        level: item.recommended_level,
-      },
-    )}`;
+    const level = t('cyclopedia.zones.level', {
+      level: item.recommended_level,
+    });
+    return item.city ? `${item.city} · ${level}` : level;
   }
 
-  return t(
-    `cyclopedia.discovery.types.${item.entity_type}`,
-    {
-      defaultValue:
-        item.entity_type || t('common.unknown'),
-    },
-  );
+  return item.entity_type
+    ? t(`cyclopedia.discovery.types.${item.entity_type}`, { defaultValue: item.entity_type })
+    : '';
 }
 
 function relatedCards(
@@ -311,18 +284,8 @@ function normalizePrimaryImage(
 
 function normalizePrimaryLink(
   item: PrimaryPreview,
-  mode: DiscoveryMode,
+  _mode: DiscoveryMode,
 ): string {
-  if (mode === 'items') {
-    const selected = `item:${encodeURIComponent(item.name)}`;
-    return `/cyclopedia?tab=items&selected=${encodeURIComponent(selected)}`;
-  }
-
-  if (mode === 'zones') {
-    const selected = `zone:${encodeURIComponent(item.name)}`;
-    return `/cyclopedia?tab=zones&selected=${encodeURIComponent(selected)}`;
-  }
-
   return item.to;
 }
 

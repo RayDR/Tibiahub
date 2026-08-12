@@ -4,13 +4,14 @@ from __future__ import annotations
 
 from typing import List
 
-from fastapi import APIRouter, Depends, HTTPException, Query
+from fastapi import APIRouter, Depends, HTTPException, Query, Response
 from sqlalchemy import or_
 from sqlalchemy.orm import Session
 
 from app.db.database import get_db
 from app.knowledge.services import KnowledgeGraphService
 from app.models.creature import Creature
+from app.models.entity_metadata import EntityMetadata
 from app.models.external_data import TibiaWikiQuest
 from app.schemas import QuestDetail, QuestRelatedCreature, QuestSearchResult
 from app.services.entity_metadata_service import EntityMetadataService
@@ -45,6 +46,45 @@ def get_quest_highlights(limit: int = Query(12, ge=1, le=50), db: Session = Depe
             TibiaWikiQuest.updated_at.desc().nullslast(), TibiaWikiQuest.id.desc()
         ).limit(limit).all()
     return [_summary(row) for row in rows]
+
+
+def _quest_activity_shelf(db: Session, *, limit: int, recent: bool) -> list[QuestSearchResult]:
+    metadata_query = db.query(EntityMetadata).filter(
+        EntityMetadata.entity_type == "quest",
+        EntityMetadata.entity_id.isnot(None),
+        EntityMetadata.search_count > 0,
+    )
+    order = (
+        (EntityMetadata.last_viewed_at.desc().nullslast(), EntityMetadata.search_count.desc())
+        if recent
+        else (EntityMetadata.search_count.desc(), EntityMetadata.last_viewed_at.desc().nullslast())
+    )
+    metadata = metadata_query.order_by(*order, EntityMetadata.id.asc()).limit(limit * 2).all()
+    ids = [row.entity_id for row in metadata]
+    rows = db.query(TibiaWikiQuest).filter(TibiaWikiQuest.id.in_(ids), TibiaWikiQuest.is_group.is_(False)).all() if ids else []
+    by_id = {row.id: row for row in rows}
+    ordered = [by_id[value] for value in ids if value in by_id]
+    if len(ordered) < limit:
+        seen = {row.id for row in ordered}
+        fallback = db.query(TibiaWikiQuest).filter(
+            TibiaWikiQuest.is_group.is_(False),
+            TibiaWikiQuest.id.notin_(seen) if seen else True,
+        ).order_by(
+            TibiaWikiQuest.updated_at.desc().nullslast() if recent else TibiaWikiQuest.name.asc(),
+            TibiaWikiQuest.id.asc(),
+        ).limit(limit - len(ordered)).all()
+        ordered.extend(fallback)
+    return [_summary(row) for row in ordered[:limit]]
+
+
+@router.get("/popular", response_model=List[QuestSearchResult])
+def get_popular_quests(limit: int = Query(10, ge=1, le=30), db: Session = Depends(get_db)):
+    return _quest_activity_shelf(db, limit=limit, recent=False)
+
+
+@router.get("/trending", response_model=List[QuestSearchResult])
+def get_trending_quests(limit: int = Query(10, ge=1, le=30), db: Session = Depends(get_db)):
+    return _quest_activity_shelf(db, limit=limit, recent=True)
 
 
 @router.get("/", response_model=List[QuestSearchResult])
@@ -87,7 +127,7 @@ def _safe_named(values) -> list[dict]:
 
 
 @router.get("/{identifier}", response_model=QuestDetail)
-def get_quest_detail(identifier: str, db: Session = Depends(get_db)):
+def get_quest_detail(identifier: str, response: Response, db: Session = Depends(get_db)):
     query = db.query(TibiaWikiQuest)
     if identifier.isdigit():
         quest = query.filter(or_(TibiaWikiQuest.id == int(identifier), TibiaWikiQuest.external_id == identifier)).first()
@@ -95,6 +135,8 @@ def get_quest_detail(identifier: str, db: Session = Depends(get_db)):
         quest = query.filter(or_(TibiaWikiQuest.slug == identifier, TibiaWikiQuest.normalized_name == normalize_search_text(identifier))).first()
     if quest is None:
         raise HTTPException(status_code=404, detail="Quest not found")
+    if quest.slug:
+        response.headers["X-Canonical-Slug"] = quest.slug
 
     relations = []
     related_creatures = []

@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import json
+import logging
 import re
 from typing import Iterable
 
@@ -10,8 +11,9 @@ from sqlalchemy.orm import Session
 from sqlalchemy.exc import SQLAlchemyError
 
 from app.assistant.context import ConversationContextService
-from app.assistant.entities import FabricatedEntityReferenceError
+from app.assistant.entities import AssistantEntityResolver, FabricatedEntityReferenceError
 from app.assistant.provider import AssistantProvider, AssistantProviderFormatError
+from app.assistant.routing import StructuredQuery, assess_query_quality, parse_structured_query
 from app.assistant.schemas import (
     AssistantContentPart,
     AssistantDraftResponse,
@@ -24,9 +26,11 @@ from app.assistant.schemas import (
     AssistantSection,
 )
 from app.assistant.tools import AssistantToolError, TibiaHubAssistantTools
+from app.models import HuntZone
 
 
 _URL_RE = re.compile(r"(?:https?://|\[[^\]]+\]\([^\)]+\))", re.I)
+logger = logging.getLogger(__name__)
 
 
 def _instructions(context_json: str) -> str:
@@ -67,6 +71,47 @@ class AssistantService:
 
     async def answer(self, request: AssistantRequest) -> AssistantResponse:
         context = ConversationContextService.update(request.context, request.message)
+        quality = assess_query_quality(request.message)
+        if quality.reject_without_lookup:
+            logger.info("assistant_path=junk_guard")
+            return self._materialize_junk_guard(context)
+
+        transaction_already_owned = self.db.in_transaction()
+        try:
+            resolver = AssistantEntityResolver(self.db)
+            direct_matches = resolver.resolve_direct(
+                request.message,
+                match_mode=quality.direct_match_mode or "exact",
+            )
+            local_response = self._materialize_local_lookup(request.message, context, direct_matches) if direct_matches else None
+            local_path = "entity_lookup" if local_response else None
+
+            if local_response is None and quality.direct_match_mode in {"exact", "prefix"}:
+                local_response = self._materialize_junk_guard(context)
+                local_path = "junk_guard"
+
+            if local_response is None and (structured := parse_structured_query(request.message)):
+                local_response = self._materialize_structured_lookup(context, structured, resolver)
+                local_path = f"structured_lookup intent={structured.intent}" if local_response else None
+            # A normal request Session reaches this method without an active
+            # transaction. End the implicit read transaction after every
+            # scalar/Pydantic value has been materialized. If a caller supplied
+            # an existing transaction (notably a unit-of-work test), it retains
+            # ownership of that transaction.
+            if not transaction_already_owned:
+                self.db.rollback()
+        except SQLAlchemyError:
+            self.db.rollback()
+            local_response = None
+
+        if local_response is not None:
+            if local_path == "entity_lookup":
+                logger.info("assistant_path=entity_lookup matches=%s", len(direct_matches))
+            else:
+                logger.info("assistant_path=%s", local_path)
+            return local_response
+
+        logger.info("assistant_path=provider")
         tools = TibiaHubAssistantTools(self.db, context, request.message)
         history = request.history[-self.max_history_messages:]
         input_items = [
@@ -126,6 +171,206 @@ class AssistantService:
             if total_calls == 0:
                 raise AssistantProviderFormatError("Assistant provider attempted an ungrounded response without local tools")
             return self._materialize(turn.draft, context, tools, total_calls)
+
+    @staticmethod
+    def _materialize_junk_guard(context) -> AssistantResponse:
+        copy = (
+            "Dame un poco más de pista. Puedes escribir el nombre de una criatura, item, quest o lugar."
+            if context.language == "es"
+            else "Give me a little more to work with. Try a creature, item, quest, or place name."
+        )
+        return AssistantResponse(
+            conversation_id=context.conversation_id,
+            language=context.language,
+            message=[AssistantContentPart(kind="text", text=copy)],
+            context=context,
+            grounding=AssistantGrounding(
+                tool_calls=0,
+                evidence_keys=["local:junk_guard"],
+                data_gaps=[],
+            ),
+        )
+
+    def _materialize_structured_lookup(
+        self,
+        context,
+        structured: StructuredQuery,
+        resolver: AssistantEntityResolver,
+    ) -> AssistantResponse | None:
+        entity_types = {
+            "item_acquisition": ["item"],
+            "creature_hunting": ["creature"],
+            "quest_requirements": ["quest"],
+            "access": ["location", "area", "town", "hunt_zone"],
+        }[structured.intent]
+        matches = resolver.resolve_direct(
+            structured.target,
+            entity_types=entity_types,
+            match_mode="contains",
+            limit=2,
+        )
+        if len(matches) != 1:
+            return None
+        target = matches[0]
+
+        if structured.intent == "access" and target.entity_type == "hunt_zone":
+            zone = self.db.get(HuntZone, int(target.id))
+            if zone is None:
+                return None
+            quest_name = zone.quest_name
+            if not zone.requires_premium and not quest_name:
+                return None
+            entities = [target]
+            if quest_name:
+                quest_matches = resolver.resolve_direct(
+                    quest_name,
+                    entity_types=["quest"],
+                    match_mode="exact",
+                    limit=1,
+                )
+                entities.extend(quest_matches)
+            details = []
+            if zone.requires_premium:
+                details.append("Premium Account" if context.language == "en" else "Premium Account")
+            if quest_name:
+                details.append(quest_name)
+            copy = (
+                f"Para acceder a {target.canonical_name} necesitas: {', '.join(details)}."
+                if context.language == "es"
+                else f"To access {target.canonical_name}, you need: {', '.join(details)}."
+            )
+            return self._structured_response(context, structured.intent, copy, entities)
+
+        tool_name = {
+            "item_acquisition": "item_acquisition_context",
+            "creature_hunting": "creature_hunting_context",
+            "quest_requirements": "quest_context",
+            "access": "location_access_context",
+        }[structured.intent]
+        tools = TibiaHubAssistantTools(self.db, context, structured.target)
+        execution = tools.execute(tool_name, {"query": target.canonical_name, "limit": 10})
+        payload = execution.payload
+
+        if structured.intent == "item_acquisition":
+            if not any(payload.get(key) for key in ("drops", "buy_from", "rewards_from")):
+                return None
+            copy = (
+                f"{target.canonical_name} puede obtenerse de estas fuentes:"
+                if context.language == "es"
+                else f"You can obtain {target.canonical_name} from these sources:"
+            )
+            entities = execution.entities
+        elif structured.intent == "creature_hunting":
+            if not payload.get("spawns"):
+                return None
+            copy = (
+                f"Encontré estas zonas de caza para {target.canonical_name}:"
+                if context.language == "es"
+                else f"I found these hunting zones for {target.canonical_name}:"
+            )
+            entities = execution.entities
+        elif structured.intent == "quest_requirements":
+            values = self._quest_requirement_lines(payload, context.language)
+            if not values:
+                return None
+            copy = (
+                f"Esto es lo que necesitas para {target.canonical_name}:\n" + "\n".join(f"• {value}" for value in values)
+                if context.language == "es"
+                else f"Here’s what you need for {target.canonical_name}:\n" + "\n".join(f"• {value}" for value in values)
+            )
+            entities = execution.entities
+        else:
+            if not any((payload.get("access_notes"), payload.get("quest_keys"), payload.get("premium_required") is True)):
+                return None
+            details = []
+            if payload.get("premium_required") is True:
+                details.append("Premium Account")
+            if payload.get("access_notes"):
+                details.append(str(payload["access_notes"])[:500])
+            quest_names = [
+                entity.canonical_name for entity in execution.entities
+                if entity.entity_type == "quest"
+            ]
+            if quest_names:
+                details.append(", ".join(quest_names[:3]))
+            copy = (
+                f"Esto es lo que necesitas para acceder a {target.canonical_name}: " + " ".join(details)
+                if context.language == "es"
+                else f"Here’s what you need to access {target.canonical_name}: " + " ".join(details)
+            )
+            entities = execution.entities
+        return self._structured_response(context, structured.intent, copy, entities)
+
+    @staticmethod
+    def _quest_requirement_lines(payload: dict, language: str) -> list[str]:
+        lines: list[str] = []
+        for key in ("requirements", "required_items", "required_quests"):
+            for value in list(payload.get(key) or [])[:6]:
+                if isinstance(value, str):
+                    text = value
+                elif isinstance(value, dict):
+                    text = str(value.get("name") or value.get("description") or "")
+                else:
+                    text = ""
+                if text and text not in lines:
+                    lines.append(text[:300])
+        if not lines and payload.get("missions"):
+            count = len(payload["missions"])
+            lines.append(f"{count} misión(es)" if language == "es" else f"{count} mission(s)")
+        return lines[:8]
+
+    @staticmethod
+    def _structured_response(context, intent: str, copy: str, entities) -> AssistantResponse:
+        unique_entities = list({entity.key: entity for entity in entities}.values())[:20]
+        target_type = {
+            "item_acquisition": "item",
+            "creature_hunting": "creature",
+            "quest_requirements": "quest",
+            "access": None,
+        }[intent]
+        related = [entity for entity in unique_entities if entity.entity_type != target_type]
+        cards = related or unique_entities
+        return AssistantResponse(
+            conversation_id=context.conversation_id,
+            language=context.language,
+            message=[AssistantContentPart(kind="text", text=copy[:4000])],
+            entities=unique_entities,
+            entity_cards=[entity.key for entity in cards[:10]],
+            context=context,
+            grounding=AssistantGrounding(
+                tool_calls=0,
+                evidence_keys=[f"local:structured_lookup:{intent}"],
+                data_gaps=[],
+            ),
+        )
+
+    @staticmethod
+    def _materialize_local_lookup(query: str, context, entities) -> AssistantResponse:
+        if len(entities) == 1:
+            copy = (
+                f"Encontré esta coincidencia para «{query}»."
+                if context.language == "es"
+                else f"I found this match for “{query}”."
+            )
+        else:
+            copy = (
+                f"Encontré varias coincidencias para «{query}». ¿Buscabas alguna de estas?"
+                if context.language == "es"
+                else f"I found several matches for “{query}”. Were you looking for one of these?"
+            )
+        return AssistantResponse(
+            conversation_id=context.conversation_id,
+            language=context.language,
+            message=[AssistantContentPart(kind="text", text=copy)],
+            entities=entities,
+            entity_cards=[entity.key for entity in entities],
+            context=context,
+            grounding=AssistantGrounding(
+                tool_calls=0,
+                evidence_keys=["local:entity_lookup"],
+                data_gaps=[],
+            ),
+        )
 
     @staticmethod
     def _assert_no_urls(*texts: str) -> None:

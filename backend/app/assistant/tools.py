@@ -337,6 +337,31 @@ class TibiaHubAssistantTools:
                             "creature_key": creature_ref.key if creature_ref else None, "creature_name": relation.target_name,
                             "resolution_state": relation.resolution_state, "confidence": relation.confidence,
                         })
+                # Legacy creature-loot rows remain a valid local acquisition
+                # source while canonical knowledge relationships are filled in.
+                # Merge them by normalized item identity, bounded and deduped.
+                legacy_rows = self.db.query(Loot).options(
+                    joinedload(Loot.creature),
+                ).filter(
+                    Loot.normalized_name == normalize_search_text(item.name),
+                ).order_by(Loot.id).limit(min(limit, 20)).all()
+                known_creature_keys = {
+                    value.get("creature_key") for value in payload["drops"] if value.get("creature_key")
+                }
+                for row in legacy_rows:
+                    if row.creature is None:
+                        continue
+                    creature_ref = creature_reference(row.creature)
+                    if creature_ref.key in known_creature_keys:
+                        continue
+                    known_creature_keys.add(creature_ref.key)
+                    entities.append(creature_ref)
+                    payload["drops"].append({
+                        "creature_key": creature_ref.key,
+                        "rarity": row.rarity,
+                        "chance": row.percentage,
+                        "hunt_zone_keys": [],
+                    })
         gaps = [] if any(payload[key] for key in ("drops", "buy_from", "rewards_from")) else [f"TibiaHub has the item {reference.canonical_name}, but no verified acquisition source."]
         return ToolExecution("item_acquisition_context", evidence_key, payload, entities, data_gaps=gaps)
 

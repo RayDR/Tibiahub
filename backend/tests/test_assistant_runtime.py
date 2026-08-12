@@ -101,11 +101,13 @@ class ObservingTwoToolProvider(AssistantProvider):
 
     async def generate(self, request: AssistantProviderRequest) -> AssistantProviderTurn:
         self.turn += 1
+        # The local-first catalog preflight and every model tool must release
+        # their read transaction before any provider turn is awaited.
+        assert self.db.in_transaction() is False
+        assert self.active_connections["active"] == 0
         if self.turn == 1:
             return _tool_turn("first")
 
-        assert self.db.in_transaction() is False
-        assert self.active_connections["active"] == 0
         output = json.loads(request.input_items[-1]["output"])
         assert output["entities"][0]["canonical_name"] == "Werewolf"
         assert output["spawns"][0]["hunt_zone_key"] == "hunt_zone:9102"
@@ -147,8 +149,9 @@ async def test_read_connection_is_checked_in_between_provider_turns_and_session_
         assert provider.turn == 3
         assert len(provider.materialized_outputs) == 2
         assert pool_state["active"] == 0
-        assert pool_state["checkouts"] == 2
-        assert pool_state["checkins"] == 2
+        # One bounded local-first lookup plus the two provider-requested tools.
+        assert pool_state["checkouts"] == 3
+        assert pool_state["checkins"] == 3
         assert db.in_transaction() is False
         assert result.grounding.tool_calls == 2
         assert db.query(Creature).count() == before

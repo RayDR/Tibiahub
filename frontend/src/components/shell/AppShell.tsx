@@ -5,6 +5,7 @@ import { useTranslation } from 'react-i18next';
 
 import Navigation from '../Navigation';
 import { Container } from '../ui';
+import { SuggestImprovementLink } from '../feedback/GitHubFeedbackLink';
 
 function currentContext(pathname: string, t: (key: string) => string): { parent?: { label: string; to: string }; label: string } | null {
   if (pathname === '/') return null;
@@ -12,10 +13,13 @@ function currentContext(pathname: string, t: (key: string) => string): { parent?
   if (pathname.startsWith('/guild')) return { parent: pathname === '/guild' ? undefined : { label: t('nav.guild'), to: '/guild' }, label: pathname === '/guild' ? t('nav.guild') : t('shell.context.guild') };
   if (pathname === '/cyclopedia') return { label: t('nav.search') };
   if (pathname.startsWith('/creatures/')) return { parent: { label: t('nav.search'), to: '/cyclopedia?tab=creatures' }, label: t('shell.context.creature') };
+  if (pathname.startsWith('/items/')) return { parent: { label: t('nav.search'), to: '/cyclopedia?tab=items' }, label: t('shell.context.item') };
+  if (pathname.startsWith('/hunt-zones/')) return { parent: { label: t('nav.search'), to: '/cyclopedia?tab=zones' }, label: t('shell.context.huntZone') };
   if (pathname.startsWith('/quests/')) return { parent: { label: t('nav.search'), to: '/cyclopedia?tab=quests' }, label: t('shell.context.quest') };
   if (pathname.startsWith('/npcs/')) return { parent: { label: t('nav.search'), to: '/cyclopedia' }, label: t('shell.context.npc') };
   if (pathname.startsWith('/locations/')) return { parent: { label: t('nav.search'), to: '/cyclopedia?tab=zones' }, label: t('shell.context.location') };
   if (pathname === '/planner') return { label: t('nav.planner') };
+  if (pathname === '/map') return { label: t('nav.map') };
   if (pathname === '/profile') return { label: t('shell.profile') };
   if (pathname.startsWith('/login') || pathname.startsWith('/register') || pathname.startsWith('/reset-password')) return { label: t('shell.context.account') };
   return null;
@@ -42,6 +46,7 @@ export default function AppShell({ children, dataVersion }: { children: ReactNod
         <p className="text-sm text-content-secondary">{t('footer.project', { version: dataVersion || t('footer.unavailable') })}</p>
         <p className="mt-2 text-xs text-content-muted">{t('footer.trademark')}</p>
         <p className="mt-2 text-xs text-content-muted">{t('footer.dataSource')} <a href="https://tibia.fandom.com" target="_blank" rel="noopener noreferrer" className="text-primary hover:text-primary-hover">TibiaWiki</a></p>
+        <SuggestImprovementLink className="mt-3 justify-center" />
       </footer>
     </div>
   </div>;

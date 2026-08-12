@@ -11,6 +11,8 @@ import CreatureDetailPage from "./pages/CreatureDetailPage";
 import QuestDetailPage from "./pages/QuestDetailPage";
 import NpcDetailPage from "./pages/NpcDetailPage";
 import LocationDetailPage from "./pages/LocationDetailPage";
+import ItemDetailPage from "./pages/ItemDetailPage";
+import HuntZoneDetailPage from "./pages/HuntZoneDetailPage";
 import HuntRecommendationsPage from "./pages/HuntRecommendationsPage";
 import QuestViewerPage from "./pages/QuestViewerPage";
 import GuildManagementDashboard from "./pages/Admin/GuildManagementDashboard";
@@ -60,6 +62,7 @@ import DataMaintenance from "./pages/Admin/Maintenance";
 import MaintenanceControl from "./pages/Admin/MaintenanceControl";
 import RaffleAssistance from "./pages/Admin/RaffleAssistance";
 import MaintenanceGate from "./components/maintenance/MaintenanceGate";
+import SeoRouteDefaults from "./components/SeoRouteDefaults";
 
 const Leadership = lazy(() => import("./pages/guild/Leadership"));
 const LeadershipRecruitment = lazy(
@@ -71,6 +74,7 @@ const LeadershipApplicationDetail = lazy(
 const AdminGuildLeadership = lazy(
   () => import("./pages/Admin/AdminGuildLeadership"),
 );
+const TibiaMapPage = lazy(() => import("./pages/TibiaMapPage"));
 
 function App() {
   const location = useLocation();
@@ -122,6 +126,7 @@ function App() {
         <ToastProvider>
           <ConfirmationProvider>
             <MaintenanceGate>
+              <SeoRouteDefaults />
               <AppShell dataVersion={latestDataVersion}>
               <Routes location={location} key={location.pathname}>
                 <Route path="/" element={<HomePage />} />
@@ -143,12 +148,16 @@ function App() {
                   element={<CreatureDetailPage />}
                 />
                 <Route path="/quests/:questId" element={<QuestDetailPage />} />
+                <Route path="/items/:identifier" element={<ItemDetailPage />} />
+                <Route path="/hunt-zones/:identifier" element={<HuntZoneDetailPage />} />
                 <Route path="/npcs/:identifier" element={<NpcDetailPage />} />
                 <Route
                   path="/locations/:identifier"
                   element={<LocationDetailPage />}
                 />
                 <Route path="/planner" element={<HuntRecommendationsPage />} />
+                <Route path="/map" element={<Suspense fallback={<div role="status" className="p-8 text-center text-content-secondary">{t("map.loading")}</div>}><TibiaMapPage /></Suspense>} />
+                <Route path="/tibiamap" element={<Navigate to="/map" replace />} />
                 <Route
                   path="/recommendations"
                   element={<Navigate to="/planner" replace />}

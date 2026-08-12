@@ -7,12 +7,11 @@ import AssistantMapReference from './AssistantMapReference';
 export default function AssistantRouteSteps({ route }: { route: AssistantRouteReference }) {
   const { t } = useTranslation();
   return <article className="rounded-xl border border-line bg-surface-raised p-4">
-    <header className="flex flex-wrap items-start justify-between gap-2">
+    <header>
       <div>
         <h3 className="flex items-center gap-2 font-semibold text-content-primary"><ListOrdered className="size-4 text-primary" />{route.name}</h3>
         {(route.start_location || route.end_location) ? <p className="mt-1 text-xs text-content-muted">{t('assistant.route.endpoints', { start: route.start_location || t('assistant.unknown'), end: route.end_location || t('assistant.unknown') })}</p> : null}
       </div>
-      <span className="rounded-full bg-primary/10 px-2 py-1 text-xs text-primary">{t('assistant.route.verification', { state: route.verification_state, confidence: route.confidence })}</span>
     </header>
     {route.steps.length > 0 ? <ol className="mt-4 space-y-2">
       {route.steps.map((step) => <li key={`${route.key}:${step.sequence}`} className="flex gap-3 rounded-lg bg-surface-base/60 p-3 text-sm text-content-secondary">

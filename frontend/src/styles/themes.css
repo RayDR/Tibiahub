@@ -5,43 +5,43 @@
  * provides the complete RGB channel contract consumed by design-system.css.
  */
 :root,
-[data-theme="default"] {
+[data-theme="tibia-stone"] {
   color-scheme: dark;
-  --ds-surface-base: 2 6 23;
-  --ds-surface: 15 23 42;
-  --ds-surface-raised: 30 41 59;
-  --ds-surface-hover: 51 65 85;
-  --ds-surface-active: 71 85 105;
-  --ds-surface-overlay: 15 23 42;
-  --ds-surface-inverse: 248 250 252;
-  --ds-primary: 96 165 250;
-  --ds-primary-hover: 147 197 253;
-  --ds-primary-active: 59 130 246;
-  --ds-success: 52 211 153;
-  --ds-warning: 251 191 36;
-  --ds-danger: 248 113 113;
-  --ds-info: 56 189 248;
-  --ds-accent: 192 132 252;
-  --ds-text-primary: 248 250 252;
-  --ds-text-secondary: 203 213 225;
-  --ds-text-muted: 148 163 184;
-  --ds-text-inverse: 2 6 23;
-  --ds-text-on-primary: 2 6 23;
-  --ds-border: 71 85 105;
-  --ds-border-strong: 100 116 139;
-  --ds-focus: 125 211 252;
-  --ds-selected: 96 165 250;
-  --ds-disabled: 71 85 105;
+  --ds-surface-base: 11 12 16;
+  --ds-surface: 26 26 26;
+  --ds-surface-raised: 35 35 35;
+  --ds-surface-hover: 48 48 48;
+  --ds-surface-active: 64 62 58;
+  --ds-surface-overlay: 26 26 26;
+  --ds-surface-inverse: 232 225 212;
+  --ds-primary: 224 190 113;
+  --ds-primary-hover: 239 211 149;
+  --ds-primary-active: 202 162 74;
+  --ds-success: 134 239 172;
+  --ds-warning: 250 204 21;
+  --ds-danger: 252 129 121;
+  --ds-info: 125 211 252;
+  --ds-accent: 216 180 254;
+  --ds-text-primary: 232 225 212;
+  --ds-text-secondary: 202 193 178;
+  --ds-text-muted: 170 161 148;
+  --ds-text-inverse: 11 12 16;
+  --ds-text-on-primary: 11 12 16;
+  --ds-border: 90 85 76;
+  --ds-border-strong: 132 123 108;
+  --ds-focus: 253 224 71;
+  --ds-selected: 224 190 113;
+  --ds-disabled: 64 62 58;
   --ds-shadow: 0 0 0;
-  --ds-scrollbar-track: 2 6 23;
-  --ds-scrollbar-thumb: 100 116 139;
-  --ds-scrollbar-thumb-hover: 148 163 184;
-  --ds-chart-1: 96 165 250;
-  --ds-chart-2: 192 132 252;
-  --ds-chart-3: 56 189 248;
-  --ds-chart-4: 52 211 153;
-  --ds-chart-5: 251 191 36;
-  --ds-chart-6: 248 113 113;
+  --ds-scrollbar-track: 11 12 16;
+  --ds-scrollbar-thumb: 132 123 108;
+  --ds-scrollbar-thumb-hover: 224 190 113;
+  --ds-chart-1: 224 190 113;
+  --ds-chart-2: 216 180 254;
+  --ds-chart-3: 125 211 252;
+  --ds-chart-4: 134 239 172;
+  --ds-chart-5: 250 204 21;
+  --ds-chart-6: 252 129 121;
 }
 
 [data-theme="medieval"] {
@@ -81,45 +81,6 @@
   --ds-chart-4: 110 231 183;
   --ds-chart-5: 251 191 36;
   --ds-chart-6: 248 113 113;
-}
-
-[data-theme="tibia-stone"] {
-  color-scheme: dark;
-  --ds-surface-base: 11 12 16;
-  --ds-surface: 26 26 26;
-  --ds-surface-raised: 35 35 35;
-  --ds-surface-hover: 48 48 48;
-  --ds-surface-active: 64 62 58;
-  --ds-surface-overlay: 26 26 26;
-  --ds-surface-inverse: 232 225 212;
-  --ds-primary: 224 190 113;
-  --ds-primary-hover: 239 211 149;
-  --ds-primary-active: 202 162 74;
-  --ds-success: 134 239 172;
-  --ds-warning: 250 204 21;
-  --ds-danger: 252 129 121;
-  --ds-info: 125 211 252;
-  --ds-accent: 216 180 254;
-  --ds-text-primary: 232 225 212;
-  --ds-text-secondary: 202 193 178;
-  --ds-text-muted: 170 161 148;
-  --ds-text-inverse: 11 12 16;
-  --ds-text-on-primary: 11 12 16;
-  --ds-border: 90 85 76;
-  --ds-border-strong: 132 123 108;
-  --ds-focus: 253 224 71;
-  --ds-selected: 224 190 113;
-  --ds-disabled: 64 62 58;
-  --ds-shadow: 0 0 0;
-  --ds-scrollbar-track: 11 12 16;
-  --ds-scrollbar-thumb: 132 123 108;
-  --ds-scrollbar-thumb-hover: 224 190 113;
-  --ds-chart-1: 224 190 113;
-  --ds-chart-2: 216 180 254;
-  --ds-chart-3: 125 211 252;
-  --ds-chart-4: 134 239 172;
-  --ds-chart-5: 250 204 21;
-  --ds-chart-6: 252 129 121;
 }
 
 [data-theme="midnight-arcana"] {

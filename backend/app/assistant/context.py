@@ -10,7 +10,7 @@ from app.services.text_utils import normalize_search_text
 
 _SPANISH_MARKERS = {
     "como", "donde", "puedo", "tengo", "acceso", "llegar", "conseguir", "cazar",
-    "misiones", "mision", "estoy", "nivel", "semillas",
+    "misiones", "mision", "requisito", "requisitos", "acceso", "estoy", "nivel", "semillas",
 }
 
 

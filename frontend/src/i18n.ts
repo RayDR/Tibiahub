@@ -9,6 +9,7 @@ i18n
         resources: {
             en: {
                 translation: {
+                    "plannerPolish": { "partyCoverage": "Party coverage", "vocationCoverage": "Based on {{count}} unique vocations", "distinct": "{{unique}}/{{total}} distinct", "recordedExp": "Recorded EXP average", "recordedProfit": "Recorded profit average", "localAverages": "Local community averages", "viewDetails": "View details", "openMap": "Open in Map" },
                     "maintenanceMode": {
                         "common": { "unknown": "Unknown" }, "screen": { "title": "Scheduled maintenance", "defaultMessage": "TibiaHub is temporarily unavailable while game data is synchronized.", "started": "Started", "expected": "Estimated return", "noEstimate": "No estimate available", "refresh": "Check status", "adminAccess": "Administrator access", "status": "Service status: {{status}}" },
                         "admin": { "title": "Maintenance control", "subtitle": "Durable manual and synchronization-scoped holds." }, "defaultPublic": "TibiaHub is temporarily synchronizing game data. Please try again soon.", "refresh": "Refresh", "effective": "Effective maintenance state", "onlineHelp": "No active maintenance hold.", "active": "Maintenance active", "online": "Online", "manualTitle": "Manual maintenance hold", "reason": "Audit reason", "publicMessage": "Public message", "plannedEnd": "Optional planned end", "enable": "Enable manual maintenance", "disable": "Disable manual maintenance", "enableConfirm": "Enable a manual maintenance hold? It remains active until an administrator explicitly disables it.", "disableConfirm": "Disable all active manual maintenance holds? Synchronization holds remain active.", "enabled": "Manual maintenance enabled.", "disabled": "Manual maintenance disabled.", "holds": "Active holds", "noHolds": "No active holds.", "release": "Release hold", "releaseConfirm": "Release this individual maintenance hold?", "released": "Maintenance hold released.", "dataTitle": "Data retirement tools", "dataHelp": "Open the separate audited archive and deletion workflow.", "openData": "Open data tools", "errors": { "load": "Maintenance state could not be loaded.", "action": "Maintenance action could not be completed." }
@@ -24,6 +25,7 @@ i18n
                         "home": "Home",
                         "search": "Cyclopedia",
                         "planner": "Team Planner",
+                        "map": "Tibia Map",
                         "quests": "Quests",
                         "creatures": "Creatures",
                         "bosses": "Bosses",
@@ -39,8 +41,9 @@ i18n
                         "mobileNavigation": "Mobile navigation",
                         "profile": "Profile",
                         "breadcrumbs": "Page context",
-                        "context": { "admin": "Administration workspace", "guild": "Guild workspace", "creature": "Creature detail", "quest": "Quest detail", "npc": "NPC detail", "location": "Location detail", "account": "Account" }
+                        "context": { "admin": "Administration workspace", "guild": "Guild workspace", "creature": "Creature detail", "item": "Item detail", "quest": "Quest detail", "huntZone": "Hunt zone detail", "npc": "NPC detail", "location": "Location detail", "account": "Account" }
                     },
+                    "map": { "beta": "Public beta", "title": "Interactive Tibia Map", "subtitle": "Search local TibiaHub knowledge and inspect only map geometry backed by synchronized records.", "searchLabel": "Search the Tibia map", "searchPlaceholder": "Hunt zone, creature, quest or location", "loading": "Loading local map data…", "noResults": "No local map results match this search.", "noBaseMap": "No cached local base map is available yet. Knowledge results remain searchable.", "mapped": "Mapped locally", "knowledgeOnly": "Knowledge only", "noGeometry": "This entry is related knowledge, but TibiaHub has no reliable map geometry for it yet.", "coordinates": "Coordinates: {{x}}, {{y}}, floor {{z}}", "openDetails": "Open details", "showHuntZone": "Show hunt zone", "closeDetails": "Close map details", "layers": { "hunt_zone": "Hunt zones", "creature": "Creatures", "boss": "Bosses", "quest": "Quests", "location": "Locations" } },
                     "accountMenu": { "open": "Open account menu", "label": "Account menu", "profile": "Profile", "characters": "My characters", "security": "Change password / Security", "guilds": "My guilds", "admin": "Administration", "logout": "Log out" },
                     "identity": {
                         "subtitle": "Manage your public identity, verified characters, guild access, and security.",
@@ -89,39 +92,34 @@ i18n
                         "title": "Tibia Cyclopedia",
                         "subtitle": "Complete your weekly tasks, find your next hunt, and plan your next set."
                     },
+                    "feedback": { "improvement": "Suggest an improvement", "correction": "Suggest a correction" },
                     "assistant": {
-                        "localOnly": "Answers use synchronized TibiaHub PostgreSQL facts. No Tibia data provider is contacted during this request.",
                         "newConversation": "New conversation",
-                        "conversation": "TibiaHub Assistant conversation",
-                        "empty": "Ask naturally about hunts, items, access, quests, NPC travel, or verified routes.",
-                        "starters": { "hunt": "Where can I hunt Werewolves?", "item": "Where can I get Ice Flower Seeds?", "access": "How do I obtain access to Marapur?" },
-                        "loading": "Checking local TibiaHub knowledge…",
-                        "inputLabel": "Ask TibiaHub Assistant",
-                        "placeholder": "Where can I hunt more Scorpions?",
+                        "conversation": "Guide Thaisano conversation",
+                        "starters": { "hunt": "Where can I hunt Werewolves?", "item": "How can I get Ice Flower Seeds?", "quest": "What do I need to start The Inquisition Quest?", "zone": "How do I get to Roshamuul?" },
+                        "loading": "Looking for a reliable answer…",
+                        "inputLabel": "Ask Guide Thaisano",
+                        "placeholder": "Ask about your next Tibia goal…",
                         "send": "Ask",
                         "close": "Close",
                         "unknown": "Unknown",
-                        "disclaimer": "TibiaHub will state when local verified evidence is incomplete.",
+                        "completion": "Press Tab to complete: {{suggestion}}",
                         "prerequisites": "Prerequisites",
-                        "errors": { "assistant_disabled": "The assistant is currently disabled.", "assistant_not_configured": "The assistant has not been configured yet.", "assistant_rate_limited": "Too many assistant requests. Please wait a moment and try again.", "assistant_timeout": "The assistant took too long. Please try again.", "assistant_provider_unavailable": "The assistant model is temporarily unavailable.", "assistant_grounding_rejected": "The answer could not be safely grounded in local TibiaHub data.", "assistant_message_too_long": "That question is too long.", "assistant_history_too_long": "This conversation is too long. Start a new conversation.", "unavailable": "The assistant is temporarily unavailable." },
-                        "entity": { "inspect": "Inspect {{name}}", "cards": "Related Tibia entities", "noCompactDetails": "No additional compact details are available.", "openFull": "Open full details", "types": { "creature": "Creature", "item": "Item", "npc": "NPC", "quest": "Quest", "location": "Location", "area": "Area", "town": "Town", "hunt_zone": "Hunt zone" } },
-                        "route": { "endpoints": "{{start}} → {{end}}", "verification": "{{state}} · {{confidence}} confidence", "unresolvedStep": "This stored step has no verified instruction.", "noSteps": "TibiaHub has no verified steps for this route." }
+                        "errors": { "assistant_disabled": "The guide is currently unavailable.", "assistant_not_configured": "The guide is currently unavailable.", "assistant_rate_limited": "Too many questions. Please wait a moment and try again.", "assistant_timeout": "The answer took too long. Please try again.", "assistant_provider_unavailable": "The guide is temporarily unavailable.", "assistant_grounding_rejected": "I couldn’t answer that with enough certainty.", "assistant_message_too_long": "That question is too long.", "assistant_history_too_long": "This conversation is too long. Start a new conversation.", "unavailable": "The guide is temporarily unavailable." },
+                        "entity": { "inspect": "Inspect {{name}}", "cards": "Related Tibia entities", "noCompactDetails": "No additional compact details are available.", "openFull": "Open full details", "types": { "creature": "Creature", "boss": "Boss", "item": "Item", "npc": "NPC", "quest": "Quest", "location": "Location", "area": "Area", "town": "Town", "hunt_zone": "Hunt zone" }, "metadata": { "hitpoints": "HP", "experience": "EXP", "difficulty": "Difficulty", "city": "City", "min_level": "Min. level", "item_type": "Type", "category": "Category", "level": "Level", "occupation": "Occupation", "location": "Location", "kind": "Kind", "region": "Region", "premium": "Premium" } },
+                        "route": { "endpoints": "{{start}} → {{end}}", "unresolvedStep": "This route step is not available yet.", "noSteps": "Route steps are not available yet." }
                     },
                     "home": {
                         "assistantPreview": {
-                            "eyebrow": "TibiaHub guide",
-                            "status": "Grounded conversational assistant",
-                            "titleAuthenticated": "What are we looking for today, {{username}}?",
-                            "titleGuest": "What are you looking for in Tibia?",
-                            "subtitle": "Ask natural questions about hunts, items, access, quests and local verified routes.",
+                            "identity": "Guide Thaisano",
                             "section": "Search section",
                             "searchLabel": "Search TibiaHub",
                             "placeholder": "Creature, boss, item, quest or hunting zone",
                             "search": "Explore",
-                            "localOnly": "Current searches use TibiaHub's synchronized PostgreSQL knowledge and do not contact external providers during this request.",
+                            "localOnly": "Find useful Tibia knowledge and continue with the smart guide.",
                             "quickFilters": "Available search sections",
                             "promptTitle": "Start with an example",
-                            "promptHelp": "Choose a real local search while the conversational assistant is being prepared.",
+                            "promptHelp": "Choose a topic or ask in your own words.",
                             "futureHelp": "Later, this space will understand questions about hunts, equipment, quests and where to obtain items.",
                             "searchSuggestions": {
                                 "listLabel": "Local knowledge suggestions",
@@ -145,7 +143,7 @@ i18n
                                 "bosses": { "title": "Bosses", "help": "Boss records, difficulty and related encounters." },
                                 "items": { "title": "Loot and items", "help": "Find items and the creatures that may drop them." },
                                 "quests": { "title": "Quests", "help": "Requirements, missions, NPCs and related places." },
-                                "zones": { "title": "Hunting zones", "help": "Explore synchronized hunting areas and level ranges." }
+                                "zones": { "title": "Hunting zones", "help": "Explore hunting areas and recommended level ranges." }
                             },
                             "prompts": {
                                 "hunt": "Find creatures related to Dragon",
@@ -188,9 +186,9 @@ i18n
                         "activityUnavailable": "Recent activity is temporarily unavailable; the rest of TibiaHub is still ready.",
                         "partialHighlights": "Some discovery sections could not be refreshed. Available local results are shown.",
                         "loadingHighlights": "Loading local highlights…",
-                        "discovery": { "section": "Search section", "label": "Search the Cyclopedia", "placeholder": "Search creatures, bosses, or quests", "search": "Discover", "localOnly": "Searches use TibiaHub's local PostgreSQL knowledge; no provider is contacted during this read." },
+                        "discovery": { "section": "Search section", "label": "Search the Cyclopedia", "placeholder": "Search creatures, bosses, or quests", "search": "Discover", "localOnly": "Search TibiaHub knowledge about creatures, quests, items, and hunt zones." },
                         "shortcuts": { "title": "Choose your next action", "cyclopedia": "Cyclopedia", "cyclopediaHelp": "Browse creatures, bosses, items, quests, and locations.", "planner": "Team Planner", "plannerHelp": "Build a hunt recommendation from your party and goal.", "quests": "Quest knowledge", "questsHelp": "Review requirements, missions, NPCs, and locations.", "guild": "Guild command center", "guildHelp": "Open member, event, leadership, and hunt operations.", "account": "Sign in", "accountHelp": "Enable recent activity and your guild workspace." },
-                        "discoveryData": { "title": "Popular and recent knowledge", "help": "Real locally available entities from the current data version.", "emptyHelp": "Highlights will appear after local data has been synchronized.", "creature": "Creature", "item": "Item", "zone": "Hunt zone", "creatureStats": "{{hp}} HP · {{exp}} EXP", "dropSources": "{{count}} known creature sources", "minimumLevel": "Minimum level: {{level}}" },
+                        "discoveryData": { "title": "Popular and recent knowledge", "help": "Explore entries players are visiting across TibiaHub.", "emptyHelp": "Highlights will appear as knowledge becomes available.", "creature": "Creature", "item": "Item", "zone": "Hunt zone", "creatureStats": "{{hp}} HP · {{exp}} EXP", "dropSources": "{{count}} known creature sources", "minimumLevel": "Minimum level: {{level}}" },
                         "profileCard": {
                             "title": "Quick Profile",
                             "subtitle": "Your account snapshot and quick access to profile settings.",
@@ -223,7 +221,6 @@ i18n
                         "zonesPlaceholder": "Search zones..."
                     },
                     "themes": {
-                        "default": { "name": "Default", "description": "Clear blue accents over deep slate surfaces." },
                         "medieval": { "name": "Medieval", "description": "Warm gold, parchment text, and deep blue steel." },
                         "tibia-stone": { "name": "Tibia Stone", "description": "Weathered stone and metal with restrained gold." },
                         "midnight-arcana": { "name": "Midnight Arcana", "description": "Arcane violet and cyan over a midnight sky." },
@@ -328,7 +325,7 @@ i18n
                         "actions": {
                             "loadMore": "Load more"
                         },
-                        "discovery": { "label": "Cyclopedia discovery", "mostPopularCreatures": "Most Popular Creatures", "popularHunts": "Popular Hunts", "popularLoot": "Popular Loot", "recentQuests": "Recent Quests", "boostedCreature": "Boosted Creature", "boostedBoss": "Boosted Boss", "latestKnowledge": "Latest Knowledge", "trending": "Trending", "searches": "{{count}} searches", "empty": "Local synchronized content will appear here as it becomes available.", "types": { "creature": "Creature", "boss": "Boss", "item": "Item", "quest": "Quest", "npc": "NPC", "location": "Location", "town": "Town", "area": "Area", "access": "Access", "mission": "Mission", "hunt_zone": "Hunt zone", "route": "Route" }, "boostedState": { "awaiting_official_sync": "Awaiting an official synchronized daily boost. No placeholder is shown." } }
+                        "discovery": { "label": "Cyclopedia discovery", "mostPopularCreatures": "Most Popular Creatures", "popularBosses": "Popular bosses", "popularHunts": "Popular Hunts", "popularLoot": "Popular Loot", "recentQuests": "Recent Quests", "questLibrary": "Quest Library", "allTimePopular": "All-time popular", "forYou": "Continue your journey", "libraryPicks": "Library picks", "questTrends": "Trends and recent knowledge", "boostedCreature": "Boosted Creature", "boostedBoss": "Boosted Boss", "latestKnowledge": "Latest Knowledge", "trending": "Trending", "searches": "{{count}} searches", "empty": "Knowledge entries will appear here as they become available.", "types": { "creature": "Creature", "boss": "Boss", "item": "Item", "quest": "Quest", "npc": "NPC", "location": "Location", "town": "Town", "area": "Area", "access": "Access", "mission": "Mission", "hunt_zone": "Hunt zone", "route": "Route" }, "boostedState": { "awaiting_official_sync": "Today's official boosted creature is not available yet." } }
                     },
                     "language": {
                         "english": "English",
@@ -357,13 +354,19 @@ i18n
                         "weak": "Weak to",
                         "loot": "Loot Statistics"
                     },
-                    "creatureDetail": { "creature": "Creature", "loading": "Loading creature details…", "unavailable": "Creature detail unavailable", "notFound": "We couldn't find this creature.", "bossEncounter": "Boss encounter", "unknownDifficulty": "Unknown difficulty", "unknownOccurrence": "Unknown occurrence", "cyclopediaClass": "Cyclopedia class: {{value}}", "charmPoints": "Charm points: {{value}}", "overview": "Overview", "showLess": "Show less", "showMore": "Show more", "behaviorUnavailable": "Behavior information is not available.", "loot": "Loot & Drops", "lootHelp": "Source values are shown as-is; unknown means no exact drop chance was supplied.", "locations": "Known Locations", "accessRequirements": "Access Requirements (Missions/Quests)", "relatedTasks": "Related Tasks", "sourcesTitle": "Sources & Completeness", "sources": "Sources: {{value}}", "missingFields": "Missing fields: {{value}}", "none": "None", "openSource": "Open source page", "sourceUnavailable": "Source page not available", "stats": { "hitpoints": "Hitpoints", "experience": "Experience", "armor": "Armor", "speed": "Speed", "maxDamage": "Max damage", "primaryType": "Primary type", "creatureClass": "Creature class", "cyclopediaLevel": "Cyclopedia level" } },
+                    "creatureDetail": { "creature": "Creature", "loading": "Loading creature details…", "unavailable": "Creature detail unavailable", "notFound": "We couldn't find this creature.", "bossEncounter": "Boss encounter", "unknownDifficulty": "Unknown difficulty", "unknownOccurrence": "Unknown occurrence", "cyclopediaClass": "Cyclopedia class: {{value}}", "charmPoints": "Charm points: {{value}}", "overview": "Overview", "showLess": "Show less", "showMore": "Show more", "behaviorUnavailable": "Behavior information is not available.", "loot": "Loot & Drops", "lootHelp": "Unknown means no exact drop chance is available.", "locations": "Hunt zones and locations", "requiresQuest": "Requires: {{quest}}", "relatedTasks": "Related Tasks", "sourceTitle": "Learn more", "openSource": "Open knowledge source", "sourceUnavailable": "Source page not available", "stats": { "hitpoints": "Hitpoints", "experience": "Experience", "armor": "Armor", "speed": "Speed", "maxDamage": "Max damage", "primaryType": "Primary type", "creatureClass": "Creature class", "cyclopediaLevel": "Cyclopedia level" } },
                     "questDetail": {
-                        "unavailable": "Quest detail unavailable", "notFound": "Quest not found", "back": "Back to Cyclopedia", "group": "Group: {{name}}", "noDetails": "Details are not available yet.",
+                        "unavailable": "Quest detail unavailable", "notFound": "Quest not found", "back": "Back to Cyclopedia", "group": "Group: {{name}}", "noDetails": "Details are not available yet.", "codexEntry": "Tibia knowledge codex", "overview": "Overview", "contents": "In this entry", "connections": "People, places and creatures", "chapter": "Chapter {{number}}",
                         "minimumLevel": "Minimum level", "experience": "Experience reward", "premium": "Premium", "repeatable": "Repeatable", "notAvailable": "N/A", "unknown": "Unknown", "yes": "Yes", "no": "No",
                         "requirements": "Requirements ({{count}})", "rewards": "Rewards ({{count}})", "items": "Items", "quests": "Prerequisite quests", "noRequirements": "No explicit requirements are available.", "noRewards": "No explicit rewards are available.",
                         "missions": "Missions ({{count}})", "noMissions": "No structured missions are available.", "npcs": "Referenced NPCs", "locations": "Locations", "access": "Unlocked access", "creatures": "Related creatures and bosses", "unknownClassification": "Unknown classification", "noCreatures": "No related creatures are linked in local data.",
                         "updated": "Local data updated {{date}}", "referencesPending": "{{count}} references pending exact resolution", "source": "Open source page", "openNpc": "View NPC", "openLocation": "View location"
+                    },
+                    "itemDetail": {
+                        "unavailable": "Item detail unavailable", "notFound": "We couldn't find this item.", "back": "Back to items", "eyebrow": "Cyclopedia item", "noDescription": "No description is available yet.", "weight": "Weight", "value": "Value", "level": "Required level", "vocations": "Vocations", "combat": "Combat and equipment", "attack": "Attack", "defense": "Defense", "armor": "Armor", "range": "Range", "slots": "Slots", "imbuements": "Imbuement slots", "attributes": "Attributes, resistances and bonuses", "noAttributes": "No additional attributes are recorded.", "acquisition": "How to obtain it", "droppedBy": "Dropped by", "creature": "Creature", "boss": "Boss", "chance": "{{value}}% chance", "rarity": "{{value}} rarity", "amount": "Amount {{value}}", "noDrops": "No creature drops are linked yet.", "trade": "Trade", "buyFrom": "Buy from", "sellTo": "Sell to", "usedFor": "Quests and uses", "requiredFor": "Required for", "rewardsFrom": "Reward from", "notes": "Notes", "provenance": "Source and update", "updated": "Updated {{date}}", "source": "Open knowledge source"
+                    },
+                    "huntZoneDetail": {
+                        "unavailable": "Hunt zone unavailable", "notFound": "We couldn't find this hunt zone.", "back": "Back to hunt zones", "eyebrow": "Hunt zone", "noDescription": "No description is available yet.", "map": "Interactive map", "mapAlt": "Local map context for {{name}}", "viewMap": "View map", "mapEmpty": "We don't have a map for this zone yet.", "mapContext": "This local image provides geographic context. A zone marker appears only when its coordinates and image bounds are both available.", "resetMap": "Reset map", "zoomIn": "Zoom in", "zoomOut": "Zoom out", "floor": "Floor {{floor}}", "coordinates": "Tibia coordinates: {{x}}, {{y}}, floor {{z}}", "levels": "Recommended levels", "vocations": "Vocations", "party": "Party size", "size": "Area size", "ratings": "Hunt profile", "experience": "Experience", "profit": "Profit", "danger": "Danger", "premium": "Premium", "creatures": "Creature spawns", "quantity": "Spawn density", "noCreatures": "No structured creature spawns are linked yet.", "tips": "Hunting notes", "access": "Access", "accessClear": "No access requirements are recorded.", "premiumRequired": "A Premium Account is required.", "requires": "Requires:", "questUnresolved": "A quest is required, but its canonical quest entry is not linked yet."
                     },
                     "namedKnowledge": {
                         "loading": "Loading local knowledge details", "npcUnavailable": "NPC detail unavailable", "locationUnavailable": "Location detail unavailable", "notFound": "This local record was not found.", "back": "Go back", "noDescription": "No local description is available yet.",
@@ -371,7 +374,7 @@ i18n
                         "occupation": "Occupation", "sex": "Sex", "location": "Location", "region": "Region", "minimumLevel": "Minimum level", "premium": "Premium", "yes": "Yes", "no": "No", "access": "Access", "relationships": "Related local knowledge", "updated": "Local data updated {{date}}", "source": "Open source page"
                     },
                     "spatialMetadata": {
-                        "title": "Map", "help": "Local positions, related areas, route previews, and nearby exploration.", "preview": "Tibia map context", "previewHelp": "Verified coordinates and route steps are rendered from local PostGIS data.", "nearby": "Nearby locations", "noNearby": "No nearby entities are linked at this coordinate yet.", "distance": "{{distance}} tiles", "unavailable": "Map data unavailable", "placeholder": "Verified local coordinates, regions, and routes will appear here when available.",
+                        "title": "Map", "help": "Positions, related areas, route previews, and nearby exploration.", "preview": "Tibia map context", "previewHelp": "Available coordinates and route steps are shown here.", "nearby": "Nearby locations", "noNearby": "No nearby entities are linked at this coordinate yet.", "distance": "{{distance}} tiles", "unavailable": "Map data unavailable", "placeholder": "Coordinates, regions, and routes will appear here when available.",
                         "coordinates": "Tibia coordinates: {{x}}, {{y}}, floor {{z}}", "bounds": "Bounds: {{min_x}}, {{min_y}} to {{max_x}}, {{max_y}}", "unresolved": "Awaiting exact spatial resolution", "routeEndpoints": "{{start}} → {{end}}", "routeMapAlt": "{{route}} map {{index}}"
                     },
                     "auth": {
@@ -892,6 +895,7 @@ i18n
             },
             es: {
                 translation: {
+                    "plannerPolish": { "partyCoverage": "Cobertura del equipo", "vocationCoverage": "Según {{count}} vocaciones únicas", "distinct": "{{unique}}/{{total}} distintas", "recordedExp": "Promedio de EXP registrado", "recordedProfit": "Promedio de ganancia registrado", "localAverages": "Promedios locales de la comunidad", "viewDetails": "Ver detalles", "openMap": "Abrir en el mapa" },
                     "maintenanceMode": {
                         "common": { "unknown": "Desconocido" }, "screen": { "title": "Mantenimiento programado", "defaultMessage": "TibiaHub no está disponible temporalmente mientras se sincronizan los datos del juego.", "started": "Inicio", "expected": "Regreso estimado", "noEstimate": "Sin estimación disponible", "refresh": "Comprobar estado", "adminAccess": "Acceso de administrador", "status": "Estado del servicio: {{status}}" },
                         "admin": { "title": "Control de mantenimiento", "subtitle": "Bloqueos duraderos manuales y asociados a sincronización." }, "defaultPublic": "TibiaHub está sincronizando temporalmente los datos del juego. Inténtalo de nuevo pronto.", "refresh": "Actualizar", "effective": "Estado efectivo de mantenimiento", "onlineHelp": "No hay bloqueos de mantenimiento activos.", "active": "Mantenimiento activo", "online": "En línea", "manualTitle": "Bloqueo manual de mantenimiento", "reason": "Motivo de auditoría", "publicMessage": "Mensaje público", "plannedEnd": "Fin previsto opcional", "enable": "Activar mantenimiento manual", "disable": "Desactivar mantenimiento manual", "enableConfirm": "¿Activar un bloqueo manual? Permanecerá activo hasta que un administrador lo desactive explícitamente.", "disableConfirm": "¿Desactivar todos los bloqueos manuales activos? Los bloqueos de sincronización seguirán activos.", "enabled": "Mantenimiento manual activado.", "disabled": "Mantenimiento manual desactivado.", "holds": "Bloqueos activos", "noHolds": "No hay bloqueos activos.", "release": "Liberar bloqueo", "releaseConfirm": "¿Liberar este bloqueo de mantenimiento?", "released": "Bloqueo de mantenimiento liberado.", "dataTitle": "Herramientas de retiro de datos", "dataHelp": "Abre el flujo separado y auditado de archivo y eliminación.", "openData": "Abrir herramientas de datos", "errors": { "load": "No se pudo cargar el estado de mantenimiento.", "action": "No se pudo completar la acción de mantenimiento." }
@@ -907,6 +911,7 @@ i18n
                         "home": "Inicio",
                         "search": "Cyclopedia",
                         "planner": "Planner",
+                        "map": "Mapa de Tibia",
                         "quests": "Quests",
                         "creatures": "Creaturas",
                         "bosses": "Bosses",
@@ -922,8 +927,9 @@ i18n
                         "mobileNavigation": "Navegación móvil",
                         "profile": "Perfil",
                         "breadcrumbs": "Contexto de la página",
-                        "context": { "admin": "Espacio de administración", "guild": "Espacio de la guild", "creature": "Detalle de criatura", "quest": "Detalle de quest", "npc": "Detalle de NPC", "location": "Detalle de ubicación", "account": "Cuenta" }
+                        "context": { "admin": "Espacio de administración", "guild": "Espacio de la guild", "creature": "Detalle de criatura", "item": "Detalle de objeto", "quest": "Detalle de quest", "huntZone": "Detalle de zona de caza", "npc": "Detalle de NPC", "location": "Detalle de ubicación", "account": "Cuenta" }
                     },
+                    "map": { "beta": "Beta pública", "title": "Mapa interactivo de Tibia", "subtitle": "Busca conocimiento local de TibiaHub y consulta solo geometría respaldada por registros sincronizados.", "searchLabel": "Buscar en el mapa de Tibia", "searchPlaceholder": "Zona, criatura, quest o ubicación", "loading": "Cargando datos locales del mapa…", "noResults": "Ningún resultado local coincide con esta búsqueda.", "noBaseMap": "Todavía no hay un mapa base local en caché. El conocimiento sigue disponible para buscar.", "mapped": "Mapeado localmente", "knowledgeOnly": "Solo conocimiento", "noGeometry": "Esta entrada tiene conocimiento relacionado, pero TibiaHub aún no tiene geometría fiable para mostrarla.", "coordinates": "Coordenadas: {{x}}, {{y}}, piso {{z}}", "openDetails": "Abrir detalles", "showHuntZone": "Mostrar zona", "closeDetails": "Cerrar detalles del mapa", "layers": { "hunt_zone": "Zonas de caza", "creature": "Criaturas", "boss": "Bosses", "quest": "Quests", "location": "Ubicaciones" } },
                     "accountMenu": { "open": "Abrir menú de cuenta", "label": "Menú de cuenta", "profile": "Perfil", "characters": "Mis personajes", "security": "Cambiar contraseña / Seguridad", "guilds": "Mis guilds", "admin": "Administración", "logout": "Cerrar sesión" },
                     "identity": {
                         "subtitle": "Gestiona tu identidad pública, personajes verificados, acceso a guilds y seguridad.",
@@ -972,39 +978,34 @@ i18n
                         "title": "Cyclopedia de Tibia",
                         "subtitle": "Completa tus weekly tasks, encuentra tu próxima hunt y consigue tu próximo set."
                     },
+                    "feedback": { "improvement": "Sugerir una mejora", "correction": "Sugerir corrección" },
                     "assistant": {
-                        "localOnly": "Las respuestas usan datos PostgreSQL sincronizados de TibiaHub. No se contactan proveedores de datos de Tibia durante esta consulta.",
                         "newConversation": "Nueva conversación",
-                        "conversation": "Conversación con el Asistente de TibiaHub",
-                        "empty": "Pregunta de forma natural sobre hunts, objetos, accesos, quests, viajes con NPC o rutas verificadas.",
-                        "starters": { "hunt": "¿Dónde puedo cazar Werewolves?", "item": "¿Dónde puedo conseguir Ice Flower Seeds?", "access": "¿Cómo obtengo acceso a Marapur?" },
-                        "loading": "Consultando el conocimiento local de TibiaHub…",
-                        "inputLabel": "Pregunta al Asistente de TibiaHub",
-                        "placeholder": "¿Dónde puedo cazar más Scorpions?",
+                        "conversation": "Conversación con Guide Thaisano",
+                        "starters": { "hunt": "¿Dónde puedo cazar Werewolves?", "item": "¿Cómo puedo conseguir Ice Flower Seeds?", "quest": "¿Qué necesito para comenzar The Inquisition Quest?", "zone": "¿Cómo llego a Roshamuul?" },
+                        "loading": "Buscando una respuesta confiable…",
+                        "inputLabel": "Pregunta a Guide Thaisano",
+                        "placeholder": "Pregunta por tu próximo objetivo…",
                         "send": "Preguntar",
                         "close": "Cerrar",
                         "unknown": "Desconocido",
-                        "disclaimer": "TibiaHub indicará cuando la evidencia local verificada esté incompleta.",
+                        "completion": "Pulsa Tab para completar: {{suggestion}}",
                         "prerequisites": "Requisitos",
-                        "errors": { "assistant_disabled": "El asistente está desactivado actualmente.", "assistant_not_configured": "El asistente todavía no está configurado.", "assistant_rate_limited": "Demasiadas consultas. Espera un momento e inténtalo de nuevo.", "assistant_timeout": "El asistente tardó demasiado. Inténtalo de nuevo.", "assistant_provider_unavailable": "El modelo del asistente no está disponible temporalmente.", "assistant_grounding_rejected": "La respuesta no pudo validarse de forma segura con los datos locales de TibiaHub.", "assistant_message_too_long": "La pregunta es demasiado larga.", "assistant_history_too_long": "La conversación es demasiado larga. Inicia una nueva.", "unavailable": "El asistente no está disponible temporalmente." },
-                        "entity": { "inspect": "Ver {{name}}", "cards": "Entidades de Tibia relacionadas", "noCompactDetails": "No hay más detalles compactos disponibles.", "openFull": "Abrir detalles completos", "types": { "creature": "Criatura", "item": "Objeto", "npc": "NPC", "quest": "Quest", "location": "Ubicación", "area": "Área", "town": "Ciudad", "hunt_zone": "Zona de caza" } },
-                        "route": { "endpoints": "{{start}} → {{end}}", "verification": "{{state}} · confianza {{confidence}}", "unresolvedStep": "Este paso guardado no tiene una instrucción verificada.", "noSteps": "TibiaHub no tiene pasos verificados para esta ruta." }
+                        "errors": { "assistant_disabled": "La guía no está disponible actualmente.", "assistant_not_configured": "La guía no está disponible actualmente.", "assistant_rate_limited": "Demasiadas preguntas. Espera un momento e inténtalo de nuevo.", "assistant_timeout": "La respuesta tardó demasiado. Inténtalo de nuevo.", "assistant_provider_unavailable": "La guía no está disponible temporalmente.", "assistant_grounding_rejected": "No pude responder con suficiente certeza.", "assistant_message_too_long": "La pregunta es demasiado larga.", "assistant_history_too_long": "La conversación es demasiado larga. Inicia una nueva.", "unavailable": "La guía no está disponible temporalmente." },
+                        "entity": { "inspect": "Ver {{name}}", "cards": "Entidades de Tibia relacionadas", "noCompactDetails": "No hay más detalles compactos disponibles.", "openFull": "Abrir detalles completos", "types": { "creature": "Criatura", "boss": "Boss", "item": "Objeto", "npc": "NPC", "quest": "Quest", "location": "Ubicación", "area": "Área", "town": "Ciudad", "hunt_zone": "Zona de caza" }, "metadata": { "hitpoints": "HP", "experience": "EXP", "difficulty": "Dificultad", "city": "Ciudad", "min_level": "Nivel mín.", "item_type": "Tipo", "category": "Categoría", "level": "Nivel", "occupation": "Ocupación", "location": "Ubicación", "kind": "Clase", "region": "Región", "premium": "Premium" } },
+                        "route": { "endpoints": "{{start}} → {{end}}", "unresolvedStep": "Este paso de la ruta aún no está disponible.", "noSteps": "Los pasos de la ruta aún no están disponibles." }
                     },
                     "home": {
                         "assistantPreview": {
-                            "eyebrow": "Guía de TibiaHub",
-                            "status": "Asistente conversacional fundamentado",
-                            "titleAuthenticated": "¿Qué buscamos hoy, {{username}}?",
-                            "titleGuest": "¿Qué estás buscando en Tibia?",
-                            "subtitle": "Pregunta de forma natural sobre hunts, objetos, accesos, quests y rutas locales verificadas.",
+                            "identity": "Guide Thaisano",
                             "section": "Sección de búsqueda",
                             "searchLabel": "Buscar en TibiaHub",
                             "placeholder": "Criatura, boss, objeto, quest o zona de caza",
                             "search": "Explorar",
-                            "localOnly": "Las búsquedas actuales usan el conocimiento PostgreSQL sincronizado de TibiaHub y no contactan proveedores externos durante esta consulta.",
+                            "localOnly": "Encuentra conocimiento útil de Tibia y continúa con la guía inteligente.",
                             "quickFilters": "Secciones de búsqueda disponibles",
                             "promptTitle": "Comienza con un ejemplo",
-                            "promptHelp": "Elige una búsqueda local real mientras preparamos el asistente conversacional.",
+                            "promptHelp": "Elige un tema o pregunta con tus propias palabras.",
                             "futureHelp": "Después este espacio comprenderá preguntas sobre hunts, equipo, quests y dónde conseguir objetos.",
                             "searchSuggestions": {
                                 "listLabel": "Sugerencias del conocimiento local",
@@ -1028,7 +1029,7 @@ i18n
                                 "bosses": { "title": "Bosses", "help": "Registros de bosses, dificultad y encuentros relacionados." },
                                 "items": { "title": "Loot y objetos", "help": "Encuentra objetos y las criaturas que pueden soltarlos." },
                                 "quests": { "title": "Quests", "help": "Requisitos, misiones, NPC y lugares relacionados." },
-                                "zones": { "title": "Zonas de caza", "help": "Explora áreas de caza sincronizadas y rangos de nivel." }
+                                "zones": { "title": "Zonas de caza", "help": "Explora áreas de caza y rangos de nivel recomendados." }
                             },
                             "prompts": {
                                 "hunt": "Buscar criaturas relacionadas con Dragon",
@@ -1071,7 +1072,7 @@ i18n
                         "activityUnavailable": "La actividad reciente no está disponible temporalmente; el resto de TibiaHub sigue listo.",
                         "partialHighlights": "Algunas secciones no pudieron actualizarse. Se muestran los resultados locales disponibles.",
                         "loadingHighlights": "Cargando destacados locales…",
-                        "discovery": { "section": "Sección de búsqueda", "label": "Buscar en la Cyclopedia", "placeholder": "Buscar criaturas, bosses o quests", "search": "Descubrir", "localOnly": "Las búsquedas usan el conocimiento PostgreSQL local de TibiaHub; no se contacta a proveedores durante esta lectura." },
+                        "discovery": { "section": "Sección de búsqueda", "label": "Buscar en la Cyclopedia", "placeholder": "Buscar criaturas, bosses o quests", "search": "Descubrir", "localOnly": "Busca conocimiento de TibiaHub sobre criaturas, quests, objetos y zonas de caza." },
                         "shortcuts": { "title": "Elige tu siguiente acción", "cyclopedia": "Cyclopedia", "cyclopediaHelp": "Explora criaturas, bosses, objetos, quests y ubicaciones.", "planner": "Planner de equipo", "plannerHelp": "Genera una recomendación de caza según tu equipo y objetivo.", "quests": "Conocimiento de quests", "questsHelp": "Revisa requisitos, etapas, NPC y ubicaciones.", "guild": "Centro de comando de guild", "guildHelp": "Abre operaciones de miembros, eventos, liderazgo y cacerías.", "account": "Iniciar sesión", "accountHelp": "Activa la actividad reciente y el espacio de tu guild." },
                         "discoveryData": { "title": "Conocimiento popular y reciente", "help": "Entidades reales disponibles localmente en la versión actual de datos.", "emptyHelp": "Los destacados aparecerán después de sincronizar los datos locales.", "creature": "Criatura", "item": "Objeto", "zone": "Zona de caza", "creatureStats": "{{hp}} HP · {{exp}} EXP", "dropSources": "{{count}} fuentes conocidas de criaturas", "minimumLevel": "Nivel mínimo: {{level}}" },
                         "profileCard": {
@@ -1106,7 +1107,6 @@ i18n
                         "zonesPlaceholder": "Buscar zonas..."
                     },
                     "themes": {
-                        "default": { "name": "Predeterminado", "description": "Acentos azules claros sobre superficies de pizarra profunda." },
                         "medieval": { "name": "Medieval", "description": "Oro cálido, texto pergamino y acero azul profundo." },
                         "tibia-stone": { "name": "Piedra de Tibia", "description": "Piedra y metal desgastados con oro discreto." },
                         "midnight-arcana": { "name": "Arcano Nocturno", "description": "Violeta arcano y cian sobre un cielo de medianoche." },
@@ -1211,7 +1211,7 @@ i18n
                         "actions": {
                             "loadMore": "Cargar más"
                         },
-                        "discovery": { "label": "Descubrimiento de Cyclopedia", "mostPopularCreatures": "Criaturas más populares", "popularHunts": "Cacerías populares", "popularLoot": "Loot popular", "recentQuests": "Quests recientes", "boostedCreature": "Criatura potenciada", "boostedBoss": "Boss potenciado", "latestKnowledge": "Conocimiento reciente", "trending": "Tendencias", "searches": "{{count}} búsquedas", "empty": "El contenido local sincronizado aparecerá aquí cuando esté disponible.", "types": { "creature": "Criatura", "boss": "Boss", "item": "Objeto", "quest": "Quest", "npc": "NPC", "location": "Ubicación", "town": "Ciudad", "area": "Área", "access": "Acceso", "mission": "Misión", "hunt_zone": "Zona de caza", "route": "Ruta" }, "boostedState": { "awaiting_official_sync": "Esperando una sincronización oficial del bonus diario. No se muestra contenido de relleno." } }
+                        "discovery": { "label": "Descubrimiento de Cyclopedia", "mostPopularCreatures": "Criaturas más populares", "popularBosses": "Bosses populares", "popularHunts": "Cacerías populares", "popularLoot": "Loot popular", "recentQuests": "Quests recientes", "questLibrary": "Biblioteca de quests", "allTimePopular": "Populares de siempre", "forYou": "Continúa tu aventura", "libraryPicks": "Selección de la biblioteca", "questTrends": "Tendencias y conocimiento reciente", "boostedCreature": "Criatura potenciada", "boostedBoss": "Boss potenciado", "latestKnowledge": "Conocimiento reciente", "trending": "Tendencias", "searches": "{{count}} búsquedas", "empty": "Las entradas de conocimiento aparecerán aquí cuando estén disponibles.", "types": { "creature": "Criatura", "boss": "Boss", "item": "Objeto", "quest": "Quest", "npc": "NPC", "location": "Ubicación", "town": "Ciudad", "area": "Área", "access": "Acceso", "mission": "Misión", "hunt_zone": "Zona de caza", "route": "Ruta" }, "boostedState": { "awaiting_official_sync": "La criatura potenciada oficial de hoy aún no está disponible." } }
                     },
                     "language": {
                         "english": "Inglés",
@@ -1240,13 +1240,19 @@ i18n
                         "weak": "Débil a",
                         "loot": "Estadísticas de Botín"
                     },
-                    "creatureDetail": { "creature": "Criatura", "loading": "Cargando detalles de la criatura…", "unavailable": "El detalle de la criatura no está disponible", "notFound": "No encontramos esta criatura.", "bossEncounter": "Encuentro con boss", "unknownDifficulty": "Dificultad desconocida", "unknownOccurrence": "Frecuencia desconocida", "cyclopediaClass": "Clase de Cyclopedia: {{value}}", "charmPoints": "Puntos de charm: {{value}}", "overview": "Resumen", "showLess": "Mostrar menos", "showMore": "Mostrar más", "behaviorUnavailable": "La información de comportamiento no está disponible.", "loot": "Botín y drops", "lootHelp": "Los valores se muestran como los publica la fuente; desconocido indica que no se proporcionó una probabilidad exacta.", "locations": "Ubicaciones conocidas", "accessRequirements": "Requisitos de acceso (misiones/quests)", "relatedTasks": "Tareas relacionadas", "sourcesTitle": "Fuentes y completitud", "sources": "Fuentes: {{value}}", "missingFields": "Campos faltantes: {{value}}", "none": "Ninguno", "openSource": "Abrir página de origen", "sourceUnavailable": "Página de origen no disponible", "stats": { "hitpoints": "Vida", "experience": "Experiencia", "armor": "Armadura", "speed": "Velocidad", "maxDamage": "Daño máximo", "primaryType": "Tipo principal", "creatureClass": "Clase de criatura", "cyclopediaLevel": "Nivel de Cyclopedia" } },
+                    "creatureDetail": { "creature": "Criatura", "loading": "Cargando detalles de la criatura…", "unavailable": "El detalle de la criatura no está disponible", "notFound": "No encontramos esta criatura.", "bossEncounter": "Encuentro con boss", "unknownDifficulty": "Dificultad desconocida", "unknownOccurrence": "Frecuencia desconocida", "cyclopediaClass": "Clase de Cyclopedia: {{value}}", "charmPoints": "Puntos de charm: {{value}}", "overview": "Resumen", "showLess": "Mostrar menos", "showMore": "Mostrar más", "behaviorUnavailable": "La información de comportamiento no está disponible.", "loot": "Botín y drops", "lootHelp": "Desconocido indica que no hay una probabilidad exacta disponible.", "locations": "Zonas de caza y ubicaciones", "requiresQuest": "Requiere: {{quest}}", "relatedTasks": "Tareas relacionadas", "sourceTitle": "Más información", "openSource": "Abrir fuente de conocimiento", "sourceUnavailable": "Página de origen no disponible", "stats": { "hitpoints": "Vida", "experience": "Experiencia", "armor": "Armadura", "speed": "Velocidad", "maxDamage": "Daño máximo", "primaryType": "Tipo principal", "creatureClass": "Clase de criatura", "cyclopediaLevel": "Nivel de Cyclopedia" } },
                     "questDetail": {
-                        "unavailable": "El detalle de la misión no está disponible", "notFound": "Misión no encontrada", "back": "Volver a Cyclopedia", "group": "Grupo: {{name}}", "noDetails": "Los detalles aún no están disponibles.",
+                        "unavailable": "El detalle de la misión no está disponible", "notFound": "Misión no encontrada", "back": "Volver a Cyclopedia", "group": "Grupo: {{name}}", "noDetails": "Los detalles aún no están disponibles.", "codexEntry": "Códice de conocimiento de Tibia", "overview": "Resumen", "contents": "En esta entrada", "connections": "Personas, lugares y criaturas", "chapter": "Capítulo {{number}}",
                         "minimumLevel": "Nivel mínimo", "experience": "Experiencia de recompensa", "premium": "Premium", "repeatable": "Repetible", "notAvailable": "N/D", "unknown": "Desconocido", "yes": "Sí", "no": "No",
                         "requirements": "Requisitos ({{count}})", "rewards": "Recompensas ({{count}})", "items": "Objetos", "quests": "Misiones previas", "noRequirements": "No hay requisitos explícitos disponibles.", "noRewards": "No hay recompensas explícitas disponibles.",
                         "missions": "Etapas ({{count}})", "noMissions": "No hay etapas estructuradas disponibles.", "npcs": "NPC relacionados", "locations": "Ubicaciones", "access": "Accesos desbloqueados", "creatures": "Criaturas y jefes relacionados", "unknownClassification": "Clasificación desconocida", "noCreatures": "No hay criaturas relacionadas vinculadas en los datos locales.",
                         "updated": "Datos locales actualizados el {{date}}", "referencesPending": "{{count}} referencias pendientes de resolución exacta", "source": "Abrir página de origen", "openNpc": "Ver NPC", "openLocation": "Ver ubicación"
+                    },
+                    "itemDetail": {
+                        "unavailable": "El detalle del objeto no está disponible", "notFound": "No encontramos este objeto.", "back": "Volver a objetos", "eyebrow": "Objeto de Cyclopedia", "noDescription": "Aún no hay una descripción disponible.", "weight": "Peso", "value": "Valor", "level": "Nivel requerido", "vocations": "Vocaciones", "combat": "Combate y equipo", "attack": "Ataque", "defense": "Defensa", "armor": "Armadura", "range": "Alcance", "slots": "Ranuras", "imbuements": "Ranuras de imbuement", "attributes": "Atributos, resistencias y bonificaciones", "noAttributes": "No hay atributos adicionales registrados.", "acquisition": "Cómo obtenerlo", "droppedBy": "Lo sueltan", "creature": "Criatura", "boss": "Boss", "chance": "{{value}}% de probabilidad", "rarity": "Rareza {{value}}", "amount": "Cantidad {{value}}", "noDrops": "Aún no hay drops de criaturas vinculados.", "trade": "Comercio", "buyFrom": "Comprar a", "sellTo": "Vender a", "usedFor": "Quests y usos", "requiredFor": "Necesario para", "rewardsFrom": "Recompensa de", "notes": "Notas", "provenance": "Fuente y actualización", "updated": "Actualizado el {{date}}", "source": "Abrir fuente de conocimiento"
+                    },
+                    "huntZoneDetail": {
+                        "unavailable": "La zona de caza no está disponible", "notFound": "No encontramos esta zona de caza.", "back": "Volver a zonas de caza", "eyebrow": "Zona de caza", "noDescription": "Aún no hay una descripción disponible.", "map": "Mapa interactivo", "mapAlt": "Contexto del mapa local de {{name}}", "viewMap": "Ver en mapa", "mapEmpty": "Todavía no tenemos un mapa de esta zona.", "mapContext": "Esta imagen local ofrece contexto geográfico. El marcador de la zona solo aparece cuando existen coordenadas y límites de imagen compatibles.", "resetMap": "Restablecer mapa", "zoomIn": "Acercar", "zoomOut": "Alejar", "floor": "Piso {{floor}}", "coordinates": "Coordenadas de Tibia: {{x}}, {{y}}, piso {{z}}", "levels": "Niveles recomendados", "vocations": "Vocaciones", "party": "Tamaño del grupo", "size": "Tamaño del área", "ratings": "Perfil de caza", "experience": "Experiencia", "profit": "Ganancia", "danger": "Peligro", "premium": "Premium", "creatures": "Criaturas presentes", "quantity": "Densidad del spawn", "noCreatures": "Aún no hay spawns estructurados vinculados.", "tips": "Notas de caza", "access": "Acceso", "accessClear": "No hay requisitos de acceso registrados.", "premiumRequired": "Se requiere Premium Account.", "requires": "Requiere:", "questUnresolved": "Se requiere una quest, pero aún no está vinculada su entrada canónica."
                     },
                     "namedKnowledge": {
                         "loading": "Cargando detalles del conocimiento local", "npcUnavailable": "El detalle del NPC no está disponible", "locationUnavailable": "El detalle de la ubicación no está disponible", "notFound": "No se encontró este registro local.", "back": "Volver", "noDescription": "Aún no hay una descripción local disponible.",
@@ -1254,7 +1260,7 @@ i18n
                         "occupation": "Ocupación", "sex": "Sexo", "location": "Ubicación", "region": "Región", "minimumLevel": "Nivel mínimo", "premium": "Premium", "yes": "Sí", "no": "No", "access": "Acceso", "relationships": "Conocimiento local relacionado", "updated": "Datos locales actualizados el {{date}}", "source": "Abrir página de origen"
                     },
                     "spatialMetadata": {
-                        "title": "Mapa", "help": "Posiciones locales, áreas relacionadas, rutas y exploración cercana.", "preview": "Contexto del mapa de Tibia", "previewHelp": "Las coordenadas verificadas y los pasos de ruta se muestran desde PostGIS local.", "nearby": "Ubicaciones cercanas", "noNearby": "Aún no hay entidades cercanas vinculadas a esta coordenada.", "distance": "{{distance}} casillas", "unavailable": "Datos del mapa no disponibles", "placeholder": "Las coordenadas, regiones y rutas locales verificadas aparecerán aquí cuando estén disponibles.",
+                        "title": "Mapa", "help": "Posiciones, áreas relacionadas, rutas y exploración cercana.", "preview": "Contexto del mapa de Tibia", "previewHelp": "Aquí se muestran las coordenadas y los pasos de ruta disponibles.", "nearby": "Ubicaciones cercanas", "noNearby": "Aún no hay entidades cercanas vinculadas a esta coordenada.", "distance": "{{distance}} casillas", "unavailable": "Datos del mapa no disponibles", "placeholder": "Las coordenadas, regiones y rutas aparecerán aquí cuando estén disponibles.",
                         "coordinates": "Coordenadas de Tibia: {{x}}, {{y}}, piso {{z}}", "bounds": "Límites: {{min_x}}, {{min_y}} a {{max_x}}, {{max_y}}", "unresolved": "Pendiente de resolución espacial exacta", "routeEndpoints": "{{start}} → {{end}}", "routeMapAlt": "Mapa {{index}} de {{route}}"
                     },
                     "auth": {

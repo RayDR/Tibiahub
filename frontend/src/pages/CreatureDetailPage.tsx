@@ -1,5 +1,6 @@
 import React, { useEffect, useState } from "react";
 import { useLocation, useNavigate, useParams } from "react-router-dom";
+import { Link } from "react-router-dom";
 import { motion } from "framer-motion";
 import {
   AlertTriangle,
@@ -24,6 +25,8 @@ import { activityApi } from "../services/activity";
 import MapMetadataPanel from "../components/MapMetadataPanel";
 import { Page } from "../components/ui";
 import { resolveCyclopediaReturnTarget } from "../utils/cyclopediaNavigation";
+import { SuggestCorrectionLink } from "../components/feedback/GitHubFeedbackLink";
+import { useSeoMetadata } from "../utils/seo";
 
 const formatNumber = (
   value: number | null | undefined,
@@ -45,6 +48,14 @@ const CreatureDetailPage: React.FC = () => {
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
   const [showFullOverview, setShowFullOverview] = useState(false);
   const { isAuthenticated } = useAuth();
+  useSeoMetadata(creature ? {
+    title: `${creature.name} — Tibia creature`,
+    description: creature.description || `Stats, loot, hunt zones and related knowledge for ${creature.name}.`,
+    canonicalPath: `/creatures/${creature.slug || creature.id}`,
+    type: 'article',
+    image: `/api/v1/creatures/${creature.id}/image`,
+    breadcrumbs: [{ name: 'Home', path: '/' }, { name: 'Cyclopedia', path: '/cyclopedia' }, { name: creature.name, path: `/creatures/${creature.slug || creature.id}` }],
+  } : null);
 
   useEffect(() => {
     const fetchCreature = async () => {
@@ -157,13 +168,7 @@ const CreatureDetailPage: React.FC = () => {
   const overviewText = showFullOverview
     ? overview
     : `${overview.slice(0, 300)}${overviewNeedsToggle ? "..." : ""}`;
-  const accessRequirements = (creature.related_tasks || []).filter((task) =>
-    /quest|mission|access|required/i.test(task),
-  );
-  const displayRequirements =
-    accessRequirements.length > 0
-      ? accessRequirements
-      : creature.related_tasks || [];
+  const displayRequirements = creature.related_tasks || [];
 
   const backTarget = resolveCyclopediaReturnTarget(
     (location.state as { from?: string } | null)?.from,
@@ -374,8 +379,24 @@ const CreatureDetailPage: React.FC = () => {
               <MapPin className="text-primary" size={20} />{" "}
               {t("creatureDetail.locations")}
             </h2>
+            <Link to={`/map?entityType=${creature.is_boss ? 'boss' : 'creature'}&slug=${encodeURIComponent(creature.slug || creature.name)}&q=${encodeURIComponent(creature.name)}`} className="app-button-secondary app-button-sm mb-4 inline-flex"><MapPin size={14} />{t('map.openDetails')}</Link>
             <div className="space-y-2 text-sm text-content-secondary">
-              {(creature.locations?.length ?? 0) > 0 ? (
+              {creature.spawn_locations.length > 0 ? (
+                creature.spawn_locations.map((spawn) => spawn.hunt_zone ? (
+                  <Link
+                    key={spawn.id}
+                    to={`/hunt-zones/${spawn.hunt_zone.slug || spawn.hunt_zone.id}`}
+                    className="block rounded-xl border border-line bg-surface-base/60 p-3 transition hover:border-primary"
+                  >
+                    <div className="font-semibold text-content-primary">{spawn.hunt_zone.name}</div>
+                    <div className="mt-1 text-xs text-content-secondary">
+                      {[spawn.hunt_zone.city, spawn.hunt_zone.min_level ? `Level ${spawn.hunt_zone.min_level}+` : null, spawn.hunt_zone.difficulty].filter(Boolean).join(' · ')}
+                    </div>
+                    {spawn.quantity || spawn.notes ? <div className="mt-2 text-xs text-content-muted">{[spawn.quantity, spawn.notes].filter(Boolean).join(' · ')}</div> : null}
+                    {spawn.hunt_zone.requires_quest && spawn.hunt_zone.quest_name ? <div className="mt-2 text-xs font-semibold text-warning">{t('creatureDetail.requiresQuest', { quest: spawn.hunt_zone.quest_name })}</div> : null}
+                  </Link>
+                ) : null)
+              ) : (creature.locations?.length ?? 0) > 0 ? (
                 creature.locations!.map((location) => (
                   <div
                     key={location}
@@ -395,9 +416,7 @@ const CreatureDetailPage: React.FC = () => {
           <div className="rounded-2xl bg-surface-raised p-6 shadow-sm">
             <h2 className="mb-4 text-lg font-bold text-content-primary">
               {t(
-                creature.is_boss
-                  ? "creatureDetail.accessRequirements"
-                  : "creatureDetail.relatedTasks",
+                "creatureDetail.relatedTasks",
               )}
             </h2>
             <div className="space-y-2 text-sm text-content-secondary">
@@ -417,25 +436,9 @@ const CreatureDetailPage: React.FC = () => {
 
           <div className="rounded-2xl bg-surface-raised p-6 shadow-sm">
             <h2 className="mb-4 text-lg font-bold text-content-primary">
-              {t("creatureDetail.sourcesTitle")}
+              {t("creatureDetail.sourceTitle")}
             </h2>
             <div className="space-y-2 text-sm text-content-secondary">
-              <div>
-                {t("creatureDetail.sources", {
-                  value:
-                    (creature.data_sources?.length ?? 0) > 0
-                      ? creature.data_sources!.join(", ")
-                      : t("common.unknown"),
-                })}
-              </div>
-              <div>
-                {t("creatureDetail.missingFields", {
-                  value:
-                    (creature.missing_fields?.length ?? 0) > 0
-                      ? creature.missing_fields!.join(", ")
-                      : t("creatureDetail.none"),
-                })}
-              </div>
               {creature.source_url ? (
                 <a
                   href={creature.source_url}
@@ -455,6 +458,7 @@ const CreatureDetailPage: React.FC = () => {
         </div>
       </div>
       <MapMetadataPanel entityId={creature.knowledge_entity_id || undefined} />
+      <div className="mt-6 flex justify-end"><SuggestCorrectionLink entityType="Creature" entityName={creature.name} /></div>
     </Page>
   );
 };

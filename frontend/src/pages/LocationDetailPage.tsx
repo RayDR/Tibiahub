@@ -11,6 +11,7 @@ import {
   createCyclopediaRouteState,
   resolveCyclopediaReturnTarget,
 } from '../utils/cyclopediaNavigation';
+import { useSeoMetadata } from '../utils/seo';
 
 function relationshipPath(relationship: NamedKnowledgeRelationship): string | null {
   if (relationship.resolution_state !== 'resolved' || !relationship.target_slug) return null;
@@ -27,16 +28,22 @@ export default function LocationDetailPage() {
   const { identifier } = useParams<{ identifier: string }>();
   const [place, setPlace] = useState<LocationKnowledgeDetail | null>(null);
   const [loading, setLoading] = useState(true);
+  useSeoMetadata(place ? {
+    title: `${place.name} — Tibia location`,
+    description: place.description || `Access, nearby knowledge and map information for ${place.name}.`,
+    canonicalPath: `/locations/${place.slug}`, type: 'article',
+    breadcrumbs: [{ name: 'Home', path: '/' }, { name: 'Cyclopedia', path: '/cyclopedia' }, { name: place.name, path: `/locations/${place.slug}` }],
+  } : null);
 
   useEffect(() => {
     const controller = new AbortController();
     if (!identifier) return () => controller.abort();
     void namedKnowledgeApi.getLocation(identifier, controller.signal)
-      .then(setPlace)
+      .then((result) => { setPlace(result); if (result.slug !== identifier) navigate(`/locations/${result.slug}`, { replace: true, state: location.state }); })
       .catch(() => setPlace(null))
       .finally(() => setLoading(false));
     return () => controller.abort();
-  }, [identifier]);
+  }, [identifier, location.state, navigate]);
 
   if (loading) return <Page variant="focused"><div role="status" className="flex min-h-[24rem] items-center justify-center text-primary"><Loader2 className="animate-spin" size={42} /><span className="sr-only">{t('namedKnowledge.loading')}</span></div></Page>;
   if (!place) return <Page variant="focused"><div className="mx-auto max-w-3xl rounded-2xl border border-danger/20 bg-danger/20 p-6"><h1 className="text-lg font-semibold text-danger">{t('namedKnowledge.locationUnavailable')}</h1><p className="mt-2 text-sm text-danger/80">{t('namedKnowledge.notFound')}</p></div></Page>;

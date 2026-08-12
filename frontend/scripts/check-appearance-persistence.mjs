@@ -27,10 +27,20 @@ assert.deepEqual(
   'invalid preference values must fall back safely',
 );
 
+assert.equal(appearance.DEFAULT_APPEARANCE.theme, 'tibia-stone', 'Tibia Stone must be the product default');
+assert.equal(appearance.THEME_IDS.includes('default'), false, 'obsolete default theme must not be selectable');
+
+values.set(appearance.APPEARANCE_STORAGE_KEY, JSON.stringify({
+  theme: 'default', motion: 'reduced', density: 'compact',
+}));
+let initialized = appearance.initializeAppearance();
+assert.deepEqual(initialized, { theme: 'tibia-stone', motion: 'reduced', density: 'compact' });
+assert.deepEqual(JSON.parse(values.get(appearance.APPEARANCE_STORAGE_KEY)), initialized, 'stored default must migrate in place');
+
 values.set(appearance.APPEARANCE_STORAGE_KEY, JSON.stringify({
   theme: 'midnight-arcana', motion: 'enhanced', density: 'compact',
 }));
-let initialized = appearance.initializeAppearance();
+initialized = appearance.initializeAppearance();
 assert.deepEqual(initialized, { theme: 'midnight-arcana', motion: 'enhanced', density: 'compact' });
 assert.deepEqual(globalThis.document.documentElement.dataset, {
   theme: 'midnight-arcana', motion: 'enhanced', density: 'compact',

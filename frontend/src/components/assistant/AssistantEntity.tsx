@@ -15,7 +15,13 @@ export default function AssistantEntity({
 }) {
   const { t } = useTranslation();
   const [open, setOpen] = useState(false);
-  const metadata = Object.entries(entity.metadata || {}).filter(([, value]) => value != null && value !== '');
+  const entityTypeLabel = entity.entity_type === 'creature' && entity.metadata?.is_boss === true
+    ? t('assistant.entity.types.boss')
+    : t(`assistant.entity.types.${entity.entity_type}`);
+  const usefulMetadataKeys = new Set(['hitpoints', 'experience', 'difficulty', 'city', 'min_level', 'item_type', 'category', 'level', 'occupation', 'location', 'kind', 'region', 'premium']);
+  const metadata = Object.entries(entity.metadata || {})
+    .filter(([key, value]) => key !== 'is_boss' && usefulMetadataKeys.has(key) && value != null && value !== '')
+    .slice(0, 2);
 
   return <>
     <button
@@ -23,13 +29,14 @@ export default function AssistantEntity({
       onClick={() => setOpen(true)}
       className={variant === 'inline'
         ? 'mx-0.5 inline-flex min-h-7 items-center gap-1.5 rounded-full border border-primary/35 bg-primary/10 px-2 py-0.5 align-baseline text-sm font-semibold text-primary hover:border-primary/70 hover:bg-primary/20'
-        : 'flex min-h-20 w-full items-center gap-3 rounded-xl border border-line bg-surface-raised p-3 text-left transition hover:border-primary/60 hover:bg-surface-active'}
+        : 'group flex min-h-24 w-full items-center gap-3 rounded-xl border border-transparent bg-surface-active/45 p-3 text-left shadow-sm transition hover:bg-surface-active focus-visible:border-primary/60'}
       aria-label={t('assistant.entity.inspect', { name: entity.canonical_name })}
     >
-      {entity.image_url ? <img src={entity.image_url} alt="" className={variant === 'inline' ? 'size-5 object-contain [image-rendering:pixelated]' : 'size-12 object-contain [image-rendering:pixelated]'} loading="lazy" /> : null}
+      {entity.image_url ? <span className={variant === 'card' ? 'grid size-16 shrink-0 place-items-center rounded-lg bg-surface-base/55' : undefined}><img src={entity.image_url} alt="" className={variant === 'inline' ? 'size-5 object-contain [image-rendering:pixelated]' : 'size-14 object-contain [image-rendering:pixelated]'} loading="lazy" /></span> : null}
       <span className={variant === 'card' ? 'min-w-0' : undefined}>
         <span className={variant === 'card' ? 'block truncate font-semibold text-content-primary' : undefined}>{entity.canonical_name}</span>
-        {variant === 'card' ? <span className="block text-xs capitalize text-content-muted">{t(`assistant.entity.types.${entity.entity_type}`)}</span> : null}
+        {variant === 'card' ? <span className="block text-xs capitalize text-content-muted">{entityTypeLabel}</span> : null}
+        {variant === 'card' && metadata.length ? <span className="mt-1 block truncate text-xs text-content-secondary">{metadata.map(([key, value]) => `${t(`assistant.entity.metadata.${key}`)}: ${String(value)}`).join(' · ')}</span> : null}
       </span>
     </button>
 
@@ -41,7 +48,7 @@ export default function AssistantEntity({
             : <ImageOff className="size-7 text-content-muted" />}
         </div>
         <div className="min-w-0">
-          <p className="text-xs font-semibold uppercase tracking-wide text-primary">{t(`assistant.entity.types.${entity.entity_type}`)}</p>
+          <p className="text-xs font-semibold uppercase tracking-wide text-primary">{entityTypeLabel}</p>
           <h3 className="mt-1 text-xl font-bold text-content-primary">{entity.canonical_name}</h3>
         </div>
       </div>

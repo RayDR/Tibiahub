@@ -48,3 +48,11 @@ def test_conversation_context_and_bilingual_strings_are_wired():
     assert "sessionStorage.setItem" in chat
     assert "Where can I hunt Werewolves?" in translations
     assert "¿Dónde puedo cazar Werewolves?" in translations
+
+
+def test_boss_metadata_changes_the_type_label_but_is_not_rendered_as_a_raw_row():
+    entity = read("frontend/src/components/assistant/AssistantEntity.tsx")
+    translations = read("frontend/src/i18n.ts")
+    assert "entity.metadata?.is_boss === true" in entity
+    assert "key !== 'is_boss'" in entity
+    assert '"boss": "Boss"' in translations

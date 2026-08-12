@@ -1,9 +1,13 @@
 import api from './api';
-import type { AssistantRequest, AssistantResponse } from '../types/assistant';
+import type { AssistantLanguage, AssistantRequest, AssistantResponse, AssistantSuggestion } from '../types/assistant';
 
 export const ASSISTANT_REQUEST_TIMEOUT_MS = 75000;
 
 export const assistantApi = {
+  suggestions: async (language: AssistantLanguage, signal?: AbortSignal): Promise<AssistantSuggestion[]> => {
+    const response = await api.get('/assistant/suggestions', { params: { language, limit: 8 }, signal });
+    return response.data;
+  },
   ask: async (payload: AssistantRequest, signal?: AbortSignal): Promise<AssistantResponse> => {
     const response = await api.post('/assistant/', payload, {
       signal,

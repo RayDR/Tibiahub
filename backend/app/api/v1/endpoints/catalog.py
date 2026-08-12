@@ -1,9 +1,9 @@
 """
 Unified Catalog Endpoints (Hunts, Quests, Custom)
 """
-from fastapi import APIRouter, Depends, HTTPException, status
+from fastapi import APIRouter, Depends, HTTPException, Response, status
 from sqlalchemy.orm import Session
-from sqlalchemy import desc, or_
+from sqlalchemy import case, desc, or_
 from typing import List, Optional
 from datetime import UTC, datetime
 
@@ -12,12 +12,60 @@ from app.knowledge.models import KnowledgeEntity
 from app.models.catalog import Catalog
 from app.models.creature import Creature
 from app.models.entity_metadata import EntityMetadata
-from app.models.external_data import TibiaWikiQuest
+from app.models.external_data import Item as ExternalItem, TibiaWikiQuest
 from app.models.hunt_zone import HuntZone
+from app.models.media_asset import MediaAsset
 from app.models.user import User
 from app.api.v1.endpoints.auth import get_current_user, get_current_admin_user
 
 router = APIRouter()
+
+
+@router.get("/category-visuals")
+def cyclopedia_category_visuals(response: Response, db: Session = Depends(get_db)):
+    """Stable, local-only visual identities for the five Cyclopedia sections."""
+    gif_first = case((MediaAsset.content_type.ilike("%gif%"), 0), else_=1)
+    creature = db.query(Creature).join(MediaAsset, Creature.image_asset_id == MediaAsset.id).filter(
+        Creature.is_hidden.is_(False),
+        Creature.is_boss.is_(False),
+        MediaAsset.status == "cached",
+    ).order_by(gif_first, Creature.id.asc()).first()
+    boss = db.query(Creature).join(MediaAsset, Creature.image_asset_id == MediaAsset.id).filter(
+        Creature.is_hidden.is_(False),
+        Creature.is_boss.is_(True),
+        MediaAsset.status == "cached",
+    ).order_by(gif_first, Creature.id.asc()).first()
+    item_candidates = db.query(ExternalItem).filter(
+        ExternalItem.knowledge_entity_id.isnot(None),
+    ).order_by(ExternalItem.id.asc()).limit(40).all()
+    quest_candidates = db.query(ExternalItem).filter(
+        ExternalItem.knowledge_entity_id.isnot(None),
+        or_(
+            ExternalItem.normalized_name.contains("tome"),
+            ExternalItem.normalized_name.contains("book"),
+            ExternalItem.normalized_name.contains("scroll"),
+        ),
+    ).order_by(ExternalItem.normalized_name == "tome of knowledge", ExternalItem.id.asc()).limit(40).all()
+    item_keys = {f"item:knowledge:{row.knowledge_entity_id}" for row in [*item_candidates, *quest_candidates]}
+    assets = db.query(MediaAsset).filter(MediaAsset.asset_key.in_(item_keys), MediaAsset.status == "cached").all() if item_keys else []
+    assets_by_key = {row.asset_key: row for row in assets}
+    def choose_item(candidates):
+        available = [row for row in candidates if f"item:knowledge:{row.knowledge_entity_id}" in assets_by_key]
+        return min(available, key=lambda row: ("gif" not in (assets_by_key[f"item:knowledge:{row.knowledge_entity_id}"].content_type or "").lower(), row.id), default=None)
+    item = choose_item(item_candidates)
+    quest_item = choose_item(quest_candidates)
+    zone = db.query(HuntZone).join(MediaAsset, HuntZone.map_asset_id == MediaAsset.id).filter(
+        MediaAsset.status == "cached",
+    ).order_by(gif_first, HuntZone.id.asc()).first()
+
+    response.headers["Cache-Control"] = "public, max-age=3600, stale-while-revalidate=86400"
+    return {
+        "creatures": f"/api/v1/creatures/{creature.id}/image?placeholder=false" if creature else None,
+        "bosses": f"/api/v1/creatures/{boss.id}/image?placeholder=false" if boss else None,
+        "items": f"/api/v1/items/{item.id}/image?placeholder=false" if item else None,
+        "quests": f"/api/v1/items/{quest_item.id}/image?placeholder=false" if quest_item else None,
+        "zones": f"/api/v1/hunt-zones/{zone.id}/map-image?placeholder=false" if zone else None,
+    }
 
 
 @router.get("/discovery")

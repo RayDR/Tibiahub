@@ -5,7 +5,7 @@ import { fileURLToPath } from 'node:url';
 const root = fileURLToPath(new URL('..', import.meta.url));
 const source = (path) => readFileSync(join(root, path), 'utf8');
 const failures = [];
-const viewportWidths = [320, 375, 390, 430, 768, 1024, 1440];
+const viewportWidths = [320, 360, 390, 430, 768, 1024, 1440];
 const coreFiles = [
   'src/components/Navigation.tsx', 'src/components/shell/AppShell.tsx', 'src/components/ui/PageHeader.tsx',
   'src/components/workspace/WorkspacePrimitives.tsx', 'src/layouts/GuildLayout.tsx', 'src/layouts/AdminLayout.tsx',

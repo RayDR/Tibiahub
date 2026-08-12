@@ -1,9 +1,10 @@
-import React, { useState } from 'react';
+import React, { lazy, Suspense, useEffect, useRef, useState } from 'react';
 import { huntZonesApi } from '../services/api';
 import { Plus, Trash2, Users, Map, Swords, TrendingUp, User, Shield, Zap, Sparkles, Scroll, Eye, X, Crown, Coins } from 'lucide-react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { HuntZone } from '../types';
-import TibiaMap from '../components/TibiaMap';
+import { Link } from 'react-router-dom';
+import { useTranslation } from 'react-i18next';
 import { faCompass } from '@fortawesome/free-solid-svg-icons';
 import PageHeader from '../components/ui/PageHeader';
 import AppTabs from '../components/ui/AppTabs';
@@ -13,6 +14,8 @@ import AppInput from '../components/ui/AppInput';
 import { Page } from '../components/ui';
 import { useAuth } from '../context/AuthContext';
 import { activityApi } from '../services/activity';
+
+const TibiaMap = lazy(() => import('../components/map/TibiaMapViewer'));
 
 // Vocation Config
 const VOCATIONS = [
@@ -34,16 +37,24 @@ interface RecommendationItem {
   zone_name: string;
   score: number;
   reasons?: string[];
-  synergy_bonus?: number;
   min_level?: number;
   max_level?: number;
   difficulty?: string;
-  estimated_exp_hour?: number;
-  estimated_profit_hour?: number;
   requires_premium?: boolean;
+  requires_quest?: boolean;
+  quest_name?: string;
+  zone_slug?: string;
+  city?: string;
+  region?: string;
+  size?: string;
+  avg_exp_hour?: number;
+  avg_profit_hour?: number;
+  rate_basis?: string;
+  creatures?: Array<{ id: number; name: string; slug?: string; is_boss?: boolean }>;
 }
 
 const HuntRecommendationsPage: React.FC = () => {
+  const { t } = useTranslation();
   const [mode, setMode] = useState<'solo' | 'party'>('solo');
 
   // Solo State
@@ -60,9 +71,11 @@ const HuntRecommendationsPage: React.FC = () => {
   const [selectedRecommendation, setSelectedRecommendation] = useState<RecommendationItem | null>(null);
   const [zoneLoading, setZoneLoading] = useState(false);
   const [loading, setLoading] = useState(false);
+  const [errorMessage, setErrorMessage] = useState<string | null>(null);
   const [goal, setGoal] = useState<'exp' | 'profit' | 'balanced'>('exp');
   const [mapPreviewFailed, setMapPreviewFailed] = useState(false);
   const { isAuthenticated } = useAuth();
+  const initialLoadRef = useRef(false);
 
   // Handlers
   const addMember = () => {
@@ -79,33 +92,23 @@ const HuntRecommendationsPage: React.FC = () => {
     setParty(party.map(m => m.id === id ? { ...m, [field]: value } : m));
   };
 
-  const findSpots = async () => {
+  const findSpots = async (recordActivity = true) => {
     setLoading(true);
+    setErrorMessage(null);
     setRecommendations(null);
     setSelectedZone(null);
     setSelectedRecommendation(null);
     try {
       if (mode === 'solo') {
-        const data = await huntZonesApi.getRecommendations(soloVocation as any, soloLevel, 10);
-        // Transform the list response to match the "recommendations" object structure for consistent rendering
-        setRecommendations({
-          recommendations: data.map(rec => ({
-            zone_id: rec.zone.id,
-            zone_name: rec.zone.name,
-            score: rec.score,
-            reasons: rec.reasons,
-            min_level: rec.zone.min_level,
-            difficulty: rec.zone.difficulty || 'Medium'
-          })),
-          is_solo: true
-        });
+        const data = await huntZonesApi.getRecommendations(soloVocation as any, soloLevel, 10, goal);
+        setRecommendations({ ...data, is_solo: true });
       } else {
         const payload = party.map(m => ({ vocation: m.vocation, level: Number(m.level) }));
         const data = await huntZonesApi.getPartyRecommendations(payload, goal);
         setRecommendations(data);
       }
 
-      if (isAuthenticated) {
+      if (isAuthenticated && recordActivity) {
         void activityApi.record({
           activity_type: 'hunt_search',
           entity_type: mode,
@@ -123,10 +126,17 @@ const HuntRecommendationsPage: React.FC = () => {
       }
     } catch (err) {
       console.error(err);
+      setErrorMessage(t('cyclopedia.states.errorTitle'));
     } finally {
       setLoading(false);
     }
   };
+
+  useEffect(() => {
+    if (initialLoadRef.current) return;
+    initialLoadRef.current = true;
+    void findSpots(false);
+  }, []);
 
   const inspectZone = async (recommendation: RecommendationItem) => {
     setSelectedRecommendation(recommendation);
@@ -320,21 +330,14 @@ const HuntRecommendationsPage: React.FC = () => {
 
                   <div className="mt-6 p-4 bg-surface-base/50 rounded-xl border border-dashed border-line">
                     <h3 className="text-sm font-bold text-content-secondary mb-2 flex items-center gap-2">
-                      <TrendingUp size={16} /> Estimated Bonus
+                      <TrendingUp size={16} /> {t('plannerPolish.partyCoverage')}
                     </h3>
                     {(() => {
                       const uniqueVocations = new Set(party.map(p => p.vocation)).size;
-                      const count = party.length;
-                      let bonus = 0;
-                      if (count >= 1) bonus = 20;
-                      if (uniqueVocations >= 2) bonus = 30;
-                      if (uniqueVocations >= 3) bonus = 60;
-                      if (uniqueVocations >= 4) bonus = 100;
-
                       return (
                         <div className="flex items-center justify-between">
-                          <span className="text-content-muted text-xs">Based on {uniqueVocations} unique vocs</span>
-                          <span className="text-xl font-bold text-success">+{bonus}% EXP</span>
+                          <span className="text-content-muted text-xs">{t('plannerPolish.vocationCoverage', { count: uniqueVocations })}</span>
+                          <span className="text-sm font-bold text-success">{t('plannerPolish.distinct', { unique: uniqueVocations, total: party.length })}</span>
                         </div>
                       )
                     })()}
@@ -343,7 +346,7 @@ const HuntRecommendationsPage: React.FC = () => {
               )}
 
               <AppButton
-                onClick={findSpots}
+                onClick={() => void findSpots()}
                 disabled={loading}
                 className="w-full h-14 inline-flex items-center justify-center gap-2"
               >
@@ -369,6 +372,8 @@ const HuntRecommendationsPage: React.FC = () => {
               <p className="font-serif text-lg">Scouting optimal locations...</p>
             </div>
           )}
+
+          {!loading && errorMessage ? <div role="alert" className="rounded-2xl border border-danger/25 bg-danger/10 p-5 text-sm text-danger">{errorMessage}</div> : null}
 
           {recommendations && (
             <div className="space-y-6">
@@ -419,16 +424,16 @@ const HuntRecommendationsPage: React.FC = () => {
 
                     <div className="mb-4 grid gap-2 sm:grid-cols-3">
                       <div className="rounded-lg border border-line bg-surface-base/60 px-3 py-2">
-                        <div className="text-[10px] uppercase tracking-wide text-content-muted">Estimated Exp</div>
-                        <div className="text-sm font-semibold text-success">{formatRate(rec.estimated_exp_hour)}</div>
+                        <div className="text-[10px] uppercase tracking-wide text-content-muted">{t('plannerPolish.recordedExp')}</div>
+                        <div className="text-sm font-semibold text-success">{formatRate(rec.avg_exp_hour)}</div>
                       </div>
                       <div className="rounded-lg border border-line bg-surface-base/60 px-3 py-2">
-                        <div className="text-[10px] uppercase tracking-wide text-content-muted">Estimated Profit</div>
-                        <div className="text-sm font-semibold text-primary">{formatRate(rec.estimated_profit_hour)}</div>
+                        <div className="text-[10px] uppercase tracking-wide text-content-muted">{t('plannerPolish.recordedProfit')}</div>
+                        <div className="text-sm font-semibold text-primary">{formatRate(rec.avg_profit_hour)}</div>
                       </div>
                       <div className="rounded-lg border border-line bg-surface-base/60 px-3 py-2">
                         <div className="text-[10px] uppercase tracking-wide text-content-muted">Access</div>
-                        <div className="text-sm font-semibold text-content-primary">{rec.requires_premium ? 'Premium' : 'Free Access'}</div>
+                        <div className="text-sm font-semibold text-content-primary">{[rec.requires_premium ? 'Premium' : null, rec.requires_quest ? rec.quest_name || 'Quest required' : null].filter(Boolean).join(' · ') || 'No recorded restrictions'}</div>
                       </div>
                     </div>
 
@@ -439,14 +444,14 @@ const HuntRecommendationsPage: React.FC = () => {
                           <TrendingUp size={12} className="text-success" /> {reason}
                         </span>
                       ))}
-                      {(rec.synergy_bonus ?? 1) > 1 && (
-                        <span className="bg-accent/10 text-accent border border-accent/20 text-xs px-2 py-1 rounded-md flex items-center gap-1">
-                          <Sparkles size={12} /> Synergy +{Math.round(((rec.synergy_bonus ?? 1) - 1) * 100)}%
-                        </span>
-                      )}
+                      {rec.rate_basis ? <span className="bg-info/10 text-info border border-info/20 text-xs px-2 py-1 rounded-md">{t('plannerPolish.localAverages')}</span> : null}
                     </div>
 
-                    <div className="flex justify-end">
+                    {rec.creatures?.length ? <div className="mb-4 flex flex-wrap gap-1.5">{rec.creatures.map((creature) => <Link key={creature.id} to={`/creatures/${creature.slug || creature.id}`} className="rounded-full border border-line bg-surface px-2 py-1 text-xs text-content-secondary hover:text-primary">{creature.name}</Link>)}</div> : null}
+
+                    <div className="flex flex-wrap justify-end gap-2">
+                      <Link to={`/hunt-zones/${rec.zone_slug || rec.zone_id}`} className="inline-flex items-center gap-2 rounded-lg border border-line bg-surface-base/60 px-3 py-2 text-xs font-semibold text-content-primary hover:text-primary">{t('plannerPolish.viewDetails')}</Link>
+                      <Link to={`/map?entityType=hunt_zone&slug=${encodeURIComponent(rec.zone_slug || rec.zone_name)}&q=${encodeURIComponent(rec.zone_name)}`} className="inline-flex items-center gap-2 rounded-lg border border-primary/30 bg-primary/10 px-3 py-2 text-xs font-semibold text-primary"><Map size={14} /> {t('plannerPolish.openMap')}</Link>
                       <button
                         onClick={() => void inspectZone(rec)}
                         className="inline-flex items-center gap-2 rounded-lg border border-line bg-surface-base/60 px-3 py-2 text-xs font-semibold text-content-primary hover:border-primary/60 hover:text-primary"
@@ -517,11 +522,11 @@ const HuntRecommendationsPage: React.FC = () => {
                       <div className="space-y-2 text-sm">
                         <div className="flex items-center justify-between rounded-lg border border-line bg-surface-base px-3 py-2">
                           <span className="text-content-secondary">EXP</span>
-                          <span className="font-semibold text-success">{formatRate(selectedRecommendation.estimated_exp_hour)}</span>
+                          <span className="font-semibold text-success">{formatRate(selectedRecommendation.avg_exp_hour)}</span>
                         </div>
                         <div className="flex items-center justify-between rounded-lg border border-line bg-surface-base px-3 py-2">
                           <span className="flex items-center gap-1 text-content-secondary"><Coins size={13} /> Profit</span>
-                          <span className="font-semibold text-primary">{formatRate(selectedRecommendation.estimated_profit_hour)}</span>
+                          <span className="font-semibold text-primary">{formatRate(selectedRecommendation.avg_profit_hour)}</span>
                         </div>
                       </div>
                     </div>
@@ -560,11 +565,13 @@ const HuntRecommendationsPage: React.FC = () => {
                           />
                         ) : (
                           <div className="h-40 overflow-hidden rounded-lg border border-line bg-surface-base">
-                            <TibiaMap
-                              zoom={11}
-                              center={selectedZone.location_x ? { x: selectedZone.location_x, y: selectedZone.location_y! } : undefined}
-                              markers={selectedZone.location_x ? [{ x: selectedZone.location_x, y: selectedZone.location_y!, label: selectedZone.name }] : []}
-                            />
+                            <Suspense fallback={<div className="h-40 bg-surface-base" />}><TibiaMap
+                              imageUrl={huntZonesApi.getMapImageUrl(selectedZone.id, false)}
+                              label={selectedZone.name}
+                              floor={selectedZone.location_z ?? selectedZone.map_z}
+                              mapBounds={selectedZone.map_bounds}
+                              center={selectedZone.location_x != null && selectedZone.location_y != null ? { x: selectedZone.location_x, y: selectedZone.location_y } : undefined}
+                            /></Suspense>
                           </div>
                         )}
                         <div className="mt-3 text-xs text-content-secondary">

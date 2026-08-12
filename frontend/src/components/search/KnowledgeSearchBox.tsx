@@ -6,14 +6,9 @@ import {
   useRef,
   useState,
 } from 'react';
-import type { LucideIcon } from 'lucide-react';
 import {
-  BookOpen,
-  Gem,
   Loader2,
-  MapPin,
   Search,
-  Shield,
   Sparkles,
 } from 'lucide-react';
 import { useTranslation } from 'react-i18next';
@@ -25,6 +20,8 @@ import {
   itemsApi,
   questsApi,
 } from '../../services/api';
+import KnowledgeCategoryIcon from '../knowledge/KnowledgeCategoryIcon';
+import { buildKnowledgeSearchPath } from '../../utils/cyclopediaNavigation';
 
 export type KnowledgeSearchSection =
   | 'creatures'
@@ -64,14 +61,6 @@ interface KnowledgeSearchBoxProps {
   compact?: boolean;
 }
 
-const sectionIcons: Record<KnowledgeSearchSection, LucideIcon> = {
-  creatures: BookOpen,
-  bosses: Shield,
-  items: Gem,
-  quests: BookOpen,
-  zones: MapPin,
-};
-
 const CACHE_STORAGE_KEY =
   'tibiahub:knowledge-search-suggestions:v2';
 const CACHE_SEPARATOR = '\u0000';
@@ -102,15 +91,7 @@ const cacheKey = (
 const fallbackUrl = (
   section: KnowledgeSearchSection,
   query: string,
-): string => {
-  const params = new URLSearchParams({ tab: section });
-
-  if (query.trim()) {
-    params.set('q', query.trim());
-  }
-
-  return `/cyclopedia?${params.toString()}`;
-};
+): string => buildKnowledgeSearchPath(section, query);
 
 function hydrateSuggestionCache() {
   if (cacheHydrated) {
@@ -332,7 +313,7 @@ async function loadRemoteSuggestions(
         section,
         kind: 'item',
         label: row.item_name,
-        to: fallbackUrl(section, row.item_name),
+        to: `/items/${row.slug || row.normalized_name.split(' ').join('-')}`,
         imageUrl:
           imageId != null
             ? `/api/v1/items/${imageId}/image` +
@@ -355,8 +336,8 @@ async function loadRemoteSuggestions(
       kind: 'quest',
       label: row.name,
       to:
-        row.id != null
-          ? `/quests/${row.id}`
+        row.slug || row.id != null
+          ? `/quests/${row.slug || row.id}`
           : fallbackUrl(section, row.name),
     }));
   }
@@ -375,7 +356,7 @@ async function loadRemoteSuggestions(
     section,
     kind: 'zone',
     label: row.name,
-    to: fallbackUrl(section, row.name),
+    to: `/hunt-zones/${row.slug || row.id}`,
     imageUrl: `/api/v1/hunt-zones/${row.id}/map-image`,
   }));
 }
@@ -840,7 +821,6 @@ function SuggestionMedia({
 }: {
   suggestion: KnowledgeSuggestion;
 }) {
-  const Icon = sectionIcons[suggestion.section];
   const [failed, setFailed] = useState(false);
 
   useEffect(() => {
@@ -860,7 +840,7 @@ function SuggestionMedia({
           className="size-11 object-contain p-0.5 [image-rendering:pixelated]"
         />
       ) : (
-        <Icon className="size-5" aria-hidden="true" />
+        <KnowledgeCategoryIcon category={suggestion.section} label={suggestion.label} className="size-12" mediaClassName="size-11 p-0.5" />
       )}
     </span>
   );

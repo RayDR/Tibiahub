@@ -11,7 +11,7 @@ Implements:
 Data sourced from TibiaWiki API: https://tibia.fandom.com/api.php
 """
 
-from fastapi import APIRouter, Depends, Query
+from fastapi import APIRouter, Depends, HTTPException, Query
 from sqlalchemy.orm import Session
 from typing import List, Optional
 from app.db.database import get_db
@@ -20,6 +20,26 @@ from app.services.tibiawiki_service import tibiawiki_service
 from app.schemas import Vocation
 
 router = APIRouter()
+
+
+def _zone_payload(rec):
+    zone = rec['zone']
+    location_x = zone.location_x if zone.location_x is not None else zone.map_x
+    location_y = zone.location_y if zone.location_y is not None else zone.map_y
+    return {
+        "zone_id": zone.id, "zone_name": zone.name, "zone_slug": zone.slug,
+        "score": round(rec['score'], 2), "reasons": rec['reasons'],
+        "avg_exp_hour": zone.avg_exp_hour, "avg_profit_hour": zone.avg_profit_hour,
+        "rate_basis": "stored_local_average" if zone.avg_exp_hour or zone.avg_profit_hour else None,
+        "min_level": zone.min_level, "max_level": zone.max_level, "difficulty": zone.difficulty,
+        "requires_premium": zone.requires_premium, "requires_quest": zone.requires_quest,
+        "quest_name": zone.quest_name, "city": zone.city, "region": zone.region, "size": zone.size,
+        "recommended_party_size": zone.recommended_party_size,
+        "map_image_url": f"/api/v1/hunt-zones/{zone.id}/map-image?placeholder=false" if zone.map_asset_id else None,
+        "map_bounds": zone.map_bounds, "location_x": location_x,
+        "location_y": location_y, "location_z": zone.location_z if zone.location_z is not None else zone.map_z,
+        "creatures": [{"id": spawn.creature.id, "name": spawn.creature.name, "slug": spawn.creature.slug, "is_boss": bool(spawn.creature.is_boss)} for spawn in zone.creature_spawns[:8] if spawn.creature],
+    }
 
 
 @router.get("/solo")
@@ -58,18 +78,7 @@ async def get_solo_recommendations(
         "level": level,
         "goal": goal,
         "recommendations": [
-            {
-                "zone_id": rec['zone'].id,
-                "zone_name": rec['zone'].name,
-                "score": rec['score'],
-                "reasons": rec['reasons'],
-                "estimated_exp_hour": rec['estimated_exp'],
-                "estimated_profit_hour": rec['estimated_profit'],
-                "min_level": rec['zone'].min_level,
-                "max_level": rec['zone'].max_level,
-                "difficulty": rec['zone'].difficulty,
-                "requires_premium": rec['zone'].requires_premium,
-            }
+            _zone_payload(rec)
             for rec in recommendations
         ]
     }
@@ -111,33 +120,33 @@ async def get_party_recommendations(
     - Party exp rates (community data)
     - Synergy calculations (game mechanics)
     """
+    allowed_vocations = {"knight", "paladin", "sorcerer", "druid", "monk"}
+    if not party_composition or len(party_composition) > 4:
+        raise HTTPException(status_code=422, detail="Party must contain between one and four members")
+    normalized_party = []
+    for member in party_composition:
+        vocation = str(member.get("vocation", "")).lower()
+        try:
+            level = int(member.get("level"))
+        except (TypeError, ValueError):
+            raise HTTPException(status_code=422, detail="Each party member requires a numeric level")
+        if vocation not in allowed_vocations or level < 8 or level > 2000:
+            raise HTTPException(status_code=422, detail="Invalid party vocation or level")
+        normalized_party.append({"vocation": vocation, "level": level})
     engine = get_recommendation_engine(db)
     recommendations = engine.get_party_recommendations(
-        party_composition=party_composition,
+        party_composition=normalized_party,
         goal=goal,
         limit=limit
     )
     
     return {
-        "party_size": len(party_composition),
-        "avg_level": sum(m['level'] for m in party_composition) / len(party_composition),
-        "vocations": [m['vocation'] for m in party_composition],
+        "party_size": len(normalized_party),
+        "avg_level": sum(m['level'] for m in normalized_party) / len(normalized_party),
+        "vocations": [m['vocation'] for m in normalized_party],
         "goal": goal,
         "recommendations": [
-            {
-                "zone_id": rec['zone'].id,
-                "zone_name": rec['zone'].name,
-                "score": rec['score'],
-                "synergy_bonus": rec['synergy_bonus'],
-                "reasons": rec['reasons'],
-                "estimated_exp_hour": rec['estimated_exp'],
-                "estimated_profit_hour": rec['estimated_profit'],
-                "min_level": rec['zone'].min_level,
-                "max_level": rec['zone'].max_level,
-                "difficulty": rec['zone'].difficulty,
-                "requires_premium": rec['zone'].requires_premium,
-                "city": rec['zone'].city,
-            }
+            {**_zone_payload(rec), "composition_fit": rec['synergy_bonus']}
             for rec in recommendations
         ]
     }

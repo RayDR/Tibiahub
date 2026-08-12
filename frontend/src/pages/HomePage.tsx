@@ -1,27 +1,20 @@
 import { useEffect, useMemo, useState } from 'react';
-import type { LucideIcon } from 'lucide-react';
 import {
   ArrowRight,
   BookOpen,
   Clock3,
-  Gem,
-  MapPin,
-  Shield,
   Sparkles,
 } from 'lucide-react';
 import { Link } from 'react-router-dom';
 import { useTranslation } from 'react-i18next';
 
-import { Card, Page, PageHeader, Section } from '../components/ui';
+import { Card, Page, Section } from '../components/ui';
 import type { KnowledgeSearchSection } from '../components/search/KnowledgeSearchBox';
 import AssistantChat from '../components/assistant/AssistantChat';
 import { activityApi, type UserActivityEntry } from '../services/activity';
-import {
-  creaturesApi,
-  huntZonesApi,
-  itemsApi,
-} from '../services/api';
 import { useAuth } from '../context/AuthContext';
+import { assistantHeroSessionSeed, selectAssistantHeroCopy } from '../utils/assistantHeroCopy';
+import KnowledgeCategoryIcon from '../components/knowledge/KnowledgeCategoryIcon';
 
 interface QuestHistoryEntry {
   id: number;
@@ -32,38 +25,22 @@ interface QuestHistoryEntry {
 
 interface HomeSearchOption {
   key: KnowledgeSearchSection;
-  icon: LucideIcon;
   title: string;
   help: string;
   to: string;
-  artUrl?: string;
 }
-
-/*
- * Future Tibia-style illustrations can be assigned here without
- * changing Home layout. Local synchronized media remains the fallback.
- *
- * Example:
- *
- * creatures: '/assets/home/creatures.webp',
- * bosses: '/assets/home/bosses.webp',
- * items: '/assets/home/items.webp',
- * quests: '/assets/home/quests.webp',
- * zones: '/assets/home/zones.webp',
- */
-const HOME_CUSTOM_ART: Partial<
-  Record<KnowledgeSearchSection, string>
-> = {};
 
 export default function HomePage() {
   const { t, i18n } = useTranslation();
-  const { isAuthenticated, user } = useAuth();
+  const { isAuthenticated } = useAuth();
+  const heroCopySeed = useMemo(() => assistantHeroSessionSeed(), []);
+  const assistantCopy = useMemo(
+    () => selectAssistantHeroCopy(i18n.resolvedLanguage || i18n.language, new Date(), heroCopySeed),
+    [heroCopySeed, i18n.language, i18n.resolvedLanguage],
+  );
 
   const [activity, setActivity] = useState<UserActivityEntry[]>([]);
   const [clearingHistory, setClearingHistory] = useState(false);
-  const [capabilityArt, setCapabilityArt] = useState<
-    Partial<Record<KnowledgeSearchSection, string>>
-  >({});
 
   useEffect(() => {
     if (!isAuthenticated) {
@@ -80,73 +57,6 @@ export default function HomePage() {
 
     return () => controller.abort();
   }, [isAuthenticated]);
-
-  useEffect(() => {
-    const controller = new AbortController();
-    let mounted = true;
-
-    void Promise.allSettled([
-      creaturesApi.getHighlights(8, controller.signal),
-      creaturesApi.getBosses(
-        { skip: 0, limit: 8 },
-        controller.signal,
-      ),
-      itemsApi.getHighlights(8, controller.signal),
-      huntZonesApi.getHighlights(8, controller.signal),
-    ]).then(([creatures, bosses, items, zones]) => {
-      if (!mounted) {
-        return;
-      }
-
-      const next: Partial<
-        Record<KnowledgeSearchSection, string>
-      > = {};
-
-      if (creatures.status === 'fulfilled') {
-        const creature = creatures.value.find(
-          (row) => !row.is_boss,
-        );
-
-        if (creature) {
-          next.creatures = `/api/v1/creatures/${creature.id}/image`;
-        }
-      }
-
-      if (bosses.status === 'fulfilled') {
-        const boss = bosses.value[0];
-
-        if (boss) {
-          next.bosses = `/api/v1/creatures/${boss.id}/image`;
-        }
-      }
-
-      if (items.status === 'fulfilled') {
-        const item = items.value.find(
-          (row) => row.image_item_id != null || row.id != null,
-        );
-        const imageId = item?.image_item_id ?? item?.id;
-
-        if (imageId != null) {
-          next.items = `/api/v1/items/${imageId}/image`;
-        }
-      }
-
-      if (zones.status === 'fulfilled') {
-        const zone = zones.value[0];
-
-        if (zone) {
-          next.zones = `/api/v1/hunt-zones/${zone.id}/map-image`;
-        }
-      }
-
-      setCapabilityArt(next);
-    });
-
-    return () => {
-      mounted = false;
-      controller.abort();
-    };
-  }, []);
 
   const questHistory = useMemo<QuestHistoryEntry[]>(() => {
     const seen = new Set<string>();
@@ -187,7 +97,6 @@ export default function HomePage() {
   const searchOptions: HomeSearchOption[] = [
     {
       key: 'creatures',
-      icon: BookOpen,
       title: t(
         'home.assistantPreview.categories.creatures.title',
       ),
@@ -195,40 +104,30 @@ export default function HomePage() {
         'home.assistantPreview.categories.creatures.help',
       ),
       to: '/cyclopedia?tab=creatures',
-      artUrl:
-        HOME_CUSTOM_ART.creatures || capabilityArt.creatures,
     },
     {
       key: 'bosses',
-      icon: Shield,
       title: t('home.assistantPreview.categories.bosses.title'),
       help: t('home.assistantPreview.categories.bosses.help'),
       to: '/cyclopedia?tab=bosses',
-      artUrl: HOME_CUSTOM_ART.bosses || capabilityArt.bosses,
     },
     {
       key: 'items',
-      icon: Gem,
       title: t('home.assistantPreview.categories.items.title'),
       help: t('home.assistantPreview.categories.items.help'),
-      to: '/cyclopedia?tab=items',
-      artUrl: HOME_CUSTOM_ART.items || capabilityArt.items,
+      to: '/cyclopedia?tab=loot',
     },
     {
       key: 'quests',
-      icon: BookOpen,
       title: t('home.assistantPreview.categories.quests.title'),
       help: t('home.assistantPreview.categories.quests.help'),
       to: '/cyclopedia?tab=quests',
-      artUrl: HOME_CUSTOM_ART.quests || capabilityArt.quests,
     },
     {
       key: 'zones',
-      icon: MapPin,
       title: t('home.assistantPreview.categories.zones.title'),
       help: t('home.assistantPreview.categories.zones.help'),
       to: '/cyclopedia?tab=zones',
-      artUrl: HOME_CUSTOM_ART.zones || capabilityArt.zones,
     },
   ];
 
@@ -251,29 +150,24 @@ export default function HomePage() {
 
   return (
     <Page className="space-y-7">
-      <section className="relative overflow-hidden rounded-3xl border border-line bg-surface-raised p-5 sm:p-8 lg:p-10">
+      <section className="assistant-hero relative overflow-hidden">
         <div className="pointer-events-none absolute -right-24 -top-24 size-96 rounded-full bg-primary/10 blur-3xl" />
         <div className="pointer-events-none absolute -bottom-40 left-1/3 size-80 rounded-full bg-accent/10 blur-3xl" />
 
         <div className="relative min-w-0">
-          <div className="mb-4 inline-flex items-center gap-2 rounded-full border border-primary/30 bg-primary/10 px-3 py-1 text-xs font-semibold text-primary">
+          <div className="mb-3 inline-flex items-center gap-2 rounded-full bg-primary/10 px-3 py-1.5 text-xs font-semibold text-primary sm:mb-4">
             <Sparkles className="size-3.5" />
-            {t('home.assistantPreview.status')}
+            {t('home.assistantPreview.identity')}
           </div>
 
-          <PageHeader
-            className="mb-5"
-            eyebrow={t('home.assistantPreview.eyebrow')}
-            title={
-              isAuthenticated
-                ? t(
-                    'home.assistantPreview.titleAuthenticated',
-                    { username: user?.username || '' },
-                  )
-                : t('home.assistantPreview.titleGuest')
-            }
-            subtitle={t('home.assistantPreview.subtitle')}
-          />
+          <header className="mb-4 max-w-4xl sm:mb-6">
+            <h1 className="text-balance font-heading text-[clamp(1.65rem,7vw,2.8rem)] font-bold leading-[1.12] tracking-[0.015em] text-content-primary">
+              {assistantCopy.headline}
+            </h1>
+            <p className="mt-2 max-w-3xl text-sm leading-6 text-content-secondary sm:mt-3 sm:text-base">
+              {assistantCopy.supporting}
+            </p>
+          </header>
           <AssistantChat />
         </div>
       </section>
@@ -375,8 +269,6 @@ function HomeCapabilityCard({
 }: {
   option: HomeSearchOption;
 }) {
-  const Icon = option.icon;
-
   return (
     <Link
       to={option.to}
@@ -385,28 +277,11 @@ function HomeCapabilityCard({
       className="group block h-full"
     >
       <Card className="relative h-full min-h-44 overflow-hidden p-0 transition duration-300 hover:-translate-y-1 hover:border-primary/60 hover:shadow-lg motion-reduce:transform-none motion-reduce:transition-none">
-        {option.artUrl ? (
-          <div className="pointer-events-none absolute inset-y-0 right-0 w-2/5 overflow-hidden">
-            <img
-              src={option.artUrl}
-              alt=""
-              aria-hidden="true"
-              loading="lazy"
-              className="h-full w-full object-contain object-right opacity-70 transition duration-300 group-hover:scale-110 group-hover:opacity-100 motion-reduce:transform-none"
-            />
-            <div className="absolute inset-0 bg-gradient-to-r from-surface-raised via-surface-raised/80 to-transparent" />
-          </div>
-        ) : null}
+        <KnowledgeCategoryIcon category={option.key} label={option.title} className="absolute -right-3 -top-2 size-28 rounded-3xl bg-primary/[0.07] opacity-90 transition duration-300 group-hover:scale-110 group-hover:opacity-100 motion-reduce:transform-none" mediaClassName="size-24 p-1" />
+        <div className="relative z-10 flex h-full max-w-[72%] flex-col p-4">
 
-        <div className="relative z-10 flex h-full flex-col p-4">
-          <div className="grid size-10 place-items-center rounded-xl bg-primary/10 text-primary transition duration-300 group-hover:scale-110 group-hover:bg-primary/20 motion-reduce:transform-none">
-            <Icon className="size-5" aria-hidden="true" />
-          </div>
-
-          <div
-            className={option.artUrl ? 'max-w-[72%]' : undefined}
-          >
-            <h3 className="mt-3 font-semibold">
+          <div>
+            <h3 className="mt-1 font-semibold">
               {option.title}
             </h3>
 

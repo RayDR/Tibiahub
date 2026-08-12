@@ -1,5 +1,5 @@
 import { useState } from 'react';
-import { Check, Contrast, Crown, Droplets, MoonStar, Mountain, Palette, Sparkles } from 'lucide-react';
+import { Check, Contrast, Crown, Droplets, MoonStar, Mountain, Sparkles } from 'lucide-react';
 import { useTranslation } from 'react-i18next';
 import {
   DENSITY_MODES,
@@ -13,7 +13,6 @@ import {
 import { Dropdown } from './ui';
 
 const themeIcons = {
-  default: Palette,
   medieval: Crown,
   'tibia-stone': Mountain,
   'midnight-arcana': MoonStar,

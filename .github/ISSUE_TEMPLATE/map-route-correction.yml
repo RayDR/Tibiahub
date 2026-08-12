@@ -1,0 +1,33 @@
+name: Map or route correction
+description: Report incorrect coordinates, access steps, locations, or routes.
+title: "[Map correction] "
+labels: [map, correction]
+body:
+  - type: input
+    id: subject
+    attributes:
+      label: Location or route name
+    validations:
+      required: true
+  - type: input
+    id: page
+    attributes:
+      label: TibiaHub page
+      description: Paste the related public URL.
+  - type: textarea
+    id: current
+    attributes:
+      label: What is currently incorrect?
+    validations:
+      required: true
+  - type: textarea
+    id: correction
+    attributes:
+      label: Correct map or route information
+      description: Include floor/coordinates and access conditions only when known.
+    validations:
+      required: true
+  - type: textarea
+    id: evidence
+    attributes:
+      label: Supporting source or screenshot

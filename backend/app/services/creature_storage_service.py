@@ -333,13 +333,30 @@ def list_cached_creatures(
     sort_column = {
         "experience": Creature.experience,
         "hitpoints": Creature.hitpoints,
-        "difficulty": Creature.difficulty,
     }.get(sort_by, Creature.name)
+
+    difficulty_order = case(
+        (func.lower(Creature.difficulty) == "harmless", 0),
+        (func.lower(Creature.difficulty) == "trivial", 1),
+        (func.lower(Creature.difficulty) == "easy", 2),
+        (func.lower(Creature.difficulty) == "medium", 3),
+        (func.lower(Creature.difficulty) == "hard", 4),
+        (func.lower(Creature.difficulty) == "challenging", 5),
+        (func.lower(Creature.difficulty) == "extreme", 6),
+        else_=-1,
+    )
 
     if relevance_order is not None:
         query = query.order_by(
             relevance_order.asc(),
             func.length(Creature.normalized_name).asc(),
+            Creature.name.asc(),
+        )
+    elif sort_by == "difficulty":
+        query = query.order_by(
+            difficulty_order.desc()
+            if sort_order == "desc"
+            else difficulty_order.asc(),
             Creature.name.asc(),
         )
     else:

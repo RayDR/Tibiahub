@@ -1,5 +1,13 @@
 export type AssistantLanguage = 'en' | 'es';
 
+export interface AssistantSuggestion {
+  id: string;
+  text: string;
+  entity_type: 'creature' | 'item' | 'quest' | 'hunt_zone';
+  entity_name: string;
+  source: 'popular' | 'fallback';
+}
+
 export interface AssistantPartyMember {
   name: string;
   vocation?: string | null;
