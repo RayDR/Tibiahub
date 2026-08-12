@@ -1,4 +1,5 @@
 """Hunt Zones API endpoints."""
+from collections import defaultdict
 from typing import List, Optional
 from fastapi import APIRouter, Depends, HTTPException, Query
 from fastapi import Request, Response
@@ -9,10 +10,16 @@ from app.core.config import settings
 from app.db.database import SessionLocal, get_db
 from app.models.spawn_location import SpawnLocation
 from app.models import HuntZone as HuntZoneModel
-from app.models.external_data import TibiaWikiQuest
+from app.models.external_data import TibiaWikiLocation, TibiaWikiQuest
 from app.models.user import User
 from app.models.workspace_audit import WorkspaceAudit
-from app.schemas import HuntZone, HuntZoneCreate, HuntRecommendation
+from app.schemas import (
+    HuntZone,
+    HuntZoneAccess,
+    HuntZoneAccessQuest,
+    HuntZoneCreate,
+    HuntRecommendation,
+)
 from app.api.v1.local_media import (
     LocalMediaDescriptor,
     build_local_media_file_response,
@@ -31,19 +38,119 @@ def _canonical_zone_slug(zone: HuntZoneModel) -> str:
     return zone.slug or normalize_search_text(zone.name).replace(" ", "-")
 
 
-def _zone_detail(db: Session, zone: HuntZoneModel) -> dict:
-    canonical_quest = None
+def _unique_location_knowledge(db: Session, zones: list[HuntZoneModel]) -> dict[str, TibiaWikiLocation]:
+    normalized_names = {zone.normalized_name or normalize_search_text(zone.name) for zone in zones}
+    normalized_names.discard("")
+    if not normalized_names:
+        return {}
+    rows = db.query(TibiaWikiLocation).filter(TibiaWikiLocation.normalized_name.in_(normalized_names)).all()
+    grouped: dict[str, list[TibiaWikiLocation]] = defaultdict(list)
+    for row in rows:
+        grouped[row.normalized_name].append(row)
+    return {name: matches[0] for name, matches in grouped.items() if len(matches) == 1}
+
+
+def _access_quest_names(zone: HuntZoneModel, location: TibiaWikiLocation | None) -> list[str]:
+    names: list[str] = []
     if zone.quest and zone.quest.name:
-        canonical_quest = db.query(TibiaWikiQuest).filter(
-            TibiaWikiQuest.normalized_name == normalize_search_text(zone.quest.name)
-        ).first()
-    return {
-        **HuntZone.model_validate(zone).model_dump(),
-        "slug": _canonical_zone_slug(zone),
-        "quest_id": canonical_quest.id if canonical_quest else None,
-        "quest_name": zone.quest.name if zone.quest else None,
-        "quest_slug": canonical_quest.slug if canonical_quest else None,
-    }
+        names.append(zone.quest.name)
+    metadata = location.provider_metadata if location and isinstance(location.provider_metadata, dict) else {}
+    raw_names = metadata.get("access_quest_names") or []
+    if isinstance(raw_names, list):
+        names.extend(str(value or "").strip() for value in raw_names if str(value or "").strip())
+    deduped: dict[str, str] = {}
+    for name in names:
+        normalized = normalize_search_text(name)
+        if normalized and normalized not in deduped:
+            deduped[normalized] = name
+    return list(deduped.values())
+
+
+def _canonical_quest_index(db: Session, quest_names: list[str]) -> dict[str, TibiaWikiQuest]:
+    normalized_names = {normalize_search_text(name) for name in quest_names if normalize_search_text(name)}
+    if not normalized_names:
+        return {}
+    rows = db.query(TibiaWikiQuest).filter(TibiaWikiQuest.normalized_name.in_(normalized_names)).all()
+    grouped: dict[str, list[TibiaWikiQuest]] = defaultdict(list)
+    for row in rows:
+        if row.normalized_name:
+            grouped[row.normalized_name].append(row)
+    return {name: matches[0] for name, matches in grouped.items() if len(matches) == 1}
+
+
+def _zone_access(zone: HuntZoneModel, location: TibiaWikiLocation | None, quest_index: dict[str, TibiaWikiQuest]) -> HuntZoneAccess:
+    names = _access_quest_names(zone, location)
+    quests: list[HuntZoneAccessQuest] = []
+    quest_requires_premium = False
+    for name in names:
+        canonical = quest_index.get(normalize_search_text(name))
+        if canonical and canonical.premium_required is True:
+            quest_requires_premium = True
+        quests.append(HuntZoneAccessQuest(id=canonical.id if canonical else None, name=name, slug=canonical.slug if canonical else None))
+
+    # HuntZone.min_level is a recommendation field, not proof of an access gate.
+    minimum_level = location.minimum_level if location else None
+    maximum_level = location.maximum_level if location else None
+
+    # Legacy False defaults are not evidence that Premium is not required.
+    if zone.requires_premium or quest_requires_premium:
+        premium_required: bool | None = True
+    elif location is not None:
+        premium_required = location.premium_required
+    else:
+        premium_required = None
+
+    quest_required = True if zone.requires_quest or quests else None
+    notes = location.access_notes if location else None
+    has_restriction = bool((minimum_level is not None and minimum_level > 0) or premium_required is True or quest_required is True)
+    has_evidence = bool(minimum_level is not None or maximum_level is not None or premium_required is not None or quest_required is not None or notes)
+    return HuntZoneAccess(
+        status="restricted" if has_restriction else "documented" if has_evidence else "unknown",
+        minimum_level=minimum_level,
+        maximum_level=maximum_level,
+        premium_required=premium_required,
+        quest_required=quest_required,
+        quests=quests,
+        notes=notes,
+        source_provider=location.source_name if location else zone.source_provider,
+        source_url=location.source_url if location else zone.source_url,
+    )
+
+
+def _zone_details(db: Session, zones: list[HuntZoneModel]) -> list[dict]:
+    if not zones:
+        return []
+    locations = _unique_location_knowledge(db, zones)
+    all_names: list[str] = []
+    for zone in zones:
+        normalized = zone.normalized_name or normalize_search_text(zone.name)
+        all_names.extend(_access_quest_names(zone, locations.get(normalized)))
+    quest_index = _canonical_quest_index(db, all_names)
+    results: list[dict] = []
+    for zone in zones:
+        normalized = zone.normalized_name or normalize_search_text(zone.name)
+        location = locations.get(normalized)
+        access = _zone_access(zone, location, quest_index)
+        payload = HuntZone.model_validate(zone).model_dump()
+        payload["slug"] = _canonical_zone_slug(zone)
+        payload["access"] = access.model_dump()
+        if not payload.get("min_level") and location and location.minimum_level is not None:
+            payload["min_level"] = location.minimum_level
+        if payload.get("max_level") is None and location and location.maximum_level is not None:
+            payload["max_level"] = location.maximum_level
+        payload["requires_premium"] = bool(payload.get("requires_premium") or access.premium_required is True)
+        payload["requires_quest"] = bool(payload.get("requires_quest") or access.quest_required is True)
+        if access.quests:
+            primary = access.quests[0]
+            payload["quest_id"] = primary.id
+            payload["quest_name"] = primary.name
+            payload["quest_slug"] = primary.slug
+        results.append(payload)
+    return results
+
+
+def _zone_detail(db: Session, zone: HuntZoneModel) -> dict:
+    return _zone_details(db, [zone])[0]
 
 
 async def _resolve_fandom_image_url(image_url: str) -> str | None:
@@ -78,9 +185,17 @@ async def get_hunt_zone_highlights(
         if not zone_ids:
             return []
 
-        raw_zones = db.query(HuntZoneModel).filter(HuntZoneModel.id.in_(zone_ids)).all()
+        raw_zones = (
+            db.query(HuntZoneModel)
+            .options(
+                selectinload(HuntZoneModel.creature_spawns).selectinload(SpawnLocation.creature),
+                selectinload(HuntZoneModel.quest),
+            )
+            .filter(HuntZoneModel.id.in_(zone_ids))
+            .all()
+        )
         by_id = {zone.id: zone for zone in raw_zones}
-        return [by_id[zone_id] for zone_id in zone_ids if zone_id in by_id]
+        return _zone_details(db, [by_id[zone_id] for zone_id in zone_ids if zone_id in by_id])
     except Exception:
         return []
 
@@ -96,7 +211,10 @@ async def get_hunt_zones(
     db: Session = Depends(get_db)
 ):
     """Get list of hunt zones with optional filters"""
-    query = db.query(HuntZoneModel).options(selectinload(HuntZoneModel.creature_spawns).selectinload(SpawnLocation.creature))
+    query = db.query(HuntZoneModel).options(
+        selectinload(HuntZoneModel.creature_spawns).selectinload(SpawnLocation.creature),
+        selectinload(HuntZoneModel.quest),
+    )
     
     if min_level is not None:
         query = query.filter(HuntZoneModel.min_level >= min_level)
@@ -125,7 +243,7 @@ async def get_hunt_zones(
             matches=[(zone.normalized_name or zone.name, zone.name, zone.id) for zone in zones[: min(len(zones), 5)]],
         )
         db.commit()
-    return zones
+    return _zone_details(db, zones)
 
 
 @router.get("/{zone_identifier}", response_model=HuntZone)

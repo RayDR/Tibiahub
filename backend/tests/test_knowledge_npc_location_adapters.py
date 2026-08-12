@@ -3,6 +3,7 @@ from __future__ import annotations
 import json
 from copy import deepcopy
 from pathlib import Path
+from types import SimpleNamespace
 from uuid import uuid4
 
 import pytest
@@ -10,6 +11,7 @@ from sqlalchemy import create_engine
 from sqlalchemy.orm import sessionmaker
 from sqlalchemy.pool import StaticPool
 
+from app.api.v1.hunt_zones import _zone_access
 from app.core.security import create_access_token
 from app.db.database import Base
 from app.knowledge.adapters import (
@@ -145,6 +147,58 @@ def test_location_detail_maps_levels_access_and_named_references():
     assert dto.premium_required is True and (dto.minimum_level, dto.maximum_level) == (1, 200)
     assert [value.name for value in dto.npcs] == ["Angus", "Lorek"]
     assert dto.access_notes.startswith("Travel by ship")
+
+
+def test_location_detail_extracts_iksupan_access_quest_and_vocation_level():
+    raw = deepcopy(fixture("tibiawiki_location_detail.json"))
+    raw["parse"]["pageid"] = 1999
+    raw["parse"]["title"] = "Iksupan"
+    raw["parse"]["wikitext"]["*"] = """
+{{Infobox Location
+| name = Iksupan
+| type = Hunting Place
+| levelknights = Level 150
+| levelpaladins = Level 150
+| levelmages = Level 150
+}}
+Access to Iksupan is obtained through the [[Adventures of Galthen Quest]].
+"""
+    adapter = TibiaWikiLocationAdapter(FixtureClient("location"))
+    normalized = adapter.normalize(detail_document("location", raw), context("location"))
+    dto = LocationKnowledgeDTO.from_canonical_data(normalized.canonical_data)
+    assert dto.minimum_level == 150
+    assert dto.access_notes == "Access to Iksupan is obtained through the Adventures of Galthen Quest."
+    assert [value.name for value in dto.quests] == ["Adventures of Galthen Quest"]
+    assert dto.provider_metadata["access_quest_names"] == ["Adventures of Galthen Quest"]
+
+
+def test_zone_access_keeps_legacy_false_defaults_unknown():
+    zone = SimpleNamespace(requires_quest=False, quest=None, requires_premium=False, source_provider="legacy", source_url=None)
+    access = _zone_access(zone, None, {})
+    assert access.status == "unknown"
+    assert access.minimum_level is None
+    assert access.premium_required is None
+    assert access.quest_required is None
+
+
+def test_zone_access_projects_canonical_location_and_required_quest_evidence():
+    zone = SimpleNamespace(requires_quest=False, quest=None, requires_premium=False, source_provider="legacy", source_url=None)
+    location = SimpleNamespace(
+        minimum_level=150,
+        maximum_level=None,
+        premium_required=None,
+        access_notes="Access to Iksupan is obtained through the Adventures of Galthen Quest.",
+        provider_metadata={"access_quest_names": ["Adventures of Galthen Quest"]},
+        source_name="tibiawiki",
+        source_url="https://example.test/wiki/Iksupan",
+    )
+    quest = SimpleNamespace(id=42, slug="adventures-of-galthen-quest", premium_required=True)
+    access = _zone_access(zone, location, {"adventures of galthen quest": quest})
+    assert access.status == "restricted"
+    assert access.minimum_level == 150
+    assert access.premium_required is True
+    assert access.quest_required is True
+    assert access.quests[0].slug == "adventures-of-galthen-quest"
 
 
 def test_normalization_is_idempotent_preserves_protected_fields_and_resolves_exact_graph_refs(db, named_registry):

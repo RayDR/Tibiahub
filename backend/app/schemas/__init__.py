@@ -126,10 +126,29 @@ class HuntZoneSimple(BaseModel):
     model_config = ConfigDict(from_attributes=True)
 
 
+class HuntZoneAccessQuest(BaseModel):
+    id: Optional[int] = None
+    name: str
+    slug: Optional[str] = None
+
+
+class HuntZoneAccess(BaseModel):
+    status: str = "unknown"
+    minimum_level: Optional[int] = None
+    maximum_level: Optional[int] = None
+    premium_required: Optional[bool] = None
+    quest_required: Optional[bool] = None
+    quests: List[HuntZoneAccessQuest] = Field(default_factory=list)
+    notes: Optional[str] = None
+    source_provider: Optional[str] = None
+    source_url: Optional[str] = None
+
+
 class HuntZone(HuntZoneBase):
     id: int
     creatures: List[CreatureSimple] = []
     creature_spawns: List[SpawnLocation] = []
+    access: HuntZoneAccess = Field(default_factory=HuntZoneAccess)
     last_synced_at: Optional[datetime] = None
     
     model_config = ConfigDict(from_attributes=True)

@@ -154,6 +154,17 @@ export interface HuntZone {
   source_provider?: string;
   source_name?: string;
   source_url?: string;
+  access?: {
+    status: 'unknown' | 'documented' | 'restricted';
+    minimum_level?: number | null;
+    maximum_level?: number | null;
+    premium_required?: boolean | null;
+    quest_required?: boolean | null;
+    quests: Array<{ id?: number | null; name: string; slug?: string | null }>;
+    notes?: string | null;
+    source_provider?: string | null;
+    source_url?: string | null;
+  };
   creatures?: CreatureSimple[];
   creature_spawns?: Array<{
     id: number;
