@@ -87,6 +87,8 @@ class Settings(BaseSettings):
     CHARACTER_CLAIM_TTL_MINUTES: int = Field(30, ge=10, le=1440)
     CHARACTER_CLAIM_MAX_ATTEMPTS: int = Field(3, ge=1, le=10)
     AVATAR_STORAGE_ROOT: str = "/forge/tibiahub-storage/avatars"
+    WORLD_MAP_STORAGE_ROOT: str = "/forge/tibiahub-storage/world-maps"
+    WORLD_MAP_STAGING_ROOT: str = "/forge/tibiahub-storage/world-maps-staging"
     AVATAR_MAX_BYTES: int = Field(5 * 1024 * 1024, ge=1024, le=10 * 1024 * 1024)
     SMTP_HOST: str = ""
     SMTP_PORT: int = 587

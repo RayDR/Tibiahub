@@ -3,6 +3,7 @@ from __future__ import annotations
 
 from datetime import UTC, datetime, timedelta
 import json
+from pathlib import Path
 from typing import Any, Optional
 
 from fastapi import APIRouter, Depends, HTTPException, Query
@@ -22,6 +23,8 @@ from app.models.settings import SystemSettings as SettingsModel
 from app.models.quest import Quest
 from app.models.user import User
 from app.services.sync_service import SyncService
+from app.services.world_map_sync_service import WorldMapSyncService
+from app.core.config import settings
 
 router = APIRouter()
 
@@ -106,6 +109,36 @@ class SyncRuntimeSettingsUpdate(BaseModel):
 
 class ImageCanaryRequest(BaseModel):
     limit: int = Field(30, ge=20, le=50)
+
+
+class WorldMapImportRequest(BaseModel):
+    upstream_commit: str = Field(min_length=7, max_length=64, pattern="^[0-9a-fA-F]+$")
+    confirmation: str
+
+
+@router.post("/world-maps/import-staged")
+def import_staged_world_maps(
+    payload: WorldMapImportRequest,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_admin_user),
+):
+    """Import a pre-staged checkout; this endpoint never performs network I/O."""
+    if payload.confirmation != "IMPORT STAGED WORLD MAPS":
+        raise HTTPException(status_code=422, detail="Explicit world-map import confirmation is required")
+    source = Path(settings.WORLD_MAP_STAGING_ROOT).resolve()
+    if not source.is_dir():
+        raise HTTPException(status_code=409, detail="Configured world-map staging directory is unavailable")
+    try:
+        result = WorldMapSyncService(db, settings.WORLD_MAP_STORAGE_ROOT).import_directory(source, upstream_commit=payload.upstream_commit.lower())
+    except ValueError as exc:
+        raise HTTPException(status_code=422, detail=str(exc)) from exc
+    db.add(WorkspaceAudit(
+        workspace_type="global_admin", actor_id=current_user.id, action="world_map_import",
+        target_type="world_map_floor", target_id=result["upstream_commit"],
+        safe_metadata={"reason": "Explicit staged TibiaMaps import", "commit": result["upstream_commit"], "floors": result["floor_count"], "markers": result["marker_count"]},
+    ))
+    db.commit()
+    return result
 
 
 def _get_setting(db: Session, key: str, default: str = "") -> str:

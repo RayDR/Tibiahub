@@ -42,10 +42,18 @@ def _zone_payload(rec, engine=None, player_level=None):
         "level_fit": profile.get("level_fit"), "danger": profile.get("danger"),
         "raw_creature_exp": profile.get("raw_experience"),
         "profile_basis": profile.get("profile_basis"),
-        "map_image_url": f"/api/v1/hunt-zones/{zone.id}/map-image?placeholder=false" if zone.map_asset_id else None,
+        "map_image_url": None,
         "map_bounds": zone.map_bounds, "location_x": location_x,
         "location_y": location_y, "location_z": zone.location_z if zone.location_z is not None else zone.map_z,
-        "creatures": [{"id": spawn.creature.id, "name": spawn.creature.name, "slug": spawn.creature.slug, "is_boss": bool(spawn.creature.is_boss)} for spawn in zone.creature_spawns[:8] if spawn.creature],
+        "creatures": [{
+            "id": spawn.creature.id, "name": spawn.creature.name, "slug": spawn.creature.slug,
+            "is_boss": bool(spawn.creature.is_boss), "image_url": f"/api/v1/creatures/{spawn.creature.id}/image",
+            "hitpoints": spawn.creature.hitpoints, "experience": spawn.creature.experience,
+            "max_damage": spawn.creature.max_damage,
+            "weaknesses": [element.name for element in spawn.creature.weaknesses],
+            "resistances": [element.name for element in spawn.creature.resistances],
+            "valuable_loot": [{"name": loot.item_name, "value": loot.item_value, "image_url": f"/api/v1/items/{loot.id}/image"} for loot in sorted(spawn.creature.loot_items, key=lambda item: item.item_value or 0, reverse=True)[:5] if loot.item_value],
+        } for spawn in zone.creature_spawns[:8] if spawn.creature],
     }
 
 
@@ -55,6 +63,7 @@ async def get_solo_recommendations(
     level: int = Query(..., ge=8, le=2000, description="Player level"),
     goal: str = Query("exp", pattern="^(exp|profit|balanced)$", description="Hunting goal"),
     limit: int = Query(10, ge=1, le=50, description="Maximum results"),
+    skip: int = Query(0, ge=0, le=500, description="Pagination offset"),
     zone: Optional[str] = Query(None, max_length=150, description="Optional zone identifier to inspect in context"),
     db: Session = Depends(get_db)
 ):
@@ -78,7 +87,8 @@ async def get_solo_recommendations(
         vocation=vocation,
         level=level,
         goal=goal,
-        limit=limit,
+        limit=limit + 1,
+        skip=skip,
         preferred_zone=zone,
     )
     
@@ -86,9 +96,10 @@ async def get_solo_recommendations(
         "vocation": vocation,
         "level": level,
         "goal": goal,
+        "skip": skip, "limit": limit, "has_more": len(recommendations) > limit,
         "recommendations": [
             _zone_payload(rec, engine, level)
-            for rec in recommendations
+            for rec in recommendations[:limit]
         ]
     }
 
@@ -98,6 +109,7 @@ async def get_party_recommendations(
     party_composition: List[dict],  # [{"vocation": "knight", "level": 100}, ...]
     goal: str = Query("exp", pattern="^(exp|profit|balanced)$"),
     limit: int = Query(10, ge=1, le=50),
+    skip: int = Query(0, ge=0, le=500),
     db: Session = Depends(get_db)
 ):
     """
@@ -146,7 +158,8 @@ async def get_party_recommendations(
     recommendations = engine.get_party_recommendations(
         party_composition=normalized_party,
         goal=goal,
-        limit=limit
+        limit=limit + 1,
+        skip=skip,
     )
     
     return {
@@ -154,9 +167,10 @@ async def get_party_recommendations(
         "avg_level": sum(m['level'] for m in normalized_party) / len(normalized_party),
         "vocations": [m['vocation'] for m in normalized_party],
         "goal": goal,
+        "skip": skip, "limit": limit, "has_more": len(recommendations) > limit,
         "recommendations": [
             {**_zone_payload(rec, engine, int(sum(m['level'] for m in normalized_party) / len(normalized_party))), "composition_fit": rec['synergy_bonus']}
-            for rec in recommendations
+            for rec in recommendations[:limit]
         ]
     }
 

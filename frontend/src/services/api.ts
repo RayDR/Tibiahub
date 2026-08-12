@@ -164,20 +164,23 @@ export const huntZonesApi = {
     limit: number = 10,
     goal: 'exp' | 'profit' | 'balanced' = 'exp',
     zone?: string,
+    skip: number = 0,
   ): Promise<any> => {
     const response = await api.get('/recommendations/solo', {
-      params: { vocation, level, limit, goal, zone },
+      params: { vocation, level, limit, goal, zone, skip },
     });
     return response.data;
   },
 
   getPartyRecommendations: async (
     party_composition: Array<{ vocation: string; level: number }>,
-    goal: 'exp' | 'profit' | 'balanced' = 'exp'
+    goal: 'exp' | 'profit' | 'balanced' = 'exp',
+    limit: number = 6,
+    skip: number = 0,
   ): Promise<any> => {
     // UPDATED: Use new /recommendations/party endpoint
     const response = await api.post('/recommendations/party', party_composition, {
-      params: { goal },
+      params: { goal, limit, skip },
     });
     return response.data;
   },

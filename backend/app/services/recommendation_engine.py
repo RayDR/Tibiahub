@@ -88,6 +88,7 @@ class RecommendationEngine:
         level: int,
         goal: str = 'exp',  # 'exp', 'profit', 'balanced'
         limit: int = 10,
+        skip: int = 0,
         preferred_zone: str | None = None,
     ) -> List[Dict[str, Any]]:
         """
@@ -107,7 +108,9 @@ class RecommendationEngine:
         level_max = level + 20
         
         zones = self.db.query(HuntZone).options(
-            selectinload(HuntZone.creature_spawns).selectinload(SpawnLocation.creature),
+            selectinload(HuntZone.creature_spawns).selectinload(SpawnLocation.creature).selectinload(Creature.weaknesses),
+            selectinload(HuntZone.creature_spawns).selectinload(SpawnLocation.creature).selectinload(Creature.resistances),
+            selectinload(HuntZone.creature_spawns).selectinload(SpawnLocation.creature).selectinload(Creature.loot_items),
             selectinload(HuntZone.quest),
         ).filter(
             HuntZone.min_level <= level_max,
@@ -135,13 +138,14 @@ class RecommendationEngine:
         # Sort by score descending
         recommendations.sort(key=lambda x: x['score'], reverse=True)
         
-        return recommendations[:limit]
+        return recommendations[skip:skip + limit]
     
     def get_party_recommendations(
         self,
         party_composition: List[Dict[str, Any]],  # [{'vocation': 'knight', 'level': 100}, ...]
         goal: str = 'exp',
-        limit: int = 10
+        limit: int = 10,
+        skip: int = 0,
     ) -> List[Dict[str, Any]]:
         """
         Get hunt zone recommendations for party
@@ -168,7 +172,9 @@ class RecommendationEngine:
         max_level = int(avg_level + 30)
         
         zones = self.db.query(HuntZone).options(
-            selectinload(HuntZone.creature_spawns).selectinload(SpawnLocation.creature),
+            selectinload(HuntZone.creature_spawns).selectinload(SpawnLocation.creature).selectinload(Creature.weaknesses),
+            selectinload(HuntZone.creature_spawns).selectinload(SpawnLocation.creature).selectinload(Creature.resistances),
+            selectinload(HuntZone.creature_spawns).selectinload(SpawnLocation.creature).selectinload(Creature.loot_items),
             selectinload(HuntZone.quest),
         ).filter(
             HuntZone.min_level <= max_level,
@@ -192,7 +198,7 @@ class RecommendationEngine:
         
         recommendations.sort(key=lambda x: x['score'], reverse=True)
         
-        return recommendations[:limit]
+        return recommendations[skip:skip + limit]
     
     def _calculate_solo_score(
         self,
