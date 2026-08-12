@@ -2,12 +2,16 @@
 from typing import List, Optional
 from fastapi import APIRouter, Depends, HTTPException, Query
 from fastapi import Request, Response
+from sqlalchemy import or_
 from sqlalchemy.orm import Session, selectinload
 
 from app.core.config import settings
 from app.db.database import SessionLocal, get_db
 from app.models.spawn_location import SpawnLocation
 from app.models import HuntZone as HuntZoneModel
+from app.models.external_data import TibiaWikiQuest
+from app.models.user import User
+from app.models.workspace_audit import WorkspaceAudit
 from app.schemas import HuntZone, HuntZoneCreate, HuntRecommendation
 from app.api.v1.local_media import (
     LocalMediaDescriptor,
@@ -18,8 +22,28 @@ from app.services.entity_metadata_service import EntityMetadataService
 from app.services.text_utils import normalize_search_text
 from app.services.hunt_service import HuntRecommendationService
 from app.services import media_asset_service as media_svc
+from app.api.v1.endpoints.auth import get_current_knowledge_editor
 
 router = APIRouter(prefix="/hunt-zones", tags=["hunt-zones"])
+
+
+def _canonical_zone_slug(zone: HuntZoneModel) -> str:
+    return zone.slug or normalize_search_text(zone.name).replace(" ", "-")
+
+
+def _zone_detail(db: Session, zone: HuntZoneModel) -> dict:
+    canonical_quest = None
+    if zone.quest and zone.quest.name:
+        canonical_quest = db.query(TibiaWikiQuest).filter(
+            TibiaWikiQuest.normalized_name == normalize_search_text(zone.quest.name)
+        ).first()
+    return {
+        **HuntZone.model_validate(zone).model_dump(),
+        "slug": _canonical_zone_slug(zone),
+        "quest_id": canonical_quest.id if canonical_quest else None,
+        "quest_name": zone.quest.name if zone.quest else None,
+        "quest_slug": canonical_quest.slug if canonical_quest else None,
+    }
 
 
 async def _resolve_fandom_image_url(image_url: str) -> str | None:
@@ -104,15 +128,26 @@ async def get_hunt_zones(
     return zones
 
 
-@router.get("/{zone_id}", response_model=HuntZone)
-async def get_hunt_zone(zone_id: int, db: Session = Depends(get_db)):
+@router.get("/{zone_identifier}", response_model=HuntZone)
+async def get_hunt_zone(
+    zone_identifier: str,
+    response: Response,
+    db: Session = Depends(get_db),
+):
     """Get detailed information about a specific hunt zone"""
-    zone = (
-        db.query(HuntZoneModel)
-        .options(selectinload(HuntZoneModel.creature_spawns).selectinload(SpawnLocation.creature))
-        .filter(HuntZoneModel.id == zone_id)
-        .first()
+    query = db.query(HuntZoneModel).options(
+        selectinload(HuntZoneModel.creature_spawns).selectinload(SpawnLocation.creature),
+        selectinload(HuntZoneModel.quest),
     )
+    if zone_identifier.isdigit():
+        query = query.filter(HuntZoneModel.id == int(zone_identifier))
+    else:
+        normalized = normalize_search_text(zone_identifier.replace("-", " ").replace("_", " "))
+        query = query.filter(or_(
+            HuntZoneModel.slug == zone_identifier,
+            HuntZoneModel.normalized_name == normalized,
+        ))
+    zone = query.first()
     
     if not zone:
         raise HTTPException(status_code=404, detail="Hunt zone not found")
@@ -123,16 +158,30 @@ async def get_hunt_zone(zone_id: int, db: Session = Depends(get_db)):
         matches=[(zone.normalized_name or zone.name, zone.name, zone.id)],
     )
     db.commit()
-    
-    return zone
+    response.headers["X-Canonical-Slug"] = _canonical_zone_slug(zone)
+    return _zone_detail(db, zone)
 
 
 @router.get("/{zone_id}/map-image")
-def get_hunt_zone_map_image(zone_id: int, request: Request):
+def get_hunt_zone_map_image(
+    zone_id: int,
+    request: Request,
+    include_placeholder: bool = Query(True, alias="placeholder"),
+):
     """Serve hunt-zone map image from local MediaAsset cache (local-first)."""
     descriptor = _resolve_hunt_zone_media_descriptor(zone_id)
 
     if descriptor.status != "cached":
+        if not include_placeholder:
+            raise HTTPException(
+                status_code=404,
+                detail="Hunt-zone map unavailable",
+                headers={
+                    "X-Image-Source": "unavailable",
+                    "X-Image-Status": descriptor.status,
+                    "X-Asset-Key": descriptor.asset_key,
+                },
+            )
         placeholder = _placeholder_map_svg(descriptor.fallback_label)
         return Response(
             content=placeholder,
@@ -158,6 +207,16 @@ def get_hunt_zone_map_image(zone_id: int, request: Request):
     )
 
     if response is None:
+        if not include_placeholder:
+            raise HTTPException(
+                status_code=404,
+                detail="Hunt-zone map unavailable",
+                headers={
+                    "X-Image-Source": "unavailable",
+                    "X-Image-Status": "missing",
+                    "X-Asset-Key": descriptor.asset_key,
+                },
+            )
         placeholder = _placeholder_map_svg(descriptor.fallback_label)
         return Response(
             content=placeholder,
@@ -228,7 +287,8 @@ async def get_hunt_recommendations(
 @router.post("/", response_model=HuntZone, status_code=201)
 async def create_hunt_zone(
     zone: HuntZoneCreate,
-    db: Session = Depends(get_db)
+    db: Session = Depends(get_db),
+    editor: User = Depends(get_current_knowledge_editor),
 ):
     """Create a new hunt zone"""
     existing = db.query(HuntZoneModel).filter(
@@ -238,8 +298,20 @@ async def create_hunt_zone(
     if existing:
         raise HTTPException(status_code=400, detail="Hunt zone already exists")
     
-    db_zone = HuntZoneModel(**zone.model_dump())
+    # ``quest_name`` is a response/display convenience; the persisted relation
+    # is ``quest_id`` and is intentionally managed by knowledge workflows.
+    db_zone = HuntZoneModel(**zone.model_dump(exclude={"quest_name", "quest_slug"}))
     db.add(db_zone)
+    db.flush()
+    db.add(WorkspaceAudit(
+        actor_id=editor.id,
+        workspace_type="knowledge_editor",
+        action="knowledge_hunt_zone_created",
+        target_type="hunt_zone",
+        target_id=str(db_zone.id),
+        assisted=False,
+        safe_metadata={"name": db_zone.name},
+    ))
     db.commit()
     db.refresh(db_zone)
     

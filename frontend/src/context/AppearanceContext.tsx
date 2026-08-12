@@ -1,6 +1,6 @@
 import React, { createContext, useCallback, useContext, useEffect, useMemo, useState } from 'react';
 
-export const THEME_IDS = ['default', 'medieval', 'tibia-stone', 'midnight-arcana', 'blood-moon', 'high-contrast'] as const;
+export const THEME_IDS = ['medieval', 'tibia-stone', 'midnight-arcana', 'blood-moon', 'high-contrast'] as const;
 export const MOTION_MODES = ['system', 'reduced', 'enhanced'] as const;
 export const DENSITY_MODES = ['comfortable', 'compact'] as const;
 
@@ -17,7 +17,7 @@ export interface AppearancePreferences {
 export const APPEARANCE_STORAGE_KEY = 'tibiahub.appearance.v1';
 const LEGACY_THEME_STORAGE_KEY = 'theme';
 export const DEFAULT_APPEARANCE: AppearancePreferences = {
-  theme: 'default',
+  theme: 'tibia-stone',
   motion: 'system',
   density: 'comfortable',
 };
@@ -28,8 +28,10 @@ const includes = <T extends string>(values: readonly T[], value: unknown): value
 
 export const normalizeAppearancePreferences = (value: unknown): AppearancePreferences => {
   const candidate = value && typeof value === 'object' ? value as Partial<AppearancePreferences> : {};
+  const storedTheme = (candidate as { theme?: unknown }).theme;
+  const migratedTheme = storedTheme === 'default' ? 'tibia-stone' : storedTheme;
   return {
-    theme: includes(THEME_IDS, candidate.theme) ? candidate.theme : DEFAULT_APPEARANCE.theme,
+    theme: includes(THEME_IDS, migratedTheme) ? migratedTheme : DEFAULT_APPEARANCE.theme,
     motion: includes(MOTION_MODES, candidate.motion) ? candidate.motion : DEFAULT_APPEARANCE.motion,
     density: includes(DENSITY_MODES, candidate.density) ? candidate.density : DEFAULT_APPEARANCE.density,
   };

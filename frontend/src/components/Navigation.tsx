@@ -1,7 +1,6 @@
 import { useEffect, useRef, useState } from 'react';
 import { Link, useLocation, useNavigate } from 'react-router-dom';
-import { BookOpen, ChevronDown, Home, Map, Settings, Shield } from 'lucide-react';
-import { FontAwesomeIcon } from '@fortawesome/react-fontawesome';
+import { BookOpen, ChevronDown, Compass, Home, Map, Settings, Shield } from 'lucide-react';
 import { useTranslation } from 'react-i18next';
 
 import { useAuth } from '../context/AuthContext';
@@ -11,6 +10,7 @@ import NotificationIndicator from './NotificationIndicator';
 import ThemeSwitcher from './ThemeSwitcher';
 import AccountMenu from './account/AccountMenu';
 import { Container } from './ui';
+import KnowledgeCategoryIcon, { categoryForTab } from './knowledge/KnowledgeCategoryIcon';
 
 interface NavigationItem {
   path: string;
@@ -28,14 +28,15 @@ export default function Navigation() {
 
   const isActive = (path: string) => {
     if (path === '/') return location.pathname === '/';
-    if (path === '/cyclopedia') return location.pathname === '/cyclopedia' || /^\/(creatures|quests|npcs|locations)\//.test(location.pathname);
+    if (path === '/cyclopedia') return location.pathname === '/cyclopedia' || /^\/(creatures|items|quests|hunt-zones|npcs|locations)\//.test(location.pathname);
     return location.pathname === path || location.pathname.startsWith(`${path}/`);
   };
 
   const primaryItems: NavigationItem[] = [
     { path: '/', label: t('nav.home'), icon: Home },
     { path: '/cyclopedia', label: t('nav.search'), icon: BookOpen },
-    { path: '/planner', label: t('nav.planner'), icon: Map },
+    { path: '/planner', label: t('nav.planner'), icon: Compass },
+    { path: '/map', label: t('nav.map'), icon: Map },
     ...(isAuthenticated ? [{ path: '/guild', label: t('nav.guild'), icon: Shield }] : []),
     ...(user?.is_superuser ? [{ path: '/admin', label: t('nav.admin'), icon: Settings }] : []),
   ];
@@ -76,7 +77,7 @@ export default function Navigation() {
                     <Link to={item.path} className="app-nav-link flex min-h-11 items-center gap-2 rounded-l-lg px-3" data-active={isActive(item.path)}><Icon className="size-4" /><span>{item.label}</span></Link>
                     <button type="button" className="app-nav-link min-h-11 rounded-r-lg px-2" aria-label={t('a11y.openCyclopediaMenu')} aria-expanded={cyclopediaMenuOpen} onClick={() => setCyclopediaMenuOpen(value => !value)}><ChevronDown className={`size-4 transition-transform ${cyclopediaMenuOpen ? 'rotate-180' : ''}`} /></button>
                     {cyclopediaMenuOpen ? <div className="ds-dropdown absolute left-0 top-full mt-2 w-56">
-                      {cyclopediaSections.map(entry => <button key={entry.key} type="button" onClick={() => { setCyclopediaMenuOpen(false); navigate(`/cyclopedia?tab=${entry.key}`); }} className="flex min-h-11 w-full items-center gap-2 rounded-sm px-3 text-left text-sm text-content-secondary hover:bg-surface-hover hover:text-content-primary"><FontAwesomeIcon icon={entry.icon} className="w-4" /><span>{t(entry.i18nLabel)}</span></button>)}
+                      {cyclopediaSections.map(entry => <button key={entry.key} type="button" onClick={() => { setCyclopediaMenuOpen(false); navigate(`/cyclopedia?tab=${entry.key}`); }} className="flex min-h-11 w-full items-center gap-2 rounded-sm px-3 text-left text-sm text-content-secondary hover:bg-surface-hover hover:text-content-primary"><KnowledgeCategoryIcon category={categoryForTab(entry.key)} label={t(entry.i18nLabel)} className="size-8" mediaClassName="size-7" /><span>{t(entry.i18nLabel)}</span></button>)}
                     </div> : null}
                   </div>;
                 }

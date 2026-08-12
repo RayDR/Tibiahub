@@ -1,0 +1,34 @@
+name: Bug report
+description: Report a reproducible problem in TibiaHub.
+title: "[Bug] "
+labels: [bug]
+body:
+  - type: markdown
+    attributes:
+      value: Thanks for helping improve TibiaHub. Please do not include passwords, tokens, or private account data.
+  - type: textarea
+    id: problem
+    attributes:
+      label: What happened?
+      description: Describe the problem and what you expected instead.
+    validations:
+      required: true
+  - type: textarea
+    id: steps
+    attributes:
+      label: Steps to reproduce
+      placeholder: "1. Open…\n2. Select…\n3. See…"
+    validations:
+      required: true
+  - type: input
+    id: page
+    attributes:
+      label: TibiaHub page
+      description: Paste the public URL if relevant.
+  - type: dropdown
+    id: device
+    attributes:
+      label: Device
+      options: [Desktop, Mobile, Tablet, Other]
+    validations:
+      required: true

@@ -11,6 +11,8 @@ from sqlalchemy.orm import Session
 
 from app.db.database import SessionLocal, get_db
 from app.models import Creature as CreatureModel
+from app.models.user import User
+from app.models.workspace_audit import WorkspaceAudit
 from app.models.settings import SystemSettings as SettingsModel
 from app.schemas import Creature, CreatureCreate, CreatureSimple
 from app.services.creature_storage_service import get_cached_creature_by_id, get_cached_creature_by_name, list_cached_creatures, resolve_cached_creature
@@ -27,6 +29,7 @@ from app.api.v1.local_media import (
     resolve_local_media_descriptor,
 )
 from app.core.config import settings
+from app.api.v1.endpoints.auth import get_current_knowledge_editor
 
 router = APIRouter(prefix="/creatures", tags=["creatures"])
 logger = logging.getLogger(__name__)
@@ -395,7 +398,49 @@ async def get_bosses(
         sort_order=safe_sort_order,
         include_hidden=False,
     )
+    if search and cached:
+        EntityMetadataService.record_searches(
+            db,
+            entity_type="creature",
+            matches=[
+                (item.normalized_name or item.name, item.name, item.id)
+                for item in cached[: min(len(cached), 5)]
+            ],
+        )
+        db.commit()
     return cached
+
+
+@router.get("/bosses/popular", response_model=List[CreatureSimple])
+async def get_popular_bosses(
+    response: Response,
+    limit: int = Query(12, ge=1, le=30),
+    db: Session = Depends(get_db),
+):
+    """Return bosses ranked by aggregate local activity and recency."""
+    metadata = EntityMetadataService.get_popular(
+        db,
+        entity_type="creature",
+        limit=min(limit * 6, 180),
+    )
+    boss_ids = [row.entity_id for row in metadata if row.entity_id is not None]
+    response.headers["Cache-Control"] = (
+        "public, max-age=300, stale-while-revalidate=900"
+    )
+    if not boss_ids:
+        return []
+
+    bosses = (
+        db.query(CreatureModel)
+        .filter(
+            CreatureModel.id.in_(boss_ids),
+            CreatureModel.is_hidden == False,
+            CreatureModel.is_boss == True,
+        )
+        .all()
+    )
+    by_id = {boss.id: boss for boss in bosses}
+    return [by_id[boss_id] for boss_id in boss_ids if boss_id in by_id][:limit]
 
 
 @router.get("/{creature_identifier}", response_model=Creature)
@@ -443,6 +488,7 @@ async def get_creature_by_name(creature_name: str, db: Session = Depends(get_db)
 async def create_creature(
     creature: CreatureCreate,
     db: Session = Depends(get_db),
+    editor: User = Depends(get_current_knowledge_editor),
 ):
     """Create a new creature in the local cache database"""
     existing = db.query(CreatureModel).filter(CreatureModel.name == creature.name).first()
@@ -451,6 +497,16 @@ async def create_creature(
 
     db_creature = CreatureModel(**creature.model_dump())
     db.add(db_creature)
+    db.flush()
+    db.add(WorkspaceAudit(
+        actor_id=editor.id,
+        workspace_type="knowledge_editor",
+        action="knowledge_creature_created",
+        target_type="creature",
+        target_id=str(db_creature.id),
+        assisted=False,
+        safe_metadata={"name": db_creature.name},
+    ))
     db.commit()
     db.refresh(db_creature)
     return db_creature

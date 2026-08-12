@@ -12,9 +12,11 @@ Algorithm considers multiple factors to suggest optimal hunting spots.
 """
 
 from typing import List, Dict, Optional, Any
-from sqlalchemy.orm import Session
+from sqlalchemy import or_
+from sqlalchemy.orm import Session, selectinload
 from ..models.hunt_zone import HuntZone
 from ..models.creature import Creature
+from ..models.spawn_location import SpawnLocation
 from ..schemas import Vocation
 
 
@@ -102,9 +104,12 @@ class RecommendationEngine:
         level_min = max(1, level - 50)
         level_max = level + 20
         
-        zones = self.db.query(HuntZone).filter(
-            HuntZone.min_level >= level_min,
-            HuntZone.min_level <= level_max
+        zones = self.db.query(HuntZone).options(
+            selectinload(HuntZone.creature_spawns).selectinload(SpawnLocation.creature),
+            selectinload(HuntZone.quest),
+        ).filter(
+            HuntZone.min_level <= level_max,
+            or_(HuntZone.max_level.is_(None), HuntZone.max_level >= level_min),
         ).all()
         
         recommendations = []
@@ -156,9 +161,12 @@ class RecommendationEngine:
         min_level = int(avg_level - 30)
         max_level = int(avg_level + 30)
         
-        zones = self.db.query(HuntZone).filter(
-            HuntZone.min_level >= min_level,
-            HuntZone.min_level <= max_level
+        zones = self.db.query(HuntZone).options(
+            selectinload(HuntZone.creature_spawns).selectinload(SpawnLocation.creature),
+            selectinload(HuntZone.quest),
+        ).filter(
+            HuntZone.min_level <= max_level,
+            or_(HuntZone.max_level.is_(None), HuntZone.max_level >= min_level),
         ).all()
         
         recommendations = []
@@ -191,7 +199,8 @@ class RecommendationEngine:
         score = 0.0
         
         # Check if zone is recommended for vocation
-        vocation_field = f"{vocation}s_recommended"
+        vocation_name = vocation.value if isinstance(vocation, Vocation) else str(vocation)
+        vocation_field = f"{vocation_name}s_recommended"
         if hasattr(zone, vocation_field) and getattr(zone, vocation_field):
             score += 50
         
@@ -275,9 +284,10 @@ class RecommendationEngine:
         """Generate human-readable reasons for recommendation"""
         reasons = []
         
-        vocation_field = f"{vocation}s_recommended"
+        vocation_name = vocation.value if isinstance(vocation, Vocation) else str(vocation)
+        vocation_field = f"{vocation_name}s_recommended"
         if hasattr(zone, vocation_field) and getattr(zone, vocation_field):
-            reasons.append(f"Recommended for {vocation}s")
+            reasons.append(f"Recommended for {vocation_name}s")
         
         level_diff = zone.min_level - level
         if level_diff <= 0:
@@ -310,7 +320,7 @@ class RecommendationEngine:
         
         synergy = self._calculate_synergy(vocation_key)
         if synergy > 1.2:
-            reasons.append(f"Excellent party synergy (+{int((synergy - 1) * 100)}%)")
+            reasons.append("Strong vocation coverage for this party")
         
         # Check if has tank
         if 'knight' in vocations:
@@ -328,11 +338,7 @@ class RecommendationEngine:
     
     def _estimate_exp(self, zone: HuntZone, level: int, vocation: Vocation) -> Optional[int]:
         """Estimate experience per hour"""
-        if zone.avg_exp_hour:
-            # Adjust based on level difference
-            level_factor = 1.0 + (level - zone.min_level) * 0.02
-            return int(zone.avg_exp_hour * level_factor)
-        return None
+        return zone.avg_exp_hour
     
     def _estimate_profit(self, zone: HuntZone, level: int, vocation: Vocation) -> Optional[int]:
         """Estimate profit per hour"""
@@ -342,14 +348,7 @@ class RecommendationEngine:
     
     def _estimate_party_exp(self, zone: HuntZone, party: List[Dict[str, Any]]) -> Optional[int]:
         """Estimate party experience per hour"""
-        if zone.avg_exp_hour:
-            party_size = len(party)
-            vocations = tuple(sorted([m['vocation'] for m in party]))
-            synergy = self._calculate_synergy(vocations)
-            
-            # Party gets bonus exp with synergy
-            return int(zone.avg_exp_hour * synergy * (1 + party_size * 0.1))
-        return None
+        return zone.avg_exp_hour
     
     def _estimate_party_profit(self, zone: HuntZone, party: List[Dict[str, Any]]) -> Optional[int]:
         """Estimate party profit per hour"""

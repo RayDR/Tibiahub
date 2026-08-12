@@ -29,6 +29,15 @@ def is_global_admin(user: User) -> bool:
     return bool(user and user.is_superuser)
 
 
+def can_edit_global_knowledge(user: User) -> bool:
+    """Return whether an active user may mutate the shared knowledge catalog."""
+    return bool(
+        user
+        and user.is_active
+        and (user.is_superuser or user.is_writer)
+    )
+
+
 def _verified_guild_characters(user: User, guild_id: str | int | None = None):
     requested = str(guild_id or "").strip().casefold()
     return [

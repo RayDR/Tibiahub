@@ -15,7 +15,7 @@ from app.db.database import get_db
 from app.models.user import User
 from app.models.user_character import UserCharacter
 from app.schemas.auth import UserCreate, UserResponse, Token, TokenData
-from app.core.permissions import is_global_admin, is_guild_leader
+from app.core.permissions import can_edit_global_knowledge, is_global_admin, is_guild_leader
 from app.services.character_ownership_service import normalize_character_name
 
 router = APIRouter()
@@ -52,6 +52,16 @@ def get_current_admin_user(current_user: User = Depends(get_current_active_user)
         raise HTTPException(
             status_code=403,
             detail="Admin privileges required",
+        )
+    return current_user
+
+
+def get_current_knowledge_editor(current_user: User = Depends(get_current_active_user)):
+    """Require the independent platform Editor capability for catalog writes."""
+    if not can_edit_global_knowledge(current_user):
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="Editor privileges required",
         )
     return current_user
 

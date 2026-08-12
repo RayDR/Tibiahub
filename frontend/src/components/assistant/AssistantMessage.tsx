@@ -25,7 +25,7 @@ export default function AssistantMessage({ response, onFollowup }: { response: A
       <p className="min-w-0 whitespace-pre-wrap leading-7 text-content-primary"><RichContent parts={response.message} entities={entities} /></p>
     </div>
 
-    {response.sections.map((section, index) => <section key={`${section.kind}:${index}`} className="rounded-xl border border-line bg-surface-base/40 p-4">
+    {response.sections.map((section, index) => <section key={`${section.kind}:${index}`} className="rounded-r-xl border-l-2 border-primary/40 bg-surface-base/35 px-4 py-3">
       <h3 className="font-semibold text-content-primary">{section.title}</h3>
       <p className="mt-2 whitespace-pre-wrap text-sm leading-6 text-content-secondary"><RichContent parts={section.content} entities={entities} /></p>
     </section>)}
@@ -38,7 +38,7 @@ export default function AssistantMessage({ response, onFollowup }: { response: A
       })}</ul>
     </section> : null}
 
-    {cards.length > 0 ? <div className="grid gap-2 sm:grid-cols-2" aria-label={t('assistant.entity.cards')}>{cards.map((entity) => <AssistantEntity key={entity.key} entity={entity} variant="card" />)}</div> : null}
+    {cards.length > 0 ? <div className="grid gap-2.5 sm:grid-cols-2" aria-label={t('assistant.entity.cards')}>{cards.map((entity) => <AssistantEntity key={entity.key} entity={entity} variant="card" />)}</div> : null}
     {response.routes.map((route) => <AssistantRouteSteps key={route.key} route={route} />)}
 
     {response.warnings.length > 0 ? <div className="space-y-2">{response.warnings.map((warning, index) => <div key={`${warning.code}:${index}`} className="flex gap-2 rounded-lg border border-warning/25 bg-warning/10 p-3 text-sm text-content-secondary"><AlertTriangle className="mt-0.5 size-4 shrink-0 text-warning" /><span>{warning.message}</span></div>)}</div> : null}

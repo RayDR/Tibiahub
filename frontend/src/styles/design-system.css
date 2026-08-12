@@ -325,6 +325,29 @@ h6 {
 .app-nav-link[data-active="true"] { border: 1px solid rgb(var(--ds-primary) / 0.45); background: var(--primary-subtle); }
 .app-stone-panel { border: 1px solid var(--border); background: linear-gradient(180deg, var(--surface), var(--surface-raised)); box-shadow: var(--elevation-2); }
 
+/* Guide Thaisano: compact, mobile-first hierarchy using semantic theme tokens. */
+.assistant-hero { border-radius: var(--radius-2xl); padding: var(--space-4); background: linear-gradient(145deg, rgb(var(--ds-surface-raised) / 0.94), rgb(var(--ds-surface) / 0.78)); box-shadow: var(--elevation-2); }
+.assistant-chat { border-radius: var(--radius-xl); background: rgb(var(--ds-surface-overlay) / 0.82); box-shadow: inset 0 1px 0 rgb(var(--ds-border-strong) / 0.16), var(--elevation-1); }
+.assistant-suggestion { display: flex; width: 100%; min-height: 3rem; align-items: center; border: 1px solid rgb(var(--ds-border) / 0.4); border-radius: var(--radius-lg); padding: 0.65rem var(--space-4); background: rgb(var(--ds-surface-raised) / 0.72); color: var(--text-secondary); font-size: var(--font-size-sm); font-weight: var(--font-weight-medium); line-height: 1.35; text-align: left; transition: background var(--duration-fast) var(--ease-standard), color var(--duration-fast) var(--ease-standard), box-shadow var(--duration-fast) var(--ease-standard); }
+.assistant-suggestion:hover { background: var(--surface-hover); color: var(--text-primary); box-shadow: var(--elevation-1); }
+.assistant-composer { display: flex; min-width: 0; align-items: flex-end; gap: var(--space-2); overflow: visible; border: 1px solid var(--border); border-radius: var(--radius-xl); padding: var(--space-1); background: rgb(var(--ds-surface) / 0.92); transition: border-color var(--duration-fast) var(--ease-standard), box-shadow var(--duration-fast) var(--ease-standard); }
+.assistant-composer:focus-within { border-color: var(--border-focus); box-shadow: 0 0 0 3px rgb(var(--ds-focus) / 0.18); }
+.assistant-composer-input { width: 100%; min-width: 0; min-height: 2.75rem; max-height: 10rem; resize: none; overflow-y: auto; border: 0; padding: 0.65rem 0.75rem; background: transparent; color: var(--text-primary); line-height: 1.5rem; outline: none; }
+.assistant-composer-input::placeholder { color: var(--text-muted); }
+.assistant-composer-input:disabled { cursor: not-allowed; color: var(--text-muted); }
+.assistant-composer-send { display: inline-flex; min-width: 2.75rem; min-height: 2.75rem; flex: 0 0 auto; align-items: center; justify-content: center; gap: var(--space-2); border: 1px solid rgb(var(--ds-primary-hover) / 0.8); border-radius: var(--radius-lg); padding-inline: var(--space-3); background: var(--primary); color: var(--text-on-primary); font-weight: var(--font-weight-semibold); transition: background var(--duration-fast) var(--ease-standard), opacity var(--duration-fast) var(--ease-standard); }
+.assistant-composer-send:hover { background: var(--primary-hover); }
+.assistant-composer-send:disabled { cursor: not-allowed; opacity: var(--opacity-disabled); }
+
+@media (min-width: 640px) {
+  .assistant-hero { border: 1px solid rgb(var(--ds-border) / 0.55); padding: var(--space-8); }
+  .assistant-suggestion { width: auto; max-width: 23rem; }
+}
+
+@media (min-width: 1024px) {
+  .assistant-hero { padding: var(--space-10); }
+}
+
 /* Application and workspace shells */
 .app-shell { min-width: 20rem; overflow-x: clip; background: radial-gradient(circle at 50% 0%, rgb(var(--ds-primary) / 0.08), transparent 34rem), var(--surface-base); }
 .app-shell-main { padding-top: var(--app-nav-clearance); padding-bottom: calc(5.25rem + env(safe-area-inset-bottom)); }

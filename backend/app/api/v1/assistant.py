@@ -7,14 +7,15 @@ import threading
 import time
 from collections import defaultdict, deque
 
-from fastapi import APIRouter, Depends, HTTPException, Request
+from fastapi import APIRouter, Depends, HTTPException, Query, Request
 from sqlalchemy.orm import Session
 
 from app.assistant.entities import FabricatedEntityReferenceError
 from app.assistant.openai_provider import OpenAIAssistantProvider
 from app.assistant.provider import AssistantProvider, AssistantProviderError
-from app.assistant.schemas import AssistantRequest, AssistantResponse
+from app.assistant.schemas import AssistantLanguage, AssistantRequest, AssistantResponse, AssistantSuggestion
 from app.assistant.service import AssistantService
+from app.assistant.suggestions import build_assistant_suggestions
 from app.core.config import settings
 from app.db.database import get_db
 
@@ -50,16 +51,32 @@ _throttle = _AssistantThrottle()
 
 
 def get_assistant_provider() -> AssistantProvider:
-    if not settings.ASSISTANT_ENABLED:
-        raise HTTPException(status_code=503, detail={"code": "assistant_disabled"})
-    key = settings.OPENAI_API_KEY.get_secret_value() if settings.OPENAI_API_KEY else ""
-    if not key:
-        raise HTTPException(status_code=503, detail={"code": "assistant_not_configured"})
-    return OpenAIAssistantProvider(
-        api_key=key, model=settings.ASSISTANT_MODEL,
-        timeout_seconds=settings.ASSISTANT_TIMEOUT_SECONDS,
-        max_output_tokens=settings.ASSISTANT_MAX_OUTPUT_TOKENS,
-    )
+    class LazyOpenAIAssistantProvider:
+        """Delay key validation/client creation until routing needs the model."""
+
+        async def generate(self, provider_request):
+            key = settings.OPENAI_API_KEY.get_secret_value() if settings.OPENAI_API_KEY else ""
+            if not key:
+                raise HTTPException(status_code=503, detail={"code": "assistant_not_configured"})
+            provider = OpenAIAssistantProvider(
+                api_key=key,
+                model=settings.ASSISTANT_MODEL,
+                timeout_seconds=settings.ASSISTANT_TIMEOUT_SECONDS,
+                max_output_tokens=settings.ASSISTANT_MAX_OUTPUT_TOKENS,
+            )
+            return await provider.generate(provider_request)
+
+    return LazyOpenAIAssistantProvider()
+
+
+@router.get("/suggestions", response_model=list[AssistantSuggestion])
+def get_assistant_suggestions(
+    language: AssistantLanguage = "en",
+    limit: int = Query(8, ge=3, le=12),
+    db: Session = Depends(get_db),
+) -> list[AssistantSuggestion]:
+    """Return bounded prompts made only from canonical local entity names."""
+    return build_assistant_suggestions(db, language=language, limit=limit)
 
 
 @router.post("/", response_model=AssistantResponse)

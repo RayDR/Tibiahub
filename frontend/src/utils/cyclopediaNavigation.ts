@@ -33,6 +33,13 @@ export function buildCyclopediaPath(state: CyclopediaLocationState): string {
   return `${CYCLOPEDIA_PATH_PREFIX}?${params.toString()}`;
 }
 
+export function buildKnowledgeSearchPath(section: string, query: string): string {
+  return buildCyclopediaPath({
+    tab: section === 'items' ? 'loot' : section,
+    q: query,
+  });
+}
+
 export function createCyclopediaRouteState(from: string): CyclopediaRouteState {
   return { from, fromCyclopedia: true };
 }

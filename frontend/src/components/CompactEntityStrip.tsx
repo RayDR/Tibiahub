@@ -1,5 +1,6 @@
 import type {
   PointerEvent as ReactPointerEvent,
+  WheelEvent as ReactWheelEvent,
 } from 'react';
 import { useEffect, useRef } from 'react';
 import { Link } from 'react-router-dom';
@@ -11,6 +12,7 @@ export interface CompactEntityStripItem {
   name: string;
   to: string;
   imageUrl?: string;
+  subtitle?: string;
 }
 
 interface CompactEntityStripProps {
@@ -245,6 +247,20 @@ export default function CompactEntityStrip({
     }
   };
 
+  const scrollWheelHorizontally = (
+    event: ReactWheelEvent<HTMLDivElement>,
+  ) => {
+    if (
+      variant !== 'rail' ||
+      Math.abs(event.deltaY) <= Math.abs(event.deltaX) ||
+      event.currentTarget.scrollWidth <= event.currentTarget.clientWidth
+    ) {
+      return;
+    }
+    event.preventDefault();
+    event.currentTarget.scrollLeft += event.deltaY;
+  };
+
   return (
     <section
       aria-label={title}
@@ -270,6 +286,7 @@ export default function CompactEntityStrip({
         onPointerMove={moveDrag}
         onPointerUp={finishDrag}
         onPointerCancel={finishDrag}
+        onWheel={scrollWheelHorizontally}
         onClickCapture={(event) => {
           if (dragRef.current.suppressClick) {
             event.preventDefault();
@@ -340,14 +357,11 @@ export default function CompactEntityStrip({
               fallbackLabel={item.name}
             />
 
-            <span
-              className={
-                variant === 'rail'
-                  ? 'line-clamp-2 text-xs font-semibold leading-tight text-content-primary'
-                  : 'truncate text-xs font-semibold text-content-primary'
-              }
-            >
-              {item.name}
+            <span className="min-w-0">
+              <strong className={variant === 'rail' ? 'line-clamp-2 text-xs font-semibold leading-tight text-content-primary' : 'block truncate text-xs font-semibold text-content-primary'}>
+                {item.name}
+              </strong>
+              {variant === 'rail' && item.subtitle ? <small className="mt-0.5 block truncate text-[10px] text-content-muted">{item.subtitle}</small> : null}
             </span>
           </Link>
         ))}

@@ -14,6 +14,14 @@ AssistantEntityType = Literal[
 ]
 
 
+class AssistantSuggestion(BaseModel):
+    id: str
+    text: str
+    entity_type: Literal["creature", "item", "quest", "hunt_zone"]
+    entity_name: str
+    source: Literal["popular", "fallback"]
+
+
 class AssistantPartyMember(BaseModel):
     name: str = Field(min_length=1, max_length=100)
     vocation: str | None = Field(default=None, max_length=50)

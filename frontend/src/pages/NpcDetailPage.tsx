@@ -11,6 +11,7 @@ import {
   createCyclopediaRouteState,
   resolveCyclopediaReturnTarget,
 } from '../utils/cyclopediaNavigation';
+import { useSeoMetadata } from '../utils/seo';
 
 export default function NpcDetailPage() {
   const { t } = useTranslation();
@@ -19,16 +20,22 @@ export default function NpcDetailPage() {
   const { identifier } = useParams<{ identifier: string }>();
   const [npc, setNpc] = useState<NpcKnowledgeDetail | null>(null);
   const [loading, setLoading] = useState(true);
+  useSeoMetadata(npc ? {
+    title: `${npc.name} — Tibia NPC`,
+    description: npc.description || `Location, services and related quests for ${npc.name}.`,
+    canonicalPath: `/npcs/${npc.slug}`, type: 'article',
+    breadcrumbs: [{ name: 'Home', path: '/' }, { name: 'Cyclopedia', path: '/cyclopedia' }, { name: npc.name, path: `/npcs/${npc.slug}` }],
+  } : null);
 
   useEffect(() => {
     const controller = new AbortController();
     if (!identifier) return () => controller.abort();
     void namedKnowledgeApi.getNpc(identifier, controller.signal)
-      .then(setNpc)
+      .then((result) => { setNpc(result); if (result.slug !== identifier) navigate(`/npcs/${result.slug}`, { replace: true, state: location.state }); })
       .catch(() => setNpc(null))
       .finally(() => setLoading(false));
     return () => controller.abort();
-  }, [identifier]);
+  }, [identifier, location.state, navigate]);
 
   if (loading) return <Page variant="focused"><div role="status" className="flex min-h-[24rem] items-center justify-center text-primary"><Loader2 className="animate-spin" size={42} /><span className="sr-only">{t('namedKnowledge.loading')}</span></div></Page>;
   if (!npc) return <Page variant="focused"><div className="mx-auto max-w-3xl rounded-2xl border border-danger/20 bg-danger/20 p-6"><h1 className="text-lg font-semibold text-danger">{t('namedKnowledge.npcUnavailable')}</h1><p className="mt-2 text-sm text-danger/80">{t('namedKnowledge.notFound')}</p></div></Page>;

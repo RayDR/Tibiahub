@@ -3,7 +3,7 @@ API v1 Router - Combines all API endpoints
 """
 from fastapi import APIRouter, Depends
 
-from app.api.v1 import assistant, creatures, hunt_zones, admin as admin_old, recommendations, items, quests, knowledge_graph, npcs_locations, spatial
+from app.api.v1 import assistant, creatures, hunt_zones, admin as admin_old, recommendations, items, quests, knowledge_graph, npcs_locations, seo, spatial, tibia_map
 from app.api.v1.endpoints import auth, guild, profile, admin, hunts, events, catalog, sync, password_reset, email_verification, character_ownership, tibia, sync_admin, raffles, raffle_participants, health, me_activity, notifications, workspaces, leadership, knowledge_admin, maintenance, maintenance_mode, admin_assistance, guild_permissions
 
 api_router = APIRouter()
@@ -43,7 +43,9 @@ api_router.include_router(quests.router)
 api_router.include_router(knowledge_graph.router)
 api_router.include_router(npcs_locations.router)
 api_router.include_router(spatial.router)
+api_router.include_router(tibia_map.router)
 api_router.include_router(assistant.router)
+api_router.include_router(seo.router)
 api_router.include_router(
     admin_old.router,
     prefix="/admin",

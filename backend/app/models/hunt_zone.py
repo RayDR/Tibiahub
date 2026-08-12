@@ -74,6 +74,14 @@ class HuntZone(Base):
     
     # Relationships
     creature_spawns = relationship("SpawnLocation", back_populates="hunt_zone", cascade="all, delete-orphan")
+
+    @property
+    def quest_name(self):
+        return self.quest.name if self.quest else None
+
+    @property
+    def quest_slug(self):
+        return getattr(self.quest, "slug", None) if self.quest else None
     
     def __repr__(self):
         return f"<HuntZone {self.name}>"

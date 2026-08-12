@@ -12,7 +12,7 @@ const appearanceSource = readFileSync(join(sourceRoot, 'context', 'AppearanceCon
 const themeSwitcher = readFileSync(join(sourceRoot, 'components', 'ThemeSwitcher.tsx'), 'utf8');
 const failures = [];
 
-const themeIds = ['default', 'medieval', 'tibia-stone', 'midnight-arcana', 'blood-moon', 'high-contrast'];
+const themeIds = ['medieval', 'tibia-stone', 'midnight-arcana', 'blood-moon', 'high-contrast'];
 const requiredThemeTokens = [
   'surface-base', 'surface', 'surface-raised', 'surface-hover', 'surface-active', 'surface-overlay', 'surface-inverse',
   'primary', 'primary-hover', 'primary-active', 'success', 'warning', 'danger', 'info', 'accent',
@@ -115,6 +115,7 @@ for (const theme of themeIds) {
     }
   }
 }
+if (themesSource.includes('[data-theme="default"]')) failures.push('styles/themes.css: obsolete default theme selector must be removed');
 
 for (const primitive of ['ds-container', 'ds-page', 'ds-section', 'ds-panel', 'ds-card', 'ds-toolbar', 'ds-split-view', 'ds-sidebar', 'ds-scrollable-panel']) {
   if (!designSystem.includes(`.${primitive}`)) failures.push(`styles/design-system.css: missing layout primitive .${primitive}`);

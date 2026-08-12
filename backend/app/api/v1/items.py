@@ -4,16 +4,21 @@ from typing import List
 
 from fastapi import APIRouter, Depends, Query
 from fastapi import HTTPException, Request, Response
-from sqlalchemy import or_
+from sqlalchemy import func, or_
 from sqlalchemy.orm import Session, joinedload
 
 from app.core.config import settings
 from app.db.database import SessionLocal, get_db
 from app.models.creature import Creature
 from app.models import Loot as LootModel
-from app.models.external_data import Item as ExternalItemModel
+from app.models.external_data import (
+    Item as ExternalItemModel,
+    TibiaWikiLocation,
+    TibiaWikiNpc,
+    TibiaWikiQuest,
+)
 from app.models.spawn_location import SpawnLocation
-from app.schemas import ItemDetail, ItemDropCreature, ItemSearchResult
+from app.schemas import ItemDetail, ItemDropCreature, ItemRelatedEntity, ItemSearchResult
 from app.api.v1.local_media import (
     LocalMediaDescriptor,
     build_local_media_file_response,
@@ -175,6 +180,7 @@ def _hunt_zones(creature: Creature | None) -> list[dict]:
     return [
         {
             "id": spawn.hunt_zone.id,
+            "slug": spawn.hunt_zone.slug or normalize_search_text(spawn.hunt_zone.name).replace(" ", "-"),
             "name": spawn.hunt_zone.name,
             "city": spawn.hunt_zone.city,
             "min_level": None if spawn.hunt_zone.min_level == 0 else spawn.hunt_zone.min_level,
@@ -194,26 +200,36 @@ def _canonical_item_drops(db: Session, item: ExternalItemModel) -> list[ItemDrop
         *KnowledgeGraphService.incoming(db, item.knowledge_entity_id, relationship_type="dropped_by"),
         *KnowledgeGraphService.outgoing(db, item.knowledge_entity_id, relationship_type="dropped_by"),
     ]
+    unique_relationships = {relationship.relationship_id: relationship for relationship in relationships}
+    target_ids = {
+        relationship.target_entity_id
+        for relationship in unique_relationships.values()
+        if relationship.target_entity_id is not None
+    }
+    creatures = (
+        db.query(Creature)
+        .options(joinedload(Creature.spawn_locations).joinedload(SpawnLocation.hunt_zone))
+        .filter(Creature.knowledge_entity_id.in_(target_ids))
+        .all()
+        if target_ids else []
+    )
+    creatures_by_knowledge_id = {creature.knowledge_entity_id: creature for creature in creatures}
+    creature_ids = [creature.id for creature in creatures]
+    legacy_rows = (
+        db.query(LootModel)
+        .filter(
+            LootModel.creature_id.in_(creature_ids),
+            LootModel.normalized_name == item.normalized_name,
+        )
+        .all()
+        if creature_ids else []
+    )
+    legacy_by_creature_id = {row.creature_id: row for row in legacy_rows}
+
     drops: list[ItemDropCreature] = []
-    for relationship in relationships:
-        creature = None
-        if relationship.target_entity_id is not None:
-            creature = (
-                db.query(Creature)
-                .options(joinedload(Creature.spawn_locations).joinedload(SpawnLocation.hunt_zone))
-                .filter(Creature.knowledge_entity_id == relationship.target_entity_id)
-                .first()
-            )
-        legacy = None
-        if creature is not None:
-            legacy = (
-                db.query(LootModel)
-                .filter(
-                    LootModel.creature_id == creature.id,
-                    LootModel.normalized_name == item.normalized_name,
-                )
-                .first()
-            )
+    for relationship in unique_relationships.values():
+        creature = creatures_by_knowledge_id.get(relationship.target_entity_id)
+        legacy = legacy_by_creature_id.get(creature.id) if creature else None
         drops.append(
             ItemDropCreature(
                 creature_id=creature.id if creature else None,
@@ -221,6 +237,9 @@ def _canonical_item_drops(db: Session, item: ExternalItemModel) -> list[ItemDrop
                 creature_slug=creature.slug if creature else None,
                 chance=legacy.percentage if legacy else None,
                 rarity=legacy.rarity if legacy else None,
+                min_amount=legacy.min_amount if legacy else None,
+                max_amount=legacy.max_amount if legacy else None,
+                is_boss=bool(creature.is_boss) if creature else False,
                 hunt_zones=_hunt_zones(creature),
                 relationship_id=relationship.relationship_id,
                 knowledge_entity_id=relationship.target_entity_id,
@@ -231,12 +250,60 @@ def _canonical_item_drops(db: Session, item: ExternalItemModel) -> list[ItemDrop
     return drops
 
 
+def _record_name(value: object) -> str | None:
+    if isinstance(value, str):
+        return value.strip() or None
+    if isinstance(value, dict):
+        for key in ("name", "npc", "quest", "location"):
+            candidate = value.get(key)
+            if isinstance(candidate, str) and candidate.strip():
+                return candidate.strip()
+    return None
+
+
+def _item_related_entities(db: Session, item: ExternalItemModel) -> list[ItemRelatedEntity]:
+    """Resolve only canonical local targets, using one query per entity type."""
+    npc_names = {
+        normalize_search_text(name)
+        for name in (
+            _record_name(value)
+            for value in [*(item.buy_from or []), *(item.sell_to or [])]
+        )
+        if name
+    }
+    quest_names = {
+        normalize_search_text(name)
+        for name in [*(item.rewards_from or []), *(item.required_for or [])]
+        if isinstance(name, str) and name.strip()
+    }
+    raw_data = item.raw_data if isinstance(item.raw_data, dict) else {}
+    raw_locations = raw_data.get("locations") or []
+    location_names = {
+        normalize_search_text(name)
+        for name in (_record_name(value) for value in raw_locations)
+        if name
+    }
+    rows: list[tuple[str, object]] = []
+    if npc_names:
+        rows.extend(("npc", row) for row in db.query(TibiaWikiNpc).filter(TibiaWikiNpc.normalized_name.in_(npc_names)).all())
+    if quest_names:
+        rows.extend(("quest", row) for row in db.query(TibiaWikiQuest).filter(TibiaWikiQuest.normalized_name.in_(quest_names)).all())
+    if location_names:
+        rows.extend(("location", row) for row in db.query(TibiaWikiLocation).filter(TibiaWikiLocation.normalized_name.in_(location_names)).all())
+    return [
+        ItemRelatedEntity(kind=kind, name=row.name, slug=row.slug)
+        for kind, row in rows
+        if getattr(row, "slug", None)
+    ]
+
+
 def _build_canonical_item_result(db: Session, item: ExternalItemModel) -> ItemSearchResult:
     return ItemSearchResult(
         id=item.id,
         image_item_id=item.id,
         item_name=item.name,
         normalized_name=item.normalized_name or normalize_search_text(item.name),
+        slug=item.slug or normalize_search_text(item.name).replace(" ", "-"),
         item_image_url=item.image_url,
         source_url=item.source_url,
         knowledge_entity_id=item.knowledge_entity_id,
@@ -288,6 +355,50 @@ async def get_item_highlights(
         return []
 
 
+@router.get("/popular", response_model=List[ItemSearchResult])
+async def get_popular_items(
+    limit: int = Query(12, ge=1, le=30),
+    db: Session = Depends(get_db),
+):
+    """Return locally popular loot in stable activity order."""
+    metadata = EntityMetadataService.get_popular(
+        db,
+        entity_type="item",
+        limit=min(limit * 2, 60),
+    )
+    ids = [row.entity_id for row in metadata if row.entity_id is not None]
+    canonical = (
+        db.query(ExternalItemModel)
+        .filter(
+            ExternalItemModel.id.in_(ids),
+            ExternalItemModel.knowledge_entity_id.isnot(None),
+        )
+        .all()
+        if ids
+        else []
+    )
+    by_id = {row.id: row for row in canonical}
+    results = [
+        _build_canonical_item_result(db, by_id[item_id])
+        for item_id in ids
+        if item_id in by_id
+    ]
+    if len(results) < limit:
+        seen = {row.id for row in canonical}
+        fallback = (
+            db.query(ExternalItemModel)
+            .filter(
+                ExternalItemModel.knowledge_entity_id.isnot(None),
+                ExternalItemModel.id.notin_(seen) if seen else True,
+            )
+            .order_by(ExternalItemModel.updated_at.desc().nullslast(), ExternalItemModel.id.asc())
+            .limit(limit - len(results))
+            .all()
+        )
+        results.extend(_build_canonical_item_result(db, row) for row in fallback)
+    return results[:limit]
+
+
 @router.get("/", response_model=List[ItemSearchResult])
 async def search_items(
     search: str | None = Query(None, min_length=2, description="Search term for item name"),
@@ -311,12 +422,13 @@ async def search_items(
     if item_type:
         canonical_query = canonical_query.filter(ExternalItemModel.type.ilike(item_type))
     canonical_match_count = canonical_query.count()
+    ordered_canonical = canonical_query.order_by(ExternalItemModel.name.asc(), ExternalItemModel.id.asc())
     canonical_items = (
-        canonical_query.order_by(ExternalItemModel.name.asc(), ExternalItemModel.id.asc())
-        .offset(skip)
-        .limit(limit)
-        .all()
+        ordered_canonical.limit(max(limit * 2, 40)).all()
+        if search
+        else ordered_canonical.offset(skip).limit(limit).all()
     )
+    canonical_results = [_build_canonical_item_result(db, item) for item in canonical_items]
     if canonical_items:
         if search:
             EntityMetadataService.record_searches(
@@ -328,8 +440,9 @@ async def search_items(
                 ],
             )
             db.commit()
-        return [_build_canonical_item_result(db, item) for item in canonical_items]
-    if canonical_match_count:
+        else:
+            return canonical_results
+    if canonical_match_count and not search:
         return []
     if category or item_type:
         return []
@@ -387,14 +500,25 @@ async def search_items(
         grouped.keys(),
         key=lambda key: _rank_item(search, grouped[key][0].item_name),
     )
-    selected_keys = ranked_keys[skip: skip + limit]
+    selected_keys = ranked_keys[: max(limit * 2, 40)]
     EntityMetadataService.record_searches(
         db,
         entity_type="item",
         matches=[(key, grouped[key][0].item_name, None) for key in selected_keys],
     )
     db.commit()
-    return [_build_item_result(grouped[key][0].item_name, grouped[key]) for key in selected_keys]
+    combined: dict[str, ItemSearchResult] = {
+        result.normalized_name: result
+        for result in canonical_results
+    }
+    for key in selected_keys:
+        result = _build_item_result(grouped[key][0].item_name, grouped[key])
+        combined.setdefault(normalize_search_text(result.item_name), result)
+    ranked_results = sorted(
+        combined.values(),
+        key=lambda result: _rank_item(search, result.item_name),
+    )
+    return ranked_results[skip: skip + limit]
 
 
 @router.get("/{item_identifier}", response_model=ItemDetail)
@@ -429,10 +553,13 @@ async def get_item_detail(
         rarity = next((drop.rarity for drop in drops if drop.rarity), None)
         if canonical.last_synced_at:
             response.headers["X-Last-Synced-At"] = canonical.last_synced_at.isoformat()
+        canonical_slug = canonical.slug or normalize_search_text(canonical.name).replace(" ", "-")
+        response.headers["X-Canonical-Slug"] = canonical_slug
         return ItemDetail(
             id=canonical.id,
             item_name=canonical.name,
             normalized_name=canonical.normalized_name or normalize_search_text(canonical.name),
+            slug=canonical_slug,
             item_image_url=canonical.image_url,
             source_url=canonical.source_url,
             rarity=rarity,
@@ -463,37 +590,45 @@ async def get_item_detail(
             sell_to=list(canonical.sell_to or []),
             rewards_from=list(canonical.rewards_from or []),
             required_for=list(canonical.required_for or []),
+            related_entities=_item_related_entities(db, canonical),
             drops=drops,
         )
 
-    if not item_identifier.isdigit():
-        raise HTTPException(status_code=404, detail="Item not found")
-
-    item_id = int(item_identifier)
-    local_by_id = (
+    local_query = (
         db.query(LootModel)
         .options(
             joinedload(LootModel.creature)
             .joinedload(Creature.spawn_locations)
             .joinedload(SpawnLocation.hunt_zone)
         )
-        .filter(LootModel.id == item_id)
-        .first()
     )
-
-    if not local_by_id:
-        local_by_id = (
-            db.query(LootModel)
-            .options(
-                joinedload(LootModel.creature)
-                .joinedload(Creature.spawn_locations)
-                .joinedload(SpawnLocation.hunt_zone)
-            )
-            .filter(LootModel.external_id == str(item_id))
-            .first()
-        )
+    if item_identifier.isdigit():
+        item_id = int(item_identifier)
+        local_by_id = local_query.filter(or_(
+            LootModel.id == item_id,
+            LootModel.external_id == item_identifier,
+        )).first()
+    else:
+        display_identifier = item_identifier.replace("-", " ").replace("_", " ").strip()
+        local_by_id = local_query.filter(or_(
+            LootModel.normalized_name == normalized_identifier,
+            func.lower(LootModel.item_name) == display_identifier.lower(),
+        )).first()
+        if local_by_id is None:
+            first_token = normalized_identifier.split(" ", 1)[0]
+            candidates = local_query.filter(or_(
+                LootModel.normalized_name.contains(first_token),
+                LootModel.item_name.ilike(f"{first_token}%"),
+            )).limit(500).all()
+            local_by_id = next((
+                row for row in candidates
+                if normalize_search_text(row.item_name) == normalized_identifier
+                or normalize_search_text(row.normalized_name) == normalized_identifier
+            ), None)
 
     if local_by_id:
+        legacy_slug = normalize_search_text(local_by_id.item_name).replace(" ", "-")
+        response.headers["X-Canonical-Slug"] = legacy_slug
         all_rows = (
             db.query(LootModel)
             .options(
@@ -507,10 +642,17 @@ async def get_item_detail(
         mapped = _build_item_result(local_by_id.item_name, all_rows)
         top_drop = max((drop.chance for drop in mapped.drops if drop.chance is not None), default=None)
         rarity = next((drop.rarity for drop in mapped.drops if drop.rarity), None)
+        EntityMetadataService.record_searches(
+            db,
+            entity_type="item",
+            matches=[(mapped.normalized_name, mapped.item_name, None)],
+        )
+        db.commit()
         return ItemDetail(
             id=local_by_id.id,
             item_name=mapped.item_name,
             normalized_name=mapped.normalized_name,
+            slug=legacy_slug,
             item_image_url=mapped.item_image_url,
             source_url=mapped.source_url,
             rarity=rarity,
@@ -542,6 +684,7 @@ def _build_item_result(
                 if spawn.hunt_zone:
                     hunt_zones.append({
                         "id": spawn.hunt_zone.id,
+                        "slug": spawn.hunt_zone.slug or normalize_search_text(spawn.hunt_zone.name).replace(" ", "-"),
                         "name": spawn.hunt_zone.name,
                         "city": spawn.hunt_zone.city,
                         "min_level": None if spawn.hunt_zone.min_level == 0 else spawn.hunt_zone.min_level,
@@ -555,14 +698,20 @@ def _build_item_result(
             creature_slug=getattr(drop.creature, "slug", None),
             chance=drop.percentage,
             rarity=drop.rarity,
+            min_amount=drop.min_amount,
+            max_amount=drop.max_amount,
+            is_boss=bool(drop.creature.is_boss),
             hunt_zones=hunt_zones,
         ))
     sample = drops[0]
     return ItemSearchResult(
+        id=sample.id,
         image_item_id=sample.id,
         item_name=item_name,
         normalized_name=sample.normalized_name or normalize_search_text(item_name),
+        slug=normalize_search_text(item_name).replace(" ", "-"),
         item_image_url=sample.item_image_url,
         source_url=sample.source_url,
+        item_type=sample.item_type,
         drops=related_drops,
     )

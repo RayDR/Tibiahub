@@ -27,11 +27,16 @@ export interface LootWithCreature extends Loot {
 
 export interface HuntZoneSimple {
   id: number;
+  slug?: string;
   name: string;
   city?: string;
   min_level: number;
   max_level?: number;
   difficulty?: string;
+  requires_quest?: boolean;
+  quest_id?: number | null;
+  quest_name?: string | null;
+  quest_slug?: string | null;
   avg_exp_hour?: number;
   avg_profit_hour?: number;
 }
@@ -131,7 +136,9 @@ export interface HuntZone {
   avg_exp_hour?: number;
   avg_profit_hour?: number;
   requires_quest: boolean;
+  quest_id?: number | null;
   quest_name?: string;
+  quest_slug?: string;
   requires_premium: boolean;
   description?: string;
   tips?: string;
@@ -148,6 +155,13 @@ export interface HuntZone {
   source_name?: string;
   source_url?: string;
   creatures?: CreatureSimple[];
+  creature_spawns?: Array<{
+    id: number;
+    creature_id: number;
+    quantity?: string;
+    notes?: string;
+    creature?: CreatureSimple;
+  }>;
   last_synced_at?: string;
 }
 
@@ -157,6 +171,9 @@ export interface ItemDropCreature {
   creature_slug?: string;
   chance?: number | null;
   rarity?: string | null;
+  min_amount?: number | null;
+  max_amount?: number | null;
+  is_boss: boolean;
   hunt_zones: HuntZoneSimple[];
   relationship_id?: string | null;
   knowledge_entity_id?: string | null;
@@ -164,11 +181,18 @@ export interface ItemDropCreature {
   source_provider?: string | null;
 }
 
+export interface ItemRelatedEntity {
+  kind: 'npc' | 'quest' | 'location';
+  name: string;
+  slug: string;
+}
+
 export interface ItemSearchResult {
   id?: number | null;
   image_item_id?: number | null;
   item_name: string;
   normalized_name: string;
+  slug?: string | null;
   item_image_url?: string | null;
   source_url?: string | null;
   knowledge_entity_id?: string | null;
@@ -183,6 +207,7 @@ export interface ItemDetail {
   id: number;
   item_name: string;
   normalized_name: string;
+  slug?: string | null;
   item_image_url?: string | null;
   source_url?: string | null;
   rarity?: string | null;
@@ -213,6 +238,7 @@ export interface ItemDetail {
   sell_to: Record<string, unknown>[];
   rewards_from: string[];
   required_for: string[];
+  related_entities: ItemRelatedEntity[];
   drops: ItemDropCreature[];
 }
 

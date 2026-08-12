@@ -1,0 +1,37 @@
+name: Knowledge or data correction
+description: Correct a Creature, Item, Quest, Hunt Zone, NPC, or Location entry.
+title: "[Knowledge correction] "
+labels: [knowledge, correction]
+body:
+  - type: dropdown
+    id: entity_type
+    attributes:
+      label: Entity type
+      options: [Creature, Item, Quest, Hunt zone, NPC, Location, Other]
+    validations:
+      required: true
+  - type: input
+    id: entity_name
+    attributes:
+      label: Entity name
+      description: Use the human-readable canonical name shown by TibiaHub.
+    validations:
+      required: true
+  - type: input
+    id: page
+    attributes:
+      label: TibiaHub page
+      description: Paste the public entry URL.
+    validations:
+      required: true
+  - type: textarea
+    id: correction
+    attributes:
+      label: What should be corrected?
+    validations:
+      required: true
+  - type: textarea
+    id: evidence
+    attributes:
+      label: Supporting source
+      description: Link useful public evidence where possible. Do not include private data.

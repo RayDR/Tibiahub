@@ -1,9 +1,10 @@
 import { Loader2, RotateCcw, Send, UserRound } from 'lucide-react';
-import { FormEvent, useEffect, useRef, useState } from 'react';
+import { FormEvent, useEffect, useMemo, useRef, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 
 import { assistantApi } from '../../services/assistant';
-import type { AssistantConversationContext, AssistantHistoryMessage, AssistantResponse } from '../../types/assistant';
+import type { AssistantConversationContext, AssistantHistoryMessage, AssistantResponse, AssistantSuggestion } from '../../types/assistant';
+import { findSuggestionCompletion, selectVisibleSuggestions } from '../../utils/assistantSuggestions';
 import AssistantMessage from './AssistantMessage';
 
 type ChatEntry = { role: 'user'; content: string } | { role: 'assistant'; response: AssistantResponse };
@@ -51,10 +52,12 @@ export default function AssistantChat() {
   const [entries, setEntries] = useState<ChatEntry[]>(initial.entries);
   const [context, setContext] = useState<AssistantConversationContext>(initial.context);
   const [message, setMessage] = useState('');
+  const [suggestions, setSuggestions] = useState<AssistantSuggestion[]>([]);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const controllerRef = useRef<AbortController | null>(null);
   const endRef = useRef<HTMLDivElement | null>(null);
+  const textareaRef = useRef<HTMLTextAreaElement | null>(null);
 
   useEffect(() => {
     try { sessionStorage.setItem(STORAGE_KEY, JSON.stringify({ entries: entries.slice(-20), context })); } catch { /* restricted storage */ }
@@ -62,6 +65,22 @@ export default function AssistantChat() {
   }, [context, entries, loading]);
 
   useEffect(() => () => controllerRef.current?.abort(), []);
+
+  useEffect(() => {
+    const textarea = textareaRef.current;
+    if (!textarea) return;
+    textarea.style.height = 'auto';
+    textarea.style.height = `${Math.min(textarea.scrollHeight, 160)}px`;
+  }, [message]);
+
+  useEffect(() => {
+    const controller = new AbortController();
+    const language = i18n.language.startsWith('es') ? 'es' : 'en';
+    void assistantApi.suggestions(language, controller.signal)
+      .then(setSuggestions)
+      .catch(() => setSuggestions([]));
+    return () => controller.abort();
+  }, [i18n.language]);
 
   const history = (): AssistantHistoryMessage[] => entries.slice(-12).map((entry) => entry.role === 'user'
     ? { role: 'user', content: entry.content }
@@ -93,18 +112,24 @@ export default function AssistantChat() {
     setEntries([]); setContext(initialContext(i18n.language)); setMessage(''); setError(null); setLoading(false);
     try { sessionStorage.removeItem(STORAGE_KEY); } catch { /* restricted storage */ }
   };
-  const starters = [t('assistant.starters.hunt'), t('assistant.starters.item'), t('assistant.starters.access')];
+  const fallbackSuggestions = useMemo<AssistantSuggestion[]>(() => [
+    { id: 'fallback:creature', text: t('assistant.starters.hunt'), entity_type: 'creature', entity_name: 'Werewolves', source: 'fallback' },
+    { id: 'fallback:item', text: t('assistant.starters.item'), entity_type: 'item', entity_name: 'Ice Flower Seeds', source: 'fallback' },
+    { id: 'fallback:quest', text: t('assistant.starters.quest'), entity_type: 'quest', entity_name: 'The Inquisition Quest', source: 'fallback' },
+    { id: 'fallback:hunt-zone', text: t('assistant.starters.zone'), entity_type: 'hunt_zone', entity_name: 'Roshamuul', source: 'fallback' },
+  ], [t]);
+  const knownSuggestions = suggestions.length ? suggestions : fallbackSuggestions;
+  const starters = selectVisibleSuggestions(knownSuggestions, context.conversation_id);
+  const completion = findSuggestionCompletion(message, knownSuggestions);
 
-  return <div className="overflow-hidden rounded-2xl border border-line bg-surface-overlay shadow-sm">
-    <div className="flex items-center justify-between gap-3 border-b border-line px-4 py-3">
-      <p className="text-xs text-content-muted">{t('assistant.localOnly')}</p>
-      {entries.length > 0 ? <button type="button" onClick={reset} className="app-button-ghost app-button-sm shrink-0"><RotateCcw className="size-3.5" />{t('assistant.newConversation')}</button> : null}
-    </div>
+  return <div className="assistant-chat overflow-hidden">
+    {entries.length > 0 ? <div className="flex justify-end px-3 pt-3 sm:px-5 sm:pt-4">
+      <button type="button" onClick={reset} className="app-button-ghost app-button-sm shrink-0"><RotateCcw className="size-3.5" />{t('assistant.newConversation')}</button>
+    </div> : null}
 
-    <div className="max-h-[38rem] min-h-56 space-y-5 overflow-y-auto p-4 sm:p-5" role="log" aria-live="polite" aria-label={t('assistant.conversation')}>
-      {entries.length === 0 ? <div className="py-4 text-center">
-        <p className="text-sm text-content-secondary">{t('assistant.empty')}</p>
-        <div className="mt-4 flex flex-wrap justify-center gap-2">{starters.map((value) => <button key={value} type="button" onClick={() => void send(value)} className="app-button-secondary app-button-sm">{value}</button>)}</div>
+    <div className={`max-h-[38rem] space-y-5 overflow-y-auto px-3 sm:px-5 ${entries.length ? 'min-h-48 py-4' : 'py-3 sm:py-4'}`} role="log" aria-live="polite" aria-label={t('assistant.conversation')}>
+      {entries.length === 0 && !message ? <div>
+        <div className="grid gap-2 sm:grid-cols-2 lg:flex lg:flex-wrap">{starters.map((suggestion) => <button key={suggestion.id} type="button" onClick={() => void send(suggestion.text)} className="assistant-suggestion"><span className="line-clamp-2">{suggestion.text}</span></button>)}</div>
       </div> : entries.map((entry, index) => entry.role === 'user'
         ? <div key={index} className="ml-auto flex max-w-[90%] items-start justify-end gap-2 sm:max-w-[78%]"><p className="rounded-2xl rounded-tr-sm bg-primary px-4 py-3 text-sm leading-6 text-content-on-primary">{entry.content}</p><span className="mt-1 grid size-7 shrink-0 place-items-center rounded-full bg-surface-active"><UserRound className="size-3.5" /></span></div>
         : <AssistantMessage key={index} response={entry.response} onFollowup={(value) => void send(value)} />)}
@@ -113,15 +138,16 @@ export default function AssistantChat() {
       <div ref={endRef} />
     </div>
 
-    <form onSubmit={submit} className="border-t border-line bg-surface-raised p-3 sm:p-4">
+    <form onSubmit={submit} className="bg-surface-raised/70 p-3 sm:p-4">
       <label htmlFor="assistant-message" className="sr-only">{t('assistant.inputLabel')}</label>
-      <div className="flex items-end gap-2">
-        <textarea id="assistant-message" value={message} onChange={(event) => setMessage(event.target.value)} onKeyDown={(event) => {
+      <div className="assistant-composer">
+        <textarea ref={textareaRef} id="assistant-message" value={message} onChange={(event) => setMessage(event.target.value)} onKeyDown={(event) => {
+          if (event.key === 'Tab' && completion) { event.preventDefault(); setMessage(completion.text); return; }
           if (event.key === 'Enter' && !event.shiftKey) { event.preventDefault(); if (message.trim()) void send(message); }
-        }} maxLength={2000} rows={2} disabled={loading} placeholder={t('assistant.placeholder')} className="app-input min-h-12 flex-1 resize-none" />
-        <button type="submit" disabled={loading || !message.trim()} className="app-button-primary min-h-12 px-4" aria-label={t('assistant.send')}><Send className="size-4" /><span className="hidden sm:inline">{t('assistant.send')}</span></button>
+        }} aria-describedby={completion ? 'assistant-completion' : undefined} maxLength={2000} rows={1} disabled={loading} placeholder={t('assistant.placeholder')} className="assistant-composer-input" />
+        <button type="submit" disabled={loading || !message.trim()} className="assistant-composer-send" aria-label={t('assistant.send')}><Send className="size-4" /><span className="hidden sm:inline">{t('assistant.send')}</span></button>
       </div>
-      <p className="mt-2 text-xs text-content-muted">{t('assistant.disclaimer')}</p>
+      {completion ? <p id="assistant-completion" className="mt-2 text-xs text-content-secondary">{t('assistant.completion', { suggestion: completion.text })}</p> : null}
     </form>
   </div>;
 }

@@ -1,5 +1,5 @@
 import axios from 'axios';
-import type { Creature, CreatureSimple, HuntZone, HuntRecommendation, ItemDetail, ItemSearchResult, LocationKnowledgeDetail, NpcKnowledgeDetail, QuestDetail, QuestSearchResult, SpatialRouteMetadata, Vocation } from '../types';
+import type { Creature, CreatureSimple, HuntZone, ItemDetail, ItemSearchResult, LocationKnowledgeDetail, NpcKnowledgeDetail, QuestDetail, QuestSearchResult, SpatialRouteMetadata, Vocation } from '../types';
 
 const API_BASE_URL = import.meta.env.VITE_API_URL || '/api/v1';
 export const REQUEST_TIMEOUT_MS = 10000;
@@ -76,6 +76,17 @@ export const creaturesApi = {
     return response.data;
   },
 
+  getPopularBosses: async (
+    limit: number = 12,
+    signal?: AbortSignal,
+  ): Promise<CreatureSimple[]> => {
+    const response = await api.get('/creatures/bosses/popular', {
+      params: { limit },
+      signal,
+    });
+    return response.data;
+  },
+
   getCategoryImages: async (
     signal?: AbortSignal,
   ): Promise<Record<string, string>> => {
@@ -135,42 +146,28 @@ export const huntZonesApi = {
     return response.data;
   },
 
+  getByIdentifier: async (identifier: number | string, signal?: AbortSignal): Promise<HuntZone> => {
+    const response = await api.get(`/hunt-zones/${encodeURIComponent(identifier)}`, { signal });
+    return response.data;
+  },
+
   getById: async (id: number): Promise<HuntZone> => {
     const response = await api.get(`/hunt-zones/${id}`);
     return response.data;
   },
 
-  getMapImageUrl: (id: number): string => `${API_BASE_URL}/hunt-zones/${id}/map-image`,
+  getMapImageUrl: (id: number, placeholder: boolean = true): string => `${API_BASE_URL}/hunt-zones/${id}/map-image?placeholder=${placeholder}`,
 
   getRecommendations: async (
     vocation: Vocation,
     level: number,
-    limit: number = 10
-  ): Promise<HuntRecommendation[]> => {
-    // UPDATED: Use new /recommendations/solo endpoint
+    limit: number = 10,
+    goal: 'exp' | 'profit' | 'balanced' = 'exp',
+  ): Promise<any> => {
     const response = await api.get('/recommendations/solo', {
-      params: { vocation, level, limit, goal: 'exp' },
+      params: { vocation, level, limit, goal },
     });
-
-    // Map response to HuntRecommendation type
-    // The backend returns { recommendations: [ { zone: {...}, score: ..., reasons: ... } ] }
-    if (response.data && response.data.recommendations) {
-      return response.data.recommendations.map((rec: any) => ({
-        zone: {
-          id: rec.zone_id,
-          name: rec.zone_name,
-          min_level: rec.min_level,
-          difficulty: rec.difficulty,
-          // Add default fields if missing from simplified response
-          city: '',
-          max_level: rec.max_level
-        },
-        score: rec.score,
-        reasons: rec.reasons,
-        creatures: []
-      }));
-    }
-    return [];
+    return response.data;
   },
 
   getPartyRecommendations: async (
@@ -197,6 +194,11 @@ export const itemsApi = {
     return response.data;
   },
 
+  getByIdentifier: async (identifier: number | string, signal?: AbortSignal): Promise<ItemDetail> => {
+    const response = await api.get(`/items/${encodeURIComponent(identifier)}`, { signal });
+    return response.data;
+  },
+
   getById: async (id: number, signal?: AbortSignal): Promise<ItemDetail> => {
     const response = await api.get(`/items/${id}`, { signal });
     return response.data;
@@ -204,6 +206,11 @@ export const itemsApi = {
 
   getHighlights: async (limit: number = 12, signal?: AbortSignal): Promise<ItemSearchResult[]> => {
     const response = await api.get('/items/highlights', { params: { limit }, signal });
+    return response.data;
+  },
+
+  getPopular: async (limit: number = 12, signal?: AbortSignal): Promise<ItemSearchResult[]> => {
+    const response = await api.get('/items/popular', { params: { limit }, signal });
     return response.data;
   },
 };
@@ -216,6 +223,16 @@ export const questsApi = {
 
   getHighlights: async (limit: number = 12, signal?: AbortSignal): Promise<QuestSearchResult[]> => {
     const response = await api.get('/quests/highlights', { params: { limit }, signal });
+    return response.data;
+  },
+
+  getPopular: async (limit: number = 10, signal?: AbortSignal): Promise<QuestSearchResult[]> => {
+    const response = await api.get('/quests/popular', { params: { limit }, signal });
+    return response.data;
+  },
+
+  getTrending: async (limit: number = 10, signal?: AbortSignal): Promise<QuestSearchResult[]> => {
+    const response = await api.get('/quests/trending', { params: { limit }, signal });
     return response.data;
   },
 

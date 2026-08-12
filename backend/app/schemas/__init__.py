@@ -87,7 +87,9 @@ class HuntZoneBase(BaseModel):
     avg_exp_hour: Optional[int] = None
     avg_profit_hour: Optional[int] = None
     requires_quest: bool = False
+    quest_id: Optional[int] = None
     quest_name: Optional[str] = None
+    quest_slug: Optional[str] = None
     requires_premium: bool = False
     description: Optional[str] = None
     tips: Optional[str] = None
@@ -110,10 +112,15 @@ class HuntZoneCreate(HuntZoneBase):
 class HuntZoneSimple(BaseModel):
     id: int
     name: str
+    slug: Optional[str] = None
     city: Optional[str] = None
     min_level: Optional[int] = None
     max_level: Optional[int] = None
     difficulty: Optional[str] = None
+    requires_quest: bool = False
+    quest_id: Optional[int] = None
+    quest_name: Optional[str] = None
+    quest_slug: Optional[str] = None
     source_url: Optional[str] = None
     
     model_config = ConfigDict(from_attributes=True)
@@ -122,6 +129,7 @@ class HuntZoneSimple(BaseModel):
 class HuntZone(HuntZoneBase):
     id: int
     creatures: List[CreatureSimple] = []
+    creature_spawns: List[SpawnLocation] = []
     last_synced_at: Optional[datetime] = None
     
     model_config = ConfigDict(from_attributes=True)
@@ -143,6 +151,7 @@ class SpawnLocation(SpawnLocationBase):
     creature_id: int
     hunt_zone_id: int
     hunt_zone: Optional[HuntZoneSimple] = None
+    creature: Optional[CreatureSimple] = None
     
     model_config = ConfigDict(from_attributes=True)
 
@@ -240,6 +249,9 @@ class ItemDropCreature(BaseModel):
     creature_slug: Optional[str] = None
     chance: Optional[float] = None
     rarity: Optional[str] = None
+    min_amount: Optional[int] = None
+    max_amount: Optional[int] = None
+    is_boss: bool = False
     hunt_zones: List[HuntZoneSimple] = []
     relationship_id: Optional[UUID] = None
     knowledge_entity_id: Optional[UUID] = None
@@ -247,11 +259,18 @@ class ItemDropCreature(BaseModel):
     source_provider: Optional[str] = None
 
 
+class ItemRelatedEntity(BaseModel):
+    kind: str
+    name: str
+    slug: str
+
+
 class ItemSearchResult(BaseModel):
     id: Optional[int] = None
     image_item_id: Optional[int] = None
     item_name: str
     normalized_name: str
+    slug: Optional[str] = None
     item_image_url: Optional[str] = None
     source_url: Optional[str] = None
     knowledge_entity_id: Optional[UUID] = None
@@ -266,6 +285,7 @@ class ItemDetail(BaseModel):
     id: int
     item_name: str
     normalized_name: str
+    slug: Optional[str] = None
     item_image_url: Optional[str] = None
     source_url: Optional[str] = None
     rarity: Optional[str] = None
@@ -296,6 +316,7 @@ class ItemDetail(BaseModel):
     sell_to: List[dict] = []
     rewards_from: List[str] = []
     required_for: List[str] = []
+    related_entities: List[ItemRelatedEntity] = []
     drops: List[ItemDropCreature] = []
 
 

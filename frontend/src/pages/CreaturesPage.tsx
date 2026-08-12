@@ -6,7 +6,6 @@ import {
 import { AlertTriangle,
   ArrowDownAZ,
   ArrowUpAZ,
-  Crown,
   Loader2,
   Search,
   X,
@@ -49,8 +48,10 @@ import { iconByCategory } from '../components/icons/CategoryIcons';
 import { useAuth } from '../context/AuthContext';
 import { activityApi } from '../services/activity';
 import CyclopediaDiscovery from '../components/CyclopediaDiscovery';
+import QuestLibraryShelves from '../components/QuestLibraryShelves';
 import CompactEntityStrip from '../components/CompactEntityStrip';
-import CyclopediaTabMedia from '../components/CyclopediaTabMedia';
+import KnowledgeCategoryIcon from '../components/knowledge/KnowledgeCategoryIcon';
+import { KnowledgeBadge } from '../components/knowledge/KnowledgeDetail';
 import KnowledgeSearchBox, {
   type KnowledgeSearchSection,
   type KnowledgeSuggestion,
@@ -297,9 +298,6 @@ const CreaturesPage: React.FC = () => {
     CyclopediaPreviewCard[]
   >([]);
   const [topPreviewCards, setTopPreviewCards] = useState<CyclopediaPreviewCard[]>([]);
-  const [tabMedia, setTabMedia] = useState<
-    Partial<Record<SearchMode, string>>
-  >({});
   const [isSearchCompact, setIsSearchCompact] =
     useState(false);
   const [mobileSearchOpen, setMobileSearchOpen] =
@@ -343,17 +341,12 @@ const CreaturesPage: React.FC = () => {
     if (mode === 'items') {
       return items.slice(0, 20).map((item) => {
         const imageId = item.image_item_id ?? item.id;
-        const selected = encodeSelectedSuggestion(
-          'item',
-          item.item_name,
-        );
-
         return {
           key: `item:${item.normalized_name}`,
           section: mode,
           kind: 'item',
           label: item.item_name,
-          to: `/cyclopedia?tab=items&selected=${encodeURIComponent(selected)}`,
+          to: `/items/${item.slug || item.normalized_name.split(' ').join('-')}`,
           imageUrl:
             imageId != null
               ? `/api/v1/items/${imageId}/image` +
@@ -370,8 +363,8 @@ const CreaturesPage: React.FC = () => {
         kind: 'quest',
         label: quest.name,
         to:
-          quest.id != null
-            ? `/quests/${quest.id}`
+          quest.slug || quest.id != null
+            ? `/quests/${quest.slug || quest.id}`
             : `/cyclopedia?tab=quests&selected=${encodeURIComponent(encodeSelectedSuggestion('quest', quest.name))}`,
       }));
     }
@@ -381,7 +374,7 @@ const CreaturesPage: React.FC = () => {
       section: mode,
       kind: 'zone',
       label: zone.name,
-      to: `/cyclopedia?tab=zones&selected=${encodeURIComponent(encodeSelectedSuggestion('zone', zone.name))}`,
+      to: `/hunt-zones/${zone.slug || zone.id}`,
       imageUrl: `/api/v1/hunt-zones/${zone.id}/map-image`,
     }));
   }, [creatures, items, mode, quests, zones]);
@@ -444,95 +437,6 @@ const CreaturesPage: React.FC = () => {
     });
 
     return () => controller.abort();
-  }, []);
-
-  useEffect(() => {
-    const controller = new AbortController();
-    let mounted = true;
-
-    const loadTabMedia = async () => {
-      const [
-        popularCreatures,
-        bosses,
-        lootItems,
-        tomeItems,
-        zonesForTabs,
-      ] = await Promise.all([
-        creaturesApi
-          .getPopular(1, controller.signal)
-          .catch(() => []),
-        creaturesApi
-          .getBosses(
-            {
-              skip: 0,
-              limit: 1,
-            },
-            controller.signal,
-          )
-          .catch(() => []),
-        itemsApi
-          .getHighlights(12, controller.signal)
-          .catch(() => []),
-        itemsApi
-          .search(
-            'Tome of Knowledge',
-            5,
-            controller.signal,
-          )
-          .catch(() => []),
-        huntZonesApi
-          .getHighlights(1, controller.signal)
-          .catch(() => []),
-      ]);
-
-      if (!mounted) {
-        return;
-      }
-
-      const lootItem = lootItems.find(
-        (item) => item.image_item_id != null,
-      );
-
-      const tomeItem =
-        tomeItems.find(
-          (item) =>
-            item.item_name
-              .trim()
-              .toLowerCase() ===
-            'tome of knowledge',
-        ) ||
-        tomeItems.find(
-          (item) =>
-            item.image_item_id != null,
-        );
-
-      setTabMedia({
-        creatures: popularCreatures[0]
-          ? `/api/v1/creatures/${popularCreatures[0].id}/image?placeholder=false`
-          : undefined,
-        bosses: bosses[0]
-          ? `/api/v1/creatures/${bosses[0].id}/image?placeholder=false`
-          : undefined,
-        items:
-          lootItem?.image_item_id != null
-            ? `/api/v1/items/${lootItem.image_item_id}/image?placeholder=false`
-            : undefined,
-        quests:
-          tomeItem?.image_item_id != null
-            ? `/api/v1/items/${tomeItem.image_item_id}/image?placeholder=false`
-            : undefined,
-        zones: zonesForTabs[0]
-          ? `/api/v1/hunt-zones/${zonesForTabs[0].id}/map-image`
-          : undefined,
-      });
-    };
-
-    void loadTabMedia();
-
-    return () => {
-      mounted = false;
-      controller.abort();
-    };
   }, []);
 
   useEffect(() => {
@@ -713,12 +617,12 @@ const CreaturesPage: React.FC = () => {
               '?placeholder=false',
           }));
         } else if (mode === 'bosses') {
-          const data = await creaturesApi.getBosses({ skip: 0, limit: 5 }, controller.signal);
+          const data = await creaturesApi.getPopularBosses(12, controller.signal);
           top = data.map((c) => ({ id: `boss:${c.id}`, name: c.name, subtitle: c.difficulty || t('cyclopedia.cards.boss'), to: `/creatures/${c.slug || c.id}`, imageUrl: `/api/v1/creatures/${c.id}/image` }));
         } else if (mode === 'items') {
           const data = (
-            await itemsApi.getHighlights(
-              20,
+            await itemsApi.getPopular(
+              12,
               controller.signal,
             )
           )
@@ -727,7 +631,7 @@ const CreaturesPage: React.FC = () => {
                 item.image_item_id != null &&
                 item.drops.length > 0,
             )
-            .slice(0, 5);
+            .slice(0, 12);
 
           top = data.map((item) => ({
             id: `item:${item.normalized_name}`,
@@ -738,7 +642,7 @@ const CreaturesPage: React.FC = () => {
                 count: item.drops.length,
               },
             ),
-            to: `/cyclopedia?tab=items&selected=${encodeURIComponent(encodeSelectedSuggestion('item', item.item_name))}`,
+            to: `/items/${item.slug || item.normalized_name.split(' ').join('-')}`,
             imageUrl:
               `/api/v1/items/` +
               `${item.image_item_id}/image` +
@@ -746,10 +650,10 @@ const CreaturesPage: React.FC = () => {
           }));
         } else if (mode === 'quests') {
           const data = await questsApi.getHighlights(5, controller.signal);
-          top = data.map((q) => ({ id: `quest:${q.id || q.name}`, name: q.name, subtitle: q.group_name || t('cyclopedia.cards.quest'), to: q.id ? `/quests/${q.id}` : '/cyclopedia?tab=quests' }));
+          top = data.map((q) => ({ id: `quest:${q.id || q.name}`, name: q.name, subtitle: q.group_name || t('cyclopedia.cards.quest'), to: q.slug || q.id ? `/quests/${q.slug || q.id}` : '/cyclopedia?tab=quests' }));
         } else {
           const data = await huntZonesApi.getHighlights(5, controller.signal);
-          top = data.map((z) => ({ id: `zone:${z.id}`, name: z.name, subtitle: z.region || z.city || t('cyclopedia.cards.huntZone'), to: '/cyclopedia?tab=zones', imageUrl: `/api/v1/hunt-zones/${z.id}/map-image` }));
+          top = data.map((z) => ({ id: `zone:${z.id}`, name: z.name, subtitle: z.region || z.city || t('cyclopedia.cards.huntZone'), to: `/hunt-zones/${z.slug || z.id}`, imageUrl: `/api/v1/hunt-zones/${z.id}/map-image` }));
         }
         if (mounted) setTopPreviewCards(top);
       } catch {
@@ -799,7 +703,7 @@ const CreaturesPage: React.FC = () => {
     const requiresRemoteFetch = mode === 'creatures'
       ? true
       : mode === 'bosses'
-        ? (!reset || normalized.length > 0)
+        ? true
         : mode === 'items'
           ? normalized.length > 1
           : mode === 'quests'
@@ -1045,7 +949,7 @@ const CreaturesPage: React.FC = () => {
           id: `quest:${q.id || q.name}`,
           name: q.name,
           subtitle: q.group_name || t('cyclopedia.cards.quest'),
-          to: q.id ? `/quests/${q.id}` : '/cyclopedia?tab=quests',
+          to: q.slug || q.id ? `/quests/${q.slug || q.id}` : '/cyclopedia?tab=quests',
         }));
         if (reset) _cacheResult = { creatures: [], items: [], quests: data, zones: [], hasMore: false, usedHighlightsSource: false };
       } else {
@@ -1061,7 +965,7 @@ const CreaturesPage: React.FC = () => {
           id: `zone:${z.id}`,
           name: z.name,
           subtitle: z.region || z.city || t('cyclopedia.cards.huntZone'),
-          to: '/cyclopedia?tab=zones',
+          to: `/hunt-zones/${z.slug || z.id}`,
           imageUrl: `/api/v1/hunt-zones/${z.id}/map-image`,
         }));
         if (reset) _cacheResult = { creatures: [], items: [], quests: [], zones: data, hasMore: false, usedHighlightsSource: false };
@@ -1611,21 +1515,13 @@ const CreaturesPage: React.FC = () => {
                     key: section.mode,
                     label: t(section.i18nLabel),
                     icon: (
-                      <CyclopediaTabMedia
-                        imageUrl={
-                          tabMedia[
-                            section.mode as SearchMode
-                          ]
-                        }
+                      <KnowledgeCategoryIcon
+                        category={section.mode}
                         label={t(
                           section.i18nLabel,
                         )}
-                        fallback={
-                          <FontAwesomeIcon
-                            icon={section.icon}
-                            className="w-4"
-                          />
-                        }
+                        className="size-7"
+                        mediaClassName="size-6"
                       />
                     ),
                   }),
@@ -1856,11 +1752,6 @@ const CreaturesPage: React.FC = () => {
                   </div>
                 )}
 
-                {mode === 'bosses' && (
-                  <div className="flex items-center gap-2 rounded-xl border border-danger/20 bg-danger/10 px-3 py-2 text-xs text-danger">
-                    <Crown size={14} /> {t('cyclopedia.helpers.bosses')}
-                  </div>
-                )}
               </div>
             )}
 
@@ -1915,6 +1806,29 @@ const CreaturesPage: React.FC = () => {
               items={topPreviewCards}
               variant="rail"
               nudgeSessionKey="popular-creatures"
+              linkState={cyclopediaRouteState}
+              onNavigate={persistCyclopediaState}
+            />
+          ) : mode === 'bosses' ? (
+            <CompactEntityStrip
+              title={t('cyclopedia.discovery.popularBosses')}
+              items={topPreviewCards}
+              variant="rail"
+              nudgeSessionKey="popular-bosses"
+              linkState={cyclopediaRouteState}
+              onNavigate={persistCyclopediaState}
+            />
+          ) : mode === 'items' ? (
+            <CompactEntityStrip
+              title={t('cyclopedia.discovery.popularLoot')}
+              items={topPreviewCards}
+              variant="rail"
+              nudgeSessionKey="popular-loot"
+              linkState={cyclopediaRouteState}
+              onNavigate={persistCyclopediaState}
+            />
+          ) : mode === 'quests' ? (
+            <QuestLibraryShelves
               linkState={cyclopediaRouteState}
               onNavigate={persistCyclopediaState}
             />
@@ -2001,43 +1915,37 @@ const CreaturesPage: React.FC = () => {
             {mode === 'items' &&
               effectiveSearchTerm.trim().length > 1 &&
               items.map((item, index) => (
-              <AppCard key={`${item.normalized_name}-${index}`} className="ds-enter p-5">
-                <div className="mb-4 flex items-start gap-3">
+              <AppCard key={`${item.normalized_name}-${index}`} className="ds-enter overflow-hidden p-0">
+                <div className="flex items-start gap-4 p-4 sm:p-5">
                   <ImageWithFallback
-                    src={item.image_item_id ? `/api/v1/items/${item.image_item_id}/image` : item.item_image_url || null}
+                    src={item.image_item_id ? `/api/v1/items/${item.image_item_id}/image?placeholder=false` : item.item_image_url || null}
                     alt={item.item_name}
-                    className="h-12 w-12 rounded-lg bg-surface-base/60 object-contain p-1"
-                    containerClassName="h-12 w-12"
+                    className="size-14 object-contain [image-rendering:pixelated]"
+                    containerClassName="grid size-16 shrink-0 place-items-center rounded-xl border border-line bg-surface-base/60"
                     fallbackLabel={item.item_name}
                   />
-                  <div>
-                    <div className="text-xl font-bold text-primary">{item.item_name}</div>
-                    <div className="text-xs text-content-muted">{t('cyclopedia.items.creaturesMatched', { count: item.drops.length })}</div>
+                  <div className="min-w-0 flex-1">
+                    <Link to={`/items/${item.slug || item.normalized_name.split(' ').join('-')}`} state={cyclopediaRouteState} onClick={persistCyclopediaState} className="text-lg font-bold text-content-primary hover:text-primary hover:underline">{item.item_name}</Link>
+                    <div className="mt-2 flex flex-wrap gap-2">{item.item_type ? <KnowledgeBadge>{item.item_type}</KnowledgeBadge> : null}{item.category ? <KnowledgeBadge>{item.category}</KnowledgeBadge> : null}{item.drops.length ? <KnowledgeBadge tone="primary">{t('cyclopedia.items.creaturesMatched', { count: item.drops.length })}</KnowledgeBadge> : null}</div>
                   </div>
                 </div>
-                <div className="space-y-3 text-sm text-content-secondary">
+                <div className="space-y-2 border-t border-line bg-surface-base/30 px-4 py-3 text-sm text-content-secondary sm:px-5">
                   {item.drops.slice(0, 3).map((drop) => (
-                    <div key={`${item.normalized_name}-${drop.creature_id}`} className="rounded-lg bg-surface-base/40 px-3 py-2">
-                      <div className="font-medium text-content-primary">{drop.creature_name}</div>
-                      <div className="text-xs text-content-secondary">{t('cyclopedia.items.chance')}: {drop.chance ?? t('cyclopedia.states.unknown')} · {t('cyclopedia.items.rarity')}: {drop.rarity || t('cyclopedia.states.unknown')}</div>
-                      {drop.hunt_zones.length > 0 && (
-                        <div className="mt-1 text-xs text-content-muted">{t('cyclopedia.items.zones')}: {drop.hunt_zones.slice(0, 2).map((zone) => zone.name).join(', ')}</div>
-                      )}
+                    <div key={`${item.normalized_name}-${drop.creature_id}`} className="flex flex-wrap items-center gap-2">
+                      {drop.creature_slug || drop.creature_id ? <Link to={`/creatures/${drop.creature_slug || drop.creature_id}`} state={cyclopediaRouteState} onClick={persistCyclopediaState} className="font-medium text-primary hover:underline">{drop.creature_name}</Link> : <span className="font-medium text-content-primary">{drop.creature_name}</span>}
+                      {drop.is_boss ? <KnowledgeBadge tone="danger">{t('itemDetail.boss')}</KnowledgeBadge> : null}
+                      {drop.chance != null ? <KnowledgeBadge>{t('itemDetail.chance', { value: drop.chance })}</KnowledgeBadge> : null}
+                      {drop.rarity ? <KnowledgeBadge>{drop.rarity}</KnowledgeBadge> : null}
                     </div>
                   ))}
                 </div>
-                {item.source_url && (
-                  <a href={item.source_url} target="_blank" rel="noreferrer" className="mt-4 inline-block text-xs text-primary hover:text-primary">
-                    {t('cyclopedia.items.sourcePage')}
-                  </a>
-                )}
               </AppCard>
             ))}
 
             {mode === 'quests' &&
               quests.map((quest, index) => {
                 const detailIdentifier =
-                  quest.id ?? quest.slug;
+                  quest.slug ?? quest.id;
 
                 const questGroup =
                   quest.group_name ||
@@ -2054,18 +1962,7 @@ const CreaturesPage: React.FC = () => {
                     className="ds-enter overflow-hidden p-0"
                   >
                     <div className="flex items-start gap-4 p-4 sm:p-5">
-                      <ImageWithFallback
-                        src={
-                          tabMedia.quests ||
-                          null
-                        }
-                        alt={quest.name}
-                        className="size-14 object-contain [image-rendering:pixelated]"
-                        containerClassName="grid size-16 shrink-0 place-items-center rounded-xl border border-line bg-surface-base/60"
-                        fallbackLabel={
-                          quest.name
-                        }
-                      />
+                      <KnowledgeCategoryIcon category="quests" label={t('nav.quests')} className="size-16 rounded-xl border border-line" mediaClassName="size-14" />
 
                       <div className="min-w-0 flex-1">
                         <div className="flex flex-wrap items-start justify-between gap-2">
@@ -2087,8 +1984,8 @@ const CreaturesPage: React.FC = () => {
                             )}
                         </p>
 
-                        <div className="mt-4 grid gap-2 text-xs text-content-muted sm:grid-cols-2">
-                          <div className="rounded-lg border border-line/70 bg-surface-base/40 px-3 py-2">
+                        <div className="mt-4 flex flex-wrap gap-2 text-xs text-content-muted">
+                          {quest.min_level != null || quest.max_level != null ? <div className="rounded-lg border border-line/70 bg-surface-base/40 px-3 py-2">
                             {t(
                               'cyclopedia.quests.levelRange',
                               {
@@ -2104,33 +2001,28 @@ const CreaturesPage: React.FC = () => {
                                   ),
                               },
                             )}
-                          </div>
+                          </div> : null}
 
-                          <div className="rounded-lg border border-line/70 bg-surface-base/40 px-3 py-2">
+                          {quest.npc ? <div className="rounded-lg border border-line/70 bg-surface-base/40 px-3 py-2">
                             <span className="font-semibold text-content-secondary">
                               {t(
                                 'cyclopedia.quests.npc',
                               )}
                               :
                             </span>{' '}
-                            {quest.npc ||
-                              t(
-                                'cyclopedia.states.unknown',
-                              )}
-                          </div>
+                            {quest.npc}
+                          </div> : null}
 
-                          <div className="rounded-lg border border-line/70 bg-surface-base/40 px-3 py-2 sm:col-span-2">
+                          {quest.location ? <div className="rounded-lg border border-line/70 bg-surface-base/40 px-3 py-2">
                             <span className="font-semibold text-content-secondary">
                               {t(
                                 'cyclopedia.quests.location',
                               )}
                               :
                             </span>{' '}
-                            {quest.location ||
-                              t(
-                                'cyclopedia.states.unknown',
-                              )}
-                          </div>
+                            {quest.location}
+                          </div> : null}
+                          {quest.premium_required ? <KnowledgeBadge tone="warning">{t('questDetail.premium')}</KnowledgeBadge> : null}
                         </div>
                       </div>
                     </div>
@@ -2171,30 +2063,24 @@ const CreaturesPage: React.FC = () => {
                 <div className="relative h-40 bg-surface-base">
                   {(zone.map_image_url || zone.map_asset_id) && !mapPreviewFailed[zone.id] ? (
                     <img
-                      src={huntZonesApi.getMapImageUrl(zone.id)}
+                      src={huntZonesApi.getMapImageUrl(zone.id, false)}
                       alt={zone.name}
                       className="h-full w-full object-cover"
                       loading="lazy"
                       onError={() => setMapPreviewFailed((prev) => ({ ...prev, [zone.id]: true }))}
                     />
                   ) : (
-                    <div className="flex h-full w-full items-center justify-center bg-gradient-to-br from-surface-base via-surface to-surface-base text-content-secondary">
-                      <div className="text-center">
-                        <div className="text-sm font-semibold">{t('cyclopedia.zones.mapPreviewUnavailable')}</div>
-                        <div className="mt-1 text-xs text-content-secondary">{t('cyclopedia.zones.usingPlaceholder')}</div>
-                      </div>
-                    </div>
+                    <div className="flex h-full w-full items-center justify-center bg-gradient-to-br from-surface-base via-surface to-surface-base"><KnowledgeCategoryIcon category="zones" label={t('nav.zones')} className="size-20" mediaClassName="size-16" /></div>
                   )}
                   <div className="absolute inset-0 bg-transparent" />
                 </div>
                 <div className="p-6">
-                  <h3 className="mb-2 text-xl font-bold text-primary">{zone.name}</h3>
-                  <div className="mb-3 flex gap-2 text-xs text-content-secondary">
-                    <span className="rounded bg-surface px-2 py-1">{zone.region || zone.city || t('cyclopedia.states.unknownRegion')}</span>
-                    <span className="rounded bg-surface px-2 py-1">{t('cyclopedia.zones.level', { level: zone.recommended_level ?? zone.min_level ?? t('common.notAvailable') })}</span>
+                  <Link to={`/hunt-zones/${zone.slug || zone.id}`} state={cyclopediaRouteState} onClick={persistCyclopediaState} className="mb-2 inline-block text-xl font-bold text-primary hover:underline">{zone.name}</Link>
+                  <div className="flex flex-wrap gap-2 text-xs text-content-secondary">
+                    {zone.region || zone.city ? <KnowledgeBadge>{zone.region || zone.city}</KnowledgeBadge> : null}
+                    {(zone.recommended_level ?? zone.min_level ?? 0) > 0 ? <KnowledgeBadge tone="primary">{t('cyclopedia.zones.level', { level: zone.recommended_level ?? zone.min_level })}</KnowledgeBadge> : null}
+                    {zone.difficulty ? <KnowledgeBadge>{zone.difficulty}</KnowledgeBadge> : null}
                   </div>
-                  <div className="text-sm text-content-secondary">{zone.difficulty || 'Not available'} difficulty</div>
-                  <div className="mt-2 text-xs text-content-muted">Source: {zone.source_provider || zone.source_name || 'local'}</div>
                 </div>
               </AppCard>
             ))}
