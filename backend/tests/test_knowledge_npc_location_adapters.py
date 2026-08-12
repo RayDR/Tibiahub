@@ -157,9 +157,9 @@ def test_location_detail_extracts_iksupan_access_quest_and_vocation_level():
 {{Infobox Location
 | name = Iksupan
 | type = Hunting Place
-| levelknights = Level 150
-| levelpaladins = Level 150
-| levelmages = Level 150
+| lvlknights = 150
+| lvlpaladins = 150
+| lvlmages = 150
 }}
 Access to Iksupan is obtained through the [[Adventures of Galthen Quest]].
 """

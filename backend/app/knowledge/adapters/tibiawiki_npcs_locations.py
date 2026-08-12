@@ -154,7 +154,11 @@ def _vocation_level_requirement(
         compact_key = re.sub(r"[^a-z0-9]", "", key.lower())
         if not any(token in compact_key for token in _VOCATION_LEVEL_TOKENS):
             continue
-        if "level" not in compact_key and not re.search(r"\blevel\b", raw_value or "", re.IGNORECASE):
+        if (
+            "level" not in compact_key
+            and "lvl" not in compact_key
+            and not re.search(r"\blevel\b", raw_value or "", re.IGNORECASE)
+        ):
             continue
         value = _to_int(raw_value)
         if value is None or value <= 0:
