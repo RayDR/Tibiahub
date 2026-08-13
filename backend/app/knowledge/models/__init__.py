@@ -19,6 +19,7 @@ from app.knowledge.models.jobs import (
     KnowledgeWorkerHeartbeat,
 )
 from app.knowledge.models.mappings import KnowledgeExternalMapping
+from app.knowledge.models.observations import KnowledgeProviderObservation
 from app.knowledge.models.relationships import KnowledgeCreatureItemDrop
 from app.knowledge.models.quest_relationships import KnowledgeAccess, KnowledgeQuestRelation
 from app.knowledge.models.graph import KnowledgeRelationship, KnowledgeRelationshipType
@@ -39,6 +40,7 @@ __all__ = [
     "KnowledgeProviderCursor",
     "KnowledgeWorkerHeartbeat",
     "KnowledgeExternalMapping",
+    "KnowledgeProviderObservation",
     "KnowledgeCreatureItemDrop",
     "KnowledgeAccess",
     "KnowledgeQuestRelation",

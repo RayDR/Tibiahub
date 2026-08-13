@@ -221,12 +221,13 @@ class RecommendationEngine:
         # level metadata (min_level=0). In that case use the creatures that are
         # actually connected to the zone instead of silently assigning a zero score.
         target_level = self._target_level(zone, profile)
-        level_diff = abs(target_level - level)
-        score += max(0, 42 - level_diff * 0.55)
-        if level < target_level - 35:
-            score -= min(35, (target_level - level - 35) * 0.65)
-        elif level > target_level + 75:
-            score -= min(28, (level - target_level - 75) * 0.35)
+        if target_level is not None:
+            level_diff = abs(target_level - level)
+            score += max(0, 42 - level_diff * 0.55)
+            if level < target_level - 35:
+                score -= min(35, (target_level - level - 35) * 0.65)
+            elif level > target_level + 75:
+                score -= min(28, (level - target_level - 75) * 0.35)
 
         # A known spawn is useful recommendation evidence even when hourly rates and
         # vocation flags have not yet been curated.
@@ -283,11 +284,13 @@ class RecommendationEngine:
         
         # Level appropriateness
         avg_level = sum(m['level'] for m in party) / len(party)
-        level_diff = abs(self._target_level(zone, profile) - avg_level)
-        if level_diff <= 15:
-            base_score += 30
-        elif level_diff <= 30:
-            base_score += 15
+        target_level = self._target_level(zone, profile)
+        if target_level is not None:
+            level_diff = abs(target_level - avg_level)
+            if level_diff <= 15:
+                base_score += 30
+            elif level_diff <= 30:
+                base_score += 15
         
         base_score += min(15, profile["creature_count"] * 2)
         return max(0, base_score)
@@ -304,13 +307,19 @@ class RecommendationEngine:
             seen.add(creature.id)
             creatures.append(creature)
         if not creatures:
-            return {"creature_count": 0, "raw_experience": 0, "suggested_level": 8, "danger": "unknown"}
+            return {"creature_count": 0, "raw_experience": None, "suggested_level": 8, "danger": "unknown"}
 
-        threats = sorted(max(1, int(((c.hitpoints or 0) + (c.experience or 0)) / 30)) for c in creatures)
+        threats = sorted(
+            max(1, int((creature.hitpoints + creature.experience) / 30))
+            for creature in creatures
+            if creature.hitpoints is not None and creature.experience is not None
+        )
         # The upper quartile is less vulnerable to one exceptional creature than max.
-        threat = threats[min(len(threats) - 1, int((len(threats) - 1) * 0.75))]
-        suggested = max(8, min(1000, threat))
-        if suggested < 35:
+        threat = threats[min(len(threats) - 1, int((len(threats) - 1) * 0.75))] if threats else None
+        suggested = max(8, min(1000, threat)) if threat is not None else None
+        if suggested is None:
+            danger = "unknown"
+        elif suggested < 35:
             danger = "low"
         elif suggested < 90:
             danger = "moderate"
@@ -320,12 +329,16 @@ class RecommendationEngine:
             danger = "extreme"
         return {
             "creature_count": len(creatures),
-            "raw_experience": sum(max(0, c.experience or 0) for c in creatures),
+            "raw_experience": (
+                sum(max(0, creature.experience) for creature in creatures)
+                if all(creature.experience is not None for creature in creatures)
+                else None
+            ),
             "suggested_level": suggested,
             "danger": danger,
         }
 
-    def _target_level(self, zone: HuntZone, profile: Dict[str, Any]) -> int:
+    def _target_level(self, zone: HuntZone, profile: Dict[str, Any]) -> int | None:
         if zone.recommended_level and zone.recommended_level > 0:
             return zone.recommended_level
         if zone.min_level and zone.min_level > 0:
@@ -335,9 +348,15 @@ class RecommendationEngine:
     def recommendation_profile(self, zone: HuntZone, player_level: int) -> Dict[str, Any]:
         profile = self._spawn_profile(zone)
         target = self._target_level(zone, profile)
-        minimum = zone.min_level if zone.min_level and zone.min_level > 0 else max(8, target - 20)
+        minimum = (
+            zone.min_level
+            if zone.min_level is not None and zone.min_level > 0
+            else max(8, target - 20) if target is not None else None
+        )
         maximum = zone.max_level if zone.max_level and zone.max_level > 0 else None
-        if player_level < minimum:
+        if minimum is None or target is None:
+            level_fit = "unknown"
+        elif player_level < minimum:
             level_fit = "below_range"
         elif maximum is not None and player_level > maximum:
             level_fit = "too_low"
@@ -353,7 +372,11 @@ class RecommendationEngine:
             "suggested_level": target,
             "level_fit": level_fit,
             "danger": (zone.danger_rating or zone.difficulty or profile["danger"]).lower(),
-            "profile_basis": "curated" if (zone.recommended_level or (zone.min_level and zone.min_level > 0)) else "spawn_profile",
+            "profile_basis": (
+                "curated" if (zone.recommended_level or (zone.min_level and zone.min_level > 0))
+                else "spawn_profile" if target is not None
+                else "unknown"
+            ),
         }
     
     def _calculate_synergy(self, vocations: tuple) -> float:

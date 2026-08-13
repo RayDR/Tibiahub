@@ -1,6 +1,8 @@
-"""Explicit sync-time importer for the MIT-licensed TibiaMaps dataset.
+"""Versioned local ingestion for the authoritative MIT-licensed TibiaMaps data.
 
 Public request paths never call this service and never perform network I/O.
+An imported commit is immutable on disk and can be renormalized into newer DB
+schemas without fetching TibiaMaps again.
 """
 from __future__ import annotations
 
@@ -14,7 +16,8 @@ from pathlib import Path
 from PIL import Image
 from sqlalchemy.orm import Session
 
-from app.models.world_map import WorldMapFloor, WorldMapMarker
+from app.knowledge.models import KnowledgeEntity, KnowledgeEntityAlias
+from app.models.world_map import WorldMapDataset, WorldMapFloor, WorldMapMarker
 from app.services.text_utils import normalize_search_text
 
 
@@ -44,49 +47,48 @@ class WorldMapSyncService:
         self.db = db
         self.storage_root = Path(storage_root).resolve()
 
-    def import_directory(self, source_root: str | Path, *, upstream_commit: str) -> dict:
-        if not upstream_commit or len(upstream_commit) < 7 or any(ch not in "0123456789abcdef" for ch in upstream_commit.lower()):
+    @staticmethod
+    def _validate_commit(upstream_commit: str) -> str:
+        value = (upstream_commit or "").lower()
+        if len(value) < 7 or any(ch not in "0123456789abcdef" for ch in value):
             raise ValueError("A hexadecimal upstream commit is required")
+        return value
+
+    @staticmethod
+    def _read_json(path: Path):
+        return json.loads(path.read_text(encoding="utf-8"))
+
+    def import_directory(self, source_root: str | Path, *, upstream_commit: str) -> dict:
+        """Validate and atomically retain one immutable upstream commit."""
+        upstream_commit = self._validate_commit(upstream_commit)
         source_root = Path(source_root).resolve()
         data_root = source_root / "data"
-        bounds_path = data_root / "bounds.json"
-        markers_path = data_root / "markers.json"
+        bounds_path, markers_path = data_root / "bounds.json", data_root / "markers.json"
         license_path = source_root / "LICENSE-MIT.txt"
         if not bounds_path.is_file() or not markers_path.is_file() or not license_path.is_file():
             raise ValueError("Source must contain data/bounds.json, data/markers.json, and LICENSE-MIT.txt")
-
-        bounds = json.loads(bounds_path.read_text(encoding="utf-8"))
-        marker_rows = json.loads(markers_path.read_text(encoding="utf-8"))
+        bounds = self._read_json(bounds_path)
         floors = [int(value) for value in bounds.get("floorIDs", [])]
         if floors != list(range(16)):
             raise ValueError("Expected Tibia floors 00 through 15")
         width, height = int(bounds["width"]), int(bounds["height"])
-        min_x, min_y = int(bounds["xMin"]), int(bounds["yMin"])
-        # Upstream bounds are inclusive tile-block starts; the generated PNG
-        # includes the final 256-tile block.
-        max_x, max_y = min_x + width, min_y + height
 
         destination = _inside(self.storage_root, self.storage_root / PROVIDER.replace("/", "-") / upstream_commit)
         destination.parent.mkdir(parents=True, exist_ok=True)
         temporary = Path(tempfile.mkdtemp(prefix="world-map-import-", dir=str(destination.parent)))
         try:
-            temporary.mkdir(parents=True, exist_ok=True)
-            license_target = temporary / "LICENSE-MIT.txt"
-            shutil.copy2(license_path, license_target)
+            shutil.copy2(license_path, temporary / "LICENSE-MIT.txt")
             imported: list[dict] = []
             for floor in floors:
                 map_source = data_root / f"floor-{floor:02d}-map.png"
                 path_source = data_root / f"floor-{floor:02d}-path.png"
                 if not map_source.is_file() or not path_source.is_file():
                     raise ValueError(f"Missing floor {floor:02d} map or pathfinding PNG")
-                with Image.open(map_source) as image:
-                    if image.format != "PNG" or image.size != (width, height):
-                        raise ValueError(f"Unexpected floor {floor:02d} map dimensions")
-                with Image.open(path_source) as image:
-                    if image.format != "PNG" or image.size != (width, height):
-                        raise ValueError(f"Unexpected floor {floor:02d} path dimensions")
-                map_target = temporary / map_source.name
-                path_target = temporary / path_source.name
+                for source in (map_source, path_source):
+                    with Image.open(source) as image:
+                        if image.format != "PNG" or image.size != (width, height):
+                            raise ValueError(f"Unexpected floor {floor:02d} image dimensions")
+                map_target, path_target = temporary / map_source.name, temporary / path_source.name
                 shutil.copy2(map_source, map_target)
                 shutil.copy2(path_source, path_target)
                 imported.append({
@@ -97,56 +99,156 @@ class WorldMapSyncService:
             shutil.copy2(markers_path, temporary / "markers.json")
             manifest = {
                 "provider": PROVIDER, "upstream_url": UPSTREAM_URL, "upstream_commit": upstream_commit,
-                "license": "MIT", "attribution": ATTRIBUTION, "bounds": bounds, "floors": imported,
-                "markers_sha256": _sha256(temporary / "markers.json"),
+                "license": "MIT", "attribution": ATTRIBUTION, "bounds": bounds,
+                "floors": imported, "markers_sha256": _sha256(temporary / "markers.json"),
             }
-            (temporary / "manifest.json").write_text(json.dumps(manifest, indent=2, sort_keys=True) + "\n", encoding="utf-8")
+            (temporary / "manifest.json").write_text(
+                json.dumps(manifest, indent=2, sort_keys=True) + "\n", encoding="utf-8",
+            )
             if destination.exists():
+                stored_manifest = self._read_json(destination / "manifest.json")
+                if stored_manifest != manifest:
+                    raise ValueError("An immutable TibiaMaps commit already exists with different content")
                 shutil.rmtree(temporary)
             else:
                 os.replace(temporary, destination)
-
-            self.db.query(WorldMapFloor).filter(WorldMapFloor.provider == PROVIDER, WorldMapFloor.is_current.is_(True)).update({WorldMapFloor.is_current: False}, synchronize_session=False)
-            floor_records: dict[int, WorldMapFloor] = {}
-            for item in imported:
-                record = self.db.query(WorldMapFloor).filter_by(provider=PROVIDER, upstream_commit=upstream_commit, floor=item["floor"]).first()
-                values = {
-                    "upstream_url": UPSTREAM_URL, "license_name": "MIT", "attribution": ATTRIBUTION,
-                    "map_path": str(destination / item["map_name"]), "pathfinding_path": str(destination / item["path_name"]),
-                    "map_sha256": item["map_sha256"], "pathfinding_sha256": item["path_sha256"],
-                    "width": width, "height": height, "min_x": min_x, "min_y": min_y,
-                    "max_x": max_x, "max_y": max_y, "source_metadata": {"bounds": bounds}, "is_current": True,
-                }
-                if record is None:
-                    record = WorldMapFloor(provider=PROVIDER, upstream_commit=upstream_commit, floor=item["floor"], **values)
-                    self.db.add(record)
-                else:
-                    for key, value in values.items():
-                        setattr(record, key, value)
-                self.db.flush()
-                floor_records[item["floor"]] = record
-                self.db.query(WorldMapMarker).filter_by(floor_id=record.id).delete(synchronize_session=False)
-
-            marker_count = 0
-            for index, row in enumerate(marker_rows):
-                try:
-                    floor, x, y = int(row["z"]), int(row["x"]), int(row["y"])
-                except (KeyError, TypeError, ValueError):
-                    continue
-                floor_record = floor_records.get(floor)
-                if floor_record is None or not (min_x <= x < max_x and min_y <= y < max_y):
-                    continue
-                description = str(row.get("description") or "").strip()
-                self.db.add(WorldMapMarker(
-                    floor_id=floor_record.id, source_index=index, description=description,
-                    normalized_description=normalize_search_text(description), icon=str(row.get("icon") or "")[:64] or None,
-                    x=x, y=y, floor=floor, raw_data=row,
-                ))
-                marker_count += 1
-            self.db.commit()
-            return {"provider": PROVIDER, "upstream_commit": upstream_commit, "storage_path": str(destination), "floor_count": len(imported), "marker_count": marker_count, "manifest": manifest}
+            return self._renormalize_destination(destination)
         except Exception:
             self.db.rollback()
             if temporary.exists():
                 shutil.rmtree(temporary, ignore_errors=True)
             raise
+
+    def renormalize_dataset(self, *, upstream_commit: str) -> dict:
+        """Rebuild normalized rows from a stored commit without provider access."""
+        upstream_commit = self._validate_commit(upstream_commit)
+        destination = _inside(
+            self.storage_root, self.storage_root / PROVIDER.replace("/", "-") / upstream_commit,
+        )
+        if not destination.is_dir():
+            raise ValueError("Stored TibiaMaps commit is unavailable")
+        try:
+            return self._renormalize_destination(destination)
+        except Exception:
+            self.db.rollback()
+            raise
+
+    def _renormalize_destination(self, destination: Path) -> dict:
+        manifest = self._read_json(destination / "manifest.json")
+        bounds = manifest.get("bounds") or {}
+        imported = manifest.get("floors") or []
+        marker_path = destination / "markers.json"
+        if (
+            manifest.get("provider") != PROVIDER
+            or manifest.get("upstream_commit") != destination.name
+            or _sha256(marker_path) != manifest.get("markers_sha256")
+            or len(imported) != 16
+        ):
+            raise ValueError("Stored TibiaMaps manifest failed integrity validation")
+        width, height = int(bounds["width"]), int(bounds["height"])
+        min_x, min_y = int(bounds["xMin"]), int(bounds["yMin"])
+        max_x, max_y = min_x + width, min_y + height
+        for item in imported:
+            map_path, path_path = destination / item["map_name"], destination / item["path_name"]
+            if _sha256(map_path) != item["map_sha256"] or _sha256(path_path) != item["path_sha256"]:
+                raise ValueError("Stored TibiaMaps floor failed integrity validation")
+
+        self.db.query(WorldMapDataset).filter_by(provider=PROVIDER, is_current=True).update(
+            {WorldMapDataset.is_current: False}, synchronize_session=False,
+        )
+        dataset = self.db.query(WorldMapDataset).filter_by(
+            provider=PROVIDER, upstream_commit=manifest["upstream_commit"],
+        ).first()
+        dataset_values = {
+            "upstream_url": UPSTREAM_URL, "license_name": "MIT", "attribution": ATTRIBUTION,
+            "bounds": bounds, "manifest": manifest, "markers_sha256": manifest["markers_sha256"],
+            "storage_path": str(destination), "is_current": True,
+        }
+        if dataset is None:
+            dataset = WorldMapDataset(
+                provider=PROVIDER, upstream_commit=manifest["upstream_commit"], **dataset_values,
+            )
+            self.db.add(dataset)
+        else:
+            for key, value in dataset_values.items():
+                setattr(dataset, key, value)
+        self.db.flush()
+
+        self.db.query(WorldMapFloor).filter_by(provider=PROVIDER, is_current=True).update(
+            {WorldMapFloor.is_current: False}, synchronize_session=False,
+        )
+        floor_records: dict[int, WorldMapFloor] = {}
+        for item in imported:
+            floor = int(item["floor"])
+            record = self.db.query(WorldMapFloor).filter_by(
+                provider=PROVIDER, upstream_commit=manifest["upstream_commit"], floor=floor,
+            ).first()
+            values = {
+                "dataset_id": dataset.id, "upstream_url": UPSTREAM_URL, "license_name": "MIT",
+                "attribution": ATTRIBUTION, "map_path": str(destination / item["map_name"]),
+                "pathfinding_path": str(destination / item["path_name"]),
+                "map_sha256": item["map_sha256"], "pathfinding_sha256": item["path_sha256"],
+                "width": width, "height": height, "min_x": min_x, "min_y": min_y,
+                "max_x": max_x, "max_y": max_y,
+                "source_metadata": {"bounds": bounds, "dataset_id": dataset.id}, "is_current": True,
+            }
+            if record is None:
+                record = WorldMapFloor(
+                    provider=PROVIDER, upstream_commit=manifest["upstream_commit"], floor=floor, **values,
+                )
+                self.db.add(record)
+            else:
+                for key, value in values.items():
+                    setattr(record, key, value)
+            self.db.flush()
+            floor_records[floor] = record
+            self.db.query(WorldMapMarker).filter_by(floor_id=record.id).delete(synchronize_session="fetch")
+
+        exact_entities = self._exact_entity_index()
+        marker_count = resolved_count = 0
+        for index, row in enumerate(self._read_json(marker_path)):
+            try:
+                floor, x, y = int(row["z"]), int(row["x"]), int(row["y"])
+            except (KeyError, TypeError, ValueError):
+                continue
+            floor_record = floor_records.get(floor)
+            if floor_record is None or not (min_x <= x < max_x and min_y <= y < max_y):
+                continue
+            description = str(row.get("description") or "").strip()
+            normalized = normalize_search_text(description)
+            matches = exact_entities.get(normalized, set()) if normalized else set()
+            resolved = next(iter(matches)) if len(matches) == 1 else None
+            state = "resolved" if resolved else "ambiguous" if len(matches) > 1 else "unresolved"
+            self.db.add(WorldMapMarker(
+                floor_id=floor_record.id, source_index=index, description=description,
+                normalized_description=normalized, icon=str(row.get("icon") or "")[:64] or None,
+                x=x, y=y, floor=floor, raw_data=row, resolved_entity_id=resolved,
+                resolution_state=state,
+                resolution_method="exact_canonical_name_or_alias" if resolved else None,
+            ))
+            marker_count += 1
+            resolved_count += int(resolved is not None)
+        self.db.commit()
+        return {
+            "provider": PROVIDER, "upstream_commit": manifest["upstream_commit"],
+            "storage_path": str(destination), "dataset_id": dataset.id,
+            "floor_count": len(imported), "marker_count": marker_count,
+            "resolved_marker_count": resolved_count, "manifest": manifest,
+            "normalization_source": "stored_immutable_dataset",
+        }
+
+    def _exact_entity_index(self) -> dict[str, set]:
+        index: dict[str, set] = {}
+        for entity_uuid, canonical_name in self.db.query(
+            KnowledgeEntity.uuid, KnowledgeEntity.canonical_name,
+        ).filter(KnowledgeEntity.status == "active").all():
+            normalized = normalize_search_text(canonical_name)
+            if normalized:
+                index.setdefault(normalized, set()).add(entity_uuid)
+        for entity_uuid, normalized_alias in self.db.query(
+            KnowledgeEntityAlias.entity_uuid, KnowledgeEntityAlias.normalized_alias,
+        ).all():
+            normalized = normalize_search_text(normalized_alias)
+            if normalized:
+                index.setdefault(normalized, set()).add(entity_uuid)
+        return index

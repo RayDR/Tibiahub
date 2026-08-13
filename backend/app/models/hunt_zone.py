@@ -1,5 +1,5 @@
 """Hunt Zone model - Areas where players can hunt."""
-from sqlalchemy import Boolean, Column, DateTime, ForeignKey, Integer, String, Text
+from sqlalchemy import Boolean, Column, DateTime, ForeignKey, Index, Integer, String, Text, UniqueConstraint, Uuid
 from sqlalchemy.orm import relationship
 from sqlalchemy.sql import func
 
@@ -10,6 +10,10 @@ from app.db.types import JSONBType
 class HuntZone(Base):
     """Hunt zone/area model"""
     __tablename__ = "hunt_zones"
+    __table_args__ = (
+        UniqueConstraint("source_provider", "external_id", name="uq_hunt_zones_source_external"),
+        Index("uq_hunt_zones_knowledge_entity_id", "knowledge_entity_id", unique=True),
+    )
     
     id = Column(Integer, primary_key=True, index=True)
     name = Column(String(100), unique=True, nullable=False, index=True)
@@ -20,9 +24,19 @@ class HuntZone(Base):
     source_provider = Column(String(50), nullable=True, index=True)
     source_name = Column(String(50), nullable=True, index=True)
     source_url = Column(String(255), nullable=True)
+    external_id = Column(String(100), nullable=True, index=True)
+    knowledge_entity_id = Column(
+        Uuid(as_uuid=True),
+        ForeignKey("knowledge_entities.uuid", ondelete="SET NULL"),
+        nullable=True,
+    )
+    provider_metadata = Column(JSONBType, nullable=True)
+    supplied_fields = Column(JSONBType, nullable=True)
+    protected_fields = Column(JSONBType, nullable=False, default=list)
+    data_version = Column(Integer, nullable=False, default=1)
     
     # Level recommendations
-    min_level = Column(Integer, nullable=False)
+    min_level = Column(Integer, nullable=True)
     max_level = Column(Integer)
     recommended_level = Column(Integer)
     recommended_vocations = Column(JSONBType, nullable=True)
@@ -32,11 +46,11 @@ class HuntZone(Base):
     danger_rating = Column(String(20), nullable=True)
     
     # Vocations (professions) - Winter Update 2025 includes Monk
-    knights_recommended = Column(Boolean, default=False)
-    paladins_recommended = Column(Boolean, default=False)
-    sorcerers_recommended = Column(Boolean, default=False)
-    druids_recommended = Column(Boolean, default=False)
-    monks_recommended = Column(Boolean, default=False)
+    knights_recommended = Column(Boolean, nullable=True)
+    paladins_recommended = Column(Boolean, nullable=True)
+    sorcerers_recommended = Column(Boolean, nullable=True)
+    druids_recommended = Column(Boolean, nullable=True)
+    monks_recommended = Column(Boolean, nullable=True)
     
     # Zone info
     size = Column(String(20))  # Small, Medium, Large, Huge
@@ -48,10 +62,10 @@ class HuntZone(Base):
     
     
     # Access requirements
-    requires_quest = Column(Boolean, default=False)
+    requires_quest = Column(Boolean, nullable=True)
     quest_id = Column(Integer, ForeignKey("quests.id"), nullable=True)
     quest = relationship("Quest", back_populates="required_for_zones")
-    requires_premium = Column(Boolean, default=False)
+    requires_premium = Column(Boolean, nullable=True)
     
     # Description
     description = Column(Text)
@@ -74,6 +88,7 @@ class HuntZone(Base):
     
     # Relationships
     creature_spawns = relationship("SpawnLocation", back_populates="hunt_zone", cascade="all, delete-orphan")
+    knowledge_entity = relationship("KnowledgeEntity")
 
     @property
     def quest_name(self):
@@ -82,6 +97,10 @@ class HuntZone(Base):
     @property
     def quest_slug(self):
         return getattr(self.quest, "slug", None) if self.quest else None
+
+    @property
+    def canonical_id(self):
+        return self.knowledge_entity_id
     
     def __repr__(self):
         return f"<HuntZone {self.name}>"

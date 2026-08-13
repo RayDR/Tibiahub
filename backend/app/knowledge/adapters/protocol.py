@@ -72,6 +72,9 @@ class CanonicalEntityCandidate:
     source_priority: int = 100
     visibility: str = "public"
     search_weight: float = 1.0
+    # Provider identities are authoritative for characters/guilds/worlds. Shared
+    # semantic families may reuse one unambiguous exact canonical name/alias.
+    identity_strategy: Literal["provider_identity", "exact_unique_or_create"] = "provider_identity"
 
 
 @dataclass(frozen=True, slots=True)
@@ -91,6 +94,13 @@ class KnowledgeNormalizationResult:
     provider_code: str | None = None
     external_id: str | None = None
     canonical_data: JsonObject | None = None
+    # A provider observation is append-only evidence captured at fetch time. It
+    # may accompany a canonical upsert or stand alone for dynamic resources.
+    observation_type: str | None = None
+    observation_key: str | None = None
+    observation_data: JsonObject | None = None
+    observation_source_url: str | None = None
+    observation_version: int = 1
 
 
 @dataclass(frozen=True, slots=True)

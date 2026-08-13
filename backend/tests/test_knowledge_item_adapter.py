@@ -504,6 +504,10 @@ def test_local_item_api_is_paginated_network_free_and_available_when_provider_is
     assert second.status_code == 200 and len(second.json()) == 1
     assert first.json()[0]["item_name"] != second.json()[0]["item_name"]
     assert detail.status_code == 200 and detail.json()["knowledge_entity_id"]
+    assert detail.json()["canonical_id"] == detail.json()["knowledge_entity_id"]
+    assert detail.json()["source_provider"] == "tibiawiki"
+    assert detail.json()["tradeable"] is True
+    assert "tradeable" in detail.json()["supplied_fields"]
     assert missing.status_code == 404
 
 

@@ -16,8 +16,10 @@ from sqlalchemy.orm import Session
 from typing import List, Optional
 from app.db.database import get_db
 from app.services.recommendation_engine import get_recommendation_engine
-from app.services.tibiawiki_service import tibiawiki_service
 from app.schemas import Vocation
+from app.models import Creature, HuntZone
+from app.models.external_data import Item, TibiaWikiQuest
+from app.services.text_utils import normalize_search_text
 
 router = APIRouter()
 
@@ -176,7 +178,7 @@ async def get_party_recommendations(
 
 
 @router.get("/weekly-bosses")
-async def get_weekly_bosses():
+def get_weekly_bosses(db: Session = Depends(get_db)):
     """
     Get information about world bosses and weekly spawns
     
@@ -186,14 +188,24 @@ async def get_weekly_bosses():
     - Minimum recommended level
     - Required team composition
     
-    **Data Source:** TibiaWiki API (https://tibia.fandom.com/api.php)
-    - Category: World_Bosses
-    - Updated from official game data
+    Reads only locally synchronized canonical boss records.
     """
-    bosses = tibiawiki_service.get_weekly_bosses()
+    rows = db.query(Creature).filter(
+        Creature.is_boss.is_(True), Creature.is_hidden.is_(False),
+    ).order_by(Creature.name.asc()).limit(100).all()
+    bosses = [{
+        "id": row.id, "name": row.name, "slug": row.slug,
+        "canonical_id": row.knowledge_entity_id, "external_id": row.external_id,
+        "source_provider": row.source_name, "source_url": row.source_url,
+        "supplied_fields": list(row.supplied_fields or []),
+        "missing_fields": list(row.missing_fields or []),
+        "data_version": row.data_version, "last_synced_at": row.last_synced_at,
+        "hitpoints": row.hitpoints, "experience": row.experience,
+        "locations": list(row.locations or []), "related_tasks": list(row.related_tasks or []),
+    } for row in rows]
     
     return {
-        "source": "TibiaWiki API (https://tibia.fandom.com)",
+        "source": "local canonical Knowledge",
         "total_bosses": len(bosses),
         "bosses": bosses,
         "note": "Spawn times and mechanics sourced from community wiki"
@@ -309,36 +321,57 @@ async def get_exp_zones(
 
 
 @router.get("/tibiawiki/search")
-async def search_tibiawiki(
+def search_tibiawiki(
     query: str = Query(..., min_length=3, description="Search query"),
-    limit: int = Query(10, ge=1, le=50)
+    limit: int = Query(10, ge=1, le=50),
+    db: Session = Depends(get_db),
 ):
     """
     Search TibiaWiki for creatures, zones, and items
     
-    **Direct access to TibiaWiki API**
+    Compatibility endpoint backed only by local canonical records.
     
     Useful for:
     - Finding creature information
     - Locating hunt zones
     - Item lookups
     
-    **Data Source:** https://tibia.fandom.com/api.php
+    **Data Source:** local Knowledge storage
     """
-    results = tibiawiki_service.search_creatures(query, limit)
+    normalized = normalize_search_text(query)
+    matches: list[dict] = []
+    sources = (
+        ("creature", Creature, Creature.normalized_name),
+        ("hunt_zone", HuntZone, HuntZone.normalized_name),
+        ("item", Item, Item.normalized_name),
+        ("quest", TibiaWikiQuest, TibiaWikiQuest.normalized_name),
+    )
+    for entity_type, model, name_column in sources:
+        rows = db.query(model).filter(name_column.contains(normalized)).order_by(model.name.asc()).limit(limit).all()
+        matches.extend({
+            "entity_type": entity_type, "id": row.id, "name": row.name,
+            "slug": getattr(row, "slug", None),
+            "canonical_id": getattr(row, "knowledge_entity_id", None),
+            "external_id": getattr(row, "external_id", None),
+            "source_provider": getattr(row, "source_name", None) or getattr(row, "source_provider", None),
+            "source_url": getattr(row, "source_url", None),
+            "data_version": getattr(row, "data_version", 1),
+            "last_synced_at": getattr(row, "last_synced_at", None),
+        } for row in rows)
+    results = sorted(matches, key=lambda value: (normalize_search_text(value["name"]) != normalized, value["name"].casefold()))[:limit]
     
     return {
         "query": query,
-        "source": "TibiaWiki (tibia.fandom.com)",
+        "source": "local canonical Knowledge",
         "results": results,
         "total": len(results)
     }
 
 
 @router.get("/tibiawiki/creature/{creature_name}")
-async def get_creature_from_wiki(creature_name: str):
+def get_creature_from_wiki(creature_name: str, db: Session = Depends(get_db)):
     """
-    Fetch detailed creature data from TibiaWiki
+    Read locally synchronized TibiaWiki creature data
     
     **Returns:**
     - Official stats (HP, EXP, Armor, Speed)
@@ -346,10 +379,13 @@ async def get_creature_from_wiki(creature_name: str):
     - Spawn locations
     - Immunities and weaknesses
     
-    **Data Source:** TibiaWiki API
+    **Data Source:** local Knowledge storage
     **Attribution:** All creature data © CipSoft GmbH, compiled by TibiaWiki community
     """
-    data = tibiawiki_service.get_creature_data(creature_name)
+    data = db.query(Creature).filter(
+        Creature.normalized_name == normalize_search_text(creature_name),
+        Creature.is_hidden.is_(False),
+    ).first()
     
     if not data:
         return {
@@ -360,7 +396,19 @@ async def get_creature_from_wiki(creature_name: str):
     
     return {
         "creature_name": creature_name,
-        "source": "TibiaWiki (tibia.fandom.com)",
-        "data": data,
+        "source": "local canonical Knowledge",
+        "data": {
+            "id": data.id, "name": data.name, "slug": data.slug,
+            "canonical_id": data.knowledge_entity_id, "external_id": data.external_id,
+            "source_provider": data.source_name, "source_url": data.source_url,
+            "supplied_fields": list(data.supplied_fields or []),
+            "missing_fields": list(data.missing_fields or []),
+            "data_version": data.data_version, "last_synced_at": data.last_synced_at,
+            "hitpoints": data.hitpoints, "experience": data.experience,
+            "armor": data.armor, "speed": data.speed,
+            "description": data.description, "behavior": data.behavior,
+            "locations": list(data.locations or []),
+            "loot": [{"name": row.item_name, "chance": row.percentage, "rarity": row.rarity} for row in data.loot_items],
+        },
         "attribution": "Tibia and all related content © CipSoft GmbH"
     }

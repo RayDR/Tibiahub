@@ -59,8 +59,8 @@ class Item(Base):
     vocation_requirements = Column(JSONBType, nullable=False, default=list)
     
     # Classification
-    tradeable = Column(Boolean, default=True)
-    stackable = Column(Boolean, default=False)
+    tradeable = Column(Boolean, nullable=True)
+    stackable = Column(Boolean, nullable=True)
     buy_from = Column(JSONBType, nullable=False, default=list)
     sell_to = Column(JSONBType, nullable=False, default=list)
     rewards_from = Column(JSONBType, nullable=False, default=list)

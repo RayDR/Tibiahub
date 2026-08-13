@@ -5,6 +5,8 @@ from PIL import Image
 
 from app.core.config import settings
 from app.models.hunt_zone import HuntZone
+from app.knowledge.models import KnowledgeEntity, KnowledgeEntityType
+from app.models.world_map import WorldMapDataset, WorldMapMarker
 from app.services.world_map_sync_service import WorldMapSyncService
 
 
@@ -15,6 +17,7 @@ def _source(root: Path) -> Path:
     (data / "markers.json").write_text(json.dumps([
         {"x": 32728, "y": 32875, "z": 7, "description": "To Iksupan", "icon": "arrowup"},
         {"x": 34038, "y": 31726, "z": 10, "description": "Iksupan Undercity", "icon": "star"},
+        {"x": 34039, "y": 31727, "z": 10, "description": "Iksupan", "icon": "star"},
         {"x": 32369, "y": 32241, "z": 7, "description": "Thais", "icon": "flag"},
     ]), encoding="utf-8")
     for floor in range(16):
@@ -25,12 +28,19 @@ def _source(root: Path) -> Path:
 
 def test_local_import_bootstrap_exact_hunt_and_no_runtime_provider_request(client, db, tmp_path, monkeypatch):
     storage = tmp_path / "world-maps"; source = _source(tmp_path)
+    db.add_all([
+        KnowledgeEntityType(entity_type="town", display_name="Town"),
+        KnowledgeEntityType(entity_type="hunt_zone", display_name="Hunt Zone"),
+    ]); db.flush()
+    thais = KnowledgeEntity(entity_type="town", canonical_name="Thais", slug="thais", language_neutral_id="town:test:thais")
+    iksupan = KnowledgeEntity(entity_type="hunt_zone", canonical_name="Iksupan", slug="iksupan", language_neutral_id="hunt:test:iksupan")
+    db.add_all([thais, iksupan]); db.flush()
     result = WorldMapSyncService(db, storage).import_directory(source, upstream_commit="d" * 40)
-    assert result["floor_count"] == 16 and result["marker_count"] == 3
+    assert result["floor_count"] == 16 and result["marker_count"] == 4
     manifest = Path(result["storage_path"]) / "manifest.json"
     assert manifest.is_file() and result["manifest"]["floors"][7]["map_sha256"]
     monkeypatch.setattr(settings, "WORLD_MAP_STORAGE_ROOT", str(storage))
-    zone = HuntZone(name="Iksupan", normalized_name="iksupan", slug="iksupan", min_level=1)
+    zone = HuntZone(name="Iksupan", normalized_name="iksupan", slug="iksupan", min_level=1, knowledge_entity_id=iksupan.uuid)
     db.add(zone); db.commit()
 
     # Any runtime provider request would fail this test; public routes only read DB/files.
@@ -43,5 +53,30 @@ def test_local_import_bootstrap_exact_hunt_and_no_runtime_provider_request(clien
     floor = client.get("/api/v1/map/floors/7/image")
     assert floor.status_code == 200 and floor.headers["x-map-source"] == "local-world-map-cache"
     search = client.get("/api/v1/map/search", params={"q": "Iksupan", "layers": "hunt_zone"}).json()["items"][0]
-    assert (search["x"], search["y"], search["z"]) == (34038, 31726, 10)
-    assert search["marker_label"] == "Iksupan Undercity"
+    assert (search["x"], search["y"], search["z"]) == (34039, 31727, 10)
+    assert search["marker_label"] == "Iksupan"
+
+
+def test_tibiamaps_stored_dataset_renormalizes_and_only_exact_names_link(db, tmp_path):
+    entity_type = KnowledgeEntityType(entity_type="town", display_name="Town")
+    db.add(entity_type); db.flush()
+    thais = KnowledgeEntity(
+        entity_type="town", canonical_name="Thais", slug="thais", language_neutral_id="town:test:thais",
+    )
+    db.add(thais); db.flush()
+    storage, source = tmp_path / "world-maps", _source(tmp_path)
+    service = WorldMapSyncService(db, storage)
+    imported = service.import_directory(source, upstream_commit="e" * 40)
+    dataset_id = imported["dataset_id"]
+    markers = db.query(WorldMapMarker).all()
+    exact = next(row for row in markers if row.description == "Thais")
+    similar = next(row for row in markers if row.description == "Iksupan Undercity")
+    assert exact.resolved_entity_id == thais.uuid
+    assert exact.resolution_method == "exact_canonical_name_or_alias"
+    assert similar.resolved_entity_id is None
+
+    replayed = service.renormalize_dataset(upstream_commit="e" * 40)
+    assert replayed["normalization_source"] == "stored_immutable_dataset"
+    assert replayed["dataset_id"] == dataset_id
+    assert db.query(WorldMapDataset).filter_by(is_current=True).one().upstream_commit == "e" * 40
+    assert db.query(WorldMapMarker).count() == 4

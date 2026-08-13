@@ -360,10 +360,14 @@ def test_local_npc_and_location_apis_never_call_provider(client, db, named_regis
     assert client.get("/api/v1/npcs/", params={"search": "Angus"}).json()[0]["name"] == "Angus"
     npc = client.get("/api/v1/npcs/angus")
     assert npc.status_code == 200 and npc.json()["occupation"] == "Recruiter"
+    assert npc.json()["canonical_id"] == npc.json()["knowledge_entity_id"]
+    assert npc.json()["source_provider"] == "tibiawiki"
+    assert "occupation" in npc.json()["supplied_fields"]
     assert "provider_metadata" not in npc.json()
     location = client.get("/api/v1/locations/port-hope")
     assert location.status_code == 200 and location.json()["region"] == "Tiquanda"
     assert location.json()["entity_type"] == "town"
+    assert location.json()["canonical_id"] == location.json()["knowledge_entity_id"]
     assert client.get("/api/v1/locations/not-present").status_code == 404
 
 

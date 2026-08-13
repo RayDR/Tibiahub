@@ -21,8 +21,15 @@ from app.services.text_utils import normalize_search_text
 
 router = APIRouter(prefix="/quests", tags=["quests"])
 
+_QUEST_COMPLETENESS_FIELDS = {
+    "description", "summary", "minimum_level", "maximum_level", "experience_reward",
+    "premium_required", "repeatable", "starting_npcs", "missions", "locations",
+}
+
 
 def _summary(row: TibiaWikiQuest) -> QuestSearchResult:
+    metadata = row.parser_metadata if isinstance(row.parser_metadata, dict) else {}
+    supplied = sorted(set(metadata.get("supplied_fields") or []))
     return QuestSearchResult(
         id=row.id, name=row.name, slug=row.slug, description=row.summary or row.description,
         group_name=row.group_name, parent_page=row.parent_page, is_group=bool(row.is_group),
@@ -30,6 +37,11 @@ def _summary(row: TibiaWikiQuest) -> QuestSearchResult:
         location=row.location, npc=row.npc, source_url=row.source_url, category=row.category,
         quest_type=row.quest_type, premium_required=row.premium_required,
         repeatable=row.repeatable, last_synced_at=row.last_synced_at,
+        knowledge_entity_id=row.knowledge_entity_id, canonical_id=row.knowledge_entity_id,
+        external_id=row.external_id, source_provider=row.source_name,
+        supplied_fields=supplied,
+        missing_fields=sorted(_QUEST_COMPLETENESS_FIELDS - set(supplied)),
+        data_version=row.data_version or 1,
     )
 
 
@@ -153,12 +165,16 @@ def get_quest_detail(identifier: str, response: Response, db: Session = Depends(
             }.get(relation.relationship_type, relation.relationship_type.removeprefix("mission_"))
             mission_id = relation.source_scope.removeprefix("mission:") if relation.source_scope.startswith("mission:") else None
             relations.append({
+                "canonical_id": relation.relationship_id,
                 "relation_type": relation_type,
+                "target_canonical_id": relation.target_entity_id,
                 "target_entity_type": relation.target_type,
                 "target_name": relation.target_name,
                 "resolution_status": relation.resolution_state,
                 "target_slug": relation.target_slug,
                 "mission_id": mission_id,
+                "source_providers": list(relation.contributing_providers),
+                "last_synced_at": relation.freshness,
             })
             if relation.target_entity_id and relation.target_type in {"creature", "boss"}:
                 creature = db.query(Creature).filter_by(knowledge_entity_id=relation.target_entity_id).first()
@@ -168,8 +184,14 @@ def get_quest_detail(identifier: str, response: Response, db: Session = Depends(
                         is_boss=bool(creature.is_boss), classification=creature.classification,
                         image_url=creature.image_url,
                     ))
+    mission_expected = {"title", "description", "objectives", "required_items", "rewarded_items", "related_npcs", "related_creatures", "locations"}
     missions = [{
-        "id": mission.id, "external_id": mission.external_id, "title": mission.title,
+        "id": mission.id, "canonical_id": mission.id, "external_id": mission.external_id,
+        "source_provider": mission.provider_id, "source_url": quest.source_url,
+        "supplied_fields": sorted(set(mission.supplied_fields or [])),
+        "missing_fields": sorted(mission_expected - set(mission.supplied_fields or [])),
+        "data_version": quest.data_version or 1, "last_synced_at": mission.updated_at or mission.created_at,
+        "title": mission.title,
         "sequence": mission.sequence, "description": mission.description,
         "objectives": list(mission.objectives or []), "required_items": _safe_named(mission.required_items),
         "rewarded_items": _safe_named(mission.rewarded_items), "related_npcs": _safe_named(mission.related_npcs),
@@ -179,10 +201,10 @@ def get_quest_detail(identifier: str, response: Response, db: Session = Depends(
     rewarded_items = _safe_named(quest.rewarded_items)
     required_quests = _safe_named(quest.required_quests)
     return QuestDetail(
-        **_summary(quest).model_dump(), knowledge_entity_id=quest.knowledge_entity_id,
+        **_summary(quest).model_dump(),
         summary=quest.summary, image_url=quest.image_url,
         difficulty=quest.difficulty, duration=quest.duration, solo_possible=quest.solo_possible,
-        data_version=quest.data_version, starting_npcs=_safe_named(quest.starting_npcs),
+        starting_npcs=_safe_named(quest.starting_npcs),
         related_npcs=_safe_named(quest.related_npcs), required_items=required_items,
         rewarded_items=rewarded_items, required_quests=required_quests,
         unlocked_quests=_safe_named(quest.unlocked_quests), required_creatures=_safe_named(quest.required_creatures),

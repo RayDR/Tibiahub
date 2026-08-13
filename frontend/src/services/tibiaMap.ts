@@ -16,7 +16,7 @@ export interface WorldMapFloor {
 }
 export interface HuntZoneMapContext {
   hunt_zone: TibiaMapResult;
-  creatures: Array<{ id: number; name: string; slug?: string; image_url: string; hitpoints: number; experience: number; geometry_status: string }>;
+  creatures: Array<{ id: number; name: string; slug?: string; image_url: string; hitpoints: number | null; experience: number | null; geometry_status: string }>;
   markers: Array<{ x: number; y: number; z?: number; name: string; image_url?: string }>;
   routes: Array<{ id: string; name: string; points: Array<{ x: number; y: number; z?: number }> }>;
 }

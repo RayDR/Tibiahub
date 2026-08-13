@@ -181,8 +181,12 @@ def test_local_apis_are_bounded_network_free_and_steps_are_ordered(client, db, s
 
     location_response = client.get("/api/v1/spatial/locations/carlin-depot")
     assert location_response.status_code == 200 and location_response.json()["points"][0]["id"] == str(point.id)
+    assert location_response.json()["points"][0]["canonical_id"]
+    assert location_response.json()["points"][0]["source_provider"] == point.source_provider_id
     route_response = client.get(f"/api/v1/spatial/routes/{route.id}")
     assert route_response.status_code == 200
+    assert route_response.json()["canonical_id"]
+    assert route_response.json()["source_provider"] == route.source_provider_id
     assert [step["sequence"] for step in route_response.json()["steps"]] == [1, 2]
     entity_response = client.get(f"/api/v1/spatial/entities/{location.uuid}")
     assert entity_response.status_code == 200 and entity_response.json()["items"]

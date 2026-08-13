@@ -293,7 +293,11 @@ def test_local_quest_api_orders_missions_filters_and_never_needs_network(client,
     detail = client.get("/api/v1/quests/explorer-society-quest")
     assert detail.status_code == 200
     payload = detail.json()
+    assert payload["canonical_id"] == payload["knowledge_entity_id"]
+    assert payload["source_provider"] == "tibiawiki"
+    assert "missions" in payload["supplied_fields"]
     assert [mission["sequence"] for mission in payload["missions"]] == [1, 2]
+    assert all(mission["canonical_id"] and mission["source_provider"] == "tibiawiki" for mission in payload["missions"])
     resolved = {
         (relationship["relation_type"], relationship["target_name"]): relationship
         for relationship in payload["relationships"]

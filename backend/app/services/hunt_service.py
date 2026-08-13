@@ -103,7 +103,7 @@ class HuntRecommendationService:
                 reasons.append("Good level match")
             elif level_diff <= 20:
                 score += 10 - (level_diff - 10) * 0.5
-        else:
+        elif zone.min_level is not None:
             # Use min/max levels if no recommended level
             mid_level = zone.min_level + ((zone.max_level or zone.min_level + 50) - zone.min_level) / 2
             level_diff = abs(level - mid_level)

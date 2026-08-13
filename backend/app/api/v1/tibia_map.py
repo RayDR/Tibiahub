@@ -11,7 +11,7 @@ from sqlalchemy.orm import Session, selectinload
 from app.core.config import settings
 from app.db.database import get_db
 from app.knowledge.models import (
-    KnowledgeRelationship, SpatialEntityLocationLink, SpatialMapPoint,
+    KnowledgeEntity, KnowledgeRelationship, SpatialEntityLocationLink, SpatialMapPoint,
     SpatialMapRegion, SpatialRoute,
 )
 from app.models.creature import Creature
@@ -59,33 +59,30 @@ def _bounds(value) -> dict | None:
     return result if all(isinstance(item, (int, float)) for item in result.values()) else None
 
 
-def _best_marker(db: Session, name: str) -> WorldMapMarker | None:
+def _best_marker(db: Session, name: str, *, entity_uuid=None, entity_type: str | None = None) -> WorldMapMarker | None:
     normalized = normalize_search_text(name)
     if not normalized:
         return None
-    candidates = db.query(WorldMapMarker).join(WorldMapFloor).filter(
+    query = db.query(WorldMapMarker).join(WorldMapFloor).filter(
         WorldMapFloor.is_current.is_(True),
-        WorldMapMarker.normalized_description.ilike(f"%{normalized}%"),
-    ).limit(40).all()
-
-    def rank(marker: WorldMapMarker) -> tuple:
-        value = marker.normalized_description
-        prefix = value.startswith(("to ", "teleport to "))
-        if value == normalized:
-            score = 0
-        elif not prefix and value.startswith(normalized + " "):
-            score = 1
-        elif not prefix:
-            score = 2
-        else:
-            score = 3
-        return score, len(value), marker.source_index
-
-    return min(candidates, key=rank, default=None)
+        WorldMapMarker.normalized_description == normalized,
+        WorldMapMarker.resolution_state == "resolved",
+    )
+    # Once the local entity has a canonical identity, only a marker explicitly
+    # resolved to that identity may place it. Name containment is never enough.
+    if entity_uuid is not None:
+        query = query.filter(WorldMapMarker.resolved_entity_id == entity_uuid)
+    elif entity_type is not None:
+        query = query.join(
+            KnowledgeEntity, KnowledgeEntity.uuid == WorldMapMarker.resolved_entity_id,
+        ).filter(KnowledgeEntity.entity_type == entity_type)
+    else:
+        return None
+    return query.order_by(WorldMapMarker.source_index.asc()).first()
 
 
 def _zone_result(db: Session, zone: HuntZone, creature_count: int | None = None) -> dict:
-    marker = _best_marker(db, zone.name)
+    marker = _best_marker(db, zone.name, entity_uuid=zone.knowledge_entity_id)
     bounds = _bounds(zone.map_bounds)
     # WorldMapMarker is preferred because it uses the same coordinate contract
     # as the floor PNG. Legacy hunt-zone geometry remains a verified fallback.
@@ -165,7 +162,7 @@ def map_bootstrap(floor: int = Query(7, ge=0, le=15), db: Session = Depends(get_
     selected = next((row for row in floors if row.floor == floor), None)
     towns = []
     for name in KNOWN_TOWNS:
-        marker = _best_marker(db, name)
+        marker = _best_marker(db, name, entity_type="town")
         if marker:
             towns.append({"id": f"town:{normalize_search_text(name).replace(' ', '-')}", "entity_type": "town", "name": name, "x": marker.x, "y": marker.y, "z": marker.floor, "geometry_status": "mapped"})
     return {"world_map": _floor_payload(selected) if selected else None, "available_floors": [row.floor for row in floors], "towns": towns}

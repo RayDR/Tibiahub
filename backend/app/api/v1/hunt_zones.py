@@ -58,6 +58,12 @@ def _access_quest_names(zone: HuntZoneModel, location: TibiaWikiLocation | None)
     raw_names = metadata.get("access_quest_names") or []
     if isinstance(raw_names, list):
         names.extend(str(value or "").strip() for value in raw_names if str(value or "").strip())
+    raw_zone_metadata = getattr(zone, "provider_metadata", None)
+    zone_metadata = raw_zone_metadata if isinstance(raw_zone_metadata, dict) else {}
+    zone_canonical = zone_metadata.get("canonical") if isinstance(zone_metadata.get("canonical"), dict) else {}
+    zone_names = zone_canonical.get("access_quests") or []
+    if isinstance(zone_names, list):
+        names.extend(str(value or "").strip() for value in zone_names if str(value or "").strip())
     deduped: dict[str, str] = {}
     for name in names:
         normalized = normalize_search_text(name)
@@ -93,15 +99,25 @@ def _zone_access(zone: HuntZoneModel, location: TibiaWikiLocation | None, quest_
     maximum_level = location.maximum_level if location else None
 
     # Legacy False defaults are not evidence that Premium is not required.
+    zone_supplied = set(getattr(zone, "supplied_fields", None) or [])
     if zone.requires_premium or quest_requires_premium:
         premium_required: bool | None = True
+    elif "premium_required" in zone_supplied and zone.requires_premium is False:
+        premium_required = False
     elif location is not None:
         premium_required = location.premium_required
     else:
         premium_required = None
 
-    quest_required = True if zone.requires_quest or quests else None
-    notes = location.access_notes if location else None
+    quest_required = (
+        True if zone.requires_quest is True or quests
+        else False if zone.requires_quest is False and "access_quests" in zone_supplied
+        else None
+    )
+    raw_zone_metadata = getattr(zone, "provider_metadata", None)
+    zone_metadata = raw_zone_metadata if isinstance(raw_zone_metadata, dict) else {}
+    zone_canonical = zone_metadata.get("canonical") if isinstance(zone_metadata.get("canonical"), dict) else {}
+    notes = location.access_notes if location else zone_canonical.get("access_notes")
     has_restriction = bool((minimum_level is not None and minimum_level > 0) or premium_required is True or quest_required is True)
     has_evidence = bool(minimum_level is not None or maximum_level is not None or premium_required is not None or quest_required is not None or notes)
     return HuntZoneAccess(
@@ -138,8 +154,24 @@ def _zone_details(db: Session, zones: list[HuntZoneModel]) -> list[dict]:
             payload["min_level"] = location.minimum_level
         if payload.get("max_level") is None and location and location.maximum_level is not None:
             payload["max_level"] = location.maximum_level
-        payload["requires_premium"] = bool(payload.get("requires_premium") or access.premium_required is True)
-        payload["requires_quest"] = bool(payload.get("requires_quest") or access.quest_required is True)
+        if access.premium_required is True:
+            payload["requires_premium"] = True
+        if access.quest_required is True:
+            payload["requires_quest"] = True
+        canonical = zone.raw_data if isinstance(zone.raw_data, dict) else {}
+        recommendations = canonical.get("vocation_recommendations")
+        payload["vocation_recommendations"] = recommendations if isinstance(recommendations, dict) else None
+        supplied = list(zone.supplied_fields or []) if zone.supplied_fields is not None else None
+        payload["supplied_fields"] = supplied
+        expected = {
+            "city", "location", "vocation_recommendations", "creatures", "access_notes",
+            "access_quests", "premium_required", "experience", "loot", "map_references",
+            "source_reference",
+        }
+        payload["missing_fields"] = sorted(expected - set(supplied or [])) if supplied is not None else sorted(expected)
+        payload["data_sources"] = sorted({
+            value for value in (zone.source_provider, zone.source_name) if value
+        }) or None
         if access.quests:
             primary = access.quests[0]
             payload["quest_id"] = primary.id
@@ -418,7 +450,10 @@ async def create_hunt_zone(
     
     # ``quest_name`` is a response/display convenience; the persisted relation
     # is ``quest_id`` and is intentionally managed by knowledge workflows.
-    db_zone = HuntZoneModel(**zone.model_dump(exclude={"quest_name", "quest_slug"}))
+    db_zone = HuntZoneModel(**zone.model_dump(exclude={
+        "quest_name", "quest_slug", "vocation_recommendations", "canonical_id",
+        "missing_fields", "data_sources",
+    }))
     db.add(db_zone)
     db.flush()
     db.add(WorkspaceAudit(

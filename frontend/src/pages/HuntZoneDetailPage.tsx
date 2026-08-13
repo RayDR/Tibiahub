@@ -45,7 +45,7 @@ export default function HuntZoneDetailPage() {
   if (!zone || error) return <Page><div className="rounded-2xl border border-danger/25 bg-danger-subtle p-6 text-danger"><h1 className="text-xl font-bold">{t('huntZoneDetail.unavailable')}</h1><p className="mt-2">{t('huntZoneDetail.notFound')}</p></div></Page>;
 
   const back = (location.state as { from?: string } | null)?.from || '/cyclopedia?tab=zones';
-  const levelRange = zone.min_level > 0 ? (zone.max_level ? `${zone.min_level}–${zone.max_level}` : `${zone.min_level}+`) : null;
+  const levelRange = zone.min_level != null && zone.min_level > 0 ? (zone.max_level ? `${zone.min_level}–${zone.max_level}` : `${zone.min_level}+`) : null;
   const accessMinimumLevel = zone.access?.minimum_level ?? null;
   const accessMaximumLevel = zone.access?.maximum_level ?? null;
   const accessLevelRange = accessMinimumLevel ? (accessMaximumLevel ? `${accessMinimumLevel}–${accessMaximumLevel}` : `${accessMinimumLevel}+`) : null;

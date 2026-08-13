@@ -9,6 +9,7 @@ from app.knowledge.dto.npc_location import (
     LocationKnowledgeDTO, NamedKnowledgeReference, NpcKnowledgeDTO, NpcTradeReference,
 )
 from app.knowledge.dto.spatial import MapPointDTO, MapRegionDTO, RouteDTO, RouteStepDTO
+from app.knowledge.dto.hunt_zone import HuntVocationRecommendation, HuntZoneKnowledgeDTO
 
 __all__ = [
     "CreatureKnowledgeDTO",
@@ -29,4 +30,6 @@ __all__ = [
     "MapRegionDTO",
     "RouteDTO",
     "RouteStepDTO",
+    "HuntVocationRecommendation",
+    "HuntZoneKnowledgeDTO",
 ]

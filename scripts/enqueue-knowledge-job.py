@@ -33,6 +33,9 @@ def arguments() -> argparse.Namespace:
     parser.add_argument("--quest-name")
     parser.add_argument("--npc-name")
     parser.add_argument("--location-name")
+    parser.add_argument("--hunt-zone-name")
+    parser.add_argument("--character-name")
+    parser.add_argument("--guild-name")
     parser.add_argument("--batch-limit", type=int)
     parser.add_argument("--confirm-catalog-sync", action="store_true")
     parser.add_argument("--allow-completed-recreate", action="store_true")
@@ -40,7 +43,10 @@ def arguments() -> argparse.Namespace:
 
 
 def request_values(args: argparse.Namespace) -> tuple[dict, dict]:
-    if args.job_type in {"creature_catalog", "item_catalog", "quest_catalog", "npc_catalog", "location_catalog"}:
+    if args.job_type in {
+        "creature_catalog", "item_catalog", "quest_catalog", "npc_catalog",
+        "location_catalog", "route_catalog", "hunt_zone_catalog",
+    }:
         if not args.confirm_catalog_sync:
             raise SystemExit("Catalog jobs require --confirm-catalog-sync.")
         if args.batch_limit is None:
@@ -85,6 +91,24 @@ def request_values(args: argparse.Namespace) -> tuple[dict, dict]:
             for key, value in {"external_id": args.external_id, "page_title": args.location_name}.items()
             if value
         }
+    if args.job_type in {"hunt_zone_detail", "hunt_zone_renormalize"}:
+        return {}, {
+            key: value
+            for key, value in {"external_id": args.external_id, "page_title": args.hunt_zone_name}.items()
+            if value
+        }
+    if args.job_type in {"character_detail", "character_renormalize"}:
+        value = args.external_id if args.job_type.endswith("_renormalize") else args.character_name
+        key = "external_id" if args.job_type.endswith("_renormalize") else "name"
+        return {}, {key: value} if value else {}
+    if args.job_type in {"guild_detail", "guild_renormalize"}:
+        value = args.external_id if args.job_type.endswith("_renormalize") else args.guild_name
+        key = "external_id" if args.job_type.endswith("_renormalize") else "name"
+        return {}, {key: value} if value else {}
+    if args.job_type == "world_catalog":
+        return {}, {}
+    if args.job_type == "world_renormalize":
+        return {}, {"external_id": args.external_id} if args.external_id else {}
     return {}, {
         key: value
         for key, value in {
