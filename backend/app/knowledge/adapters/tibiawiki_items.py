@@ -112,10 +112,15 @@ def _list_param(params: dict[str, str], *keys: str) -> tuple[tuple[str, ...], bo
     raw, supplied = _first_param(params, *keys)
     if raw is None:
         return (), supplied
+
+    text = _strip_markup(raw).strip()
+    if text == "--":
+        return (), supplied
+
     linked = _extract_links(raw)
     if linked:
         return tuple(dict.fromkeys(item.strip() for item in linked if item.strip())), supplied
-    text = _strip_markup(raw)
+
     values = [item.strip() for item in re.split(r"[,;/]", text) if item.strip()]
     return tuple(dict.fromkeys(values)), supplied
 
