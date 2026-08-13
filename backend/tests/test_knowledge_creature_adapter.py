@@ -131,14 +131,20 @@ def test_catalog_marks_invalid_members_as_partial_without_losing_valid_children(
     class PartialCatalogClient(FixtureCreatureClient):
         def fetch_catalog(self, *, continuation: str | None, limit: int) -> dict:
             value = super().fetch_catalog(continuation=continuation, limit=limit)
-            value["query"]["categorymembers"].append({"pageid": None, "title": "Invalid"})
+            value["query"]["categorymembers"].extend(
+                [
+                    {"pageid": None, "title": "Invalid"},
+                    {"pageid": 107180, "title": "List of Creatures by Armor Value"},
+                    {"pageid": 64179, "title": "List of Creatures (Ordered)"},
+                ]
+            )
             return value
 
     result = TibiaWikiCreatureAdapter(PartialCatalogClient()).fetch(
         request("creature_catalog", scope={"batch_limit": 3})
     )
     assert result.partial is True
-    assert result.provider_metadata["invalid_members"] == 1
+    assert result.provider_metadata["invalid_members"] == 3
     assert [child.payload.get("external_id") for child in result.child_jobs[:2]] == ["321", "654"]
 
 

@@ -310,19 +310,23 @@ def test_non_creature_catalog_pages_are_hidden(db):
     navigation = make_creature(
         "Bestiary/Classes"
     )
+    creature_list = make_creature(
+        "List of Creatures by Armor Value"
+    )
     real_creature = make_creature(
         "Real Creature"
     )
 
     db.add_all(
-        [navigation, real_creature]
+        [navigation, creature_list, real_creature]
     )
     db.flush()
 
     changed = hide_non_creature_catalog_rows(db)
 
-    assert changed == 1
+    assert changed == 2
     assert navigation.is_hidden is True
+    assert creature_list.is_hidden is True
     assert real_creature.is_hidden is False
 
 
