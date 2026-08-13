@@ -236,11 +236,22 @@ def _bridge_item(db: Session, entity: KnowledgeEntity, dto: ItemKnowledgeDTO) ->
     protected = set(item.protected_fields or [])
     canonical_changed = False
 
-    def assign(field: str, value, *, supplied: str | None = None) -> None:
+    def assign(
+        field: str,
+        value,
+        *,
+        supplied: str | None = None,
+        clear_if_supplied: bool = False,
+    ) -> None:
         nonlocal canonical_changed
-        if field in protected or value in (None, "", [], {}):
+        if field in protected:
             return
         if supplied is not None and supplied not in dto.supplied_fields:
+            return
+        if (
+            value in (None, "", [], {})
+            and not (clear_if_supplied and supplied is not None)
+        ):
             return
         if dto.is_partial and not created and getattr(item, field) not in (None, "", [], {}):
             return
@@ -271,17 +282,47 @@ def _bridge_item(db: Session, entity: KnowledgeEntity, dto: ItemKnowledgeDTO) ->
     assign("armor", dto.armor, supplied="armor")
     assign("range", dto.range, supplied="range")
     assign("level_required", dto.level_requirement, supplied="level_requirement")
-    assign("vocation_requirements", list(dto.vocation_requirements), supplied="vocation_requirements")
-    assign("vocation_required", ", ".join(dto.vocation_requirements), supplied="vocation_requirements")
-    assign("slots", list(dto.slots), supplied="slots")
+    assign(
+        "vocation_requirements",
+        list(dto.vocation_requirements),
+        supplied="vocation_requirements",
+        clear_if_supplied=True,
+    )
+    assign(
+        "vocation_required",
+        ", ".join(dto.vocation_requirements) or None,
+        supplied="vocation_requirements",
+        clear_if_supplied=True,
+    )
+    assign("slots", list(dto.slots), supplied="slots", clear_if_supplied=True)
     assign("imbuement_slots", dto.imbuement_slots, supplied="imbuement_slots")
-    assign("attributes", dict(dto.attributes), supplied="attributes")
-    assign("resistances", dict(dto.resistances), supplied="resistances")
-    assign("bonuses", dict(dto.bonuses), supplied="bonuses")
-    assign("buy_from", [asdict(reference) for reference in dto.buy_from], supplied="buy_from")
-    assign("sell_to", [asdict(reference) for reference in dto.sell_to], supplied="sell_to")
-    assign("rewards_from", list(dto.rewards_from), supplied="rewards_from")
-    assign("required_for", list(dto.required_for), supplied="required_for")
+    assign("attributes", dict(dto.attributes), supplied="attributes", clear_if_supplied=True)
+    assign("resistances", dict(dto.resistances), supplied="resistances", clear_if_supplied=True)
+    assign("bonuses", dict(dto.bonuses), supplied="bonuses", clear_if_supplied=True)
+    assign(
+        "buy_from",
+        [asdict(reference) for reference in dto.buy_from],
+        supplied="buy_from",
+        clear_if_supplied=True,
+    )
+    assign(
+        "sell_to",
+        [asdict(reference) for reference in dto.sell_to],
+        supplied="sell_to",
+        clear_if_supplied=True,
+    )
+    assign(
+        "rewards_from",
+        list(dto.rewards_from),
+        supplied="rewards_from",
+        clear_if_supplied=True,
+    )
+    assign(
+        "required_for",
+        list(dto.required_for),
+        supplied="required_for",
+        clear_if_supplied=True,
+    )
     assign("tradeable", dto.tradeable, supplied="tradeable")
     assign("stackable", dto.stackable, supplied="stackable")
 

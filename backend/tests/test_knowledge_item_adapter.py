@@ -278,6 +278,32 @@ def test_item_mapping_reuses_uuid_updates_and_versions_only_canonical_changes(db
     assert item.attack == 49 and item.data_version == 2
 
 
+
+def test_item_explicit_empty_list_clears_stale_bridge_value(db, item_registry):
+    _apply_detail(db, fixture("tibiawiki_item_detail.json"))
+    item = db.query(Item).one()
+
+    assert item.buy_from == [
+        {"name": "A Sweaty Cyclops", "price": None, "location": None}
+    ]
+    assert item.data_version == 1
+
+    raw = fixture("tibiawiki_item_detail.json")
+    raw["parse"]["wikitext"]["*"] = raw["parse"]["wikitext"]["*"].replace(
+        "| buyfrom = [[A Sweaty Cyclops]]",
+        "| buyfrom = --",
+    )
+
+    applied = _apply_detail(db, raw)
+
+    assert applied.status == "updated"
+    assert item.buy_from == []
+    assert item.sell_to == [
+        {"name": "Rashid", "price": None, "location": None}
+    ]
+    assert item.data_version == 2
+
+
 def test_item_partial_missing_and_protected_fields_do_not_erase_good_values(db, item_registry):
     _apply_detail(db, fixture("tibiawiki_item_detail.json"))
     item = db.query(Item).one()
