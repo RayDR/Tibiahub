@@ -173,6 +173,25 @@ def test_item_detail_maps_real_fields_categories_and_unknown_envelope():
     assert dto.provider_metadata["provider_category"] == "Weapon"
 
 
+
+def test_item_detail_treats_double_dash_list_placeholder_as_empty():
+    raw = fixture("tibiawiki_item_detail.json")
+    raw["parse"]["wikitext"]["*"] = raw["parse"]["wikitext"]["*"].replace(
+        "| buyfrom = [[A Sweaty Cyclops]]",
+        "| buyfrom = --",
+    )
+
+    adapter = TibiaWikiItemAdapter(FixtureItemClient())
+    document = _document(raw)
+
+    normalized = adapter.normalize(document, normalization_context())
+    dto = ItemKnowledgeDTO.from_canonical_data(normalized.canonical_data)
+
+    assert dto.buy_from == ()
+    assert [reference.name for reference in dto.sell_to] == ["Rashid"]
+    assert "buy_from" in dto.supplied_fields
+
+
 def test_item_enqueue_requires_bounded_catalog_and_safe_identifiers():
     adapter = TibiaWikiItemAdapter(FixtureItemClient())
     with pytest.raises(ValueError, match="batch_limit"):
