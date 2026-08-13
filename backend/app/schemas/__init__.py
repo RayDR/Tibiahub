@@ -2,7 +2,7 @@
 from __future__ import annotations
 
 from pydantic import BaseModel, ConfigDict, Field
-from typing import List, Optional
+from typing import Any, Dict, List, Optional
 from enum import Enum
 from datetime import datetime
 from uuid import UUID
@@ -73,24 +73,25 @@ class HuntZoneBase(BaseModel):
     max_level: Optional[int] = None
     recommended_level: Optional[int] = None
     recommended_vocations: Optional[List[str]] = None
+    vocation_recommendations: Optional[Dict[str, Dict[str, Optional[int]]]] = None
     recommended_party_size: Optional[str] = None
     exp_rating: Optional[str] = None
     profit_rating: Optional[str] = None
     danger_rating: Optional[str] = None
-    knights_recommended: bool = False
-    paladins_recommended: bool = False
-    sorcerers_recommended: bool = False
-    druids_recommended: bool = False
-    monks_recommended: bool = False  # Winter Update 2025
+    knights_recommended: Optional[bool] = None
+    paladins_recommended: Optional[bool] = None
+    sorcerers_recommended: Optional[bool] = None
+    druids_recommended: Optional[bool] = None
+    monks_recommended: Optional[bool] = None  # Winter Update 2025
     size: Optional[str] = None
     difficulty: Optional[str] = None
     avg_exp_hour: Optional[int] = None
     avg_profit_hour: Optional[int] = None
-    requires_quest: bool = False
+    requires_quest: Optional[bool] = None
     quest_id: Optional[int] = None
     quest_name: Optional[str] = None
     quest_slug: Optional[str] = None
-    requires_premium: bool = False
+    requires_premium: Optional[bool] = None
     description: Optional[str] = None
     tips: Optional[str] = None
     location_x: Optional[int] = None
@@ -103,6 +104,14 @@ class HuntZoneBase(BaseModel):
     map_image_url: Optional[str] = None
     source_url: Optional[str] = None
     source_provider: Optional[str] = None
+    source_name: Optional[str] = None
+    external_id: Optional[str] = None
+    knowledge_entity_id: Optional[UUID] = None
+    canonical_id: Optional[UUID] = None
+    supplied_fields: Optional[List[str]] = None
+    missing_fields: Optional[List[str]] = None
+    data_sources: Optional[List[str]] = None
+    data_version: Optional[int] = None
 
 
 class HuntZoneCreate(HuntZoneBase):
@@ -117,19 +126,46 @@ class HuntZoneSimple(BaseModel):
     min_level: Optional[int] = None
     max_level: Optional[int] = None
     difficulty: Optional[str] = None
-    requires_quest: bool = False
+    requires_quest: Optional[bool] = None
     quest_id: Optional[int] = None
     quest_name: Optional[str] = None
     quest_slug: Optional[str] = None
     source_url: Optional[str] = None
+    canonical_id: Optional[UUID] = None
+    knowledge_entity_id: Optional[UUID] = None
+    external_id: Optional[str] = None
+    source_provider: Optional[str] = None
+    supplied_fields: Optional[List[str]] = None
+    missing_fields: Optional[List[str]] = None
+    data_version: Optional[int] = None
+    last_synced_at: Optional[datetime] = None
     
     model_config = ConfigDict(from_attributes=True)
+
+
+class HuntZoneAccessQuest(BaseModel):
+    id: Optional[int] = None
+    name: str
+    slug: Optional[str] = None
+
+
+class HuntZoneAccess(BaseModel):
+    status: str = "unknown"
+    minimum_level: Optional[int] = None
+    maximum_level: Optional[int] = None
+    premium_required: Optional[bool] = None
+    quest_required: Optional[bool] = None
+    quests: List[HuntZoneAccessQuest] = Field(default_factory=list)
+    notes: Optional[str] = None
+    source_provider: Optional[str] = None
+    source_url: Optional[str] = None
 
 
 class HuntZone(HuntZoneBase):
     id: int
     creatures: List[CreatureSimple] = []
     creature_spawns: List[SpawnLocation] = []
+    access: HuntZoneAccess = Field(default_factory=HuntZoneAccess)
     last_synced_at: Optional[datetime] = None
     
     model_config = ConfigDict(from_attributes=True)
@@ -161,10 +197,10 @@ class CreatureBase(BaseModel):
     name: str
     article: Optional[str] = None
     plural: Optional[str] = None
-    hitpoints: int
-    experience: int
-    armor: int = 0
-    speed: int = 0
+    hitpoints: Optional[int] = None
+    experience: Optional[int] = None
+    armor: Optional[int] = None
+    speed: Optional[int] = None
     max_damage: Optional[int] = None
     summon_cost: Optional[int] = None
     convince_cost: Optional[int] = None
@@ -187,6 +223,8 @@ class CreatureBase(BaseModel):
     creature_class: Optional[str] = None
     primary_type: Optional[str] = None
     source_url: Optional[str] = None
+    source_provider: Optional[str] = None
+    supplied_fields: Optional[List[str]] = None
     data_sources: Optional[List[str]] = None
     missing_fields: Optional[List[str]] = None
     related_tasks: Optional[List[str]] = None
@@ -201,8 +239,8 @@ class CreatureSimple(BaseModel):
     id: int
     slug: Optional[str] = None
     name: str
-    hitpoints: int
-    experience: int
+    hitpoints: Optional[int] = None
+    experience: Optional[int] = None
     is_boss: bool = False
     is_hidden: bool = False
     difficulty: Optional[str] = None
@@ -210,6 +248,14 @@ class CreatureSimple(BaseModel):
     related_tasks: Optional[List[str]] = None
     image_url: Optional[str] = None
     source_url: Optional[str] = None
+    canonical_id: Optional[UUID] = None
+    knowledge_entity_id: Optional[UUID] = None
+    external_id: Optional[str] = None
+    source_provider: Optional[str] = None
+    supplied_fields: Optional[List[str]] = None
+    missing_fields: Optional[List[str]] = None
+    data_version: int = 1
+    last_synced_at: Optional[datetime] = None
     
     model_config = ConfigDict(from_attributes=True)
 
@@ -225,6 +271,7 @@ class Creature(CreatureBase):
     external_id: Optional[str] = None
     source_name: Optional[str] = None
     knowledge_entity_id: Optional[UUID] = None
+    canonical_id: Optional[UUID] = None
     data_version: int = 1
     last_synced_at: Optional[datetime] = None
     loot_items: List[Loot] = []
@@ -274,6 +321,13 @@ class ItemSearchResult(BaseModel):
     item_image_url: Optional[str] = None
     source_url: Optional[str] = None
     knowledge_entity_id: Optional[UUID] = None
+    canonical_id: Optional[UUID] = None
+    external_id: Optional[str] = None
+    source_provider: Optional[str] = None
+    supplied_fields: List[str] = []
+    missing_fields: List[str] = []
+    tradeable: Optional[bool] = None
+    stackable: Optional[bool] = None
     item_type: Optional[str] = None
     category: Optional[str] = None
     data_version: int = 1
@@ -291,6 +345,11 @@ class ItemDetail(BaseModel):
     rarity: Optional[str] = None
     drop_chance: Optional[float] = None
     knowledge_entity_id: Optional[UUID] = None
+    canonical_id: Optional[UUID] = None
+    external_id: Optional[str] = None
+    source_provider: Optional[str] = None
+    supplied_fields: List[str] = []
+    missing_fields: List[str] = []
     data_version: int = 1
     last_synced_at: Optional[datetime] = None
     game_item_id: Optional[int] = None
@@ -300,6 +359,8 @@ class ItemDetail(BaseModel):
     weight: Optional[float] = None
     value: Optional[int] = None
     level_requirement: Optional[int] = None
+    tradeable: Optional[bool] = None
+    stackable: Optional[bool] = None
     vocation_requirements: List[str] = []
     attack: Optional[int] = None
     defense: Optional[int] = None
@@ -334,6 +395,13 @@ class QuestSearchResult(BaseModel):
     location: Optional[str] = None
     npc: Optional[str] = None
     source_url: Optional[str] = None
+    knowledge_entity_id: Optional[UUID] = None
+    canonical_id: Optional[UUID] = None
+    external_id: Optional[str] = None
+    source_provider: Optional[str] = None
+    supplied_fields: List[str] = []
+    missing_fields: List[str] = []
+    data_version: int = 1
     category: Optional[str] = None
     quest_type: Optional[str] = None
     premium_required: Optional[bool] = None
@@ -362,7 +430,14 @@ class QuestItemValue(QuestNamedValue):
 
 class QuestMissionResult(BaseModel):
     id: UUID
+    canonical_id: UUID
     external_id: Optional[str] = None
+    source_provider: str
+    source_url: Optional[str] = None
+    supplied_fields: List[str] = []
+    missing_fields: List[str] = []
+    data_version: int = 1
+    last_synced_at: Optional[datetime] = None
     title: str
     sequence: int
     description: Optional[str] = None
@@ -375,17 +450,26 @@ class QuestMissionResult(BaseModel):
 
 
 class QuestRelationResult(BaseModel):
+    canonical_id: UUID
     relation_type: str
+    target_canonical_id: Optional[UUID] = None
     target_entity_type: str
     target_name: str
     resolution_status: str
     target_slug: Optional[str] = None
     mission_id: Optional[UUID] = None
+    source_providers: List[str] = []
+    last_synced_at: Optional[datetime] = None
 
 
 class QuestDetail(BaseModel):
     id: int
     knowledge_entity_id: Optional[UUID] = None
+    canonical_id: Optional[UUID] = None
+    external_id: Optional[str] = None
+    source_provider: Optional[str] = None
+    supplied_fields: List[str] = []
+    missing_fields: List[str] = []
     name: str
     slug: Optional[str] = None
     description: Optional[str] = None

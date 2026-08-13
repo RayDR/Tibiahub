@@ -34,6 +34,9 @@ from app.knowledge.adapters.tibiawiki_npcs_locations import (
     TibiaWikiNpcAdapter,
 )
 from app.knowledge.adapters.tibiawiki_routes import TibiaWikiRouteAdapter
+from app.knowledge.adapters.tibiawiki_hunt_zones import TibiaWikiHuntZoneAdapter
+from app.knowledge.adapters.tibiadata import HttpTibiaDataKnowledgeClient, TibiaDataKnowledgeAdapter, TibiaDataKnowledgeClient
+from app.knowledge.adapters.tibiamaps import TibiaMapsKnowledgeAdapter
 
 __all__ = [
     "AdapterNotFoundError",
@@ -63,4 +66,9 @@ __all__ = [
     "TibiaWikiNpcAdapter",
     "TibiaWikiLocationAdapter",
     "TibiaWikiRouteAdapter",
+    "TibiaWikiHuntZoneAdapter",
+    "HttpTibiaDataKnowledgeClient",
+    "TibiaDataKnowledgeAdapter",
+    "TibiaDataKnowledgeClient",
+    "TibiaMapsKnowledgeAdapter",
 ]

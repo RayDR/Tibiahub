@@ -137,6 +137,9 @@ class KnowledgeProviderResponse(BaseModel):
     consecutive_failures: int
     cooldown_until: datetime | None
     supports_entities: list[str]
+    provider_roles: list[str]
+    observation_capabilities: list[str]
+    spatial_capabilities: list[str]
     supports_media: bool
     supports_search: bool
     supported_job_types: list[str]

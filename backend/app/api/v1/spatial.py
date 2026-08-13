@@ -21,30 +21,84 @@ router = APIRouter(prefix="/spatial", tags=["Spatial Knowledge"])
 
 
 def _point(row: SpatialMapPoint) -> dict:
+    supplied = [key for key, value in {
+        "name": row.name, "x": row.tibia_x, "y": row.tibia_y, "z": row.tibia_z,
+        "location": row.location_entity_id or row.unresolved_location_name,
+    }.items() if value is not None]
     return {
         "id": row.id, "name": row.name, "x": row.tibia_x, "y": row.tibia_y, "z": row.tibia_z,
+        "canonical_id": row.knowledge_entity_id, "knowledge_entity_id": row.knowledge_entity_id,
+        "external_id": row.external_id, "source_provider": row.source_provider_id,
+        "source_url": row.source_reference, "supplied_fields": supplied,
+        "missing_fields": sorted({"name", "x", "y", "z", "location"} - set(supplied)),
+        "data_version": row.version, "last_synced_at": row.updated_at or row.created_at,
+        "provider_metadata": dict(row.source_metadata or {}),
         "bounds": {"min_x": row.min_x, "min_y": row.min_y, "max_x": row.max_x, "max_y": row.max_y,
                    "min_z": row.min_z, "max_z": row.max_z},
         "confidence": row.confidence, "verification_state": row.verification_state,
         "unresolved_location_name": row.unresolved_location_name,
+        "location": {
+            "canonical_id": row.location_entity_id,
+            "name": row.location_entity.canonical_name,
+        } if row.location_entity else (
+            {"canonical_id": None, "name": row.unresolved_location_name}
+            if row.unresolved_location_name else None
+        ),
     }
 
 
 def _region(row: SpatialMapRegion) -> dict:
+    supplied = [key for key, value in {
+        "name": row.name, "min_x": row.min_x, "min_y": row.min_y,
+        "max_x": row.max_x, "max_y": row.max_y, "min_z": row.min_z,
+        "max_z": row.max_z, "location": row.location_entity_id or row.unresolved_location_name,
+    }.items() if value is not None]
     return {
         "id": row.id, "name": row.name,
+        "canonical_id": row.knowledge_entity_id, "knowledge_entity_id": row.knowledge_entity_id,
+        "external_id": row.external_id, "source_provider": row.source_provider_id,
+        "source_url": row.source_reference, "supplied_fields": supplied,
+        "missing_fields": sorted({"name", "min_x", "min_y", "max_x", "max_y", "min_z", "max_z", "location"} - set(supplied)),
+        "data_version": row.version, "last_synced_at": row.updated_at or row.created_at,
+        "provider_metadata": dict(row.source_metadata or {}),
         "bounds": {"min_x": row.min_x, "min_y": row.min_y, "max_x": row.max_x, "max_y": row.max_y,
                    "min_z": row.min_z, "max_z": row.max_z},
         "confidence": row.confidence, "verification_state": row.verification_state,
         "unresolved_location_name": row.unresolved_location_name,
+        "location": {
+            "canonical_id": row.location_entity_id,
+            "name": row.location_entity.canonical_name,
+        } if row.location_entity else (
+            {"canonical_id": None, "name": row.unresolved_location_name}
+            if row.unresolved_location_name else None
+        ),
     }
 
 
 def _route(row: SpatialRoute) -> dict:
+    supplied = [key for key, value in {
+        "name": row.name, "start_location": row.start_location_entity_id or row.unresolved_start_name,
+        "end_location": row.end_location_entity_id or row.unresolved_end_name,
+        "steps": row.step_count if row.step_count else None,
+    }.items() if value is not None]
     return {
         "id": row.id, "name": row.name, "slug": row.slug, "step_count": row.step_count,
+        "canonical_id": row.knowledge_entity_id, "knowledge_entity_id": row.knowledge_entity_id,
+        "external_id": row.external_id, "source_provider": row.source_provider_id,
+        "source_url": row.source_reference, "supplied_fields": supplied,
+        "missing_fields": sorted({"name", "start_location", "end_location", "steps"} - set(supplied)),
+        "data_version": row.version, "last_synced_at": row.updated_at or row.created_at,
+        "provider_metadata": dict(row.source_metadata or {}),
         "start_location": row.start_location.canonical_name if row.start_location else row.unresolved_start_name,
         "end_location": row.end_location.canonical_name if row.end_location else row.unresolved_end_name,
+        "start": {
+            "canonical_id": row.start_location_entity_id,
+            "name": row.start_location.canonical_name if row.start_location else row.unresolved_start_name,
+        },
+        "end": {
+            "canonical_id": row.end_location_entity_id,
+            "name": row.end_location.canonical_name if row.end_location else row.unresolved_end_name,
+        },
         "bounds": {"min_x": row.min_x, "min_y": row.min_y, "max_x": row.max_x, "max_y": row.max_y,
                    "min_z": row.min_z, "max_z": row.max_z},
         "confidence": row.confidence, "verification_state": row.verification_state,
@@ -162,7 +216,12 @@ def route_detail(identifier: str, db: Session = Depends(get_db)):
         "id": step.id, "sequence": step.sequence, "kind": step.step_kind,
         "instruction": step.instruction,
         "location_name": step.location_entity.canonical_name if step.location_entity else step.unresolved_location_name,
+        "location": {
+            "canonical_id": step.location_entity_id,
+            "name": step.location_entity.canonical_name if step.location_entity else step.unresolved_location_name,
+        },
         "x": step.tibia_x, "y": step.tibia_y, "z": step.tibia_z,
+        "provider_metadata": dict(step.source_metadata or {}),
     } for step in route.steps[:250]]
     return value
 

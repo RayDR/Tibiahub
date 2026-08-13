@@ -9,6 +9,7 @@ from typing import Any
 MAX_TIBIA_COORDINATE = 65_535
 MAX_TIBIA_FLOOR = 15
 MAX_ROUTE_STEPS = 250
+SPATIAL_LOCATION_ENTITY_TYPES = frozenset({"area", "town", "location", "hunt_zone", "access"})
 
 
 def _coordinate(value: int | None, name: str) -> int | None:
@@ -43,12 +44,15 @@ class MapPointDTO:
     y: int | None = None
     z: int | None = None
     location_name: str | None = None
+    location_entity_type: str | None = None
     confidence: str = "unknown"
     source_reference: str | None = None
     provider_metadata: dict[str, Any] = field(default_factory=dict)
 
     def __post_init__(self) -> None:
         _coordinate(self.x, "x"); _coordinate(self.y, "y"); _floor(self.z)
+        if self.location_entity_type is not None and self.location_entity_type not in SPATIAL_LOCATION_ENTITY_TYPES:
+            raise ValueError("Unsupported spatial location entity type")
         supplied = (self.x, self.y, self.z)
         if any(value is None for value in supplied) and any(value is not None for value in supplied):
             raise ValueError("Point coordinates must be complete or entirely unresolved")
@@ -64,6 +68,7 @@ class MapRegionDTO:
     name: str
     geometry: dict[str, Any] | None = None
     location_name: str | None = None
+    location_entity_type: str | None = None
     minimum_z: int | None = None
     maximum_z: int | None = None
     confidence: str = "unknown"
@@ -72,6 +77,8 @@ class MapRegionDTO:
 
     def __post_init__(self) -> None:
         _floor(self.minimum_z); _floor(self.maximum_z)
+        if self.location_entity_type is not None and self.location_entity_type not in SPATIAL_LOCATION_ENTITY_TYPES:
+            raise ValueError("Unsupported spatial location entity type")
         if self.minimum_z is not None and self.maximum_z is not None and self.minimum_z > self.maximum_z:
             raise ValueError("minimum_z cannot exceed maximum_z")
         if self.geometry is not None and self.geometry.get("type") not in {"Polygon", "MultiPolygon"}:

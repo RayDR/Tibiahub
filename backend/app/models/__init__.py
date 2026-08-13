@@ -31,7 +31,7 @@ from app.models.guild_member_snapshot import GuildMemberSnapshot
 from app.models.guild_management import GuildDirectory, GuildManagementGrant, GuildRosterCharacter
 from app.models.email_delivery import EmailOutbox, EmailWorkerHeartbeat
 from app.models.workspace_audit import WorkspaceAudit
-from app.models.world_map import WorldMapFloor, WorldMapMarker
+from app.models.world_map import WorldMapDataset, WorldMapFloor, WorldMapMarker
 from app.models.hunt_analyzer import HuntAnalyzerSubmission
 from app.models.maintenance_sync import MaintenanceHold, SyncJobPhase, SyncWorkerHeartbeat
 from app.models.leadership import (
@@ -46,6 +46,7 @@ from app.knowledge.models import (
     KnowledgeEntityType, KnowledgeProvider, KnowledgeSearchMetadata,
     KnowledgeJob, KnowledgeJobAttempt, KnowledgeProviderCursor, KnowledgeWorkerHeartbeat,
     KnowledgeExternalMapping,
+    KnowledgeProviderObservation,
     KnowledgeCreatureItemDrop,
     KnowledgeAccess, KnowledgeQuestRelation,
     KnowledgeRelationship, KnowledgeRelationshipType,
@@ -110,7 +111,7 @@ __all__ = [
     "GuildRosterCharacter",
     "MediaAsset",
     "WorkspaceAudit",
-    "WorldMapFloor", "WorldMapMarker", "HuntAnalyzerSubmission",
+    "WorldMapDataset", "WorldMapFloor", "WorldMapMarker", "HuntAnalyzerSubmission",
     "MaintenanceHold", "SyncJobPhase", "SyncWorkerHeartbeat",
     "GuildLeadershipRole", "GuildLeadershipOpening", "GuildLeadershipApplication",
     "GuildLeadershipAssignment", "GuildLeadershipApplicationHistory",
@@ -122,6 +123,7 @@ __all__ = [
     "KnowledgeDomainEvent",
     "KnowledgeJob", "KnowledgeJobAttempt", "KnowledgeProviderCursor", "KnowledgeWorkerHeartbeat",
     "KnowledgeExternalMapping",
+    "KnowledgeProviderObservation",
     "KnowledgeCreatureItemDrop",
     "KnowledgeAccess", "KnowledgeQuestRelation",
     "KnowledgeRelationship", "KnowledgeRelationshipType",

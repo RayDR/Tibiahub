@@ -169,7 +169,10 @@ def _bridge(db: Session, entity: KnowledgeEntity, dto: QuestKnowledgeDTO) -> tup
         ("access_unlocks", [{
             **asdict(x), "required_quests": list(x.required_quests), "required_items": list(x.required_items),
         } for x in dto.access_unlocks], "access_unlocks"),
-        ("parser_metadata", dict(dto.provider_metadata), None),
+        ("parser_metadata", {
+            **dict(dto.provider_metadata),
+            "supplied_fields": sorted(dto.supplied_fields),
+        }, None),
     ):
         assign(field, value, supplied)
     if dto.starting_npcs:

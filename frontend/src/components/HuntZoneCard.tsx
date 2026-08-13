@@ -51,7 +51,9 @@ const HuntZoneCard: React.FC<HuntZoneCardProps> = ({ zone }) => {
           <div className="flex items-center space-x-2 text-sm">
             <span className="text-content-secondary">Level:</span>
             <span className="text-primary font-bold">
-              {zone.min_level} - {zone.max_level || '∞'}
+              {zone.min_level == null
+                ? 'Not recorded'
+                : `${zone.min_level} - ${zone.max_level ?? '∞'}`}
             </span>
             {zone.recommended_level && (
               <span className="text-success text-xs">

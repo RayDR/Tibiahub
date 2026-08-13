@@ -620,7 +620,7 @@ const CreaturesPage: React.FC = () => {
               'cyclopedia.cards.experience',
               {
                 value:
-                  creature.experience.toLocaleString(),
+                  creature.experience?.toLocaleString() ?? t('common.unknown'),
               },
             ),
             to: `/creatures/${

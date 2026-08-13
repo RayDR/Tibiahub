@@ -33,6 +33,33 @@ from app.knowledge.services import KnowledgeGraphService
 
 router = APIRouter(prefix="/items", tags=["items"])
 
+_ITEM_COMPLETENESS_FIELDS = {
+    "description", "item_type", "category", "weight", "value", "level_requirement",
+    "tradeable", "stackable", "buy_from", "sell_to", "rewards_from", "required_for",
+}
+
+
+def _item_provenance(item: ExternalItemModel) -> dict:
+    raw = item.raw_data if isinstance(item.raw_data, dict) else {}
+    supplied = set(raw.get("supplied_fields") or [])
+    if not supplied:
+        field_map = {
+            "description": item.description, "item_type": item.type, "category": item.category,
+            "weight": item.weight, "value": item.value, "level_requirement": item.level_required,
+            "tradeable": item.tradeable, "stackable": item.stackable, "buy_from": item.buy_from,
+            "sell_to": item.sell_to, "rewards_from": item.rewards_from, "required_for": item.required_for,
+        }
+        supplied = {key for key, value in field_map.items() if value not in (None, "", [], {})}
+    return {
+        "canonical_id": item.knowledge_entity_id,
+        "external_id": item.external_id,
+        "source_provider": item.source_name,
+        "supplied_fields": sorted(supplied),
+        "missing_fields": sorted(_ITEM_COMPLETENESS_FIELDS - supplied),
+        "tradeable": item.tradeable,
+        "stackable": item.stackable,
+    }
+
 
 def _placeholder_svg(label: str) -> bytes:
     safe = media_svc.escape_svg_text(label or "Unknown Item", limit=42)
@@ -309,6 +336,7 @@ def _build_canonical_item_result(db: Session, item: ExternalItemModel) -> ItemSe
         item_image_url=item.image_url,
         source_url=item.source_url,
         knowledge_entity_id=item.knowledge_entity_id,
+        **_item_provenance(item),
         item_type=item.type,
         category=item.category,
         data_version=item.data_version or 1,
@@ -603,6 +631,7 @@ async def get_item_detail(
             rarity=rarity,
             drop_chance=top_drop,
             knowledge_entity_id=canonical.knowledge_entity_id,
+            **_item_provenance(canonical),
             data_version=canonical.data_version or 1,
             last_synced_at=canonical.last_synced_at,
             game_item_id=canonical.item_id,

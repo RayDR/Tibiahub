@@ -20,6 +20,9 @@ class ProviderRegistry:
         provider.version = definition.version
         provider.rate_limit = dict(definition.rate_limit)
         provider.supports_entities = list(definition.supports_entities)
+        provider.provider_roles = list(definition.provider_roles)
+        provider.observation_capabilities = list(definition.observation_capabilities)
+        provider.spatial_capabilities = list(definition.spatial_capabilities)
         provider.supports_media = definition.supports_media
         provider.supports_search = definition.supports_search
         return provider

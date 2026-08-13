@@ -71,10 +71,16 @@ def _mapped_entity(db: Session, provider: str, entity_type: str, external_id: st
     return entity
 
 
-def _place(db: Session, name: str | None) -> tuple[KnowledgeEntity | None, str]:
+def _place(
+    db: Session, name: str | None, entity_type: str | None = None,
+) -> tuple[KnowledgeEntity | None, str]:
     if not name:
         return None, "unresolved"
-    matches = exact_place_candidates(db, name)
+    matches = (
+        exact_entity_candidates(db, entity_type, name)
+        if entity_type is not None
+        else exact_place_candidates(db, name)
+    )
     return (matches[0], "resolved") if len(matches) == 1 else (None, "ambiguous" if len(matches) > 1 else "unresolved")
 
 
@@ -130,7 +136,7 @@ def persist_map_point(db: Session, dto: MapPointDTO, *, provider: str = "tibiama
         require_postgis(db)
     entity = _mapped_entity(db, provider, "map_point", dto.external_id, dto.name)
     current = db.query(SpatialMapPoint).filter_by(knowledge_entity_id=entity.uuid, is_current=True).first()
-    location, state = _place(db, dto.location_name)
+    location, state = _place(db, dto.location_name, dto.location_entity_type)
     metadata = _source_metadata(dto)
     if current and current.source_metadata.get("spatial_content_sha256") == metadata["spatial_content_sha256"]:
         return current
@@ -178,7 +184,7 @@ def persist_map_region(db: Session, dto: MapRegionDTO, *, provider: str = "tibia
         require_postgis(db)
     entity = _mapped_entity(db, provider, "map_region", dto.external_id, dto.name)
     current = db.query(SpatialMapRegion).filter_by(knowledge_entity_id=entity.uuid, is_current=True).first()
-    location, state = _place(db, dto.location_name)
+    location, state = _place(db, dto.location_name, dto.location_entity_type)
     metadata = _source_metadata(dto)
     if current and current.source_metadata.get("spatial_content_sha256") == metadata["spatial_content_sha256"]:
         return current

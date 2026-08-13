@@ -49,10 +49,10 @@ class Creature(Base):
     plural = Column(String(100))
     
     # Basic stats
-    hitpoints = Column(Integer, nullable=False)
-    experience = Column(Integer, nullable=False)
-    armor = Column(Integer, default=0)
-    speed = Column(Integer, default=0)
+    hitpoints = Column(Integer, nullable=True)
+    experience = Column(Integer, nullable=True)
+    armor = Column(Integer, nullable=True)
+    speed = Column(Integer, nullable=True)
     
     # Combat info
     max_damage = Column(Integer)  # Maximum damage output
@@ -111,3 +111,25 @@ class Creature(Base):
     
     def __repr__(self):
         return f"<Creature {self.name}>"
+
+    @property
+    def canonical_id(self):
+        return self.knowledge_entity_id
+
+    @property
+    def source_provider(self):
+        return self.source_name
+
+    @property
+    def supplied_fields(self):
+        raw = self.raw_data if isinstance(self.raw_data, dict) else {}
+        recorded = raw.get("supplied_fields") or raw.get("provided_fields")
+        if recorded:
+            return recorded
+        fields = (
+            "article", "plural", "hitpoints", "experience", "armor", "speed",
+            "max_damage", "summon_cost", "convince_cost", "difficulty", "occurrence",
+            "description", "behavior", "bestiary_class", "bestiary_level", "charm_points",
+            "classification", "creature_class", "primary_type", "locations", "related_tasks",
+        )
+        return [field for field in fields if getattr(self, field, None) not in (None, "", [], {})]

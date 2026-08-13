@@ -176,7 +176,8 @@ async def get_creature_category_previews(
         score = (
             media_rank,
             exact_rank,
-            -int(creature.experience or 0),
+            0 if creature.experience is not None else 1,
+            -creature.experience if creature.experience is not None else 0,
             len(creature.name or ""),
             (creature.name or "").lower(),
         )
@@ -495,7 +496,11 @@ async def create_creature(
     if existing:
         raise HTTPException(status_code=400, detail="Creature already exists")
 
-    db_creature = CreatureModel(**creature.model_dump())
+    db_creature = CreatureModel(**creature.model_dump(exclude={
+        # Response-only provenance/completeness projections. Provider writes
+        # are performed by normalization services, not the manual editor.
+        "source_provider", "supplied_fields", "missing_fields", "data_sources",
+    }))
     db.add(db_creature)
     db.flush()
     db.add(WorkspaceAudit(

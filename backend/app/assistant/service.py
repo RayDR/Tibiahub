@@ -218,7 +218,7 @@ class AssistantService:
             if zone is None:
                 return None
             quest_name = zone.quest_name
-            if not zone.requires_premium and not quest_name:
+            if zone.requires_premium is False and zone.requires_quest is False and not quest_name:
                 return None
             entities = [target]
             if quest_name:
@@ -234,6 +234,13 @@ class AssistantService:
                 details.append("Premium Account" if context.language == "en" else "Premium Account")
             if quest_name:
                 details.append(quest_name)
+            if not details:
+                copy = (
+                    f"El acceso a {target.canonical_name} no está registrado."
+                    if context.language == "es"
+                    else f"Access requirements for {target.canonical_name} are not recorded."
+                )
+                return self._structured_response(context, structured.intent, copy, entities)
             copy = (
                 f"Para acceder a {target.canonical_name} necesitas: {', '.join(details)}."
                 if context.language == "es"

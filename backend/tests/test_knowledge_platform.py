@@ -51,10 +51,19 @@ def test_provider_registry_contains_capabilities_and_priority(db, knowledge_regi
     assert [provider.provider_id for provider in providers] == ["tibiadata", "tibiamaps"]
     tibiadata = ProviderRegistry.get(db, "tibiadata")
     tibiamaps = ProviderRegistry.get(db, "tibiamaps")
-    assert tibiadata is not None and tibiadata.supports_search is True
-    assert "creature" in tibiadata.supports_entities
+    assert tibiadata is not None and tibiadata.supports_search is False
+    assert set(tibiadata.supports_entities) == {"character", "guild", "world", "creature", "spell"}
+    assert set(tibiadata.provider_roles) == {"current_facts", "live_observations", "historical_snapshot_upstream"}
+    assert {"highscores", "killstatistics", "houses", "boosted_bosses"}.issubset(
+        set(tibiadata.observation_capabilities)
+    )
     assert tibiamaps is not None and tibiamaps.supports_media is True
     assert tibiamaps.rate_limit == {"requests": 30, "window_seconds": 60}
+    assert set(tibiamaps.supports_entities) == {"map_point", "map_region"}
+    assert tibiamaps.provider_roles == ["spatial_authority"]
+    assert set(tibiamaps.spatial_capabilities) == {
+        "dataset", "floors", "markers", "coordinates", "pathfinding", "map_version",
+    }
     assert tibiadata.health == "unknown" and tibiadata.last_sync_at is None
 
 

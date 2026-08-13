@@ -45,6 +45,7 @@ from app.knowledge.services.jobs import (
     KnowledgeJobService,
 )
 from app.knowledge.services.normalization import KnowledgeNormalizationService
+from app.knowledge.services.observations import KnowledgeObservationService
 from app.knowledge.services.provider_health import (
     record_provider_attempt,
     record_provider_failure,
@@ -190,6 +191,18 @@ class KnowledgeWorker:
             KnowledgeJobService.assert_owner(job, self.worker_id, datetime.now(UTC))
             metrics = KnowledgeNormalizationMetrics(documents_received=len(result.documents))
             metric_values = metrics.as_dict()
+            metric_values["discovered"] = sum(
+                int(child.job_type.endswith("_detail")) for child in result.child_jobs
+            )
+            provider_discovered = result.provider_metadata.get("discovered")
+            if isinstance(provider_discovered, int) and not isinstance(provider_discovered, bool):
+                metric_values["discovered"] += max(0, provider_discovered)
+            metric_values["fetched"] = len(result.documents)
+            metric_values["normalized"] = 0
+            metric_values["repaired"] = 0
+            metric_values["skipped"] = 0
+            metric_values["failed"] = 0
+            metric_values["unresolved_relationships"] = 0
             invalid_members = result.provider_metadata.get("invalid_members")
             if isinstance(invalid_members, int) and not isinstance(invalid_members, bool) and invalid_members >= 0:
                 metric_values["invalid_members"] = invalid_members
@@ -214,11 +227,23 @@ class KnowledgeWorker:
                 applied = KnowledgeNormalizationService.apply(db, normalization)
                 if applied.entity_uuid is not None:
                     persistence.document.entity_uuid = applied.entity_uuid
+                observed = KnowledgeObservationService.apply(
+                    db,
+                    normalization,
+                    document=persistence.document,
+                    entity_uuid=applied.entity_uuid,
+                )
+                metric_values["observations_created"] = metric_values.get("observations_created", 0) + int(observed.created)
                 metric_values[f"entities_{applied.status}"] += 1
+                if normalization.action == "noop":
+                    metric_values["skipped"] += 1
+                else:
+                    metric_values["normalized"] += 1
                 metric_values["aliases_created"] += applied.aliases_created
                 metric_values["warnings"] += applied.warnings
                 for metric_name, metric_value in applied.metrics.items():
                     metric_values[metric_name] = metric_values.get(metric_name, 0) + metric_value
+                metric_values["repaired"] += applied.metrics.get("entities_repaired", 0)
                 if applied.status in {"created", "updated"}:
                     emit_event(
                         db,
@@ -297,6 +322,22 @@ class KnowledgeWorker:
             "quest_renormalize": "quest",
             "npc_renormalize": "npc",
             "location_renormalize": "location",
+            "route_renormalize": "route",
+            "hunt_zone_renormalize": "hunt_zone",
+            "map_point_renormalize": "map_point",
+            "map_region_renormalize": "map_region",
+            "character_renormalize": "character",
+            "guild_renormalize": "guild",
+            "world_renormalize": "world",
+            "world_catalog_renormalize": "catalog",
+            "guild_catalog_renormalize": "guild_catalog",
+            "spell_renormalize": "spell",
+            "spell_catalog_renormalize": "catalog",
+            "creature_catalog_renormalize": "catalog",
+            "highscores_renormalize": "highscores",
+            "killstatistics_renormalize": "killstatistics",
+            "house_renormalize": "houses",
+            "boosted_bosses_renormalize": "boosted_bosses",
         }
         document_prefix = prefixes.get(request.job_type)
         if document_prefix is None:
@@ -318,6 +359,8 @@ class KnowledgeWorker:
                 raise EmptyProviderResponseError()
             payload = dict(request.payload)
             payload["_stored_document"] = deepcopy(document.raw_json)
+            payload["_stored_metadata"] = deepcopy(document.document_metadata or {})
+            payload["_stored_version"] = document.version
         return replace(request, payload=payload)
 
     @staticmethod

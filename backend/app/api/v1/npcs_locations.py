@@ -28,20 +28,30 @@ class NamedReferenceSummary(BaseModel):
     name: str
     slug: str
     knowledge_entity_id: UUID
+    canonical_id: UUID
+    external_id: str
     entity_type: str
     description: str | None = None
     image_url: str | None = None
     source_url: str | None = None
+    source_provider: str
+    supplied_fields: list[str]
+    missing_fields: list[str]
     data_version: int
     last_synced_at: datetime | None = None
 
 
 class NamedRelationship(BaseModel):
+    canonical_id: UUID
     relationship_type: str
+    target_canonical_id: UUID | None = None
     target_name: str
     target_type: str
     target_slug: str | None = None
     resolution_state: str
+    confidence: str
+    source_providers: list[str]
+    last_synced_at: datetime
 
 
 class NpcDetail(NamedReferenceSummary):
@@ -72,15 +82,26 @@ class LocationDetail(NamedReferenceSummary):
 
 
 def _summary(row) -> NamedReferenceSummary:
+    supplied = sorted(set(row.supplied_fields or []))
+    expected = (
+        {"description", "title", "occupation", "location_name", "buys", "sells", "destinations", "related_quests"}
+        if isinstance(row, TibiaWikiNpc)
+        else {"description", "location_kind", "region", "parent_location", "premium_required", "minimum_level", "maximum_level", "npcs", "creatures", "quests", "sublocations", "access_notes"}
+    )
     return NamedReferenceSummary(
         id=row.id,
         name=row.name,
         slug=row.slug,
         knowledge_entity_id=row.knowledge_entity_id,
+        canonical_id=row.knowledge_entity_id,
+        external_id=row.external_id,
         entity_type=row.knowledge_entity.entity_type,
         description=row.description,
         image_url=row.image_url,
         source_url=row.source_url,
+        source_provider=row.source_name,
+        supplied_fields=supplied,
+        missing_fields=sorted(expected - set(supplied)),
         data_version=row.data_version,
         last_synced_at=row.last_synced_at,
     )
@@ -89,9 +110,11 @@ def _summary(row) -> NamedReferenceSummary:
 def _relationships(db: Session, entity_id: UUID) -> list[NamedRelationship]:
     values = [*KnowledgeGraphService.outgoing(db, entity_id), *KnowledgeGraphService.incoming(db, entity_id)]
     return [NamedRelationship(
-        relationship_type=value.relationship_type, target_name=value.target_name,
+        canonical_id=value.relationship_id, relationship_type=value.relationship_type,
+        target_canonical_id=value.target_entity_id, target_name=value.target_name,
         target_type=value.target_type, target_slug=value.target_slug,
-        resolution_state=value.resolution_state,
+        resolution_state=value.resolution_state, confidence=value.confidence,
+        source_providers=list(value.contributing_providers), last_synced_at=value.freshness,
     ) for value in values]
 
 

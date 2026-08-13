@@ -9,6 +9,9 @@ from app.knowledge.adapters.tibiawiki_items import TibiaWikiItemAdapter
 from app.knowledge.adapters.tibiawiki_quests import TibiaWikiQuestAdapter
 from app.knowledge.adapters.tibiawiki_npcs_locations import TibiaWikiLocationAdapter, TibiaWikiNpcAdapter
 from app.knowledge.adapters.tibiawiki_routes import TibiaWikiRouteAdapter
+from app.knowledge.adapters.tibiawiki_hunt_zones import TibiaWikiHuntZoneAdapter
+from app.knowledge.adapters.tibiadata import TibiaDataKnowledgeAdapter
+from app.knowledge.adapters.tibiamaps import TibiaMapsKnowledgeAdapter
 
 
 class AdapterNotFoundError(LookupError):
@@ -19,12 +22,15 @@ class KnowledgeAdapterRegistry:
     def __init__(self, adapters: tuple[KnowledgeProviderAdapter, ...] | None = None):
         configured = adapters if adapters is not None else (
             ReferenceKnowledgeAdapter(),
+            TibiaDataKnowledgeAdapter(),
+            TibiaMapsKnowledgeAdapter(),
             TibiaWikiCreatureAdapter(),
             TibiaWikiItemAdapter(),
             TibiaWikiQuestAdapter(),
             TibiaWikiNpcAdapter(),
             TibiaWikiLocationAdapter(),
             TibiaWikiRouteAdapter(),
+            TibiaWikiHuntZoneAdapter(),
         )
         self._adapters: dict[str, list[KnowledgeProviderAdapter]] = {}
         for adapter in configured:
@@ -46,6 +52,13 @@ class KnowledgeAdapterRegistry:
             for job_type in adapter.job_types
             if any(adapter.supports(job_type, entity_type) for entity_type in entity_types)
         )
+
+    def provider_job_types(self, provider_code: str) -> list[str]:
+        return sorted({
+            job_type
+            for adapter in self._adapters.get(provider_code, [])
+            for job_type in adapter.job_types
+        })
 
     def validate_enqueue(
         self,

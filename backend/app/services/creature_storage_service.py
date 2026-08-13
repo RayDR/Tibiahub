@@ -42,7 +42,7 @@ def _ensure_hunt_zone(db: Session, location_name: str) -> HuntZone:
         zone = HuntZone(
             name=location_name,
             normalized_name=normalized_name,
-            min_level=0,
+            min_level=None,
             source_name="tibiawiki",
             source_url=None,
             description=None,
@@ -65,8 +65,8 @@ def upsert_creature_payload(db: Session, payload: dict[str, Any]) -> Creature:
         creature = Creature(
             id=payload.get("id"),
             name=payload.get("name"),
-            hitpoints=payload.get("hitpoints") or 0,
-            experience=payload.get("experience") or 0,
+            hitpoints=payload.get("hitpoints"),
+            experience=payload.get("experience"),
         )
         db.add(creature)
         db.flush()
@@ -361,9 +361,9 @@ def list_cached_creatures(
         )
     else:
         query = query.order_by(
-            sort_column.desc()
+            sort_column.desc().nullslast()
             if sort_order == "desc"
-            else sort_column.asc(),
+            else sort_column.asc().nullslast(),
             Creature.name.asc(),
         )
 

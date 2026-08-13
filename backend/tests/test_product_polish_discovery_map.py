@@ -69,11 +69,13 @@ def test_quest_shelves_are_local_and_activity_ranked(client, db):
 
 def test_public_map_returns_real_zone_geometry_and_honest_related_context(client, db):
     asset = MediaAsset(asset_key="zone:mapped-grounds", status="cached", local_path="/tmp/not-read-by-bootstrap.png")
+    zone_entity = _entity(db, "hunt_zone", "Mapped Grounds")
     zone = HuntZone(
         name="Mapped Grounds", slug="mapped-grounds", normalized_name="mapped grounds", min_level=80,
         location_x=120, location_y=220, location_z=7,
         map_bounds={"min_x": 100, "min_y": 200, "max_x": 300, "max_y": 400},
         map_asset_id=None,
+        knowledge_entity_id=zone_entity.uuid,
     )
     creature = Creature(name="Ground Walker", slug="ground-walker", normalized_name="ground walker", hitpoints=100, experience=100, is_hidden=False)
     floor = WorldMapFloor(
@@ -85,7 +87,12 @@ def test_public_map_returns_real_zone_geometry_and_honest_related_context(client
     )
     db.add_all([asset, zone, creature, floor])
     db.flush()
-    db.add(WorldMapMarker(floor_id=floor.id, source_index=1, description="Mapped Grounds", normalized_description="mapped grounds", icon="star", x=32120, y=32220, floor=7, raw_data={}))
+    db.add(WorldMapMarker(
+        floor_id=floor.id, source_index=1, description="Mapped Grounds",
+        normalized_description="mapped grounds", icon="star", x=32120, y=32220,
+        floor=7, raw_data={}, resolved_entity_id=zone_entity.uuid,
+        resolution_state="resolved", resolution_method="exact_canonical_name_or_alias",
+    ))
     zone.map_asset_id = asset.id
     db.add(SpawnLocation(creature_id=creature.id, hunt_zone_id=zone.id))
     db.flush()

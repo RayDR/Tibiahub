@@ -37,7 +37,7 @@ from app.models.guild_management import GuildDirectory
 from app.models.maintenance_sync import SyncJobPhase, SyncWorkerHeartbeat
 from app.models.workspace_audit import WorkspaceAudit
 from app.knowledge.models import ACTIVE_KNOWLEDGE_JOB_STATES, KnowledgeJob
-from app.knowledge.services.bootstrap import KnowledgeBootstrapService, TIBIAWIKI_BOOTSTRAP_CONFIRMATION
+from app.knowledge.services.bootstrap import KnowledgeFullSyncService
 from app.services.guild_roster_service import GuildRosterService, GuildRosterSyncError
 from app.services.maintenance_mode_service import MaintenanceModeService, TERMINAL_SYNC_STATES
 from app.services import media_asset_service
@@ -571,12 +571,11 @@ class SyncService:
         if not correlation_texts and checkpoint.get("correlation_id"):
             correlation_texts = [checkpoint["correlation_id"]]
         if not correlation_texts:
-            if job.requested_by_user_id is None:
-                raise ValueError("Knowledge synchronization requires an administrator owner")
-            result = KnowledgeBootstrapService.activate_tibiawiki(
-                db, actor_id=job.requested_by_user_id,
-                confirmation=TIBIAWIKI_BOOTSTRAP_CONFIRMATION,
+            result = KnowledgeFullSyncService.enqueue(
+                db,
                 batch_limit=min(50, max(1, int(job.batch_size or 50))),
+                repair_existing=bool(job.force_refresh),
+                enable_provider_ids={"tibiawiki"},
             )
             correlation_texts = sorted({str(row.correlation_id) for row in result.jobs})
             phase.checkpoint = {"correlation_ids": correlation_texts, "root_job_ids": [str(row.id) for row in result.jobs]}
@@ -1060,8 +1059,8 @@ class SyncService:
                     "armor": None,
                     "levelrequired": None,
                     "vocationrequired": None,
-                    "tradeable": True,
-                    "stackable": False,
+                    "tradeable": None,
+                    "stackable": None,
                 }
 
                 success = False
@@ -1298,91 +1297,23 @@ class SyncService:
         limit: int | None = None,
         job: SyncJob | None = None,
     ) -> dict[str, Any]:
-        """Seed/refresh hunt-zone map infrastructure from tibiamaps metadata.
+        """Deprecated unsafe bridge retained only for API compatibility.
 
-        tibiamaps does not provide canonical "hunt zones" as first-class entities.
-        We keep existing local zone names and enrich map metadata/provider references.
+        TibiaMaps has no hunt-zone catalog. Dataset import and exact canonical
+        marker resolution are handled by WorldMapSyncService; global bounds are
+        never copied onto individual zones.
         """
-        bounds = await get_tibiamaps_bounds()
-        markers = await get_tibiamaps_markers(limit=5000)
-
-        zones = db.query(HuntZone).order_by(HuntZone.id.asc()).all()
-        if limit is not None and limit > 0:
-            zones = zones[:limit]
-
-        created = 0
-        updated = 0
-        errors = 0
-
-        bounds_center = None
-        if bounds:
-            try:
-                min_x = int(bounds.get("minX"))
-                max_x = int(bounds.get("maxX"))
-                min_y = int(bounds.get("minY"))
-                max_y = int(bounds.get("maxY"))
-                bounds_center = {
-                    "x": int((min_x + max_x) / 2),
-                    "y": int((min_y + max_y) / 2),
-                    "z": 7,
-                }
-            except Exception:
-                bounds_center = None
-
-        for zone in zones:
-            try:
-                before_provider = zone.source_provider
-                zone.source_provider = "tibiamaps"
-                zone.source_name = zone.source_name or "tibiamaps"
-                zone.source_url = zone.source_url or "https://github.com/tibiamaps/tibia-map-data"
-                zone.map_bounds = bounds or zone.map_bounds
-                if bounds_center:
-                    zone.map_x = zone.map_x or bounds_center["x"]
-                    zone.map_y = zone.map_y or bounds_center["y"]
-                    zone.map_z = zone.map_z if zone.map_z is not None else bounds_center["z"]
-
-                # If no custom preview exists, use a stable floor preview from tibiamaps CDN.
-                if not zone.map_image_url:
-                    floor = zone.map_z if zone.map_z is not None else 7
-                    floor = max(0, min(15, int(floor)))
-                    zone.map_image_url = f"https://tibiamaps.github.io/tibia-map-data/floor-{floor:02d}-map.png"
-
-                zone.raw_data = {
-                    **(zone.raw_data or {}),
-                    "source_provider": "tibiamaps",
-                    "tibiamaps_marker_count": len(markers),
-                }
-                zone.last_synced_at = datetime.now(UTC)
-                if before_provider is None:
-                    created += 1
-                else:
-                    updated += 1
-                db.add(zone)
-            except Exception as exc:
-                errors += 1
-                category, retryable, _ = SyncService.classify_provider_error(exc)
-                response = exc.response if isinstance(exc, httpx.HTTPStatusError) else None
-                if job:
-                    record_sync_error(
-                        db, job_id=job.id, phase_key="hunt-zones", entity_type="hunt_zone",
-                        external_id=str(zone.id), entity_name=zone.name, category=category,
-                        message=SAFE_MESSAGES.get(category), provider="tibiamaps",
-                        source_url=str(response.request.url) if response is not None and response.request else None,
-                        http_status=response.status_code if response is not None else None,
-                        retryable=retryable, checkpoint_offset=updated + created + errors, attempt=1,
-                    )
-                logger.warning("sync_hunt_zones_tibiamaps_failed zone=%s category=%s", zone.name, category)
-
-        db.commit()
+        _ = (db, limit, job)
         return {
-            "status": "success",
-            "created": created,
-            "updated": updated,
-            "errors": errors,
-            "total": len(zones),
+            "status": "deprecated",
+            "created": 0,
+            "updated": 0,
+            "errors": 0,
+            "total": 0,
             "provider": "tibiamaps",
-            "marker_count": len(markers),
-            "has_bounds": bool(bounds),
+            "marker_count": 0,
+            "has_bounds": False,
+            "reason": "Use the versioned WorldMapSyncService dataset importer",
         }
 
     @staticmethod

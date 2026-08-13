@@ -89,11 +89,11 @@ const CreatureCard: React.FC<CreatureCardProps> = ({
           <div className="grid grid-cols-2 gap-2 text-sm">
             <div className="flex items-center gap-2 text-content-secondary bg-surface-base/30 p-2 rounded">
               <Heart className="w-4 h-4 text-danger" />
-              <span className="font-mono">{creature.hitpoints.toLocaleString()}</span>
+              <span className="font-mono">{creature.hitpoints?.toLocaleString() ?? '—'}</span>
             </div>
             <div className="flex items-center gap-2 text-content-secondary bg-surface-base/30 p-2 rounded">
               <Star className="w-4 h-4 text-primary" />
-              <span className="font-mono">{creature.experience.toLocaleString()}</span>
+              <span className="font-mono">{creature.experience?.toLocaleString() ?? '—'}</span>
             </div>
           </div>
         </div>

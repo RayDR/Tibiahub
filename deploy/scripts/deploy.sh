@@ -14,7 +14,7 @@ source "$ROOT/scripts/lib/ops-common.sh"
 # shellcheck source=../../scripts/lib/postgres.sh
 source "$ROOT/scripts/lib/postgres.sh"
 
-EXPECTED_REVISION="hunt_analyzer_20260812"
+EXPECTED_REVISION="provider_knowledge_20260813"
 DEPLOY_ROOT="${TIBIAHUB_DEPLOY_ROOT:-/forge/tibiahub-backups/deployments}"
 LOCK_FILE="${TIBIAHUB_DEPLOY_LOCK_FILE:-$DEPLOY_ROOT/.deploy.lock}"
 RUNTIME_ROOT="${TIBIAHUB_RUNTIME_ROOT:-/forge/tibiahub-runtimes}"

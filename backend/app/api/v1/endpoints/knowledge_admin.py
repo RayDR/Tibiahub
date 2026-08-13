@@ -510,9 +510,12 @@ def list_providers(
             consecutive_failures=provider.consecutive_failures,
             cooldown_until=provider.cooldown_until,
             supports_entities=list(provider.supports_entities),
+            provider_roles=list(provider.provider_roles),
+            observation_capabilities=list(provider.observation_capabilities),
+            spatial_capabilities=list(provider.spatial_capabilities),
             supports_media=provider.supports_media,
             supports_search=provider.supports_search,
-            supported_job_types=adapters.supported_job_types(provider.provider_id, list(provider.supports_entities)),
+            supported_job_types=adapters.provider_job_types(provider.provider_id),
         )
         for provider in providers
     ]

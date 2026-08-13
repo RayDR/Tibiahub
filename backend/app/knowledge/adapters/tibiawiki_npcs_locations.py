@@ -135,6 +135,62 @@ def _npc_parts(raw: dict[str, Any]) -> tuple[str, str, str, NpcKnowledgeDTO]:
     return external_id, page_title, wikitext, replace(dto, is_partial=not dto.sufficient_detail)
 
 
+_VOCATION_LEVEL_TOKENS = (
+    "knight", "paladin", "mage", "sorcerer", "druid", "monk",
+)
+
+_ACCESS_BODY_HINT = re.compile(
+    r"\b(?:access\s+to|to\s+access|gain(?:ing)?\s+access|access\s+(?:is|can|requires?))\b",
+    re.IGNORECASE,
+)
+
+
+def _vocation_level_requirement(
+    params: dict[str, str],
+) -> tuple[int | None, tuple[str, ...]]:
+    candidates: list[int] = []
+    supplied_keys: list[str] = []
+    for key, raw_value in params.items():
+        compact_key = re.sub(r"[^a-z0-9]", "", key.lower())
+        if not any(token in compact_key for token in _VOCATION_LEVEL_TOKENS):
+            continue
+        if (
+            "level" not in compact_key
+            and "lvl" not in compact_key
+            and not re.search(r"\blevel\b", raw_value or "", re.IGNORECASE)
+        ):
+            continue
+        value = _to_int(raw_value)
+        if value is None or value <= 0:
+            continue
+        candidates.append(value)
+        supplied_keys.append(key)
+    if not candidates:
+        return None, ()
+    return min(candidates), tuple(sorted(set(supplied_keys)))
+
+
+def _access_body_evidence(
+    wikitext: str,
+) -> tuple[str | None, tuple[NamedKnowledgeReference, ...]]:
+    access_note: str | None = None
+    quest_names: list[str] = []
+    for raw_line in wikitext.splitlines():
+        candidate = raw_line.strip()
+        if not candidate:
+            continue
+        cleaned = _strip_markup(candidate).strip()
+        if not cleaned or len(cleaned) > 600 or not _ACCESS_BODY_HINT.search(cleaned):
+            continue
+        if access_note is None:
+            access_note = cleaned
+        for linked_name in _extract_links(candidate):
+            name = linked_name.split("#", 1)[0].strip()
+            if name and "quest" in name.casefold() and name not in quest_names:
+                quest_names.append(name)
+    return access_note, tuple(NamedKnowledgeReference(name=name) for name in quest_names)
+
+
 def _location_parts(raw: dict[str, Any]) -> tuple[str, str, str, LocationKnowledgeDTO]:
     external_id, page_title, wikitext, params = _envelope(raw)
     name, name_supplied = _text(params, "name", "actualname")
@@ -146,11 +202,29 @@ def _location_parts(raw: dict[str, Any]) -> tuple[str, str, str, LocationKnowled
     premium_raw, premium_supplied = _first(params, "premium", "premiumonly", "premium required")
     minimum_raw, minimum_supplied = _first(params, "level", "minlevel", "minimumlevel")
     maximum_raw, maximum_supplied = _first(params, "maxlevel", "maximumlevel")
+
+    minimum_level = _to_int(minimum_raw)
+    vocation_minimum, vocation_level_keys = _vocation_level_requirement(params)
+    if minimum_level is None and vocation_minimum is not None:
+        minimum_level = vocation_minimum
+        minimum_supplied = True
+
     npcs, npcs_supplied = _names(params, "npcs", "npc")
     creatures, creatures_supplied = _names(params, "creatures", "monsters")
     quests, quests_supplied = _names(params, "quests", "relatedquests")
     sublocations, sublocations_supplied = _names(params, "sublocations", "subareas", "areas")
     access, access_supplied = _text(params, "access", "accessnotes", "access notes")
+
+    body_access, access_quests = _access_body_evidence(wikitext)
+    if not access and body_access:
+        access = body_access
+        access_supplied = True
+
+    if access_quests:
+        existing_quests = {normalize_name(value.name) for value in quests}
+        quests = quests + tuple(value for value in access_quests if normalize_name(value.name) not in existing_quests)
+        quests_supplied = True
+
     supplied = frozenset(key for key, flag in {
         "canonical_name": name_supplied, "location_kind": kind_supplied, "region": region_supplied,
         "parent_location": parent_supplied, "description": description_supplied,
@@ -164,10 +238,15 @@ def _location_parts(raw: dict[str, Any]) -> tuple[str, str, str, LocationKnowled
         external_id=external_id, canonical_name=canonical_name, slug=slugify(canonical_name), aliases=aliases,
         location_kind=kind, region=region, parent_location=parent, description=description,
         premium_required=_to_bool(premium_raw) if premium_supplied else None,
-        minimum_level=_to_int(minimum_raw), maximum_level=_to_int(maximum_raw),
+        minimum_level=minimum_level, maximum_level=_to_int(maximum_raw),
         npcs=npcs, creatures=creatures, quests=quests, sublocations=sublocations, access_notes=access,
         image_reference=_build_sprite_url(canonical_name), source_reference=_build_wiki_page_url(page_title),
-        provider_metadata={"page_title": page_title, "template_parameters": sorted(params)},
+        provider_metadata={
+            "page_title": page_title,
+            "template_parameters": sorted(params),
+            "access_quest_names": [value.name for value in access_quests],
+            "vocation_level_parameters": list(vocation_level_keys),
+        },
         supplied_fields=supplied,
     )
     return external_id, page_title, wikitext, replace(dto, is_partial=not dto.sufficient_detail)

@@ -671,6 +671,9 @@ def test_local_creature_api_never_calls_provider_and_survives_provider_failure(c
     assert listed.status_code == 200 and listed.json()[0]["name"] == "Demon"
     assert second_page.status_code == 200 and second_page.json()[0]["name"] == "Dragon"
     assert detail.status_code == 200 and detail.json()["knowledge_entity_id"]
+    assert detail.json()["canonical_id"] == detail.json()["knowledge_entity_id"]
+    assert detail.json()["source_provider"] == "tibiawiki"
+    assert "hitpoints" in detail.json()["supplied_fields"]
     assert missing.status_code == 404
 
 

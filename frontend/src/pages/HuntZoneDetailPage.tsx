@@ -1,5 +1,5 @@
-import { lazy, Suspense, useEffect, useState } from 'react';
-import { Compass, Crown, Gauge, Loader2, MapPin, Sparkles, Users } from 'lucide-react';
+import { useEffect, useState } from 'react';
+import { Crown, Gauge, Loader2, Sparkles, Users } from 'lucide-react';
 import { Link, useLocation, useNavigate, useParams } from 'react-router-dom';
 import { useTranslation } from 'react-i18next';
 
@@ -11,7 +11,6 @@ import type { HuntZone } from '../types';
 import { SuggestCorrectionLink } from '../components/feedback/GitHubFeedbackLink';
 import { useSeoMetadata } from '../utils/seo';
 
-const TibiaMapViewer = lazy(() => import('../components/map/TibiaMapViewer'));
 
 export default function HuntZoneDetailPage() {
   const { identifier } = useParams<{ identifier: string }>();
@@ -26,7 +25,7 @@ export default function HuntZoneDetailPage() {
     title: `${zone.name} — Tibia hunt zone`,
     description: zone.description || `Levels, creatures, access and hunting information for ${zone.name}.`,
     canonicalPath: `/hunt-zones/${zone.slug || zone.id}`,
-    type: 'article', image: huntZonesApi.getMapImageUrl(zone.id, false),
+    type: 'article',
     breadcrumbs: [{ name: 'Home', path: '/' }, { name: 'Cyclopedia', path: '/cyclopedia' }, { name: zone.name, path: `/hunt-zones/${zone.slug || zone.id}` }],
   } : null);
 
@@ -46,7 +45,13 @@ export default function HuntZoneDetailPage() {
   if (!zone || error) return <Page><div className="rounded-2xl border border-danger/25 bg-danger-subtle p-6 text-danger"><h1 className="text-xl font-bold">{t('huntZoneDetail.unavailable')}</h1><p className="mt-2">{t('huntZoneDetail.notFound')}</p></div></Page>;
 
   const back = (location.state as { from?: string } | null)?.from || '/cyclopedia?tab=zones';
-  const levelRange = zone.min_level > 0 ? (zone.max_level ? `${zone.min_level}–${zone.max_level}` : `${zone.min_level}+`) : null;
+  const levelRange = zone.min_level != null && zone.min_level > 0 ? (zone.max_level ? `${zone.min_level}–${zone.max_level}` : `${zone.min_level}+`) : null;
+  const accessMinimumLevel = zone.access?.minimum_level ?? null;
+  const accessMaximumLevel = zone.access?.maximum_level ?? null;
+  const accessLevelRange = accessMinimumLevel ? (accessMaximumLevel ? `${accessMinimumLevel}–${accessMaximumLevel}` : `${accessMinimumLevel}+`) : null;
+  const accessPremiumRequired = zone.access?.premium_required ?? (zone.requires_premium ? true : null);
+  const accessStatus = zone.access?.status ?? (zone.requires_premium || zone.requires_quest ? 'restricted' : 'unknown');
+  const accessQuests = zone.access?.quests?.length ? zone.access.quests : (zone.requires_quest && zone.quest_name ? [{ id: zone.quest_id, name: zone.quest_name, slug: zone.quest_slug }] : []);
   const vocations = zone.recommended_vocations?.length ? zone.recommended_vocations : [zone.knights_recommended && 'Knight', zone.paladins_recommended && 'Paladin', zone.sorcerers_recommended && 'Sorcerer', zone.druids_recommended && 'Druid', zone.monks_recommended && 'Monk'].filter(Boolean) as string[];
   const quickFacts = [
     levelRange ? <KnowledgeFact key="levels" label={t('huntZoneDetail.levels')} value={levelRange} /> : null,
@@ -59,7 +64,6 @@ export default function HuntZoneDetailPage() {
     zone.avg_profit_hour || zone.profit_rating ? <KnowledgeFact key="profit" label={t('huntZoneDetail.profit')} value={zone.avg_profit_hour ? `${zone.avg_profit_hour.toLocaleString()} gp/h` : zone.profit_rating} /> : null,
     zone.danger_rating || zone.difficulty ? <KnowledgeFact key="danger" label={t('huntZoneDetail.danger')} value={zone.danger_rating || zone.difficulty} /> : null,
   ].filter(Boolean);
-  const mapFloor = zone.location_z ?? zone.map_z;
 
   return <Page>
     <KnowledgeBackLink to={back}>{t('huntZoneDetail.back')}</KnowledgeBackLink>
@@ -68,32 +72,12 @@ export default function HuntZoneDetailPage() {
       title={zone.name}
       description={zone.description || undefined}
       media={<div className="grid aspect-[4/3] place-items-center rounded-2xl border border-line bg-surface-base"><KnowledgeCategoryIcon category="zones" label={t('nav.zones')} className="size-28" mediaClassName="size-24" /></div>}
-      badges={<>{zone.city ? <KnowledgeBadge tone="primary">{zone.city}</KnowledgeBadge> : null}{zone.region && zone.region !== zone.city ? <KnowledgeBadge>{zone.region}</KnowledgeBadge> : null}{zone.difficulty ? <KnowledgeBadge>{zone.difficulty}</KnowledgeBadge> : null}{zone.requires_premium ? <KnowledgeBadge tone="warning">{t('huntZoneDetail.premium')}</KnowledgeBadge> : null}<a href="#hunt-zone-map" className="app-button-secondary app-button-sm"><Compass size={15} />{t('huntZoneDetail.viewMap')}</a><Link to={`/planner?zone=${encodeURIComponent(zone.slug || String(zone.id))}`} className="app-button-secondary app-button-sm"><Compass size={15} />Compare in Planner</Link><Link to={`/map?entityType=hunt_zone&slug=${encodeURIComponent(zone.slug || zone.name)}&q=${encodeURIComponent(zone.name)}`} className="app-button-primary app-button-sm"><MapPin size={15} />{t('map.openDetails')}</Link></>}
+      badges={<>{zone.city ? <KnowledgeBadge tone="primary">{zone.city}</KnowledgeBadge> : null}{zone.region && zone.region !== zone.city ? <KnowledgeBadge>{zone.region}</KnowledgeBadge> : null}{zone.difficulty ? <KnowledgeBadge>{zone.difficulty}</KnowledgeBadge> : null}{accessPremiumRequired === true ? <KnowledgeBadge tone="warning">{t('huntZoneDetail.premium')}</KnowledgeBadge> : null}</>}
     />
 
     {quickFacts.length ? <div className="mt-6"><KnowledgeFacts>{quickFacts}</KnowledgeFacts></div> : null}
 
     <div className="mt-8 space-y-6">
-      <KnowledgeSection id="hunt-zone-map" title={t('huntZoneDetail.map')} icon={<MapPin size={20} />}>
-        {(zone.city || zone.region) ? <p className="mb-3 text-sm text-content-secondary">{[zone.city, zone.region].filter((value, index, rows) => value && rows.indexOf(value) === index).join(' · ')}</p> : null}
-        <Suspense fallback={<div className="grid min-h-56 place-items-center rounded-xl border border-line bg-surface-base/60 text-sm text-content-muted">{t('common.loading')}</div>}>
-          <TibiaMapViewer
-            imageUrl={huntZonesApi.getMapImageUrl(zone.id, false)}
-            label={t('huntZoneDetail.mapAlt', { name: zone.name })}
-            floor={mapFloor}
-            floorLabel={mapFloor != null ? t('huntZoneDetail.floor', { floor: mapFloor }) : undefined}
-            mapBounds={zone.map_bounds}
-            center={zone.location_x != null && zone.location_y != null ? { x: zone.location_x, y: zone.location_y } : undefined}
-            emptyMessage={t('huntZoneDetail.mapEmpty')}
-            resetLabel={t('huntZoneDetail.resetMap')}
-            zoomInLabel={t('huntZoneDetail.zoomIn')}
-            zoomOutLabel={t('huntZoneDetail.zoomOut')}
-          />
-        </Suspense>
-        {zone.location_x != null && zone.location_y != null ? <p className="mt-3 text-xs text-content-muted">{t('huntZoneDetail.coordinates', { x: zone.location_x, y: zone.location_y, z: zone.location_z ?? '—' })}</p> : null}
-        <p className="mt-2 text-xs text-content-muted">{t('huntZoneDetail.mapContext')}</p>
-      </KnowledgeSection>
-
       <div className="grid gap-6 lg:grid-cols-[minmax(0,1.5fr)_minmax(18rem,1fr)]">
         <div className="space-y-6">
           {ratingFacts.length ? <KnowledgeSection title={t('huntZoneDetail.ratings')} icon={<Gauge size={20} />}><KnowledgeFacts>{ratingFacts}</KnowledgeFacts></KnowledgeSection> : null}
@@ -101,7 +85,21 @@ export default function HuntZoneDetailPage() {
           {zone.tips ? <KnowledgeSection title={t('huntZoneDetail.tips')} icon={<Sparkles size={20} />}><p className="whitespace-pre-line leading-7 text-content-secondary">{zone.tips}</p></KnowledgeSection> : null}
         </div>
         <div className="space-y-6">
-          <KnowledgeSection title={t('huntZoneDetail.access')} icon={<Crown size={20} />}><div className="space-y-3 text-sm text-content-secondary">{!zone.requires_premium && !zone.requires_quest ? <p>{t('huntZoneDetail.accessClear')}</p> : null}{zone.requires_premium ? <p>{t('huntZoneDetail.premiumRequired')}</p> : null}{zone.requires_quest ? zone.quest_name ? <p>{t('huntZoneDetail.requires')} {zone.quest_slug || zone.quest_id ? <Link className="font-semibold text-primary hover:underline" to={`/quests/${zone.quest_slug || zone.quest_id}`}>{zone.quest_name}</Link> : <span className="font-semibold text-content-primary">{zone.quest_name}</span>}</p> : <p>{t('huntZoneDetail.questUnresolved')}</p> : null}</div></KnowledgeSection>
+          <KnowledgeSection title={t('huntZoneDetail.access')} icon={<Crown size={20} />}>
+            {accessStatus === 'unknown' ? (
+              <KnowledgeEmpty>{t('huntZoneDetail.accessUnknown')}</KnowledgeEmpty>
+            ) : (
+              <div className="space-y-4 text-sm text-content-secondary">
+                <div className="flex flex-wrap gap-2">
+                  {accessLevelRange ? <KnowledgeBadge tone="warning">{t('huntZoneDetail.minimumLevel', { level: accessLevelRange })}</KnowledgeBadge> : null}
+                  {accessPremiumRequired === true ? <KnowledgeBadge tone="warning">{t('huntZoneDetail.premiumRequired')}</KnowledgeBadge> : null}
+                  {accessPremiumRequired === false ? <KnowledgeBadge>{t('huntZoneDetail.premiumNotRequired')}</KnowledgeBadge> : null}
+                </div>
+                {accessQuests.length ? <div><p className="mb-2 font-semibold text-content-primary">{t('huntZoneDetail.accessQuests')}</p><div className="flex flex-wrap gap-2">{accessQuests.map((quest) => quest.slug || quest.id ? <Link key={quest.name} className="rounded-full border border-primary/35 bg-primary/10 px-3 py-1.5 font-semibold text-primary hover:bg-primary/15" to={`/quests/${quest.slug || quest.id}`}>{quest.name}</Link> : <span key={quest.name} className="rounded-full border border-line px-3 py-1.5 text-content-primary">{quest.name}</span>)}</div></div> : zone.access?.quest_required ? <p>{t('huntZoneDetail.questUnresolved')}</p> : null}
+                {zone.access?.notes ? <p className="leading-6">{zone.access.notes}</p> : null}
+              </div>
+            )}
+          </KnowledgeSection>
         </div>
       </div>
     </div>
