@@ -385,15 +385,10 @@ class TibiaWikiQuestAdapter:
             raise ProviderResponseEnvelopeError()
         external_id, page_title, _wikitext, dto = _quest_parts(raw)
         parent_page = str(request.payload.get("parent_page") or "").strip() or None
-        children = tuple(
-            KnowledgeChildJobRequest(job_type="quest_detail", entity_type="quest", payload={"page_title": child, "parent_page": page_title}, priority=100, allow_completed_recreate=True)
-            for child in dto.provider_metadata.get("child_quest_links", [])
-        ) if dto.is_group else ()
         return KnowledgeFetchResult(
             documents=(self._detail_document(raw, external_id, page_title, parent_page),),
             partial=dto.is_partial,
             provider_metadata={"source": "stored_document" if request.job_type == "quest_renormalize" else "tibiawiki"},
-            child_jobs=children,
         )
 
     def _fetch_catalog(self, request: KnowledgeFetchRequest) -> KnowledgeFetchResult:

@@ -139,6 +139,44 @@ def test_quest_detail_extracts_missions_requirements_rewards_and_safe_unparsed_s
     assert result.documents[0].raw_json["future_envelope_field"] == "retained"
 
 
+
+def test_quest_detail_preserves_link_metadata_without_recursive_child_jobs():
+    class GroupQuestClient(FixtureQuestClient):
+        def fetch_detail(self, *, external_id: str | None, page_title: str | None) -> dict:
+            return {
+                "parse": {
+                    "pageid": 799,
+                    "title": "Quest Group",
+                    "links": [
+                        {"*": "Blood Brothers Quest", "ns": 0, "exists": ""},
+                        {"*": "The Ice Islands Quest", "ns": 0, "exists": ""},
+                    ],
+                    "wikitext": {
+                        "*": """{{Infobox Quest
+| name = Quest Group
+| description = A grouping page for related quests.
+}}"""
+                    },
+                }
+            }
+
+    adapter = TibiaWikiQuestAdapter(GroupQuestClient())
+    result = adapter.fetch(
+        request("quest_detail", payload={"page_title": "Quest Group"})
+    )
+
+    normalized = adapter.normalize(result.documents[0], context())
+    dto = QuestKnowledgeDTO.from_canonical_data(normalized.canonical_data)
+
+    assert dto.is_group is True
+    assert dto.provider_metadata["child_quest_links"] == [
+        "Blood Brothers Quest",
+        "The Ice Islands Quest",
+    ]
+    assert result.child_jobs == ()
+
+
+
 def test_quest_enqueue_and_validation_reject_unsafe_or_malformed_input():
     adapter = TibiaWikiQuestAdapter(FixtureQuestClient())
     with pytest.raises(ValueError, match="batch_limit"):
