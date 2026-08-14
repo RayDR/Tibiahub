@@ -204,10 +204,7 @@ def _location_parts(raw: dict[str, Any]) -> tuple[str, str, str, LocationKnowled
     maximum_raw, maximum_supplied = _first(params, "maxlevel", "maximumlevel")
 
     minimum_level = _to_int(minimum_raw)
-    vocation_minimum, vocation_level_keys = _vocation_level_requirement(params)
-    if minimum_level is None and vocation_minimum is not None:
-        minimum_level = vocation_minimum
-        minimum_supplied = True
+    _vocation_minimum, vocation_level_keys = _vocation_level_requirement(params)
 
     npcs, npcs_supplied = _names(params, "npcs", "npc")
     creatures, creatures_supplied = _names(params, "creatures", "monsters")
@@ -215,15 +212,9 @@ def _location_parts(raw: dict[str, Any]) -> tuple[str, str, str, LocationKnowled
     sublocations, sublocations_supplied = _names(params, "sublocations", "subareas", "areas")
     access, access_supplied = _text(params, "access", "accessnotes", "access notes")
 
-    body_access, access_quests = _access_body_evidence(wikitext)
-    if not access and body_access:
-        access = body_access
-        access_supplied = True
-
-    if access_quests:
-        existing_quests = {normalize_name(value.name) for value in quests}
-        quests = quests + tuple(value for value in access_quests if normalize_name(value.name) not in existing_quests)
-        quests_supplied = True
+    # Body prose can describe access to a subarea rather than this canonical
+    # location. Preserve it only in the immutable raw document.
+    access_quests: tuple[NamedKnowledgeReference, ...] = ()
 
     supplied = frozenset(key for key, flag in {
         "canonical_name": name_supplied, "location_kind": kind_supplied, "region": region_supplied,
@@ -308,7 +299,12 @@ class _TibiaWikiNamedEntityAdapter:
             documents=(KnowledgeDocumentDTO(
                 self.provider_code, f"{self.entity_type}:{external_id}", raw,
                 version="mediawiki-v1", language="en",
-                metadata={"document_kind": f"{self.entity_type}_detail", "external_id": external_id, "page_title": page_title},
+                metadata={
+                    "document_kind": f"{self.entity_type}_detail",
+                    "external_id": external_id,
+                    "page_title": page_title,
+                    "normalization_mode": "renormalize" if stored else "detail",
+                },
             ),), partial=dto.is_partial,
             provider_metadata={"source": "stored_document" if stored else "tibiawiki"},
         )
@@ -387,17 +383,33 @@ class _TibiaWikiNamedEntityAdapter:
         if document.metadata.get("document_kind") != f"{self.entity_type}_detail":
             return KnowledgeNormalizationResult(action="noop")
         external_id, _title, _wikitext, dto = self.parts(document.raw_json)
-        if dto.is_partial or not dto.sufficient_detail:
-            return KnowledgeNormalizationResult(action="noop", warnings=(f"partial_{self.entity_type}_detail_not_normalized",))
+        partial = dto.is_partial or not dto.sufficient_detail
+        renormalize = document.metadata.get("normalization_mode") == "renormalize"
+
+        if partial and not renormalize:
+            return KnowledgeNormalizationResult(
+                action="noop",
+                warnings=(f"partial_{self.entity_type}_detail_not_normalized",),
+            )
+
         return KnowledgeNormalizationResult(
             action="upsert",
             candidate=CanonicalEntityCandidate(
                 entity_type=(dto.canonical_entity_type if isinstance(dto, LocationKnowledgeDTO) else self.entity_type),
                 canonical_name=dto.canonical_name,
-                language_neutral_id=dto.language_neutral_id, aliases=dto.aliases,
-                source_priority=20, search_weight=1.0,
+                language_neutral_id=dto.language_neutral_id,
+                aliases=dto.aliases,
+                source_priority=20,
+                search_weight=1.0,
             ),
-            provider_code=self.provider_code, external_id=external_id, canonical_data=dto.to_canonical_data(),
+            warnings=(
+                (f"partial_{self.entity_type}_renormalize_existing_only",)
+                if partial
+                else ()
+            ),
+            provider_code=self.provider_code,
+            external_id=external_id,
+            canonical_data=dto.to_canonical_data(),
         )
 
 

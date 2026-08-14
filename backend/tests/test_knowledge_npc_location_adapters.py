@@ -27,6 +27,7 @@ from app.knowledge.schemas import KnowledgeEntityCreate
 from app.knowledge.services import EnqueueKnowledgeJob, KnowledgeEntityService, KnowledgeGraphService, KnowledgeJobService
 from app.knowledge.services.graph import RelationshipInput
 from app.knowledge.services.npc_location_normalization import sync_access_destination
+from app.knowledge.services.failures import InvalidNormalizationContractError
 from app.knowledge.services.normalization import KnowledgeNormalizationService
 from app.knowledge.workers.knowledge_worker import KnowledgeWorker
 from app.models import TibiaWikiLocation, TibiaWikiNpc
@@ -149,7 +150,7 @@ def test_location_detail_maps_levels_access_and_named_references():
     assert dto.access_notes.startswith("Travel by ship")
 
 
-def test_location_detail_extracts_iksupan_access_quest_and_vocation_level():
+def test_location_detail_keeps_iksupan_recommendations_and_body_access_noncanonical():
     raw = deepcopy(fixture("tibiawiki_location_detail.json"))
     raw["parse"]["pageid"] = 1999
     raw["parse"]["title"] = "Iksupan"
@@ -166,10 +167,21 @@ Access to Iksupan is obtained through the [[Adventures of Galthen Quest]].
     adapter = TibiaWikiLocationAdapter(FixtureClient("location"))
     normalized = adapter.normalize(detail_document("location", raw), context("location"))
     dto = LocationKnowledgeDTO.from_canonical_data(normalized.canonical_data)
-    assert dto.minimum_level == 150
-    assert dto.access_notes == "Access to Iksupan is obtained through the Adventures of Galthen Quest."
-    assert [value.name for value in dto.quests] == ["Adventures of Galthen Quest"]
-    assert dto.provider_metadata["access_quest_names"] == ["Adventures of Galthen Quest"]
+    assert dto.minimum_level is None
+    assert "minimum_level" not in dto.supplied_fields
+
+    assert dto.access_notes is None
+    assert "access_notes" not in dto.supplied_fields
+
+    assert dto.quests == ()
+    assert "quests" not in dto.supplied_fields
+
+    assert dto.provider_metadata["vocation_level_parameters"] == [
+        "lvlknights",
+        "lvlmages",
+        "lvlpaladins",
+    ]
+    assert dto.provider_metadata["access_quest_names"] == []
 
 
 def test_zone_access_keeps_legacy_false_defaults_unknown():
@@ -199,6 +211,155 @@ def test_zone_access_projects_canonical_location_and_required_quest_evidence():
     assert access.premium_required is True
     assert access.quest_required is True
     assert access.quests[0].slug == "adventures-of-galthen-quest"
+
+
+
+def test_partial_location_renormalize_repairs_existing_only_without_graph_reconciliation(
+    db,
+    named_registry,
+):
+    full = _place_fixture(
+        page_id=1128,
+        name="Edron",
+        kind="Location",
+        parent="Tiquanda",
+    )
+    applied = apply_detail(db, "location", full)
+    location = db.query(TibiaWikiLocation).one()
+
+    relation = (
+        db.query(KnowledgeRelationship)
+        .filter_by(
+            source_entity_id=applied.entity_uuid,
+            relationship_type_code="contained_in",
+            is_current=True,
+        )
+        .one()
+    )
+
+    location.access_notes = (
+        "South of this area is the Edron Orc Cave. "
+        "To access this place you need another tunnel."
+    )
+    location.provider_metadata = {
+        "page_title": "Edron",
+        "template_parameters": ["name", "type", "parent"],
+        "access_quest_names": [],
+        "vocation_level_parameters": [],
+    }
+    location.supplied_fields = [
+        "canonical_name",
+        "location_kind",
+        "parent_location",
+        "access_notes",
+        "image_reference",
+        "slug",
+        "source_reference",
+    ]
+    initial_version = location.data_version
+    db.flush()
+
+    partial_raw = {
+        "parse": {
+            "title": "Edron",
+            "pageid": 1128,
+            "wikitext": {
+                "*": (
+                    "{{Infobox Location\n"
+                    "| name = Edron\n"
+                    "}}\n"
+                    "South of this area is the Edron Orc Cave. "
+                    "To access this place you need another tunnel."
+                )
+            },
+        }
+    }
+
+    adapter = TibiaWikiLocationAdapter(FixtureClient("location"))
+
+    ordinary = adapter.normalize(
+        detail_document("location", partial_raw),
+        context("location"),
+    )
+    assert ordinary.action == "noop"
+
+    renormalize_document = KnowledgeDocumentDTO(
+        "tibiawiki",
+        "location:1128",
+        partial_raw,
+        metadata={
+            "document_kind": "location_detail",
+            "normalization_mode": "renormalize",
+        },
+    )
+    normalized = adapter.normalize(
+        renormalize_document,
+        context("location"),
+    )
+
+    dto = LocationKnowledgeDTO.from_canonical_data(
+        normalized.canonical_data
+    )
+    assert dto.is_partial is True
+    assert normalized.action == "upsert"
+
+    repaired = KnowledgeNormalizationService.apply(db, normalized)
+
+    assert repaired.status == "updated"
+    assert location.access_notes is None
+    assert "access_notes" not in location.supplied_fields
+    assert location.data_version == initial_version + 1
+
+    # The partial source omitted parent information, so it must not
+    # supersede an existing graph relationship.
+    assert db.get(KnowledgeRelationship, relation.id).is_current is True
+
+
+def test_partial_location_renormalize_cannot_create_new_canonical_entity(
+    db,
+    named_registry,
+):
+    raw = {
+        "parse": {
+            "title": "Unknown Partial Place",
+            "pageid": 2999,
+            "wikitext": {
+                "*": (
+                    "{{Infobox Location\n"
+                    "| name = Unknown Partial Place\n"
+                    "}}"
+                )
+            },
+        }
+    }
+
+    adapter = TibiaWikiLocationAdapter(FixtureClient("location"))
+    document = KnowledgeDocumentDTO(
+        "tibiawiki",
+        "location:2999",
+        raw,
+        metadata={
+            "document_kind": "location_detail",
+            "normalization_mode": "renormalize",
+        },
+    )
+
+    normalized = adapter.normalize(
+        document,
+        context("location"),
+    )
+
+    assert normalized.action == "upsert"
+
+    with pytest.raises(InvalidNormalizationContractError):
+        KnowledgeNormalizationService.apply(db, normalized)
+
+    assert (
+        db.query(KnowledgeEntity)
+        .filter_by(canonical_name="Unknown Partial Place")
+        .count()
+        == 0
+    )
 
 
 def test_normalization_is_idempotent_preserves_protected_fields_and_resolves_exact_graph_refs(db, named_registry):

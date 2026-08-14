@@ -195,6 +195,102 @@ def _bridge_npc(db: Session, entity: KnowledgeEntity, dto: NpcKnowledgeDTO):
     return created or changed
 
 
+
+_EXPLICIT_LOCATION_ACCESS_PARAMS = {
+    "access",
+    "accessnotes",
+    "access notes",
+}
+
+_EXPLICIT_LOCATION_MIN_LEVEL_PARAMS = {
+    "level",
+    "minlevel",
+    "minimumlevel",
+}
+
+
+def _clear_legacy_location_inferences(
+    row: TibiaWikiLocation,
+    dto: LocationKnowledgeDTO,
+    *,
+    created: bool,
+) -> bool:
+    """Remove values provably produced by legacy parser inference."""
+    if created:
+        return False
+
+    protected = set(row.protected_fields or [])
+    previous_supplied = set(row.supplied_fields or [])
+    metadata = row.provider_metadata if isinstance(row.provider_metadata, dict) else {}
+
+    template_parameters = {
+        str(value).strip().casefold()
+        for value in metadata.get("template_parameters", [])
+        if str(value).strip()
+    }
+
+    changed = False
+
+    # Previous parser could promote body prose about a sub-area to the
+    # canonical location's access_notes.
+    if (
+        "access_notes" not in dto.supplied_fields
+        and "access_notes" in previous_supplied
+        and not template_parameters.intersection(_EXPLICIT_LOCATION_ACCESS_PARAMS)
+        and row.access_notes is not None
+        and "access_notes" not in protected
+    ):
+        row.access_notes = None
+        changed = True
+
+    # Previous parser could promote vocation recommendation levels into
+    # canonical minimum_level.
+    if (
+        "minimum_level" not in dto.supplied_fields
+        and "minimum_level" in previous_supplied
+        and metadata.get("vocation_level_parameters")
+        and not template_parameters.intersection(_EXPLICIT_LOCATION_MIN_LEVEL_PARAMS)
+        and row.minimum_level is not None
+        and "minimum_level" not in protected
+    ):
+        row.minimum_level = None
+        changed = True
+
+    # Remove only quest references known to have come from the old
+    # body-access inference.
+    legacy_access_quests = {
+        normalize_name(str(value))
+        for value in metadata.get("access_quest_names", [])
+        if str(value).strip()
+    }
+    current_quest_names = {
+        normalize_name(value.name)
+        for value in dto.quests
+    }
+
+    if legacy_access_quests and "quests" not in protected:
+        current = list(row.quests or [])
+        cleaned = []
+
+        for value in current:
+            name = value.get("name") if isinstance(value, dict) else None
+            normalized = normalize_name(str(name or ""))
+
+            if (
+                normalized in legacy_access_quests
+                and normalized not in current_quest_names
+            ):
+                continue
+
+            cleaned.append(value)
+
+        if cleaned != current:
+            row.quests = cleaned
+            changed = True
+
+    return changed
+
+
 def _bridge_location(db: Session, entity: KnowledgeEntity, dto: LocationKnowledgeDTO):
     row = db.query(TibiaWikiLocation).filter_by(knowledge_entity_id=entity.uuid).first()
     if row is None:
@@ -210,6 +306,11 @@ def _bridge_location(db: Session, entity: KnowledgeEntity, dto: LocationKnowledg
         )
         db.add(row)
         db.flush()
+    changed = _clear_legacy_location_inferences(
+        row,
+        dto,
+        created=created,
+    )
     changed = _assign_bridge(row, dto, (
         ("name", dto.canonical_name, None), ("normalized_name", normalize_search_text(dto.canonical_name), None),
         ("slug", entity.slug, None), ("external_id", dto.external_id, None), ("source_name", "tibiawiki", None),
@@ -225,7 +326,7 @@ def _bridge_location(db: Session, entity: KnowledgeEntity, dto: LocationKnowledg
         ("access_notes", dto.access_notes, "access_notes"),
         ("provider_metadata", dict(dto.provider_metadata), None),
         ("supplied_fields", sorted(dto.supplied_fields), None),
-    ), created=created)
+    ), created=created) or changed
     if not created and changed:
         row.data_version = max(1, row.data_version or 1) + 1
     row.last_synced_at = datetime.now(UTC)
@@ -404,26 +505,103 @@ class NpcLocationKnowledgeNormalizationService:
     def apply(db: Session, result: KnowledgeNormalizationResult) -> NamedEntityNormalizationApplied:
         if result.canonical_data is None or result.candidate is None:
             raise InvalidNormalizationContractError()
+
         entity_type = result.candidate.entity_type
         if entity_type == "npc":
             dto = NpcKnowledgeDTO.from_canonical_data(result.canonical_data)
+            bridge_model = TibiaWikiNpc
         elif entity_type in PLACE_ENTITY_TYPES:
             dto = LocationKnowledgeDTO.from_canonical_data(result.canonical_data)
+            bridge_model = TibiaWikiLocation
         else:
             raise InvalidNormalizationContractError()
-        entity, created = _resolve_entity(db, result, dto, entity_type)
-        _ensure_mapping(db, result, entity, dto, entity_type)
-        entity_changed, aliases, warnings = _update_entity(db, entity, result)
-        bridge_changed = _bridge_npc(db, entity, dto) if entity_type == "npc" else _bridge_location(db, entity, dto)
-        relationships_synced = _sync_npc_location_relationships(
-            db, entity=entity, dto=dto, provider_id=result.provider_code or "tibiawiki",
-        )
-        references_resolved = _resolve_exact_references(db, entity)
+
+        if dto.is_partial:
+            # Partial renormalization is repair-only. It must never create
+            # canonical knowledge from an insufficient stored document.
+            mapping = _provider_mapping(
+                db,
+                result.provider_code or "",
+                entity_type,
+                result.external_id or "",
+            )
+            if mapping is None:
+                raise InvalidNormalizationContractError()
+
+            entity = mapping.entity
+            bridge = (
+                db.query(bridge_model)
+                .filter_by(knowledge_entity_id=entity.uuid)
+                .first()
+            )
+            if bridge is None:
+                raise InvalidNormalizationContractError()
+
+            created = False
+            _ensure_mapping(db, result, entity, dto, entity_type)
+
+            entity_changed = False
+            aliases = 0
+            warnings = len(result.warnings)
+
+            bridge_changed = (
+                _bridge_npc(db, entity, dto)
+                if entity_type == "npc"
+                else _bridge_location(db, entity, dto)
+            )
+
+            # Missing fields in a partial document are not evidence that
+            # existing graph relationships should be removed.
+            relationships_synced = 0
+            references_resolved = 0
+        else:
+            entity, created = _resolve_entity(
+                db,
+                result,
+                dto,
+                entity_type,
+            )
+            _ensure_mapping(db, result, entity, dto, entity_type)
+
+            entity_changed, aliases, warnings = _update_entity(
+                db,
+                entity,
+                result,
+            )
+
+            bridge_changed = (
+                _bridge_npc(db, entity, dto)
+                if entity_type == "npc"
+                else _bridge_location(db, entity, dto)
+            )
+
+            relationships_synced = _sync_npc_location_relationships(
+                db,
+                entity=entity,
+                dto=dto,
+                provider_id=result.provider_code or "tibiawiki",
+            )
+            references_resolved = _resolve_exact_references(db, entity)
+
         changed = entity_changed or bridge_changed
+
         if changed and not created:
-            emit_event(db, KnowledgeEventType.ENTITY_UPDATED, entity_uuid=entity.uuid, payload={"source": f"tibiawiki_{entity_type}_normalization"})
+            emit_event(
+                db,
+                KnowledgeEventType.ENTITY_UPDATED,
+                entity_uuid=entity.uuid,
+                payload={
+                    "source": f"tibiawiki_{entity_type}_normalization",
+                },
+            )
+
         return NamedEntityNormalizationApplied(
             "created" if created else "updated" if changed else "unchanged",
-            entity.uuid, aliases, warnings,
-            {"references_resolved": references_resolved, "relationships_synced": relationships_synced},
+            entity.uuid,
+            aliases,
+            warnings,
+            {
+                "references_resolved": references_resolved,
+                "relationships_synced": relationships_synced,
+            },
         )
