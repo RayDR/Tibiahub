@@ -10,10 +10,11 @@ from app.knowledge.registry import EntityTypeRegistry, ProviderRegistry, Relatio
 from app.knowledge.services.normalization import KnowledgeNormalizationService
 
 
-ROUTE_WIKITEXT = """* Go to the [[Ancient Temple]], north of [[Thais]].
+ROUTE_WIKITEXT = """* Go to the [[Ancient Temple]], north of [[Thais]] ({{Mapper Coords|126.100|125.171|7|3|text=here}}).
 * Follow the documented path east and go down the ladder.
 [[Image:Route to Mintwallin 1.png]]
 * Continue until you stand by the gate of [[Mintwallin]].
+* [[Image:Route to Mintwallin 2.png]]
 [[Category:Routes]]"""
 
 
@@ -76,4 +77,16 @@ def test_route_detail_persists_source_instructions_idempotently(db):
     assert route.unresolved_end_name == "Mintwallin"
     assert route.step_count == 3
     assert route.source_metadata["map_images"][0].endswith("/Special:FilePath/Route_to_Mintwallin_1.png")
-    assert [step.instruction for step in route.steps][0].startswith("Go to the Ancient Temple")
+    assert len(route.source_metadata["map_images"]) == 2
+    assert route.steps[0].instruction == "Go to the Ancient Temple, north of Thais."
+    assert all(step.tibia_x is None for step in route.steps)
+    assert all(step.tibia_y is None for step in route.steps)
+    assert all(step.tibia_z is None for step in route.steps)
+    assert all(step.geom is None for step in route.steps)
+    assert route.geom is None
+    assert route.min_x is None
+    assert route.min_y is None
+    assert route.max_x is None
+    assert route.max_y is None
+    assert route.min_z is None
+    assert route.max_z is None

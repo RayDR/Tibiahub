@@ -34,6 +34,10 @@ from app.services.bestiary_source import _build_wiki_page_url, _strip_markup
 
 _UNSAFE_TEXT = re.compile(r"<\s*script\b|javascript\s*:|\bon(?:error|load)\s*=", re.I)
 _IMAGE = re.compile(r"\[\[(?:File|Image):([^\]|]+)", re.I)
+_MAPPER_COORDS_WRAPPER = re.compile(
+    r"\s*\(\s*\{\{\s*Mapper Coords\b[^{}]*\}\}\s*\)",
+    re.I,
+)
 
 
 def _size(value: dict[str, Any]) -> int:
@@ -57,7 +61,9 @@ def _parts(raw: dict[str, Any]) -> tuple[str, str, str, RouteDTO]:
     for line in wikitext.splitlines():
         if not re.match(r"^\s*\*", line) or re.match(r"^\s*\*\s*\[\[(?:File|Image):", line, re.I):
             continue
-        instruction = _strip_markup(re.sub(r"^\s*\*+\s*", "", line)).strip()
+        raw_instruction = re.sub(r"^\s*\*+\s*", "", line)
+        raw_instruction = _MAPPER_COORDS_WRAPPER.sub("", raw_instruction)
+        instruction = _strip_markup(raw_instruction).strip()
         if instruction and instruction.casefold() not in {value.casefold() for value in instructions}:
             instructions.append(instruction[:2000])
         if len(instructions) >= 250:
