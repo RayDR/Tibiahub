@@ -119,6 +119,43 @@ def _item_values(raw: str | None) -> tuple[QuestItemReference, ...]:
     return tuple(deduped.values())
 
 
+_REWARD_ACCESS_LINK = re.compile(
+    r"\baccess\s+to\s+(?:the\s+)?\[\[([^\]|#]+)(?:\|[^\]]+)?\]\]",
+    re.I,
+)
+
+_REWARD_ITEM_ENTRY = (
+    r"(?:\d+\s*[xX]?\s*)?"
+    r"\[\[[^\]|#]+(?:\|[^\]]+)?\]\]"
+)
+
+_REWARD_ITEM_LIST = re.compile(
+    rf"^\s*{_REWARD_ITEM_ENTRY}"
+    rf"(?:\s*(?:,|;|\band\b)\s*{_REWARD_ITEM_ENTRY})*"
+    rf"\s*[.]?\s*$",
+    re.I,
+)
+
+
+def _reward_item_values(raw: str | None) -> tuple[QuestItemReference, ...]:
+    """Treat rewards as items only when the non-access value is a pure item list."""
+    if not raw:
+        return ()
+
+    candidate = _REWARD_ACCESS_LINK.sub("", raw).strip()
+    candidate = re.sub(
+        r"^\s*(?:,|;|and)\s*|\s*(?:,|;|and)\s*$",
+        "",
+        candidate,
+        flags=re.I,
+    ).strip()
+
+    if not candidate or not _REWARD_ITEM_LIST.fullmatch(candidate):
+        return ()
+
+    return _item_values(candidate)
+
+
 def _access_values(
     access_raw: str | None,
     rewards_raw: str | None,
@@ -132,7 +169,7 @@ def _access_values(
     """
     values = [QuestAccessReference(name=value.name) for value in _name_values(access_raw)]
     seen = {(normalize_name(value.name), normalize_name(value.destination_name or "")) for value in values}
-    for match in re.finditer(r"\baccess\s+to\s+\[\[([^\]|#]+)(?:\|[^\]]+)?\]\]", rewards_raw or "", re.I):
+    for match in _REWARD_ACCESS_LINK.finditer(rewards_raw or ""):
         destination = _strip_markup(match.group(1)).strip()
         if not destination:
             continue
@@ -288,7 +325,7 @@ def _quest_parts(raw: dict[str, Any]) -> tuple[str, str, str, QuestKnowledgeDTO]
     }
     rewarded_items = tuple(
         value
-        for value in _item_values(rewards_raw)
+        for value in _reward_item_values(rewards_raw)
         if normalize_name(value.name) not in access_destinations
     )
     child_links = _candidate_quest_links(raw, page_title)

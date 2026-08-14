@@ -135,14 +135,36 @@ def _bridge(db: Session, entity: KnowledgeEntity, dto: QuestKnowledgeDTO) -> tup
         db.add(quest); db.flush()
     changed = False
     protected = set(quest.protected_fields or [])
+    clearable_fields = {
+        "starting_npcs",
+        "related_npcs",
+        "required_items",
+        "rewarded_items",
+        "required_quests",
+        "unlocked_quests",
+        "required_creatures",
+        "bosses",
+        "locations",
+        "access_unlocks",
+        "rewards",
+        "treasure",
+    }
+
     def assign(field: str, value, supplied: str | None = None) -> None:
         nonlocal changed
-        if field in protected or value is None or value == "" or (supplied and supplied not in dto.supplied_fields):
+        if field in protected or value is None or value == "":
             return
-        if value in ([], {}) and getattr(quest, field) not in (None, "", [], {}):
+        if supplied is not None and supplied not in dto.supplied_fields:
+            return
+        if value in ([], {}) and not (
+            field in clearable_fields
+            and supplied is not None
+            and supplied in dto.supplied_fields
+        ):
             return
         if getattr(quest, field) != value:
-            setattr(quest, field, value); changed = True
+            setattr(quest, field, value)
+            changed = True
     if quest.knowledge_entity_id is None:
         quest.knowledge_entity_id = entity.uuid; changed = True
     for field, value, supplied in (
@@ -180,8 +202,8 @@ def _bridge(db: Session, entity: KnowledgeEntity, dto: QuestKnowledgeDTO) -> tup
     if dto.locations:
         assign("location", dto.locations[0].name)
     assign("requirements", [x.name for x in dto.required_items] + [x.name for x in dto.required_quests])
-    assign("rewards", [x.name for x in dto.rewarded_items])
-    assign("treasure", [asdict(x) for x in dto.rewarded_items])
+    assign("rewards", [x.name for x in dto.rewarded_items], "rewarded_items")
+    assign("treasure", [asdict(x) for x in dto.rewarded_items], "rewarded_items")
     quest.raw_data = None
     quest.last_synced_at = datetime.now(UTC)
     if not created and changed:

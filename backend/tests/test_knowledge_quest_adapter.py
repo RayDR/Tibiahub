@@ -177,6 +177,56 @@ def test_quest_detail_preserves_link_metadata_without_recursive_child_jobs():
 
 
 
+
+def test_mixed_reward_prose_does_not_become_items_and_clears_stale_rewards(
+    db,
+    quest_registry,
+):
+    raw = fixture("tibiawiki_quest_detail.json")
+
+    first = apply_detail(db, raw)
+    quest = db.query(TibiaWikiQuest).one()
+
+    assert [value["name"] for value in quest.rewarded_items] == [
+        "Gold Coin",
+        "Explorer Brooch",
+    ]
+
+    mixed = deepcopy(raw)
+    wikitext = mixed["parse"]["wikitext"]["*"]
+    wikitext = wikitext.replace(
+        "|rewards=100x [[Gold Coin]], [[Explorer Brooch]]",
+        (
+            "|rewards=[[Norseman Outfits|Norseman Outfit]], "
+            "access to the [[Formorgar Mines]], [[Helheim]], [[Tyrsung]], "
+            "ability to use the dogsleds from [[Nibelor]] to [[Inukaya]], "
+            "ability to become a citizen of [[Svargrond]], including talking "
+            "to the arena, boat and more [[NPC]]s."
+        ),
+    )
+    wikitext = wikitext.replace("|access=[[Calassa Access]]\n", "")
+    mixed["parse"]["wikitext"]["*"] = wikitext
+
+    adapter = TibiaWikiQuestAdapter(FixtureQuestClient())
+    normalized = adapter.normalize(detail_document(mixed), context())
+    dto = QuestKnowledgeDTO.from_canonical_data(normalized.canonical_data)
+
+    assert dto.rewarded_items == ()
+    assert [
+        (value.name, value.destination_name)
+        for value in dto.access_unlocks
+    ] == [
+        ("Formorgar Mines Access", "Formorgar Mines"),
+    ]
+
+    applied = KnowledgeNormalizationService.apply(db, normalized)
+
+    assert applied.entity_uuid == first.entity_uuid
+    assert quest.rewarded_items == []
+    assert quest.rewards == []
+    assert quest.treasure == []
+
+
 def test_quest_enqueue_and_validation_reject_unsafe_or_malformed_input():
     adapter = TibiaWikiQuestAdapter(FixtureQuestClient())
     with pytest.raises(ValueError, match="batch_limit"):
