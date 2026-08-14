@@ -33,6 +33,7 @@ def arguments() -> argparse.Namespace:
     parser.add_argument("--quest-name")
     parser.add_argument("--npc-name")
     parser.add_argument("--location-name")
+    parser.add_argument("--route-name")
     parser.add_argument("--hunt-zone-name")
     parser.add_argument("--character-name")
     parser.add_argument("--guild-name")
@@ -89,6 +90,12 @@ def request_values(args: argparse.Namespace) -> tuple[dict, dict]:
         return {}, {
             key: value
             for key, value in {"external_id": args.external_id, "page_title": args.location_name}.items()
+            if value
+        }
+    if args.job_type in {"route_detail", "route_renormalize"}:
+        return {}, {
+            key: value
+            for key, value in {"external_id": args.external_id, "page_title": args.route_name}.items()
             if value
         }
     if args.job_type in {"hunt_zone_detail", "hunt_zone_renormalize"}:
