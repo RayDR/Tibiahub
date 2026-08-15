@@ -97,9 +97,17 @@ def _graph_named_place(db: Session, *, source: KnowledgeEntity, relationship_typ
     )).relationship
 
 
-def _retire(row) -> None:
+def _retire(row, transition_at: datetime) -> None:
     row.is_current = False
-    row.valid_until = datetime.now(UTC)
+    row.valid_until = transition_at
+
+
+def _version_transition(current) -> dict[str, datetime]:
+    if current is None:
+        return {}
+    transition_at = datetime.now(UTC)
+    _retire(current, transition_at)
+    return {"valid_from": transition_at}
 
 
 def _source_metadata(dto) -> dict:
@@ -119,8 +127,7 @@ def _replace_representation_link(db: Session, *, row, source_entity_id: UUID,
     current = db.query(SpatialEntityLocationLink).filter_by(
         source_provider_id=provider, external_id=external_id, is_current=True,
     ).first()
-    if current:
-        _retire(current)
+    transition = _version_transition(current)
     db.add(SpatialEntityLocationLink(
         source_entity_id=source_entity_id, location_entity_id=location_entity_id,
         map_point_id=map_point_id, map_region_id=map_region_id,
@@ -128,6 +135,7 @@ def _replace_representation_link(db: Session, *, row, source_entity_id: UUID,
         source_provider_id=provider, source_reference=source_reference,
         source_metadata=source_metadata, confidence=confidence,
         verification_state=row.verification_state, version=row.version,
+        **transition,
     ))
 
 
@@ -141,8 +149,7 @@ def persist_map_point(db: Session, dto: MapPointDTO, *, provider: str = "tibiama
     if current and current.source_metadata.get("spatial_content_sha256") == metadata["spatial_content_sha256"]:
         return current
     version = (current.version + 1) if current else 1
-    if current:
-        _retire(current)
+    transition = _version_transition(current)
     row = SpatialMapPoint(
         knowledge_entity_id=entity.uuid, location_entity_id=location.uuid if location else None,
         external_id=dto.external_id, name=dto.name, tibia_x=dto.x, tibia_y=dto.y, tibia_z=dto.z,
@@ -154,6 +161,7 @@ def persist_map_point(db: Session, dto: MapPointDTO, *, provider: str = "tibiama
         verification_state=(state if dto.location_name and location is None else
                             ("pending" if dto.resolved else "unresolved")),
         version=version,
+        **transition,
     )
     if dto.resolved:
         row.geom = (
@@ -188,8 +196,7 @@ def persist_map_region(db: Session, dto: MapRegionDTO, *, provider: str = "tibia
     metadata = _source_metadata(dto)
     if current and current.source_metadata.get("spatial_content_sha256") == metadata["spatial_content_sha256"]:
         return current
-    if current:
-        _retire(current)
+    transition = _version_transition(current)
     row = SpatialMapRegion(
         knowledge_entity_id=entity.uuid, location_entity_id=location.uuid if location else None,
         external_id=dto.external_id, name=dto.name, min_z=dto.minimum_z, max_z=dto.maximum_z,
@@ -200,6 +207,7 @@ def persist_map_region(db: Session, dto: MapRegionDTO, *, provider: str = "tibia
         verification_state=(state if dto.location_name and location is None else
                             ("pending" if dto.geometry else "unresolved")),
         version=(current.version + 1) if current else 1,
+        **transition,
     )
     if dto.geometry:
         row.geom = (
@@ -245,8 +253,7 @@ def persist_route(db: Session, dto: RouteDTO, *, provider: str = "tibiamaps") ->
     metadata = _source_metadata(dto)
     if current and current.source_metadata.get("spatial_content_sha256") == metadata["spatial_content_sha256"]:
         return current
-    if current:
-        _retire(current)
+    transition = _version_transition(current)
     start, _ = _place(db, dto.start_location_name)
     end, _ = _place(db, dto.end_location_name)
     row = SpatialRoute(
@@ -258,6 +265,7 @@ def persist_route(db: Session, dto: RouteDTO, *, provider: str = "tibiamaps") ->
         source_metadata=metadata, confidence=dto.confidence,
         verification_state="pending" if dto.steps else "unresolved",
         version=(current.version + 1) if current else 1,
+        **transition,
     )
     db.add(row); db.flush()
     coordinate_steps = []
