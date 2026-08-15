@@ -84,11 +84,15 @@ def test_point_region_route_persistence_graph_and_versioning(db, spatial_registr
         location_name="Thais Temple", confidence="high",
     ))
     db.flush()
+    db.refresh(point)
+    db.refresh(changed)
     assert changed.version == 2 and changed.is_current and point.is_current is False
+    assert point.valid_until == changed.valid_from
     links = db.query(SpatialEntityLocationLink).filter_by(external_id="point:thais-temple").order_by(
         SpatialEntityLocationLink.version,
     ).all()
     assert [(row.version, row.is_current) for row in links] == [(1, False), (2, True)]
+    assert links[0].valid_until == links[1].valid_from
 
     region = persist_map_region(db, MapRegionDTO(
         "thais-centre", "Thais Centre", polygon(), location_name="Thais Temple",
@@ -108,11 +112,23 @@ def test_point_region_route_persistence_graph_and_versioning(db, spatial_registr
     )
     route = persist_route(db, route_dto)
     assert persist_route(db, route_dto).id == route.id
+    changed_route = persist_route(db, RouteDTO(
+        "temple-depot", "Temple to Depot",
+        (
+            RouteStepDTO(1, "Leave the temple", "Thais Temple", 32369, 32241, 7),
+            RouteStepDTO(2, "Enter the depot through the east door", "Thais Depot", 32375, 32245, 7),
+        ),
+        start_location_name="Thais Temple", end_location_name="Thais Depot", confidence="high",
+    ))
     db.flush()
+    db.refresh(route)
+    db.refresh(changed_route)
 
     assert isinstance(region, SpatialMapRegion) and region.location_entity_id == location.uuid
-    assert isinstance(route, SpatialRoute) and [step.sequence for step in route.steps] == [1, 2]
-    assert route.start_location_entity_id == location.uuid and route.end_location_entity_id == destination.uuid
+    assert isinstance(changed_route, SpatialRoute) and [step.sequence for step in changed_route.steps] == [1, 2]
+    assert changed_route.version == 2 and changed_route.is_current and route.is_current is False
+    assert route.valid_until == changed_route.valid_from
+    assert changed_route.start_location_entity_id == location.uuid and changed_route.end_location_entity_id == destination.uuid
     relationships = {(row.relationship_type_code, row.resolution_state) for row in db.query(KnowledgeRelationship).all()}
     assert ("represented_by", "resolved") in relationships
     assert {("starts_at", "resolved"), ("ends_at", "resolved"), ("passes_through", "resolved")} <= relationships
