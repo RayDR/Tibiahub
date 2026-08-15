@@ -49,6 +49,10 @@ _UNSAFE_TEXT = re.compile(r"<\s*script\b|javascript\s*:|\bon(?:error|load)\s*=",
 _CREATURE_LIST = re.compile(r"\{\{\s*CreatureList\b(.*?)\n\s*\}\}", re.I | re.S)
 _RECOMMENDATION_KEY = re.compile(r"^(lvl|sk|def)([a-z]+)$", re.I)
 _RECOMMENDATION_FIELD = {"lvl": "level", "sk": "skill", "def": "defense"}
+_MAPPER_COORDS_REFERENCE = re.compile(
+    r"\s*,?\s*\{\{\s*Mapper Coords\b[^{}]*\}\}",
+    re.I,
+)
 
 
 def _serialized_size(value: dict[str, Any]) -> int:
@@ -105,7 +109,8 @@ def _hunt_zone_parts(raw: dict[str, Any]) -> tuple[str, str, str, HuntZoneKnowle
     name, name_supplied = _text(params, "name", "actualname")
     canonical_name = name or page_title
     city, city_supplied = _text(params, "city")
-    location, location_supplied = _text(params, "location")
+    location_raw, location_supplied = _first(params, "location")
+    location = _strip_markup(_MAPPER_COORDS_REFERENCE.sub("", location_raw or "")) or None
     implemented, implemented_supplied = _text(params, "implemented")
     vocation_text, vocation_supplied = _text(params, "vocation", "vocations")
     experience, experience_supplied = _text(params, "exp", "experience")
