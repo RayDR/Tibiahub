@@ -140,6 +140,14 @@ def _bridge(db: Session, entity: KnowledgeEntity, dto: HuntZoneKnowledgeDTO) -> 
             setattr(row, field_name, value)
             changed = True
 
+    def clear_unknown(field_name: str) -> None:
+        nonlocal changed
+        if field_name in protected:
+            return
+        if getattr(row, field_name) is not None:
+            setattr(row, field_name, None)
+            changed = True
+
     assign("knowledge_entity_id", entity.uuid)
     assign("name", dto.canonical_name)
     assign("normalized_name", normalize_search_text(dto.canonical_name))
@@ -154,6 +162,17 @@ def _bridge(db: Session, entity: KnowledgeEntity, dto: HuntZoneKnowledgeDTO) -> 
     assign("exp_rating", str(dto.experience_rating) if dto.experience_rating is not None else None, "experience_rating")
     assign("profit_rating", str(dto.loot_rating) if dto.loot_rating is not None else None, "loot_rating")
     assign("requires_premium", dto.premium_required, "premium_required")
+    if "premium_required" not in dto.supplied_fields:
+        clear_unknown("requires_premium")
+    for legacy_field in (
+        "requires_quest",
+        "knights_recommended",
+        "paladins_recommended",
+        "sorcerers_recommended",
+        "druids_recommended",
+        "monks_recommended",
+    ):
+        clear_unknown(legacy_field)
     assign("description", dto.description, "description")
     assign("map_image_url", dto.image_reference, "image_reference")
 
@@ -184,13 +203,16 @@ def _named_relationship(
     unresolved_type: str,
     scope: str,
     document: str,
-) -> tuple[UUID, bool]:
+    retain_unresolved: bool = True,
+) -> tuple[UUID | None, bool]:
     if set(target_types).issubset({"area", "town", "location"}):
         matches = exact_place_candidates(db, name, target_types)
     else:
         matches = [match for target_type in target_types for match in exact_entity_candidates(db, target_type, name)]
     unique = {match.uuid: match for match in matches}
     target = next(iter(unique.values())) if len(unique) == 1 else None
+    if target is None and not retain_unresolved:
+        return None, False
     state = "resolved" if target else "ambiguous" if len(unique) > 1 else "unresolved"
     mutation = KnowledgeGraphService.upsert(db, RelationshipInput(
         source_entity_id=source.uuid,
@@ -216,13 +238,16 @@ def _sync_relationships(db: Session, entity: KnowledgeEntity, dto: HuntZoneKnowl
     document = f"hunt_zone:{dto.external_id}"
     total = unresolved = retired = 0
     specs = (
-        ("creatures", "creatures", "has_creature", dto.creatures, ("creature", "boss"), "creature"),
-        ("access_quests", "access", "requires_hunt_quest", dto.access_quests, ("quest",), "quest"),
-        ("city", "location", "located_at", (dto.city,) if dto.city else (), ("town",), "town"),
-        ("location", "location", "located_at", (dto.location,) if dto.location else (), ("area", "location"), "location"),
+        ("creatures", "creatures", "has_creature", dto.creatures, ("creature", "boss"), "creature", True),
+        ("access_quests", "access", "requires_hunt_quest", dto.access_quests, ("quest",), "quest", True),
+        ("city", "location", "located_at", (dto.city,) if dto.city else (), ("town",), "town", True),
+        # TibiaWiki's free-form location field often contains prose rather than a
+        # canonical place identity. Keep that text on HuntZone.region, but only
+        # project a graph edge when the complete value resolves exactly.
+        ("location", "location", "located_at", (dto.location,) if dto.location else (), ("area", "location"), "location", False),
     )
     by_scope: dict[str, tuple[set[str], set[UUID]]] = {}
-    for supplied_field, scope, relation, names, target_types, unresolved_type in specs:
+    for supplied_field, scope, relation, names, target_types, unresolved_type, retain_unresolved in specs:
         if supplied_field not in dto.supplied_fields:
             continue
         relation_types, current_ids = by_scope.setdefault(scope, (set(), set()))
@@ -237,7 +262,10 @@ def _sync_relationships(db: Session, entity: KnowledgeEntity, dto: HuntZoneKnowl
                 unresolved_type=unresolved_type,
                 scope=scope,
                 document=document,
+                retain_unresolved=retain_unresolved,
             )
+            if relationship_id is None:
+                continue
             current_ids.add(relationship_id)
             total += 1
             unresolved += int(is_unresolved)
