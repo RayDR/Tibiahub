@@ -1,7 +1,7 @@
 """Align Hunt Zone relationship registry with runtime definitions.
 
 Revision ID: hunt_zone_registry_20260815
-Revises: hunt_analyzer_20260812
+Revises: provider_knowledge_20260813
 """
 from __future__ import annotations
 
@@ -12,7 +12,7 @@ import sqlalchemy as sa
 
 
 revision = "hunt_zone_registry_20260815"
-down_revision = "hunt_analyzer_20260812"
+down_revision = "provider_knowledge_20260813"
 branch_labels = None
 depends_on = None
 
