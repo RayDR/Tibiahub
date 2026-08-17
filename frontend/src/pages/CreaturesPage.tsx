@@ -1857,12 +1857,7 @@ const CreaturesPage: React.FC = () => {
               <CompactEntityStrip title={t('cyclopedia.discovery.popularLoot')} items={topPreviewCards} variant="rail" nudgeSessionKey="popular-loot" linkState={cyclopediaRouteState} onNavigate={persistCyclopediaState} />
               <CompactEntityStrip title={t('cyclopedia.discovery.trendingLoot')} items={lootTrendingPreviewCards} variant="rail" nudgeSessionKey="trending-loot" linkState={cyclopediaRouteState} onNavigate={persistCyclopediaState} />
             </div>
-          ) : mode === 'quests' ? (
-            <QuestLibraryShelves
-              linkState={cyclopediaRouteState}
-              onNavigate={persistCyclopediaState}
-            />
-          ) : (
+          ) : mode === 'quests' ? null : (
             <CyclopediaDiscovery
               mode={mode}
               primaryItems={topPreviewCards}
@@ -1872,6 +1867,13 @@ const CreaturesPage: React.FC = () => {
           )
         ) : null}
       </div>
+
+      {mode === 'quests' ? (
+        <QuestLibraryShelves
+          linkState={cyclopediaRouteState}
+          onNavigate={persistCyclopediaState}
+        />
+      ) : null}
 
       <div>
         {!loading &&
@@ -2000,123 +2002,6 @@ const CreaturesPage: React.FC = () => {
               </AppCard>
             ))}
 
-            {mode === 'quests' &&
-              quests.map((quest, index) => {
-                const detailIdentifier =
-                  quest.slug ?? quest.id;
-
-                const questGroup =
-                  quest.group_name ||
-                  quest.category ||
-                  quest.quest_type;
-
-                return (
-                  <AppCard
-                    data-cyclopedia-result
-                    key={
-                      quest.id ||
-                      quest.slug ||
-                      `${quest.name}-${index}`
-                    }
-                    className="ds-enter overflow-hidden p-0"
-                  >
-                    <div className="flex items-start gap-4 p-4 sm:p-5">
-                      <KnowledgeCategoryIcon category="quests" label={t('nav.quests')} className="size-16 rounded-xl border border-line" mediaClassName="size-14" />
-
-                      <div className="min-w-0 flex-1">
-                        <div className="flex flex-wrap items-start justify-between gap-2">
-                          <h3 className="min-w-0 text-lg font-bold leading-tight text-content-primary">
-                            {quest.name}
-                          </h3>
-
-                          {questGroup ? (
-                            <span className="shrink-0 rounded-full border border-primary/30 bg-primary/10 px-2 py-1 text-[10px] font-semibold uppercase tracking-wide text-primary">
-                              {questGroup}
-                            </span>
-                          ) : null}
-                        </div>
-
-                        <p className="mt-2 line-clamp-3 text-sm leading-relaxed text-content-secondary">
-                          {quest.description ||
-                            t(
-                              'cyclopedia.quests.noDetails',
-                            )}
-                        </p>
-
-                        <div className="mt-4 flex flex-wrap gap-2 text-xs text-content-muted">
-                          {quest.min_level != null || quest.max_level != null ? <div className="rounded-lg border border-line/70 bg-surface-base/40 px-3 py-2">
-                            {t(
-                              'cyclopedia.quests.levelRange',
-                              {
-                                min:
-                                  quest.min_level ??
-                                  t(
-                                    'common.notAvailable',
-                                  ),
-                                max:
-                                  quest.max_level ??
-                                  t(
-                                    'common.notAvailable',
-                                  ),
-                              },
-                            )}
-                          </div> : null}
-
-                          {quest.npc ? <div className="rounded-lg border border-line/70 bg-surface-base/40 px-3 py-2">
-                            <span className="font-semibold text-content-secondary">
-                              {t(
-                                'cyclopedia.quests.npc',
-                              )}
-                              :
-                            </span>{' '}
-                            {quest.npc}
-                          </div> : null}
-
-                          {quest.location ? <div className="rounded-lg border border-line/70 bg-surface-base/40 px-3 py-2">
-                            <span className="font-semibold text-content-secondary">
-                              {t(
-                                'cyclopedia.quests.location',
-                              )}
-                              :
-                            </span>{' '}
-                            {quest.location}
-                          </div> : null}
-                          {quest.premium_required ? <KnowledgeBadge tone="warning">{t('questDetail.premium')}</KnowledgeBadge> : null}
-                        </div>
-                      </div>
-                    </div>
-
-                    <div className="flex flex-wrap items-center gap-4 border-t border-line bg-surface-base/30 px-4 py-3 text-xs sm:px-5">
-                      {detailIdentifier != null ? (
-                        <Link
-                          to={`/quests/${detailIdentifier}`}
-                          state={cyclopediaRouteState}
-                          onClick={() => persistCyclopediaState()}
-                          className="font-semibold text-primary hover:underline"
-                        >
-                          {t(
-                            'cyclopedia.quests.openDetail',
-                          )}
-                        </Link>
-                      ) : null}
-
-                      {quest.source_url ? (
-                        <a
-                          href={quest.source_url}
-                          target="_blank"
-                          rel="noreferrer"
-                          className="text-content-muted hover:text-primary"
-                        >
-                          {t(
-                            'cyclopedia.items.sourcePage',
-                          )}
-                        </a>
-                      ) : null}
-                    </div>
-                  </AppCard>
-                );
-              })}
-
             {mode === 'zones' && zones.map((zone) => (
               <AppCard key={zone.id} data-cyclopedia-result className="ds-enter overflow-hidden">
                 <div className="relative h-40 bg-surface-base">
@@ -2168,7 +2053,7 @@ const CreaturesPage: React.FC = () => {
           </div>
         ) : null}
 
-        {isEmpty && !errorMessage && (
+        {isEmpty && mode !== 'quests' && !errorMessage && (
           <div className="py-20 text-center opacity-70">
             <div className="mb-4 text-5xl text-primary"><FontAwesomeIcon icon={faScroll} /></div>
             <p className="font-serif text-xl text-content-secondary">{emptyTitle}</p>
