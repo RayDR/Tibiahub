@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+import json
+from pathlib import Path
 from uuid import uuid4
 
 from app.knowledge.adapters.protocol import KnowledgeFetchRequest
@@ -9,6 +11,9 @@ from app.knowledge.adapters.tibiawiki_items import (
 )
 
 
+FIXTURES = Path(__file__).parent / "fixtures"
+
+
 class CaptureItemClient(HttpTibiaWikiItemClient):
     def __init__(self):
         super().__init__()
@@ -16,25 +21,18 @@ class CaptureItemClient(HttpTibiaWikiItemClient):
 
     def _request(self, params: dict) -> dict:
         self.params = dict(params)
-        return {"batchcomplete": "", "query": {"embeddedin": []}}
+        return {"batchcomplete": "", "query": {"categorymembers": []}}
 
 
-class EmbeddedInFixtureClient:
+class PickupableCategoryFixtureClient:
     def fetch_catalog(self, *, continuation: str | None, limit: int) -> dict:
         assert continuation is None
         assert limit == 2
-        return {
-            "continue": {
-                "eicontinue": "10|Infobox_Item|222",
-                "continue": "-||",
-            },
-            "query": {
-                "embeddedin": [
-                    {"pageid": 111, "ns": 0, "title": "Magic Sword"},
-                    {"pageid": 222, "ns": 0, "title": "Demon Shield"},
-                ]
-            },
-        }
+        return json.loads(
+            (FIXTURES / "tibiawiki_pickupable_item_catalog.json").read_text(
+                encoding="utf-8"
+            )
+        )
 
     def fetch_detail(self, *, external_id: str | None, page_title: str | None) -> dict:
         raise AssertionError("detail fetch is not expected")
@@ -53,26 +51,29 @@ def _catalog_request() -> KnowledgeFetchRequest:
     )
 
 
-def test_live_item_catalog_discovers_infobox_item_transclusions():
+def test_live_item_catalog_discovers_pickupable_objects():
     client = CaptureItemClient()
 
-    client.fetch_catalog(continuation="10|Infobox_Item|222", limit=25)
+    client.fetch_catalog(
+        continuation="page|41425953532048414d4d4552|222",
+        limit=25,
+    )
 
     assert client.params == {
         "action": "query",
-        "list": "embeddedin",
-        "eititle": "Template:Infobox Item",
-        "einamespace": 0,
-        "eilimit": 25,
+        "list": "categorymembers",
+        "cmtitle": "Category:Pickupable Objects",
+        "cmtype": "page",
+        "cmlimit": 25,
         "format": "json",
-        "eicontinue": "10|Infobox_Item|222",
+        "cmcontinue": "page|41425953532048414d4d4552|222",
     }
-    assert "cmtitle" not in client.params
-    assert "cmcontinue" not in client.params
+    assert "eititle" not in client.params
+    assert "eicontinue" not in client.params
 
 
-def test_embeddedin_catalog_enqueues_details_and_continuation():
-    adapter = TibiaWikiItemAdapter(EmbeddedInFixtureClient())
+def test_pickupable_catalog_enqueues_details_and_continuation():
+    adapter = TibiaWikiItemAdapter(PickupableCategoryFixtureClient())
 
     result = adapter.fetch(_catalog_request())
 
@@ -88,11 +89,11 @@ def test_embeddedin_catalog_enqueues_details_and_continuation():
     ] == ["111", "222"]
     assert result.child_jobs[-1].scope == {
         "batch_limit": 2,
-        "continuation": "10|Infobox_Item|222",
+        "continuation": "page|41425953532048414d4d4552|222",
     }
     assert result.cursor == {
-        "continuation": "10|Infobox_Item|222",
+        "continuation": "page|41425953532048414d4d4552|222",
         "members_processed": 2,
     }
-    assert result.documents[0].metadata["catalog_source"] == "Template:Infobox Item"
-    assert result.provider_metadata["catalog_source"] == "Template:Infobox Item"
+    assert result.documents[0].metadata["catalog_source"] == "Category:Pickupable Objects"
+    assert result.provider_metadata["catalog_source"] == "Category:Pickupable Objects"
