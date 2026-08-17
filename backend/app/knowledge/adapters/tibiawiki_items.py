@@ -69,7 +69,7 @@ class HttpTibiaWikiItemClient(HttpTibiaWikiCreatureClient):
         params: dict[str, Any] = {
             "action": "query",
             "list": "categorymembers",
-            "cmtitle": "Category:Items",
+            "cmtitle": "Category:Pickupable Objects",
             "cmtype": "page",
             "cmlimit": limit,
             "format": "json",
@@ -81,6 +81,24 @@ class HttpTibiaWikiItemClient(HttpTibiaWikiCreatureClient):
 
 def _serialized_size(value: dict[str, Any]) -> int:
     return len(json.dumps(value, ensure_ascii=False, separators=(",", ":")).encode("utf-8"))
+
+
+def _catalog_members(raw: dict[str, Any]) -> list[Any] | None:
+    query = raw.get("query") or {}
+    members = query.get("categorymembers")
+    if isinstance(members, list):
+        return members
+    legacy_members = query.get("embeddedin")
+    return legacy_members if isinstance(legacy_members, list) else None
+
+
+def _catalog_continuation(raw: dict[str, Any]) -> str | None:
+    continuation = raw.get("continue") or {}
+    return str(
+        continuation.get("cmcontinue")
+        or continuation.get("eicontinue")
+        or ""
+    ).strip() or None
 
 
 def _first_param(params: dict[str, str], *keys: str) -> tuple[str | None, bool]:
@@ -336,8 +354,8 @@ class TibiaWikiItemAdapter:
             raise OversizedProviderResponseError()
         if raw.get("error"):
             raise ProviderResponseEnvelopeError()
-        members = (raw.get("query") or {}).get("categorymembers")
-        if not isinstance(members, list):
+        members = _catalog_members(raw)
+        if members is None:
             raise MalformedProviderPayloadError()
         children: list[KnowledgeChildJobRequest] = []
         invalid_members = 0
@@ -363,7 +381,7 @@ class TibiaWikiItemAdapter:
                     allow_completed_recreate=True,
                 )
             )
-        next_token = str((raw.get("continue") or {}).get("cmcontinue") or "").strip() or None
+        next_token = _catalog_continuation(raw)
         if next_token:
             children.append(
                 KnowledgeChildJobRequest(
@@ -381,12 +399,19 @@ class TibiaWikiItemAdapter:
                     provider_document_id=f"catalog:items:{continuation or 'first'}",
                     raw_json=raw,
                     version="mediawiki-v1",
-                    metadata={"document_kind": "item_catalog", "batch_limit": limit},
+                    metadata={
+                        "document_kind": "item_catalog",
+                        "batch_limit": limit,
+                        "catalog_source": "Category:Pickupable Objects",
+                    },
                 ),
             ),
             cursor={"continuation": next_token, "members_processed": len(children) - int(bool(next_token))},
             partial=invalid_members > 0,
-            provider_metadata={"invalid_members": invalid_members},
+            provider_metadata={
+                "invalid_members": invalid_members,
+                "catalog_source": "Category:Pickupable Objects",
+            },
             child_jobs=tuple(children),
         )
 
@@ -416,7 +441,7 @@ class TibiaWikiItemAdapter:
             if document.raw_json.get("error"):
                 return KnowledgeValidationResult(False, classification="provider_error", safe_errors=("provider_error",))
             if document.metadata.get("document_kind") == "item_catalog":
-                members = (document.raw_json.get("query") or {}).get("categorymembers")
+                members = _catalog_members(document.raw_json)
                 if not isinstance(members, list) or not members:
                     return KnowledgeValidationResult(False, classification="empty", safe_errors=("empty_catalog",))
                 continue
