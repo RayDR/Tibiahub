@@ -129,11 +129,13 @@ def build_local_media_file_response(
     if etag:
         headers["ETag"] = etag
 
+    if etag and request.headers.get("if-none-match") == etag:
+        # A 304 response has no body. Do not propagate the cached file size as
+        # Content-Length or Uvicorn will reject the empty response body.
+        return Response(status_code=304, headers=headers)
+
     if descriptor.size_bytes is not None:
         headers["Content-Length"] = str(descriptor.size_bytes)
-
-    if etag and request.headers.get("if-none-match") == etag:
-        return Response(status_code=304, headers=headers)
 
     return FileResponse(
         path=str(path),
