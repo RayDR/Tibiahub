@@ -10,7 +10,7 @@ const client = read('src/services/questBrowser.ts');
 
 const checks = [
   [page.includes("mode === 'quests' ? (\n        <QuestLibraryShelves"), 'Quest Library must render for the quests tab regardless of search text'],
-  [page.includes("mode === 'quests' && false &&"), 'legacy oversized quest result cards must stay disabled'],
+  [!page.includes('quests.map((quest, index)'), 'legacy oversized quest result cards must be removed'],
   [library.includes('access_only: accessOnly'), 'Access Quest filtering must use the canonical browser'],
   [library.includes("sort_by: sortBy"), 'quest sorting must be server-backed'],
   [library.includes('IntersectionObserver'), 'quest library must auto-paginate'],
