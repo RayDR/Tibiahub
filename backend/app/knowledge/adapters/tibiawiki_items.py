@@ -68,14 +68,14 @@ class HttpTibiaWikiItemClient(HttpTibiaWikiCreatureClient):
     def fetch_catalog(self, *, continuation: str | None, limit: int) -> dict[str, Any]:
         params: dict[str, Any] = {
             "action": "query",
-            "list": "embeddedin",
-            "eititle": "Template:Infobox Item",
-            "einamespace": 0,
-            "eilimit": limit,
+            "list": "categorymembers",
+            "cmtitle": "Category:Pickupable Objects",
+            "cmtype": "page",
+            "cmlimit": limit,
             "format": "json",
         }
         if continuation:
-            params["eicontinue"] = continuation
+            params["cmcontinue"] = continuation
         return self._request(params)
 
 
@@ -85,18 +85,18 @@ def _serialized_size(value: dict[str, Any]) -> int:
 
 def _catalog_members(raw: dict[str, Any]) -> list[Any] | None:
     query = raw.get("query") or {}
-    members = query.get("embeddedin")
+    members = query.get("categorymembers")
     if isinstance(members, list):
         return members
-    legacy_members = query.get("categorymembers")
+    legacy_members = query.get("embeddedin")
     return legacy_members if isinstance(legacy_members, list) else None
 
 
 def _catalog_continuation(raw: dict[str, Any]) -> str | None:
     continuation = raw.get("continue") or {}
     return str(
-        continuation.get("eicontinue")
-        or continuation.get("cmcontinue")
+        continuation.get("cmcontinue")
+        or continuation.get("eicontinue")
         or ""
     ).strip() or None
 
@@ -402,7 +402,7 @@ class TibiaWikiItemAdapter:
                     metadata={
                         "document_kind": "item_catalog",
                         "batch_limit": limit,
-                        "catalog_source": "Template:Infobox Item",
+                        "catalog_source": "Category:Pickupable Objects",
                     },
                 ),
             ),
@@ -410,7 +410,7 @@ class TibiaWikiItemAdapter:
             partial=invalid_members > 0,
             provider_metadata={
                 "invalid_members": invalid_members,
-                "catalog_source": "Template:Infobox Item",
+                "catalog_source": "Category:Pickupable Objects",
             },
             child_jobs=tuple(children),
         )
