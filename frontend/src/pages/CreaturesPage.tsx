@@ -127,8 +127,6 @@ const normalizeSelectedValue = (value: string) =>
     ? value
     : '';
 
-const COMPACT_ACTIVATE_MARGIN_PX = 8;
-
 const readStickyOffsetPx = (): number => {
   const rootStyle = window.getComputedStyle(
     document.documentElement,
@@ -315,13 +313,9 @@ const CreaturesPage: React.FC = () => {
   const [snapshotReadyTick, setSnapshotReadyTick] = useState(0);
   const syncingFromUrlRef = useRef(false);
   const activeRequestRef = useRef<AbortController | null>(null);
-  const stickySearchRef = useRef<HTMLDivElement | null>(null);
   const searchOriginRef = useRef<HTMLDivElement | null>(null);
-  const resultsStartRef = useRef<HTMLDivElement | null>(null);
   const loadMoreSentinelRef = useRef<HTMLDivElement | null>(null);
   const loadMoreLockRef = useRef(false);
-  const lastScrollYRef = useRef(0);
-  const scrollingDownRef = useRef(false);
   const lastSearchSignatureRef = useRef<string>('');
   const pendingScrollRestoreRef = useRef<number | null>(null);
   const inPageTabSwitchRef = useRef(false);
@@ -1258,46 +1252,31 @@ const CreaturesPage: React.FC = () => {
 
   useEffect(() => {
     let frame = 0;
-    lastScrollYRef.current = window.scrollY;
-    const updateDirectionAndRelease = () => {
+
+    const updateCompactState = () => {
       if (frame) return;
       frame = window.requestAnimationFrame(() => {
         frame = 0;
-        const nextY = window.scrollY;
-        const delta = nextY - lastScrollYRef.current;
-        if (Math.abs(delta) > 2) scrollingDownRef.current = delta > 0;
-        lastScrollYRef.current = nextY;
-        // The fixed origin sentinel never changes height, so leaving compact mode
-        // cannot move the document or retrigger the second-result boundary.
-        if (isSearchCompact && !scrollingDownRef.current && searchOriginRef.current && searchOriginRef.current.getBoundingClientRect().top >= readStickyOffsetPx()) {
-          setIsSearchCompact(false);
-        }
+        const origin = searchOriginRef.current;
+        if (!origin) return;
+        const shouldCompact =
+          origin.getBoundingClientRect().top <= readStickyOffsetPx();
+        setIsSearchCompact((current) =>
+          current === shouldCompact ? current : shouldCompact,
+        );
       });
     };
-    window.addEventListener('scroll', updateDirectionAndRelease, { passive: true });
 
-    const resultBlocks = document.querySelectorAll<HTMLElement>('[data-cyclopedia-result]');
-    const boundary = resultBlocks[1] || resultsStartRef.current;
-    const stickyOffset = readStickyOffsetPx() + COMPACT_ACTIVATE_MARGIN_PX;
-    const observer = boundary ? new IntersectionObserver(([entry]) => {
-      if (!entry.isIntersecting && entry.boundingClientRect.top <= stickyOffset && scrollingDownRef.current) setIsSearchCompact(true);
-    }, { rootMargin: `-${stickyOffset}px 0px 0px 0px`, threshold: 0 }) : null;
-    if (boundary && observer) observer.observe(boundary);
+    updateCompactState();
+    window.addEventListener('scroll', updateCompactState, { passive: true });
+    window.addEventListener('resize', updateCompactState);
 
     return () => {
       if (frame) window.cancelAnimationFrame(frame);
-      observer?.disconnect();
-      window.removeEventListener('scroll', updateDirectionAndRelease);
+      window.removeEventListener('scroll', updateCompactState);
+      window.removeEventListener('resize', updateCompactState);
     };
-  }, [
-    mode,
-    showCategories,
-    creatureCategory,
-    selectedResult,
-    loading,
-    hasActiveQuery,
-    isSearchCompact,
-  ]);
+  }, []);
 
   useEffect(() => {
     if (!isSearchCompact) {
@@ -1308,6 +1287,10 @@ const CreaturesPage: React.FC = () => {
   useEffect(() => {
     const sentinel =
       loadMoreSentinelRef.current;
+    const canAutoPaginate =
+      mode === 'creatures' ||
+      mode === 'bosses' ||
+      effectiveSearchTerm.trim().length > 0;
 
     if (
       !sentinel ||
@@ -1315,7 +1298,7 @@ const CreaturesPage: React.FC = () => {
       loading ||
       loadingMore ||
       errorMessage ||
-      !effectiveSearchTerm.trim()
+      !canAutoPaginate
     ) {
       return undefined;
     }
@@ -1352,6 +1335,7 @@ const CreaturesPage: React.FC = () => {
     zones.length,
     skip,
     searchTerm,
+    selectedResult,
     creatureCategory,
     creatureSort,
     sortOrder,
@@ -1418,44 +1402,25 @@ const CreaturesPage: React.FC = () => {
           />
         </div>
 
-        <div ref={searchOriginRef} className="h-0 w-full" aria-hidden="true" />
+        <div ref={searchOriginRef} className="h-px w-full" aria-hidden="true" />
         <div
-          ref={stickySearchRef}
-          className={`mx-auto mb-5 w-full motion-reduce:transition-none transition-[top,transform,opacity] ${
-            isSearchCompact
-              ? 'duration-[400ms] ease-out'
-              : 'transition-none'
-          } ${
+          className={`mx-auto mb-5 w-full ${
             isSearchCompact
               ? 'app-sticky-offset sticky z-40'
               : 'relative z-20'
-          } opacity-100`}
+          }`}
         >
           <AppCard
-            className={`flex flex-col shadow-2xl motion-reduce:transition-none transition-[padding,background-color,border-color,box-shadow,gap,opacity,transform] ${
-              isSearchCompact
-                ? 'duration-[400ms] ease-out'
-                : 'transition-none'
-            } ${
+            className={`flex flex-col shadow-2xl ${
               isSearchCompact
                 ? 'gap-1 border-primary/20 bg-surface-overlay/95 p-1 backdrop-blur-xl'
                 : 'gap-2 p-2'
             }`}
           >
-            <div
-              className={`overflow-hidden motion-reduce:transition-none transition-[max-height,opacity,transform,margin] ${
-                isSearchCompact
-                  ? 'pointer-events-none max-h-0 -translate-y-1 opacity-0 duration-[400ms] ease-out'
-                  : 'max-h-[20rem] translate-y-0 opacity-100 transition-none'
-              }`}
-              aria-hidden={isSearchCompact}
-            >
-              {(
-                mode === 'creatures' ||
-                mode === 'bosses'
-              ) &&
-              mostVisitedPreviewCards.length >
-                0 ? (
+            {!isSearchCompact &&
+            (mode === 'creatures' || mode === 'bosses') &&
+            mostVisitedPreviewCards.length > 0 ? (
+              <div>
                 <CompactEntityStrip
                   title={t(
                     'cyclopedia.cards.mostVisited',
@@ -1467,8 +1432,8 @@ const CreaturesPage: React.FC = () => {
                   linkState={cyclopediaRouteState}
                   onNavigate={persistCyclopediaState}
                 />
-              ) : null}
-            </div>
+              </div>
+            ) : null}
             <div
               className={
                 isSearchCompact
@@ -1621,16 +1586,8 @@ const CreaturesPage: React.FC = () => {
               </>
             )}
 
-            {(mode === 'creatures' ||
-              mode === 'bosses') && (
-              <div
-                className={`space-y-2 overflow-hidden motion-reduce:transition-none transition-[max-height,opacity,transform,margin] ${
-                  isSearchCompact
-                    ? 'pointer-events-none max-h-0 -translate-y-1 opacity-0 duration-[400ms] ease-out'
-                    : 'max-h-[100rem] translate-y-0 opacity-100 duration-150 ease-in'
-                }`}
-                aria-hidden={isSearchCompact}
-              >
+            {(mode === 'creatures' || mode === 'bosses') && !isSearchCompact ? (
+              <div className="space-y-2">
                 {mode === 'creatures' && (
                   <div className="flex justify-end">
                     <button
@@ -1738,9 +1695,8 @@ const CreaturesPage: React.FC = () => {
                     })}
                   </div>
                 )}
-
               </div>
-            )}
+            ) : null}
 
             {(mode === 'creatures' && creatureCategory) || selectedSuggestion ? (
               <div className="flex flex-wrap items-center gap-2 px-1 pb-1">
@@ -1827,12 +1783,6 @@ const CreaturesPage: React.FC = () => {
       </div>
 
       <div>
-        <div
-          ref={resultsStartRef}
-          className="h-0"
-          aria-hidden="true"
-        />
-
         {!loading &&
         (mode === 'creatures' || mode === 'bosses') ? (
           <div className="mb-4 grid gap-3 rounded-xl border border-line bg-surface-base/50 p-3 md:grid-cols-[minmax(0,1fr)_14rem_auto] md:items-center">

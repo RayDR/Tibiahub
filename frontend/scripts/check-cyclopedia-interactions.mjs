@@ -27,6 +27,37 @@ assert.match(page, /mode === 'bosses'[\s\S]*?<CompactEntityStrip/, 'Bosses must 
 assert.doesNotMatch(page, /cyclopedia\.helpers\.bosses/, 'redundant Boss helper banner must be removed');
 assert.doesNotMatch(page, /mode === 'bosses'[\s\S]{0,220}<CyclopediaDiscovery/, 'Bosses must not render the duplicate discovery heading');
 
+assert.match(
+  page,
+  /origin\.getBoundingClientRect\(\)\.top <= readStickyOffsetPx\(\)/,
+  'sticky Cyclopedia search must use its stable origin instead of result-card boundaries',
+);
+assert.match(
+  page,
+  /window\.addEventListener\('scroll', updateCompactState, \{ passive: true \}\)/,
+  'sticky Cyclopedia search must react to passive window scrolling',
+);
+assert.doesNotMatch(
+  page,
+  /scrollingDownRef|lastScrollYRef|COMPACT_ACTIVATE_MARGIN_PX/,
+  'sticky search must not depend on scroll direction or a second-result activation boundary',
+);
+assert.doesNotMatch(
+  page,
+  /transition-\[top,transform,opacity\]|transition-\[max-height,opacity,transform,margin\]/,
+  'sticky search must not animate layout/position when compacting',
+);
+assert.match(
+  page,
+  /const canAutoPaginate =[\s\S]*?mode === 'creatures' \|\|[\s\S]*?mode === 'bosses' \|\|[\s\S]*?effectiveSearchTerm\.trim\(\)\.length > 0/,
+  'Creatures and Bosses must paginate even when the search query is empty',
+);
+assert.doesNotMatch(
+  page,
+  /errorMessage \|\|\s*!effectiveSearchTerm\.trim\(\)/,
+  'empty search text must not disable the infinite-scroll observer',
+);
+
 for (const [name, source] of [['Navigation', navigationMenu], ['Home', home], ['Cyclopedia', page]]) {
   assert.match(source, /KnowledgeCategoryIcon/, `${name} must use the shared category visual component`);
 }
@@ -47,4 +78,4 @@ for (const source of [page, itemDetail, zoneDetail, mapViewer]) {
   assert.doesNotMatch(source, /(?:min-w|w)-\[(?:32[1-9]|3[3-9]\d|[4-9]\d\d|\d{4,})px\]/, 'Cyclopedia mobile surfaces must not impose page-width overflow');
 }
 
-console.log('Cyclopedia interaction checks passed: category visuals, Boss sorting/carousel state, tab-preserving Enter, item links, local map controls, and mobile guards are present.');
+console.log('Cyclopedia interaction checks passed: stable sticky search, infinite scrolling, category visuals, Boss sorting/carousel state, tab-preserving Enter, item links, local map controls, and mobile guards are present.');
