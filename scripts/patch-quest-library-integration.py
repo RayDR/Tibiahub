@@ -16,10 +16,13 @@ if anchor not in text:
     raise SystemExit("Quest library insertion anchor was not found; refusing to patch.")
 text = text.replace(anchor, replacement, 1)
 
-legacy_cards = """            {mode === 'quests' &&\n              quests.map((quest, index) => {"""
-if legacy_cards not in text:
+legacy_start = """            {mode === 'quests' &&\n              quests.map((quest, index) => {"""
+legacy_end = """            {mode === 'zones' && zones.map((zone) => ("""
+start_index = text.find(legacy_start)
+end_index = text.find(legacy_end, start_index if start_index >= 0 else 0)
+if start_index < 0 or end_index < 0:
     raise SystemExit("Legacy quest card block was not found; refusing to patch.")
-text = text.replace(legacy_cards, """            {mode === 'quests' && false &&\n              quests.map((quest, index) => {""", 1)
+text = text[:start_index] + text[end_index:]
 
 empty_state = """        {isEmpty && !errorMessage && ("""
 if empty_state not in text:
