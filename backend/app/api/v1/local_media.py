@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import hashlib
+import re
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Callable
@@ -12,6 +13,7 @@ from fastapi.responses import FileResponse
 from sqlalchemy.orm import Session
 
 from app.db.database import SessionLocal
+from app.models.media_asset import MediaAsset
 
 
 @dataclass(frozen=True)
@@ -27,6 +29,44 @@ class LocalMediaDescriptor:
     fallback_label: str
 
 
+def _legacy_item_asset_key(label: str) -> str | None:
+    """Build the historical item media key from a canonical display name."""
+    normalized = (label or "").strip().lower()
+    for extension in (".gif", ".png", ".jpg", ".jpeg", ".webp"):
+        if normalized.endswith(extension):
+            normalized = normalized[: -len(extension)]
+            break
+    normalized = re.sub(r"[^a-z0-9]+", "_", normalized).strip("_")
+    return f"item:{normalized}" if normalized else None
+
+
+def _bridge_legacy_item_descriptor(
+    db: Session,
+    descriptor: LocalMediaDescriptor,
+) -> LocalMediaDescriptor:
+    """Reuse an already-cached legacy item asset for a canonical item key."""
+    if descriptor.status == "cached" or not descriptor.asset_key.startswith("item:knowledge:"):
+        return descriptor
+
+    legacy_key = _legacy_item_asset_key(descriptor.fallback_label)
+    if not legacy_key:
+        return descriptor
+
+    asset = db.query(MediaAsset).filter(MediaAsset.asset_key == legacy_key).first()
+    if not asset or asset.status != "cached" or not asset.file_exists():
+        return descriptor
+
+    return LocalMediaDescriptor(
+        local_path=str(asset.local_path) if asset.local_path else None,
+        content_type=asset.content_type,
+        size_bytes=asset.size_bytes,
+        asset_hash=asset.sha256_hash,
+        asset_key=legacy_key,
+        status="cached",
+        fallback_label=descriptor.fallback_label,
+    )
+
+
 def resolve_local_media_descriptor(
     resolver: Callable[[Session], LocalMediaDescriptor],
     *,
@@ -35,7 +75,8 @@ def resolve_local_media_descriptor(
     """Run DB lookups in a short-lived session and always release the pool slot."""
     db = session_factory()
     try:
-        return resolver(db)
+        descriptor = resolver(db)
+        return _bridge_legacy_item_descriptor(db, descriptor)
     finally:
         try:
             # Public media lookups are read-only; ensure no idle transaction lingers.
