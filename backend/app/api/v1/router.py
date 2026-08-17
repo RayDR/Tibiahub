@@ -3,7 +3,7 @@ API v1 Router - Combines all API endpoints
 """
 from fastapi import APIRouter, Depends
 
-from app.api.v1 import assistant, creatures, hunt_zones, admin as admin_old, recommendations, items, quests, knowledge_graph, npcs_locations, seo, spatial, tibia_map, hunt_analyzer
+from app.api.v1 import assistant, creatures, hunt_zones, admin as admin_old, recommendations, items, item_browser, quests, knowledge_graph, npcs_locations, seo, spatial, tibia_map, hunt_analyzer
 from app.api.v1.endpoints import auth, guild, profile, admin, hunts, events, catalog, sync, password_reset, email_verification, character_ownership, tibia, sync_admin, raffles, raffle_participants, health, me_activity, notifications, workspaces, leadership, knowledge_admin, maintenance, maintenance_mode, admin_assistance, guild_permissions
 
 api_router = APIRouter()
@@ -38,6 +38,8 @@ api_router.include_router(tibia.router, tags=["TibiaData API"])
 api_router.include_router(health.router, tags=["Health"])
 api_router.include_router(creatures.router)
 api_router.include_router(hunt_zones.router)
+# Register fixed item-browser paths before the legacy item identifier route.
+api_router.include_router(item_browser.router)
 api_router.include_router(items.router)
 api_router.include_router(quests.router)
 api_router.include_router(knowledge_graph.router)
