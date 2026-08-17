@@ -1,8 +1,11 @@
 from pathlib import Path
 
+from starlette.requests import Request
+
 from app.api.v1.local_media import (
     LocalMediaDescriptor,
     _bridge_legacy_item_descriptor,
+    build_local_media_file_response,
 )
 from app.models.media_asset import MediaAsset
 
@@ -65,3 +68,38 @@ def test_bridge_does_not_cross_entity_types(db):
     descriptor = _descriptor(asset_key="creature:knowledge:behemoth")
 
     assert _bridge_legacy_item_descriptor(db, descriptor) is descriptor
+
+
+def test_conditional_media_response_omits_file_content_length(tmp_path: Path):
+    media_path = tmp_path / "item_behemoth_claw.webp"
+    media_path.write_bytes(b"cached-image")
+    descriptor = LocalMediaDescriptor(
+        local_path=str(media_path),
+        content_type="image/webp",
+        size_bytes=12,
+        asset_hash="abc123",
+        asset_key="item:behemoth_claw",
+        status="cached",
+        fallback_label="Behemoth Claw",
+    )
+    request = Request(
+        {
+            "type": "http",
+            "method": "GET",
+            "path": "/api/v1/items/6/image",
+            "headers": [(b"if-none-match", b"abc123")],
+        }
+    )
+
+    response = build_local_media_file_response(
+        request,
+        descriptor,
+        default_media_type="image/gif",
+        cache_max_age_seconds=86400,
+    )
+
+    assert response is not None
+    assert response.status_code == 304
+    assert response.body == b""
+    assert response.headers["etag"] == "abc123"
+    assert "content-length" not in response.headers
