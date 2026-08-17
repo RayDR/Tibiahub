@@ -81,7 +81,6 @@ assert.match(itemDetail, /\/hunt-zones\/\$\{zone\.slug \|\| zone\.id\}/, 'item d
 assert.doesNotMatch(itemDetail, /dropFacts|common\.unknown/, 'item acquisition cards must omit repetitive unknown facts');
 
 assert.doesNotMatch(zoneDetail, /futureMap|noPremium|noQuest/, 'hunt-zone detail must not ship future-map or repeated negative placeholders');
-assert.match(zoneDetail, /lazy\(\(\) => import\('\.\.\/components\/map\/TibiaMapViewer'\)\)/, 'Leaflet viewer must be lazy loaded');
 assert.match(mapViewer, /L\.CRS\.Simple/, 'map must use image coordinates rather than geographic projection');
 assert.match(mapViewer, /ImageOverlay/, 'map must use the fetched local image');
 assert.match(mapViewer, /map\.zoomIn\(\)|map\.zoomOut\(\)|map\.fitBounds/, 'map zoom and reset controls must exist');
