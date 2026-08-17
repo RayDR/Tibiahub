@@ -36,6 +36,8 @@ def _base_query(db: Session):
     return db.query(TibiaWikiQuest).filter(
         TibiaWikiQuest.knowledge_entity_id.isnot(None),
         TibiaWikiQuest.is_group.is_(False),
+        ~func.lower(func.coalesce(TibiaWikiQuest.name, "")).like("%/spoiler"),
+        ~func.lower(func.coalesce(TibiaWikiQuest.source_url, "")).like("%/spoiler"),
     )
 
 

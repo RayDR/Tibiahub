@@ -2,7 +2,7 @@ from app.knowledge.models import KnowledgeEntity, KnowledgeEntityType
 from app.models.external_data import TibiaWikiQuest
 
 
-def _seed_quest(db, *, name: str, external_id: str, min_level: int | None = None, category: str | None = None, access_unlocks: list | None = None, canonical: bool = True, is_group: bool = False):
+def _seed_quest(db, *, name: str, external_id: str, min_level: int | None = None, category: str | None = None, access_unlocks: list | None = None, canonical: bool = True, is_group: bool = False, source_url: str | None = None):
     slug = name.lower().replace("'", "").replace(" ", "-")
     entity_id = None
     if canonical:
@@ -16,6 +16,7 @@ def _seed_quest(db, *, name: str, external_id: str, min_level: int | None = None
         slug=slug,
         external_id=external_id,
         source_name="tibiawiki",
+        source_url=source_url,
         knowledge_entity_id=entity_id,
         min_level=min_level,
         category=category,
@@ -37,9 +38,21 @@ def _seed_catalog(db):
     _seed_quest(db, name="Unknown Level Quest", external_id="4")
     _seed_quest(db, name="Quest Group", external_id="5", is_group=True)
     _seed_quest(db, name="Legacy Only Quest", external_id="6", canonical=False)
+    _seed_quest(
+        db,
+        name="Lion's Rock Quest/Spoiler",
+        external_id="7",
+        source_url="https://tibia.fandom.com/wiki/Lion%27s_Rock_Quest/Spoiler",
+    )
+    _seed_quest(
+        db,
+        name="Aliased Quest",
+        external_id="8",
+        source_url="https://tibia.fandom.com/wiki/Aliased_Quest/Spoiler",
+    )
 
 
-def test_quest_facets_count_only_canonical_non_group_rows(client, db):
+def test_quest_facets_count_only_canonical_non_group_overview_rows(client, db):
     _seed_catalog(db)
     response = client.get("/api/v1/quests/facets")
     assert response.status_code == 200
@@ -52,7 +65,7 @@ def test_quest_facets_count_only_canonical_non_group_rows(client, db):
     }
 
 
-def test_quest_browser_filters_access_sorts_levels_and_paginates(client, db):
+def test_quest_browser_filters_access_sorts_levels_paginates_and_hides_spoilers(client, db):
     _seed_catalog(db)
 
     access = client.get("/api/v1/quests/browse", params={"access_only": True, "limit": 20})
@@ -76,3 +89,7 @@ def test_quest_browser_filters_access_sorts_levels_and_paginates(client, db):
     searched = client.get("/api/v1/quests/browse", params={"search": "door", "limit": 20})
     assert searched.status_code == 200
     assert [row["name"] for row in searched.json()] == ["Door Opener"]
+
+    spoilers = client.get("/api/v1/quests/browse", params={"search": "spoiler", "limit": 20})
+    assert spoilers.status_code == 200
+    assert spoilers.json() == []

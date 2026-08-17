@@ -6,7 +6,7 @@ from app.knowledge.adapters.protocol import KnowledgeProviderAdapter
 from app.knowledge.adapters.reference import ReferenceKnowledgeAdapter
 from app.knowledge.adapters.tibiawiki_creatures import TibiaWikiCreatureAdapter
 from app.knowledge.adapters.tibiawiki_items import TibiaWikiItemAdapter
-from app.knowledge.adapters.tibiawiki_quests import TibiaWikiQuestAdapter
+from app.knowledge.adapters.tibiawiki_quest_catalog import TibiaWikiOverviewQuestAdapter
 from app.knowledge.adapters.tibiawiki_npcs_locations import TibiaWikiLocationAdapter, TibiaWikiNpcAdapter
 from app.knowledge.adapters.tibiawiki_routes import TibiaWikiRouteAdapter
 from app.knowledge.adapters.tibiawiki_hunt_zones import TibiaWikiHuntZoneAdapter
@@ -26,7 +26,7 @@ class KnowledgeAdapterRegistry:
             TibiaMapsKnowledgeAdapter(),
             TibiaWikiCreatureAdapter(),
             TibiaWikiItemAdapter(),
-            TibiaWikiQuestAdapter(),
+            TibiaWikiOverviewQuestAdapter(),
             TibiaWikiNpcAdapter(),
             TibiaWikiLocationAdapter(),
             TibiaWikiRouteAdapter(),
