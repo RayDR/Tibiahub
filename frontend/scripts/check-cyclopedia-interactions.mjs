@@ -62,7 +62,7 @@ assert.doesNotMatch(
 assert.match(itemBrowser, /api\.get\('\/items\/browse'/, 'Loot must browse the canonical local item endpoint');
 assert.match(itemBrowser, /api\.get\('\/items\/facets'/, 'Loot category controls must come from local canonical facets');
 assert.match(page, /mode === 'items'[\s\S]*?itemBrowserApi\.browse\(/, 'Loot mode must load browse results without requiring typed search text');
-assert.match(page, /itemBrowserApi\.getFacets/, 'Loot mode must load category facets');
+assert.match(page, /itemBrowserApi\s*\.\s*getFacets\(/, 'Loot mode must load category facets');
 assert.match(page, /setItemCategory\(event\.target\.value\)/, 'Loot must expose category filtering');
 assert.match(page, /setItemSort\(event\.target\.value as ItemBrowseSort\)/, 'Loot must expose sort selection');
 assert.doesNotMatch(
