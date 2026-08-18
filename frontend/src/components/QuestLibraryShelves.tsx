@@ -62,6 +62,8 @@ export default function QuestLibraryShelves({ linkState, onNavigate }: Props) {
   const [loadingMore, setLoadingMore] = useState(false);
   const [error, setError] = useState(false);
   const sentinelRef = useRef<HTMLDivElement | null>(null);
+  const previewRef = useRef<HTMLElement | null>(null);
+  const activeBrowseRef = useRef<AbortController | null>(null);
   const loadingMoreRef = useRef(false);
 
   useEffect(() => {
@@ -80,23 +82,35 @@ export default function QuestLibraryShelves({ linkState, onNavigate }: Props) {
     return () => controller.abort();
   }, []);
 
+  useEffect(() => () => activeBrowseRef.current?.abort(), []);
+
   const load = useCallback(async (reset: boolean) => {
     if (query.length === 1) {
+      activeBrowseRef.current?.abort();
       setQuests([]);
       setSelected(null);
       setSkip(0);
       setHasMore(false);
       setLoading(false);
       setLoadingMore(false);
+      loadingMoreRef.current = false;
       return;
     }
     if (!reset && loadingMoreRef.current) return;
-    const nextSkip = reset ? 0 : skip;
-    if (reset) setLoading(true);
-    else {
+
+    const controller = new AbortController();
+    if (reset) {
+      activeBrowseRef.current?.abort();
+      setLoading(true);
+      setLoadingMore(false);
+      loadingMoreRef.current = false;
+    } else {
       loadingMoreRef.current = true;
       setLoadingMore(true);
     }
+    activeBrowseRef.current = controller;
+
+    const nextSkip = reset ? 0 : skip;
     setError(false);
     try {
       const rows = await questBrowserApi.browse({
@@ -106,7 +120,9 @@ export default function QuestLibraryShelves({ linkState, onNavigate }: Props) {
         sort_order: sortOrder,
         skip: nextSkip,
         limit: PAGE_SIZE,
-      });
+      }, controller.signal);
+      if (controller.signal.aborted) return;
+
       setQuests((current) => {
         if (reset) return rows;
         const seen = new Set(current.map(questKey));
@@ -118,12 +134,15 @@ export default function QuestLibraryShelves({ linkState, onNavigate }: Props) {
         setSelected((current) => current && rows.some((row) => questKey(row) === questKey(current)) ? current : null);
       }
     } catch {
+      if (controller.signal.aborted) return;
       if (reset) setQuests([]);
       setError(true);
     } finally {
-      setLoading(false);
-      setLoadingMore(false);
-      loadingMoreRef.current = false;
+      if (activeBrowseRef.current === controller) {
+        setLoading(false);
+        setLoadingMore(false);
+        loadingMoreRef.current = false;
+      }
     }
   }, [accessOnly, query, skip, sortBy, sortOrder]);
 
@@ -142,9 +161,19 @@ export default function QuestLibraryShelves({ linkState, onNavigate }: Props) {
     return () => observer.disconnect();
   }, [error, hasMore, load, loading, loadingMore, quests.length]);
 
-  const visibleCount = !query
+  const visibleCount: number | string = !query
     ? accessOnly ? facets.access_quests : facets.total
-    : quests.length;
+    : hasMore ? `${quests.length}+` : quests.length;
+
+  const selectQuest = (quest: QuestBrowseResult) => {
+    setSelected(quest);
+    window.requestAnimationFrame(() => {
+      previewRef.current?.scrollIntoView({
+        behavior: window.matchMedia('(prefers-reduced-motion: reduce)').matches ? 'auto' : 'smooth',
+        block: 'nearest',
+      });
+    });
+  };
 
   return (
     <section aria-label={t('cyclopedia.discovery.questLibrary')} className="space-y-4">
@@ -189,7 +218,7 @@ export default function QuestLibraryShelves({ linkState, onNavigate }: Props) {
       </div>
 
       {selected ? (
-        <article className="relative overflow-hidden rounded-2xl border border-primary/25 bg-surface-base shadow-sm">
+        <article ref={previewRef} className="relative overflow-hidden rounded-2xl border border-primary/25 bg-surface-base shadow-sm">
           <div className="grid md:grid-cols-2">
             <div className="relative border-b border-line p-5 md:border-b-0 md:border-r sm:p-6">
               <div className="absolute inset-y-3 right-0 w-px bg-line/80" aria-hidden="true" />
@@ -235,7 +264,7 @@ export default function QuestLibraryShelves({ linkState, onNavigate }: Props) {
                   type="button"
                   data-cyclopedia-result
                   key={questKey(quest)}
-                  onClick={() => setSelected(quest)}
+                  onClick={() => selectQuest(quest)}
                   className={`group relative min-h-[5.25rem] overflow-hidden rounded-r-xl rounded-l-sm border border-line border-l-4 bg-surface-raised px-4 py-3 text-left shadow-sm transition hover:-translate-y-0.5 hover:border-primary/45 ${active ? 'border-l-primary ring-1 ring-primary/30' : quest.is_access_quest ? 'border-l-primary/70' : 'border-l-content-muted/35'}`}
                 >
                   <div className="flex h-full items-start gap-3">
@@ -256,7 +285,7 @@ export default function QuestLibraryShelves({ linkState, onNavigate }: Props) {
           {loadingMore ? <div className="flex items-center justify-center gap-2 py-4 text-xs text-content-muted"><Loader2 className="size-4 animate-spin text-primary" />{t('common.loading')}</div> : null}
         </>
       ) : (
-        <div className="rounded-xl border border-line bg-surface-base/40 p-8 text-center text-sm text-content-muted">{t('cyclopedia.states.creatureEmptyTitle')}</div>
+        <div className="rounded-xl border border-line bg-surface-base/40 p-8 text-center text-sm text-content-muted">{t('cyclopedia.quests.noDetails')}</div>
       )}
     </section>
   );
