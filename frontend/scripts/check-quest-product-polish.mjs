@@ -18,7 +18,7 @@ const checks = [
   [library.includes('activeBrowseRef.current?.abort()'), 'Quest Library must cancel stale browse requests'],
   [library.includes('controller.signal'), 'Quest Library browse requests must use AbortSignal'],
   [library.includes('scrollIntoView'), 'Selecting a Quest must bring its preview into view'],
-  [library.includes("hasMore ? `${quests.length}+` : quests.length"), 'Search result count must distinguish partial pagination'],
+  [library.includes("const countIsPartial = Boolean(query && hasMore);"), 'Search result count must mark partial pagination'],
 ];
 
 const failed = checks.filter(([ok]) => !ok).map(([, message]) => message);
