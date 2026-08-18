@@ -161,9 +161,10 @@ export default function QuestLibraryShelves({ linkState, onNavigate }: Props) {
     return () => observer.disconnect();
   }, [error, hasMore, load, loading, loadingMore, quests.length]);
 
-  const visibleCount: number | string = !query
+  const visibleCount = !query
     ? accessOnly ? facets.access_quests : facets.total
-    : hasMore ? `${quests.length}+` : quests.length;
+    : quests.length;
+  const countIsPartial = Boolean(query && hasMore);
 
   const selectQuest = (quest: QuestBrowseResult) => {
     setSelected(quest);
@@ -185,7 +186,7 @@ export default function QuestLibraryShelves({ linkState, onNavigate }: Props) {
             </span>
             <div className="min-w-0">
               <h2 className="font-serif text-lg font-semibold text-content-primary">{t('cyclopedia.discovery.questLibrary')}</h2>
-              <p className="text-xs text-content-muted">{t('cyclopedia.filters.resultCount', { count: visibleCount })}</p>
+              <p className="text-xs text-content-muted">{t('cyclopedia.filters.resultCount', { count: visibleCount })}{countIsPartial ? ' +' : ''}</p>
             </div>
           </div>
 
