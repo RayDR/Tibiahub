@@ -75,6 +75,7 @@ module.exports = {
         PYTHONUNBUFFERED: '1',
         APP_ENV: 'production',
         KNOWLEDGE_WORKER_ENABLED: 'true',
+        KNOWLEDGE_WORKER_LEASE_SECONDS: '900',
         TIBIAHUB_SECRETS_FILE: '/forge/tibiahub-secrets/runtime.env',
       },
       error_file: './logs/knowledge-worker-error.log',
