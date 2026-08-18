@@ -14,6 +14,21 @@ Relationship codes are stable and language-neutral. The registry owns allowed so
 
 Provider facts are unique per source, scope, type, target identity, and provider provenance. Multiple providers can support the same logical fact and the public DTO consolidates them. A manually verified fact takes precedence, while provider history remains auditable. Provider reconciliation is opt-in and may supersede only the selected provider's non-manual current facts; it never removes verified facts merely because an import omitted them.
 
+## P0 closure reconciliation
+
+`scripts/reconcile-knowledge-layer.py` is the bounded closure pass for existing
+facts. `--dry-run` reports exact-name/approved-alias candidates and deterministic
+raw-document links without changing PostgreSQL. Mutation requires both `--apply`
+and the exact confirmation phrase printed by the command help. The pass never
+uses fuzzy matching, never creates entities or provider documents, never fills
+unknown canonical fields, and never changes manual overrides. A successful
+apply runs the same pass again in its transaction and reports zero resolved
+facts and zero repaired provenance links in `second_pass`.
+
+Run it only after loading the production environment and validating the local
+target with `scripts/lib/postgres.sh`, as required for all production database
+operations.
+
 Unresolved and ambiguous references retain a normalized name and may include existing candidate UUIDs in protected source context. Candidate lists are admin-only. Resolution must select an existing entity, pass registry type validation, include a reason, create a verified successor, and preserve the old record as superseded history.
 
 ## APIs

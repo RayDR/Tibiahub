@@ -14,7 +14,8 @@ from sqlalchemy.orm import Session
 from app.knowledge.dto.spatial import MAX_ROUTE_STEPS, MapPointDTO, MapRegionDTO, RouteDTO
 from app.knowledge.indexing import normalize_name
 from app.knowledge.models import (
-    KnowledgeEntity, KnowledgeExternalMapping, SpatialEntityLocationLink,
+    KnowledgeDocument, KnowledgeEntity, KnowledgeExternalMapping, KnowledgeRelationship,
+    SpatialEntityLocationLink,
     SpatialMapPoint, SpatialMapRegion, SpatialRoute, SpatialRouteStep,
 )
 from app.knowledge.schemas import KnowledgeEntityCreate
@@ -91,7 +92,7 @@ def _graph_named_place(db: Session, *, source: KnowledgeEntity, relationship_typ
         source_entity_id=source.uuid, source_scope=scope, relationship_type=relationship_type,
         target_entity_id=target.uuid if target else None,
         target_entity_type=target.entity_type if target else "location",
-        unresolved_name=None if target else name, resolution_state=state, confidence="high",
+        unresolved_name=name, resolution_state=state, confidence="high",
         source_provider_id=provider, source_document_ref=document,
         source_context={"context": f"spatial.{scope}", "resolution_policy": "exact_name_or_alias_only"},
     )).relationship
@@ -117,9 +118,28 @@ def _source_metadata(dto) -> dict:
     return metadata
 
 
+def _source_document(
+    db: Session,
+    *,
+    provider: str,
+    reference: str | None,
+    entity_id: UUID,
+) -> KnowledgeDocument | None:
+    if not reference:
+        return None
+    document = (
+        db.query(KnowledgeDocument)
+        .filter_by(provider_id=provider, provider_document_id=reference)
+        .order_by(KnowledgeDocument.retrieved_at.desc())
+        .first()
+    )
+    return document if document is not None and document.entity_uuid in (None, entity_id) else None
+
+
 def _replace_representation_link(db: Session, *, row, source_entity_id: UUID,
                                  location_entity_id: UUID, relationship_id: UUID,
                                  external_id: str, provider: str,
+                                 source_document_id: UUID | None,
                                  source_reference: str | None,
                                  source_metadata: dict, confidence: str,
                                  map_point_id: UUID | None = None,
@@ -132,21 +152,33 @@ def _replace_representation_link(db: Session, *, row, source_entity_id: UUID,
         source_entity_id=source_entity_id, location_entity_id=location_entity_id,
         map_point_id=map_point_id, map_region_id=map_region_id,
         graph_relationship_id=relationship_id, external_id=external_id,
-        source_provider_id=provider, source_reference=source_reference,
+        source_provider_id=provider, source_document_id=source_document_id,
+        source_reference=source_reference,
         source_metadata=source_metadata, confidence=confidence,
         verification_state=row.verification_state, version=row.version,
         **transition,
     ))
 
 
-def persist_map_point(db: Session, dto: MapPointDTO, *, provider: str = "tibiamaps") -> SpatialMapPoint:
+def persist_map_point(
+    db: Session,
+    dto: MapPointDTO,
+    *,
+    provider: str = "tibiamaps",
+    source_document_ref: str | None = None,
+) -> SpatialMapPoint:
     if db.bind is not None and db.bind.dialect.name == "postgresql":
         require_postgis(db)
     entity = _mapped_entity(db, provider, "map_point", dto.external_id, dto.name)
+    document = _source_document(
+        db, provider=provider, reference=source_document_ref, entity_id=entity.uuid,
+    )
     current = db.query(SpatialMapPoint).filter_by(knowledge_entity_id=entity.uuid, is_current=True).first()
     location, state = _place(db, dto.location_name, dto.location_entity_type)
     metadata = _source_metadata(dto)
     if current and current.source_metadata.get("spatial_content_sha256") == metadata["spatial_content_sha256"]:
+        if document is not None and current.source_document_id != document.uuid:
+            current.source_document_id = document.uuid
         return current
     version = (current.version + 1) if current else 1
     transition = _version_transition(current)
@@ -156,7 +188,8 @@ def persist_map_point(db: Session, dto: MapPointDTO, *, provider: str = "tibiama
         min_x=dto.x, min_y=dto.y, max_x=dto.x, max_y=dto.y, min_z=dto.z, max_z=dto.z,
         unresolved_location_name=None if location else dto.location_name,
         normalized_unresolved_location_name=normalize_name(dto.location_name or "") or None,
-        source_provider_id=provider, source_reference=dto.source_reference,
+        source_provider_id=provider, source_document_id=document.uuid if document else None,
+        source_reference=dto.source_reference,
         source_metadata=metadata, confidence=dto.confidence,
         verification_state=(state if dto.location_name and location is None else
                             ("pending" if dto.resolved else "unresolved")),
@@ -174,27 +207,40 @@ def persist_map_point(db: Session, dto: MapPointDTO, *, provider: str = "tibiama
         relationship = KnowledgeGraphService.upsert(db, RelationshipInput(
             source_entity_id=location.uuid, source_scope="map_representation", relationship_type="represented_by",
             target_entity_id=entity.uuid, resolution_state="resolved", confidence=dto.confidence,
-            source_provider_id=provider, source_document_ref=dto.source_reference,
+            source_provider_id=provider,
+            source_document_ref=source_document_ref or dto.source_reference,
             source_context={"context": "spatial.map_point"},
         )).relationship
         _replace_representation_link(
             db, row=row, source_entity_id=location.uuid, location_entity_id=location.uuid,
             relationship_id=relationship.id, external_id=f"point:{dto.external_id}",
-            provider=provider, source_reference=dto.source_reference,
+            provider=provider, source_document_id=document.uuid if document else None,
+            source_reference=dto.source_reference,
             source_metadata=metadata, confidence=dto.confidence,
             map_point_id=row.id,
         )
     return row
 
 
-def persist_map_region(db: Session, dto: MapRegionDTO, *, provider: str = "tibiamaps") -> SpatialMapRegion:
+def persist_map_region(
+    db: Session,
+    dto: MapRegionDTO,
+    *,
+    provider: str = "tibiamaps",
+    source_document_ref: str | None = None,
+) -> SpatialMapRegion:
     if db.bind is not None and db.bind.dialect.name == "postgresql":
         require_postgis(db)
     entity = _mapped_entity(db, provider, "map_region", dto.external_id, dto.name)
+    document = _source_document(
+        db, provider=provider, reference=source_document_ref, entity_id=entity.uuid,
+    )
     current = db.query(SpatialMapRegion).filter_by(knowledge_entity_id=entity.uuid, is_current=True).first()
     location, state = _place(db, dto.location_name, dto.location_entity_type)
     metadata = _source_metadata(dto)
     if current and current.source_metadata.get("spatial_content_sha256") == metadata["spatial_content_sha256"]:
+        if document is not None and current.source_document_id != document.uuid:
+            current.source_document_id = document.uuid
         return current
     transition = _version_transition(current)
     row = SpatialMapRegion(
@@ -202,7 +248,8 @@ def persist_map_region(db: Session, dto: MapRegionDTO, *, provider: str = "tibia
         external_id=dto.external_id, name=dto.name, min_z=dto.minimum_z, max_z=dto.maximum_z,
         unresolved_location_name=None if location else dto.location_name,
         normalized_unresolved_location_name=normalize_name(dto.location_name or "") or None,
-        source_provider_id=provider, source_reference=dto.source_reference,
+        source_provider_id=provider, source_document_id=document.uuid if document else None,
+        source_reference=dto.source_reference,
         source_metadata=metadata, confidence=dto.confidence,
         verification_state=(state if dto.location_name and location is None else
                             ("pending" if dto.geometry else "unresolved")),
@@ -230,28 +277,60 @@ def persist_map_region(db: Session, dto: MapRegionDTO, *, provider: str = "tibia
         relationship = KnowledgeGraphService.upsert(db, RelationshipInput(
             source_entity_id=location.uuid, source_scope="map_representation", relationship_type="represented_by",
             target_entity_id=entity.uuid, resolution_state="resolved", confidence=dto.confidence,
-            source_provider_id=provider, source_document_ref=dto.source_reference,
+            source_provider_id=provider,
+            source_document_ref=source_document_ref or dto.source_reference,
             source_context={"context": "spatial.map_region"},
         )).relationship
         _replace_representation_link(
             db, row=row, source_entity_id=location.uuid, location_entity_id=location.uuid,
             relationship_id=relationship.id, external_id=f"region:{dto.external_id}",
-            provider=provider, source_reference=dto.source_reference,
+            provider=provider, source_document_id=document.uuid if document else None,
+            source_reference=dto.source_reference,
             source_metadata=metadata, confidence=dto.confidence,
             map_region_id=row.id,
         )
     return row
 
 
-def persist_route(db: Session, dto: RouteDTO, *, provider: str = "tibiamaps") -> SpatialRoute:
+def persist_route(
+    db: Session,
+    dto: RouteDTO,
+    *,
+    provider: str = "tibiamaps",
+    source_document_ref: str | None = None,
+) -> SpatialRoute:
     if len(dto.steps) > MAX_ROUTE_STEPS:
         raise ValueError("Route step limit exceeded")
     if db.bind is not None and db.bind.dialect.name == "postgresql":
         require_postgis(db)
     entity = _mapped_entity(db, provider, "route", dto.external_id, dto.name)
+    document = _source_document(
+        db, provider=provider, reference=source_document_ref, entity_id=entity.uuid,
+    )
     current = db.query(SpatialRoute).filter_by(knowledge_entity_id=entity.uuid, is_current=True).first()
     metadata = _source_metadata(dto)
     if current and current.source_metadata.get("spatial_content_sha256") == metadata["spatial_content_sha256"]:
+        if document is not None:
+            for route in db.query(SpatialRoute).filter_by(
+                knowledge_entity_id=entity.uuid,
+                source_provider_id=provider,
+                external_id=dto.external_id,
+            ):
+                if route.source_document_id is None:
+                    route.source_document_id = document.uuid
+            for relationship in db.query(KnowledgeRelationship).filter_by(
+                source_entity_id=entity.uuid,
+                source_provider_id=provider,
+                is_current=True,
+            ):
+                if relationship.source_document_id is None:
+                    context = dict(relationship.source_context or {})
+                    prior_reference = context.get("source_document_ref")
+                    if prior_reference and prior_reference != document.provider_document_id:
+                        context.setdefault("source_reference", prior_reference)
+                    context["source_document_ref"] = document.provider_document_id
+                    relationship.source_context = context
+                    relationship.source_document_id = document.uuid
         return current
     transition = _version_transition(current)
     start, _ = _place(db, dto.start_location_name)
@@ -261,7 +340,9 @@ def persist_route(db: Session, dto: RouteDTO, *, provider: str = "tibiamaps") ->
         start_location_entity_id=start.uuid if start else None, end_location_entity_id=end.uuid if end else None,
         unresolved_start_name=None if start else dto.start_location_name,
         unresolved_end_name=None if end else dto.end_location_name,
-        step_count=len(dto.steps), source_provider_id=provider, source_reference=dto.source_reference,
+        step_count=len(dto.steps), source_provider_id=provider,
+        source_document_id=document.uuid if document else None,
+        source_reference=dto.source_reference,
         source_metadata=metadata, confidence=dto.confidence,
         verification_state="pending" if dto.steps else "unresolved",
         version=(current.version + 1) if current else 1,
@@ -288,11 +369,13 @@ def persist_route(db: Session, dto: RouteDTO, *, provider: str = "tibiamaps") ->
             coordinate_steps.append(step)
         if step.location_name:
             _graph_named_place(db, source=entity, relationship_type="passes_through", name=step.location_name,
-                               provider=provider, document=dto.source_reference, scope=f"step:{step.sequence}")
+                               provider=provider, document=source_document_ref or dto.source_reference,
+                               scope=f"step:{step.sequence}")
     for relation, name in (("starts_at", dto.start_location_name), ("ends_at", dto.end_location_name)):
         if name:
             _graph_named_place(db, source=entity, relationship_type=relation, name=name,
-                               provider=provider, document=dto.source_reference, scope=relation)
+                               provider=provider, document=source_document_ref or dto.source_reference,
+                               scope=relation)
     if len(coordinate_steps) == len(dto.steps) and len(coordinate_steps) >= 2 and db.bind is not None and db.bind.dialect.name == "postgresql":
         points = ",".join(f"{step.x} {step.y} {step.z}" for step in coordinate_steps)
         db.execute(text("""
