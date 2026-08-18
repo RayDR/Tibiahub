@@ -8,7 +8,12 @@ from uuid import UUID
 from sqlalchemy.orm import Session
 
 from app.knowledge.indexing import normalize_name
-from app.knowledge.models import KnowledgeEntity, KnowledgeRelationship
+from app.knowledge.models import (
+    KnowledgeEntity,
+    KnowledgeEntityAlias,
+    KnowledgeRelationship,
+    KnowledgeSearchMetadata,
+)
 from app.knowledge.services.graph import KnowledgeGraphService, RelationshipInput
 from app.models import Loot
 from app.services.text_utils import normalize_search_text
@@ -25,12 +30,33 @@ def exact_entity_candidates(db: Session, entity_type: str, name: str) -> list[Kn
     normalized = normalize_name(name)
     if not normalized:
         return []
-    entities = db.query(KnowledgeEntity).filter(KnowledgeEntity.entity_type == entity_type).all()
-    matches: dict[UUID, KnowledgeEntity] = {}
-    for entity in entities:
-        names = [entity.canonical_name, *(alias.alias for alias in entity.aliases)]
-        if any(normalize_name(candidate) == normalized for candidate in names):
-            matches[entity.uuid] = entity
+    # Canonical and alias names are both indexed local knowledge. Query them
+    # directly instead of lazily loading every entity's alias collection (an
+    # N+1 path that made relationship-heavy normalization exceed its lease).
+    matches = {
+        entity.uuid: entity
+        for entity in (
+            db.query(KnowledgeEntity)
+            .join(
+                KnowledgeSearchMetadata,
+                KnowledgeSearchMetadata.entity_uuid == KnowledgeEntity.uuid,
+            )
+            .filter(
+                KnowledgeEntity.entity_type == entity_type,
+                KnowledgeSearchMetadata.normalized_name == normalized,
+            )
+        )
+    }
+    for entity in (
+        db.query(KnowledgeEntity)
+        .join(KnowledgeEntityAlias, KnowledgeEntityAlias.entity_uuid == KnowledgeEntity.uuid)
+        .filter(
+            KnowledgeEntity.entity_type == entity_type,
+            KnowledgeEntityAlias.entity_type == entity_type,
+            KnowledgeEntityAlias.normalized_alias == normalized,
+        )
+    ):
+        matches[entity.uuid] = entity
     return list(matches.values())
 
 

@@ -163,16 +163,30 @@ class KnowledgeGraphService:
         db.flush()
 
         # A successful exact resolution supersedes the same provider's prior
-        # unresolved spelling without affecting manual or other-provider facts.
-        if target and unresolved_name:
+        # exact name/alias facts without affecting manual or other-provider
+        # provenance. Callers that already know a target often omit
+        # ``unresolved_name``; include the target's canonical names so those
+        # resolved upserts still retire the stale name-keyed fact.
+        if target:
+            resolved_names = {
+                normalized_name
+                for candidate_name in (
+                    unresolved_name,
+                    target.canonical_name,
+                    *(alias.alias for alias in target.aliases),
+                )
+                if (normalized_name := normalize_name(candidate_name or ""))
+            }
             candidates = db.query(KnowledgeRelationship).filter_by(
                 source_entity_id=source.uuid,
                 source_scope=value.source_scope,
                 relationship_type_code=value.relationship_type,
-                normalized_unresolved_name=normalize_name(unresolved_name),
                 provenance_key=provenance,
                 is_current=True,
-            ).all()
+            ).filter(
+                KnowledgeRelationship.resolution_state.in_(("unresolved", "ambiguous")),
+                KnowledgeRelationship.normalized_unresolved_name.in_(resolved_names),
+            ).all() if resolved_names else []
             for old in candidates:
                 if old.id != row.id and not old.manual_override:
                     cls.supersede(db, old, row)

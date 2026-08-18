@@ -54,9 +54,19 @@ class KnowledgeNormalizationService:
                 is_current=True,
             ).first()
             row = (
-                persist_map_point(db, MapPointDTO(**data), provider=result.provider_code)
+                persist_map_point(
+                    db,
+                    MapPointDTO(**data),
+                    provider=result.provider_code,
+                    source_document_ref=f"map_point:{result.external_id}",
+                )
                 if result.candidate.entity_type == "map_point"
-                else persist_map_region(db, MapRegionDTO(**data), provider=result.provider_code)
+                else persist_map_region(
+                    db,
+                    MapRegionDTO(**data),
+                    provider=result.provider_code,
+                    source_document_ref=f"map_region:{result.external_id}",
+                )
             )
             status = "created" if existing is None else "unchanged" if existing.id == row.id else "updated"
             return AppliedNormalization(status, row.knowledge_entity_id, int(existing is None), len(result.warnings))
@@ -89,7 +99,12 @@ class KnowledgeNormalizationService:
                     external_id=result.external_id,
                     is_current=True,
                 ).first()
-                route = persist_route(db, RouteDTO(**data), provider=result.provider_code)
+                route = persist_route(
+                    db,
+                    RouteDTO(**data),
+                    provider=result.provider_code,
+                    source_document_ref=f"route:{result.external_id}",
+                )
                 status = "created" if existing is None else "unchanged" if existing.id == route.id else "updated"
                 return AppliedNormalization(status, route.knowledge_entity_id, 0, len(result.warnings), {"route_steps": route.step_count})
             elif result.candidate is not None and result.candidate.entity_type == "hunt_zone":

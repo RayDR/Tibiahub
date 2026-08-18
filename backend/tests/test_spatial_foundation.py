@@ -7,6 +7,7 @@ import pytest
 from app.core.security import create_access_token
 from app.knowledge.dto import MapPointDTO, MapRegionDTO, RouteDTO, RouteStepDTO
 from app.knowledge.models import (
+    KnowledgeDocument,
     KnowledgeRelationship,
     SpatialEntityLocationLink,
     SpatialMapPoint,
@@ -16,6 +17,7 @@ from app.knowledge.models import (
 from app.knowledge.registry import EntityTypeRegistry, ProviderRegistry, RelationshipTypeRegistry
 from app.knowledge.schemas import KnowledgeEntityCreate
 from app.knowledge.services import KnowledgeEntityService, KnowledgeGraphService, RelationshipInput
+from app.knowledge.services import repair_document_provenance
 from app.knowledge.services.spatial import (
     link_entity_to_location,
     persist_map_point,
@@ -157,6 +159,53 @@ def test_unresolved_and_ambiguous_references_are_preserved_without_guessing(db, 
         KnowledgeRelationship.relationship_type_code.in_(["starts_at", "ends_at", "passes_through"]),
     )}
     assert graph_states["Nowhere"] == "unresolved" and graph_states["Elsewhere"] == "unresolved"
+
+
+def test_route_replay_repairs_existing_raw_document_provenance_idempotently(db, spatial_registry):
+    route_dto = RouteDTO(
+        "route-closure", "Closure Route",
+        (RouteStepDTO(1, location_name="Unknown Closure Place"),),
+        end_location_name="Unknown Closure Place",
+        source_reference="https://example.invalid/route/closure",
+    )
+    route = persist_route(db, route_dto, provider="tibiawiki")
+    document = KnowledgeDocument(
+        provider_id="tibiawiki",
+        provider_document_id="route:route-closure",
+        entity_uuid=route.knowledge_entity_id,
+        raw_json={"fixture": True},
+        checksum="a" * 64,
+        content_identity="b" * 64,
+    )
+    db.add(document)
+    db.flush()
+
+    replayed = persist_route(
+        db,
+        route_dto,
+        provider="tibiawiki",
+        source_document_ref="route:route-closure",
+    )
+    db.flush()
+
+    assert replayed.id == route.id
+    assert route.source_document_id == document.uuid
+    relationships = db.query(KnowledgeRelationship).filter_by(
+        source_entity_id=route.knowledge_entity_id,
+        is_current=True,
+    ).all()
+    assert relationships
+    assert {row.source_document_id for row in relationships} == {document.uuid}
+    assert {row.source_context["source_document_ref"] for row in relationships} == {
+        "route:route-closure"
+    }
+    assert {row.source_context["source_reference"] for row in relationships} == {
+        route_dto.source_reference
+    }
+
+    report = repair_document_provenance(db, apply=True)
+    assert report.relationships_repaired == 0
+    assert report.spatial_routes_repaired == 0
 
 
 def test_entity_location_link_is_idempotent_and_uses_unified_graph(db, spatial_registry):

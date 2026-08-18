@@ -41,6 +41,12 @@ from app.knowledge.services.item_relationships import (
     link_item_drops,
     upsert_drop_relationship,
 )
+from app.knowledge.services.reconciliation import (
+    ExactReferenceReport,
+    ProvenanceRepairReport,
+    reconcile_exact_references,
+    repair_document_provenance,
+)
 from app.knowledge.services.spatial import (
     PostGISUnavailableError,
     entities_inside_region,
@@ -80,6 +86,10 @@ __all__ = [
     "link_creature_loot",
     "link_item_drops",
     "upsert_drop_relationship",
+    "ExactReferenceReport",
+    "ProvenanceRepairReport",
+    "reconcile_exact_references",
+    "repair_document_provenance",
     "PostGISUnavailableError",
     "postgis_status",
     "persist_map_point",

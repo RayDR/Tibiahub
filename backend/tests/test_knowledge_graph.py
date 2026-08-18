@@ -8,7 +8,13 @@ from app.core.security import create_access_token
 from app.knowledge.models import KnowledgeRelationship, KnowledgeRelationshipType
 from app.knowledge.registry import EntityTypeRegistry, ProviderRegistry, RelationshipTypeRegistry
 from app.knowledge.schemas import KnowledgeEntityCreate
-from app.knowledge.services import KnowledgeEntityService, KnowledgeGraphService, RelationshipInput
+from app.knowledge.services import (
+    KnowledgeEntityService,
+    KnowledgeGraphService,
+    RelationshipInput,
+    reconcile_exact_references,
+)
+from app.knowledge.services.item_relationships import exact_entity_candidates
 from app.models.workspace_audit import WorkspaceAudit
 from tests.conftest import make_user
 
@@ -68,6 +74,58 @@ def test_graph_deduplicates_provenance_and_derives_incoming_inverse(db, graph_re
     incoming = KnowledgeGraphService.incoming(db, item.uuid)
     assert [(row.relationship_type, row.target_name) for row in outgoing] == [("drops", "Demon Horn")]
     assert [(row.relationship_type, row.target_name) for row in incoming] == [("dropped_by", "Demon")]
+
+
+def test_resolved_upsert_retires_exact_stale_name_fact_without_name_hint(db, graph_registry):
+    creature = entity(db, "creature", "Dragon")
+    item = entity(db, "item", "Dragon Ham")
+    unresolved = KnowledgeGraphService.upsert(db, RelationshipInput(
+        source_entity_id=creature.uuid, relationship_type="drops", target_entity_type="item",
+        unresolved_name="Dragon Ham", resolution_state="unresolved", source_provider_id="tibiawiki",
+    )).relationship
+
+    resolved = KnowledgeGraphService.upsert(db, RelationshipInput(
+        source_entity_id=creature.uuid, relationship_type="drops", target_entity_id=item.uuid,
+        resolution_state="resolved", source_provider_id="tibiawiki",
+    )).relationship
+    db.flush()
+
+    assert unresolved.is_current is False
+    assert unresolved.superseded_by_id == resolved.id
+    assert db.query(KnowledgeRelationship).filter_by(is_current=True).count() == 1
+
+
+def test_exact_reconciliation_is_previewable_conservative_and_idempotent(db, graph_registry):
+    quest = entity(db, "quest", "Closure Quest")
+    item = entity(db, "item", "Closure Reward")
+    unresolved = KnowledgeGraphService.upsert(db, RelationshipInput(
+        source_entity_id=quest.uuid, relationship_type="rewards_item", target_entity_type="item",
+        unresolved_name="Closure Reward", resolution_state="unresolved", source_provider_id="tibiawiki",
+    )).relationship
+
+    preview = reconcile_exact_references(db, apply=False)
+    assert preview.uniquely_resolvable == 1 and preview.resolved == 0
+    assert unresolved.is_current is True
+
+    first = reconcile_exact_references(db, apply=True)
+    second = reconcile_exact_references(db, apply=True)
+    db.flush()
+
+    assert first.resolved == 1
+    assert second.uniquely_resolvable == 0 and second.resolved == 0
+    assert unresolved.is_current is False
+    current = db.query(KnowledgeRelationship).filter_by(is_current=True).one()
+    assert current.target_entity_id == item.uuid and current.resolution_state == "resolved"
+
+
+def test_exact_candidate_lookup_uses_canonical_names_and_approved_aliases(db, graph_registry):
+    canonical = entity(db, "item", "Canonical Closure Item")
+    KnowledgeEntityService.add_alias(db, canonical, "Old Closure Item")
+    entity(db, "creature", "Old Closure Item")
+    db.flush()
+
+    assert exact_entity_candidates(db, "item", "canonical closure item") == [canonical]
+    assert exact_entity_candidates(db, "item", "OLD CLOSURE ITEM") == [canonical]
 
 
 def test_provenance_consolidation_manual_precedence_and_provider_reconciliation(db, graph_registry):
