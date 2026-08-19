@@ -17,4 +17,4 @@ The guarded deploy resolves release state from the commit being deployed instead
 - Symlinked `frontend/node_modules` is rejected rather than mutated, because deploy must not accidentally alter another checkout through a symlink.
 - The rollback frontend is built with `npm ci` from the previous commit's own `package-lock.json` instead of borrowing the current release's dependencies.
 
-The deploy should repair deterministic local prerequisites such as missing frontend dependencies. It should still fail safely rather than guess when dependency installation, migration topology, database validation, builds, health checks, or service checks genuinely fail.
+The deploy repairs deterministic local prerequisites such as missing frontend dependencies. It still fails safely rather than guessing when dependency installation, migration topology, database validation, builds, health checks, or service checks genuinely fail.
