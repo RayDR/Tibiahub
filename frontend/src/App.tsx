@@ -63,6 +63,7 @@ import MaintenanceControl from "./pages/Admin/MaintenanceControl";
 import RaffleAssistance from "./pages/Admin/RaffleAssistance";
 import MaintenanceGate from "./components/maintenance/MaintenanceGate";
 import SeoRouteDefaults from "./components/SeoRouteDefaults";
+import RouteExperience from "./components/navigation/RouteExperience";
 
 const Leadership = lazy(() => import("./pages/guild/Leadership"));
 const LeadershipRecruitment = lazy(
@@ -128,7 +129,8 @@ function App() {
             <MaintenanceGate>
               <SeoRouteDefaults />
               <AppShell dataVersion={latestDataVersion}>
-              <Routes location={location} key={location.pathname}>
+              <RouteExperience />
+              <Routes location={location}>
                 <Route path="/" element={<HomePage />} />
                 <Route path="/cyclopedia" element={<CreaturesPage />} />
                 <Route

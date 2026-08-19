@@ -1,5 +1,6 @@
 import api from './api';
 import type { ItemSearchResult } from '../types';
+import { cachedKnowledgeRead, knowledgeCacheKey } from './knowledgeRequestCache';
 
 export type ItemBrowseSort = 'name' | 'category';
 export type ItemBrowseOrder = 'asc' | 'desc';
@@ -25,13 +26,20 @@ export const itemBrowserApi = {
       limit?: number;
     } = {},
     signal?: AbortSignal,
-  ): Promise<ItemSearchResult[]> => {
-    const response = await api.get('/items/browse', { params, signal });
-    return response.data;
-  },
+  ): Promise<ItemSearchResult[]> => (
+    cachedKnowledgeRead(
+      knowledgeCacheKey('/items/browse', params),
+      async () => {
+        const response = await api.get('/items/browse', { params, signal });
+        return response.data;
+      },
+    )
+  ),
 
-  getFacets: async (signal?: AbortSignal): Promise<ItemFacets> => {
-    const response = await api.get('/items/facets', { signal });
-    return response.data;
-  },
+  getFacets: async (signal?: AbortSignal): Promise<ItemFacets> => (
+    cachedKnowledgeRead('/items/facets', async () => {
+      const response = await api.get('/items/facets', { signal });
+      return response.data;
+    })
+  ),
 };

@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useEffect, useState } from 'react';
 import { ImageOff } from 'lucide-react';
 
 interface ImageWithFallbackProps {
@@ -9,6 +9,8 @@ interface ImageWithFallbackProps {
   containerClassName?: string;
 }
 
+const failedMediaUrls = new Set<string>();
+
 const ImageWithFallback: React.FC<ImageWithFallbackProps> = ({
   src,
   alt,
@@ -16,7 +18,11 @@ const ImageWithFallback: React.FC<ImageWithFallbackProps> = ({
   className = '',
   containerClassName = '',
 }) => {
-  const [failed, setFailed] = useState(false);
+  const [failed, setFailed] = useState(() => Boolean(src && failedMediaUrls.has(src)));
+
+  useEffect(() => {
+    setFailed(Boolean(src && failedMediaUrls.has(src)));
+  }, [src]);
 
   if (!src || failed) {
     return (
@@ -29,7 +35,18 @@ const ImageWithFallback: React.FC<ImageWithFallbackProps> = ({
     );
   }
 
-  return <img src={src} alt={alt} loading="lazy" className={className} onError={() => setFailed(true)} />;
+  return (
+    <img
+      src={src}
+      alt={alt}
+      loading="lazy"
+      className={className}
+      onError={() => {
+        failedMediaUrls.add(src);
+        setFailed(true);
+      }}
+    />
+  );
 };
 
 export default ImageWithFallback;
