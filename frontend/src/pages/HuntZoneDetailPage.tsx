@@ -7,6 +7,8 @@ import { KnowledgeBackLink, KnowledgeBadge, KnowledgeEmpty, KnowledgeFact, Knowl
 import KnowledgeCategoryIcon from '../components/knowledge/KnowledgeCategoryIcon';
 import { Page } from '../components/ui';
 import { huntZonesApi } from '../services/api';
+import { activityApi } from '../services/activity';
+import { useAuth } from '../context/AuthContext';
 import type { HuntZone } from '../types';
 import { SuggestCorrectionLink } from '../components/feedback/GitHubFeedbackLink';
 import { useSeoMetadata } from '../utils/seo';
@@ -21,6 +23,7 @@ export default function HuntZoneDetailPage() {
   const { t } = useTranslation();
   const navigate = useNavigate();
   const location = useLocation();
+  const { isAuthenticated } = useAuth();
   const [zone, setZone] = useState<HuntZone | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(false);
@@ -40,14 +43,45 @@ export default function HuntZoneDetailPage() {
     let current = true;
     setLoading(true);
     setError(false);
+    setMapContext(null);
     void huntZonesApi.getByIdentifier(identifier, controller.signal).then((result) => {
       if (!current) return;
       setZone(result);
-      setMapContext(tibiaMapApi.peekHuntZoneContext(result.slug || result.id) || tibiaMapApi.peekHuntZoneContext(result.id));
-      if (result.slug && result.slug !== identifier) navigate(`/hunt-zones/${result.slug}`, { replace: true, state: location.state });
+
+      if (result.slug && result.slug !== identifier) {
+        navigate(`/hunt-zones/${result.slug}`, { replace: true, state: location.state });
+        return;
+      }
+
+      const contextIdentifier = result.slug || result.id;
+      const cachedContext = tibiaMapApi.peekHuntZoneContext(contextIdentifier) || tibiaMapApi.peekHuntZoneContext(result.id);
+      setMapContext(cachedContext);
+      if (!cachedContext && result.spatial?.geometry_status === 'mapped') {
+        void tibiaMapApi.huntZoneContext(contextIdentifier, controller.signal).then((context) => {
+          if (current && !controller.signal.aborted) setMapContext(context);
+        }).catch(() => {
+          // The canonical zone geometry remains useful even when optional map context fails.
+        });
+      }
+
+      if (isAuthenticated && result.id) {
+        void activityApi.record({
+          activity_type: 'view_zone',
+          entity_type: 'hunt_zone',
+          entity_id: String(result.id),
+          metadata: {
+            name: result.name,
+            slug: result.slug,
+            city: result.city,
+            region: result.region,
+          },
+        }).catch(() => {
+          // Visit history is non-blocking.
+        });
+      }
     }).catch(() => { if (current && !controller.signal.aborted) setError(true); }).finally(() => { if (current) setLoading(false); });
     return () => { current = false; controller.abort(); };
-  }, [identifier, location.state, navigate]);
+  }, [identifier, isAuthenticated, location.state, navigate]);
 
   if (loading) return <Page><div className="flex min-h-[24rem] items-center justify-center text-primary"><Loader2 className="animate-spin" size={42} /></div></Page>;
   if (!zone || error) return <Page><div className="rounded-2xl border border-danger/25 bg-danger-subtle p-6 text-danger"><h1 className="text-xl font-bold">{t('huntZoneDetail.unavailable')}</h1><p className="mt-2">{t('huntZoneDetail.notFound')}</p></div></Page>;
