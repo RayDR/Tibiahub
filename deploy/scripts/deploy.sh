@@ -14,11 +14,13 @@ source "$ROOT/scripts/lib/ops-common.sh"
 # shellcheck source=../../scripts/lib/postgres.sh
 source "$ROOT/scripts/lib/postgres.sh"
 
-EXPECTED_REVISION="provider_knowledge_20260813"
+EXPECTED_REVISION=""
 DEPLOY_ROOT="${TIBIAHUB_DEPLOY_ROOT:-/forge/tibiahub-backups/deployments}"
 LOCK_FILE="${TIBIAHUB_DEPLOY_LOCK_FILE:-$DEPLOY_ROOT/.deploy.lock}"
 RUNTIME_ROOT="${TIBIAHUB_RUNTIME_ROOT:-/forge/tibiahub-runtimes}"
 RUNTIME_LINK="$ROOT/backend/runtime-current"
+FRONTEND_DIR="$ROOT/frontend"
+FRONTEND_DEPS_STAMP="$FRONTEND_DIR/node_modules/.tibiahub-dependency-inputs.sha256"
 candidate_runtime=""
 previous_runtime=""
 runtime_is_ephemeral=0
@@ -307,7 +309,22 @@ preflight_alembic_head() {
     APP_ENV=test DATABASE_URL="sqlite+pysqlite:///:memory:" PYTHONPATH="$ROOT/backend:$ROOT" \
       "$candidate_runtime/bin/alembic" -c "$ROOT/backend/alembic.ini" heads | awk '{print $1}'
   )
-  [[ ${#migration_heads[@]} -eq 1 && "${migration_heads[0]}" == "$EXPECTED_REVISION" ]]
+
+  if [[ ${#migration_heads[@]} -ne 1 ]]; then
+    echo "Deployment requires exactly one Alembic HEAD; found ${#migration_heads[@]}." >&2
+    if [[ ${#migration_heads[@]} -gt 0 ]]; then
+      printf 'Alembic HEAD: %s\n' "${migration_heads[@]}" >&2
+    fi
+    return 1
+  fi
+
+  EXPECTED_REVISION="${migration_heads[0]}"
+  [[ "$EXPECTED_REVISION" =~ ^[A-Za-z0-9_]+$ ]] || {
+    echo "Resolved Alembic HEAD has an invalid revision identifier." >&2
+    return 1
+  }
+
+  echo "Resolved Alembic target revision: $EXPECTED_REVISION"
 }
 
 preflight_runtime_env() {
@@ -419,8 +436,58 @@ preflight_worker_imports() {
     "$candidate_runtime/bin/python" -c "import app.workers.sync_worker, app.workers.email_worker, app.workers.raffle_scheduler, app.knowledge.workers.knowledge_worker"
 }
 
+frontend_dependency_fingerprint() {
+  [[ -f "$FRONTEND_DIR/package.json" && -f "$FRONTEND_DIR/package-lock.json" ]] || {
+    echo "Frontend package.json and package-lock.json are required." >&2
+    return 1
+  }
+
+  (
+    cd "$FRONTEND_DIR"
+    sha256sum package.json package-lock.json | sha256sum | awk '{print $1}'
+  )
+}
+
+prepare_frontend_dependencies() {
+  local expected_sha
+  local recorded_sha=""
+
+  expected_sha="$(frontend_dependency_fingerprint)" || return 1
+
+  if [[ -L "$FRONTEND_DIR/node_modules" ]]; then
+    echo "Refusing to mutate symlinked frontend/node_modules; remove the symlink so deploy can prepare isolated dependencies." >&2
+    return 1
+  fi
+
+  if [[ -f "$FRONTEND_DEPS_STAMP" ]]; then
+    recorded_sha="$(cat "$FRONTEND_DEPS_STAMP")"
+  fi
+
+  if [[
+    "$recorded_sha" == "$expected_sha"
+    && -x "$FRONTEND_DIR/node_modules/.bin/vite"
+  ]]; then
+    echo "Frontend dependencies already match package inputs."
+    return 0
+  fi
+
+  echo "Preparing frontend dependencies with npm ci."
+  (
+    cd "$FRONTEND_DIR"
+    npm ci --prefer-offline --no-audit --no-fund
+  )
+
+  [[ -x "$FRONTEND_DIR/node_modules/.bin/vite" ]] || {
+    echo "Frontend dependency installation did not provide Vite." >&2
+    return 1
+  }
+
+  printf '%s\n' "$expected_sha" >"$FRONTEND_DEPS_STAMP"
+  echo "Frontend dependencies prepared for package inputs: $expected_sha"
+}
+
 preflight_frontend_build() {
-  (cd "$ROOT/frontend" && npm run build -- --outDir "$staged_dist")
+  (cd "$FRONTEND_DIR" && npm run build -- --outDir "$staged_dist")
   [[ -f "$staged_dist/index.html" ]]
 }
 
@@ -451,13 +518,12 @@ capture_pm2_state() {
 
 build_previous_frontend() {
   previous_worktree="$evidence_dir/previous-worktree"
-  [[ -d "$ROOT/frontend/node_modules" ]] || {
-    echo "Frontend dependencies are required to construct the rollback build." >&2
-    return 1
-  }
   git worktree add --quiet --detach "$previous_worktree" "$previous_commit"
-  ln -s "$ROOT/frontend/node_modules" "$previous_worktree/frontend/node_modules"
-  (cd "$previous_worktree/frontend" && npm run build -- --outDir "$evidence_dir/frontend-dist-previous")
+  (
+    cd "$previous_worktree/frontend"
+    npm ci --prefer-offline --no-audit --no-fund
+    npm run build -- --outDir "$evidence_dir/frontend-dist-previous"
+  )
   [[ -f "$evidence_dir/frontend-dist-previous/index.html" ]]
   git worktree remove --force "$previous_worktree"
 }
@@ -565,6 +631,7 @@ run_step "050-preflight-production-revision" preflight_production_revision_reada
 run_step "060-preflight-backend-import" preflight_backend_imports
 run_step "070-preflight-fastapi-import" preflight_fastapi_import
 run_step "080-preflight-worker-imports" preflight_worker_imports
+run_step "085-preflight-frontend-dependencies" prepare_frontend_dependencies
 run_step "090-preflight-frontend-build" preflight_frontend_build
 run_step "100-preflight-pm2-config" preflight_pm2_config
 run_step "110-preflight-alembic-heads" run_alembic_read_only heads
