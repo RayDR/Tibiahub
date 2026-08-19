@@ -12,4 +12,10 @@ grep -Fq 'Deployment requires exactly one Alembic HEAD' "$DEPLOY_SCRIPT"
 grep -Fq 'EXPECTED_REVISION="${migration_heads[0]}"' "$DEPLOY_SCRIPT"
 grep -Fq 'Resolved Alembic target revision: $EXPECTED_REVISION' "$DEPLOY_SCRIPT"
 
-echo "Dynamic Alembic deploy target checks passed."
+grep -Fq 'frontend_dependency_fingerprint()' "$DEPLOY_SCRIPT"
+grep -Fq 'npm ci --prefer-offline --no-audit --no-fund' "$DEPLOY_SCRIPT"
+grep -Fq '085-preflight-frontend-dependencies' "$DEPLOY_SCRIPT"
+grep -Fq '.tibiahub-dependency-inputs.sha256' "$DEPLOY_SCRIPT"
+! grep -Fq 'ln -s "$ROOT/frontend/node_modules" "$previous_worktree/frontend/node_modules"' "$DEPLOY_SCRIPT"
+
+echo "Dynamic Alembic deploy target and frontend dependency checks passed."
