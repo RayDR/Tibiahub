@@ -6,9 +6,11 @@
  * 2. Per-tab sessionStorage snapshots — scroll/filter state per tab,
  *    survives navigating to a detail page and pressing Back.
  * 3. Server version checking — if /system/version returns a newer
- *    data_version than we last saw, the in-memory cache is invalidated
+ *    data_version than we last saw, client knowledge caches are invalidated
  *    so the next fetch retrieves fresh data.
  */
+
+import { clearKnowledgeRequestCache } from './knowledgeRequestCache';
 
 const TTL_MS = 10 * 60 * 1000;
 const SNAPSHOT_TTL_MS = 30 * 60 * 1000;
@@ -77,8 +79,8 @@ function _saveVersion(v: string): void {
 }
 
 /**
- * Compare server data_version with local. If different, clear in-memory cache.
- * Fire-and-forget — failure falls back to TTL.
+ * Compare server data_version with local. If different, clear client knowledge
+ * caches. Fire-and-forget — failure falls back to each cache's TTL.
  */
 export async function checkAndInvalidateIfStale(): Promise<void> {
   if (!_knownDataVersion) _knownDataVersion = _loadStoredVersion();
@@ -96,6 +98,7 @@ export async function checkAndInvalidateIfStale(): Promise<void> {
     if (!serverVersion) return;
     if (serverVersion !== _knownDataVersion) {
       _cache.clear();
+      clearKnowledgeRequestCache();
       _saveVersion(serverVersion);
     }
   } catch { /* Version check failure is non-fatal */ }

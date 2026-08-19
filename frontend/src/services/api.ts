@@ -1,5 +1,6 @@
-import axios from 'axios';
+import axios, { type AxiosRequestConfig } from 'axios';
 import type { Creature, CreatureSimple, HuntZone, ItemDetail, ItemSearchResult, LocationKnowledgeDetail, NpcKnowledgeDetail, QuestDetail, QuestSearchResult, SpatialRouteMetadata, Vocation } from '../types';
+import { cachedKnowledgeRead, knowledgeCacheKey } from './knowledgeRequestCache';
 
 const API_BASE_URL = import.meta.env.VITE_API_URL || '/api/v1';
 export const REQUEST_TIMEOUT_MS = 10000;
@@ -29,6 +30,20 @@ api.interceptors.request.use((config) => {
   return config;
 });
 
+async function cachedGet<T>(
+  path: string,
+  config: AxiosRequestConfig = {},
+): Promise<T> {
+  const key = knowledgeCacheKey(
+    path,
+    config.params as Record<string, unknown> | undefined,
+  );
+  return cachedKnowledgeRead(key, async () => {
+    const response = await api.get<T>(path, config);
+    return response.data;
+  });
+}
+
 // Creatures API
 export const creaturesApi = {
   getAll: async (params?: {
@@ -40,30 +55,20 @@ export const creaturesApi = {
     difficulty?: string;
     sort_by?: 'name' | 'experience' | 'hitpoints' | 'difficulty';
     sort_order?: 'asc' | 'desc';
-  }, signal?: AbortSignal): Promise<CreatureSimple[]> => {
-    const response = await api.get('/creatures/', { params, signal });
-    return response.data;
-  },
+  }, signal?: AbortSignal): Promise<CreatureSimple[]> => (
+    cachedGet<CreatureSimple[]>('/creatures/', { params, signal })
+  ),
 
-  getHighlights: async (limit: number = 18, signal?: AbortSignal): Promise<CreatureSimple[]> => {
-    const response = await api.get('/creatures/highlights', { params: { limit }, signal });
-    return response.data;
-  },
+  getHighlights: async (limit: number = 18, signal?: AbortSignal): Promise<CreatureSimple[]> => (
+    cachedGet<CreatureSimple[]>('/creatures/highlights', { params: { limit }, signal })
+  ),
 
   getPopular: async (
     limit: number = 12,
     signal?: AbortSignal,
-  ): Promise<CreatureSimple[]> => {
-    const response = await api.get(
-      '/creatures/popular',
-      {
-        params: { limit },
-        signal,
-      },
-    );
-
-    return response.data;
-  },
+  ): Promise<CreatureSimple[]> => (
+    cachedGet<CreatureSimple[]>('/creatures/popular', { params: { limit }, signal })
+  ),
 
   getBosses: async (params?: {
     skip?: number;
@@ -71,90 +76,64 @@ export const creaturesApi = {
     search?: string;
     sort_by?: 'name' | 'experience' | 'hitpoints' | 'difficulty';
     sort_order?: 'asc' | 'desc';
-  }, signal?: AbortSignal): Promise<CreatureSimple[]> => {
-    const response = await api.get('/creatures/bosses', { params, signal });
-    return response.data;
-  },
+  }, signal?: AbortSignal): Promise<CreatureSimple[]> => (
+    cachedGet<CreatureSimple[]>('/creatures/bosses', { params, signal })
+  ),
 
   getPopularBosses: async (
     limit: number = 12,
     signal?: AbortSignal,
-  ): Promise<CreatureSimple[]> => {
-    const response = await api.get('/creatures/bosses/popular', {
-      params: { limit },
-      signal,
-    });
-    return response.data;
-  },
+  ): Promise<CreatureSimple[]> => (
+    cachedGet<CreatureSimple[]>('/creatures/bosses/popular', { params: { limit }, signal })
+  ),
 
   getCategoryImages: async (
     signal?: AbortSignal,
-  ): Promise<Record<string, string>> => {
-    const response = await api.get(
-      '/creatures/category-images',
-      { signal },
-    );
-    return response.data || {};
-  },
+  ): Promise<Record<string, string>> => (
+    cachedGet<Record<string, string>>('/creatures/category-images', { signal })
+  ),
 
   getCategoryPreviews: async (
     signal?: AbortSignal,
-  ): Promise<Record<string, CreatureCategoryPreview[]>> => {
-    const response = await api.get(
-      '/creatures/category-previews',
-      { signal },
-    );
-    return response.data || {};
-  },
+  ): Promise<Record<string, CreatureCategoryPreview[]>> => (
+    cachedGet<Record<string, CreatureCategoryPreview[]>>('/creatures/category-previews', { signal })
+  ),
 
   getCategoryCounts: async (
     signal?: AbortSignal,
-  ): Promise<Record<string, number>> => {
-    const response = await api.get(
-      '/creatures/category-counts',
-      { signal },
-    );
-    return response.data || {};
-  },
+  ): Promise<Record<string, number>> => (
+    cachedGet<Record<string, number>>('/creatures/category-counts', { signal })
+  ),
 
-  getById: async (id: number): Promise<Creature> => {
-    const response = await api.get(`/creatures/${id}`);
-    return response.data;
-  },
+  getById: async (id: number): Promise<Creature> => (
+    cachedGet<Creature>(`/creatures/${id}`)
+  ),
 
-  getBySlug: async (slug: string): Promise<Creature> => {
-    const response = await api.get(`/creatures/${encodeURIComponent(slug)}`);
-    return response.data;
-  },
+  getBySlug: async (slug: string): Promise<Creature> => (
+    cachedGet<Creature>(`/creatures/${encodeURIComponent(slug)}`)
+  ),
 
-  getByName: async (name: string): Promise<Creature> => {
-    const response = await api.get(`/creatures/name/${name}`);
-    return response.data;
-  },
+  getByName: async (name: string): Promise<Creature> => (
+    cachedGet<Creature>(`/creatures/name/${name}`)
+  ),
 };
 
-// Hunt Zones API
-// Hunt Zones API
 export const huntZonesApi = {
-  getAll: async (filters: { skip?: number; limit?: number; min_level?: number; max_level?: number; city?: string; search?: string } = {}, signal?: AbortSignal): Promise<HuntZone[]> => {
-    const response = await api.get('/hunt-zones/', { params: filters, signal });
-    return response.data;
-  },
+  getAll: async (filters: { skip?: number; limit?: number; min_level?: number; max_level?: number; city?: string; search?: string } = {}, signal?: AbortSignal): Promise<HuntZone[]> => (
+    cachedGet<HuntZone[]>('/hunt-zones/', { params: filters, signal })
+  ),
 
-  getHighlights: async (limit: number = 12, signal?: AbortSignal): Promise<HuntZone[]> => {
-    const response = await api.get('/hunt-zones/highlights', { params: { limit }, signal });
-    return response.data;
-  },
+  getHighlights: async (limit: number = 12, signal?: AbortSignal): Promise<HuntZone[]> => (
+    cachedGet<HuntZone[]>('/hunt-zones/highlights', { params: { limit }, signal })
+  ),
 
-  getByIdentifier: async (identifier: number | string, signal?: AbortSignal): Promise<HuntZone> => {
-    const response = await api.get(`/hunt-zones/${encodeURIComponent(identifier)}`, { signal });
-    return response.data;
-  },
+  getByIdentifier: async (identifier: number | string, signal?: AbortSignal): Promise<HuntZone> => (
+    cachedGet<HuntZone>(`/hunt-zones/${encodeURIComponent(identifier)}`, { signal })
+  ),
 
-  getById: async (id: number): Promise<HuntZone> => {
-    const response = await api.get(`/hunt-zones/${id}`);
-    return response.data;
-  },
+  getById: async (id: number): Promise<HuntZone> => (
+    cachedGet<HuntZone>(`/hunt-zones/${id}`)
+  ),
 
   getMapImageUrl: (id: number, placeholder: boolean = true): string => `${API_BASE_URL}/hunt-zones/${id}/map-image?placeholder=${placeholder}`,
 
@@ -180,7 +159,6 @@ export const huntZonesApi = {
     skip: number = 0,
     signal?: AbortSignal,
   ): Promise<any> => {
-    // UPDATED: Use new /recommendations/party endpoint
     const response = await api.post('/recommendations/party', party_composition, {
       params: { goal, limit, skip }, signal,
     });
@@ -188,101 +166,88 @@ export const huntZonesApi = {
   },
 };
 
-// Items API
 export const itemsApi = {
-  search: async (search: string, limit: number = 50, signal?: AbortSignal, skip: number = 0): Promise<ItemSearchResult[]> => {
-    const response = await api.get('/items/', { params: { search, limit, skip }, signal });
-    return response.data;
-  },
+  search: async (search: string, limit: number = 50, signal?: AbortSignal, skip: number = 0): Promise<ItemSearchResult[]> => (
+    cachedGet<ItemSearchResult[]>('/items/', { params: { search, limit, skip }, signal })
+  ),
 
-  list: async (params?: { skip?: number; limit?: number }, signal?: AbortSignal): Promise<ItemSearchResult[]> => {
-    const response = await api.get('/items/', { params, signal });
-    return response.data;
-  },
+  list: async (params?: { skip?: number; limit?: number }, signal?: AbortSignal): Promise<ItemSearchResult[]> => (
+    cachedGet<ItemSearchResult[]>('/items/', { params, signal })
+  ),
 
-  getByIdentifier: async (identifier: number | string, signal?: AbortSignal): Promise<ItemDetail> => {
-    const response = await api.get(`/items/${encodeURIComponent(identifier)}`, { signal });
-    return response.data;
-  },
+  getByIdentifier: async (identifier: number | string, signal?: AbortSignal): Promise<ItemDetail> => (
+    cachedGet<ItemDetail>(`/items/${encodeURIComponent(identifier)}`, { signal })
+  ),
 
-  getById: async (id: number, signal?: AbortSignal): Promise<ItemDetail> => {
-    const response = await api.get(`/items/${id}`, { signal });
-    return response.data;
-  },
+  getById: async (id: number, signal?: AbortSignal): Promise<ItemDetail> => (
+    cachedGet<ItemDetail>(`/items/${id}`, { signal })
+  ),
 
-  getHighlights: async (limit: number = 12, signal?: AbortSignal): Promise<ItemSearchResult[]> => {
-    const response = await api.get('/items/highlights', { params: { limit }, signal });
-    return response.data;
-  },
+  getHighlights: async (limit: number = 12, signal?: AbortSignal): Promise<ItemSearchResult[]> => (
+    cachedGet<ItemSearchResult[]>('/items/highlights', { params: { limit }, signal })
+  ),
 
-  getPopular: async (limit: number = 12, signal?: AbortSignal): Promise<ItemSearchResult[]> => {
-    const response = await api.get('/items/popular', { params: { limit }, signal });
-    return response.data;
-  },
+  getPopular: async (limit: number = 12, signal?: AbortSignal): Promise<ItemSearchResult[]> => (
+    cachedGet<ItemSearchResult[]>('/items/popular', { params: { limit }, signal })
+  ),
 
-  getTrending: async (limit: number = 12, signal?: AbortSignal): Promise<ItemSearchResult[]> => {
-    const response = await api.get('/items/trending', { params: { limit }, signal });
-    return response.data;
-  },
+  // Compatibility shim for the legacy second Loot rail. Keep the callable
+  // shape until CreaturesPage is split up, but do not issue a redundant GET.
+  getTrending: async (
+    _limit: number = 12,
+    _signal?: AbortSignal,
+  ): Promise<ItemSearchResult[]> => [],
 };
 
 export const questsApi = {
-  list: async (params?: { skip?: number; limit?: number; include_groups?: boolean; category?: string; level?: number; premium?: boolean; repeatable?: boolean }, signal?: AbortSignal): Promise<QuestSearchResult[]> => {
-    const response = await api.get('/quests/', { params, signal });
-    return response.data;
-  },
+  list: async (params?: { skip?: number; limit?: number; include_groups?: boolean; category?: string; level?: number; premium?: boolean; repeatable?: boolean }, signal?: AbortSignal): Promise<QuestSearchResult[]> => (
+    cachedGet<QuestSearchResult[]>('/quests/', { params, signal })
+  ),
 
-  getHighlights: async (limit: number = 12, signal?: AbortSignal): Promise<QuestSearchResult[]> => {
-    const response = await api.get('/quests/highlights', { params: { limit }, signal });
-    return response.data;
-  },
+  getHighlights: async (limit: number = 12, signal?: AbortSignal): Promise<QuestSearchResult[]> => (
+    cachedGet<QuestSearchResult[]>('/quests/highlights', { params: { limit }, signal })
+  ),
 
-  getPopular: async (limit: number = 10, signal?: AbortSignal): Promise<QuestSearchResult[]> => {
-    const response = await api.get('/quests/popular', { params: { limit }, signal });
-    return response.data;
-  },
+  getPopular: async (limit: number = 10, signal?: AbortSignal): Promise<QuestSearchResult[]> => (
+    cachedGet<QuestSearchResult[]>('/quests/popular', { params: { limit }, signal })
+  ),
 
-  getTrending: async (limit: number = 10, signal?: AbortSignal): Promise<QuestSearchResult[]> => {
-    const response = await api.get('/quests/trending', { params: { limit }, signal });
-    return response.data;
-  },
+  getTrending: async (limit: number = 10, signal?: AbortSignal): Promise<QuestSearchResult[]> => (
+    cachedGet<QuestSearchResult[]>('/quests/trending', { params: { limit }, signal })
+  ),
 
-  search: async (search: string, limit: number = 50, signal?: AbortSignal, include_groups: boolean = false, skip: number = 0): Promise<QuestSearchResult[]> => {
-    const response = await api.get('/quests/', { params: { search, limit, include_groups, skip }, signal });
-    return response.data;
-  },
+  search: async (search: string, limit: number = 50, signal?: AbortSignal, include_groups: boolean = false, skip: number = 0): Promise<QuestSearchResult[]> => (
+    cachedGet<QuestSearchResult[]>('/quests/', { params: { search, limit, include_groups, skip }, signal })
+  ),
 
-  getById: async (id: number | string, signal?: AbortSignal): Promise<QuestDetail> => {
-    const response = await api.get(`/quests/${id}`, { signal });
-    return response.data;
-  },
+  getById: async (id: number | string, signal?: AbortSignal): Promise<QuestDetail> => (
+    cachedGet<QuestDetail>(`/quests/${id}`, { signal })
+  ),
 };
 
 export const namedKnowledgeApi = {
-  getNpc: async (identifier: string, signal?: AbortSignal): Promise<NpcKnowledgeDetail> => {
-    const response = await api.get(`/npcs/${encodeURIComponent(identifier)}`, { signal });
-    return response.data;
-  },
+  getNpc: async (identifier: string, signal?: AbortSignal): Promise<NpcKnowledgeDetail> => (
+    cachedGet<NpcKnowledgeDetail>(`/npcs/${encodeURIComponent(identifier)}`, { signal })
+  ),
 
-  getLocation: async (identifier: string, signal?: AbortSignal): Promise<LocationKnowledgeDetail> => {
-    const response = await api.get(`/locations/${encodeURIComponent(identifier)}`, { signal });
-    return response.data;
-  },
+  getLocation: async (identifier: string, signal?: AbortSignal): Promise<LocationKnowledgeDetail> => (
+    cachedGet<LocationKnowledgeDetail>(`/locations/${encodeURIComponent(identifier)}`, { signal })
+  ),
 };
 
 export const spatialApi = {
-  forLocation: async (identifier: string, signal?: AbortSignal) => (
-    await api.get(`/spatial/locations/${encodeURIComponent(identifier)}`, { signal })
-  ).data,
-  forEntity: async (entityId: string, signal?: AbortSignal) => (
-    await api.get(`/spatial/entities/${encodeURIComponent(entityId)}`, { signal })
-  ).data,
+  forLocation: async (identifier: string, signal?: AbortSignal): Promise<any> => (
+    cachedGet<any>(`/spatial/locations/${encodeURIComponent(identifier)}`, { signal })
+  ),
+  forEntity: async (entityId: string, signal?: AbortSignal): Promise<any> => (
+    cachedGet<any>(`/spatial/entities/${encodeURIComponent(entityId)}`, { signal })
+  ),
   route: async (identifier: string, signal?: AbortSignal): Promise<SpatialRouteMetadata> => (
-    await api.get(`/spatial/routes/${encodeURIComponent(identifier)}`, { signal })
-  ).data,
+    cachedGet<SpatialRouteMetadata>(`/spatial/routes/${encodeURIComponent(identifier)}`, { signal })
+  ),
   nearby: async (x: number, y: number, z: number, signal?: AbortSignal): Promise<{ items: Array<{ source_entity_id: string; canonical_name: string; entity_type: string; slug: string; distance: number }> }> => (
-    await api.get('/spatial/nearby', { params: { x, y, z, distance: 50, limit: 12 }, signal })
-  ).data,
+    cachedGet<{ items: Array<{ source_entity_id: string; canonical_name: string; entity_type: string; slug: string; distance: number }> }>('/spatial/nearby', { params: { x, y, z, distance: 50, limit: 12 }, signal })
+  ),
 };
 
 export const adminCreaturesApi = {

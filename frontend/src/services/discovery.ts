@@ -1,4 +1,5 @@
 import api from './api';
+import { cachedKnowledgeRead } from './knowledgeRequestCache';
 
 export interface DiscoveryCard { id: string | number; name: string; slug?: string; image_url?: string; experience?: number; hitpoints?: number; city?: string; recommended_level?: number; summary?: string; entity_type?: string; updated_at?: string; search_count?: number }
 export interface CyclopediaDiscovery {
@@ -15,10 +16,10 @@ export interface CyclopediaDiscovery {
 export const discoveryApi = {
   load: async (
     signal?: AbortSignal,
-  ): Promise<CyclopediaDiscovery> =>
-    (
-      await api.get('/catalog/discovery', {
-        signal,
-      })
-    ).data,
+  ): Promise<CyclopediaDiscovery> => (
+    cachedKnowledgeRead('/catalog/discovery', async () => {
+      const response = await api.get('/catalog/discovery', { signal });
+      return response.data;
+    })
+  ),
 };

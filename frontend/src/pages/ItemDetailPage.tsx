@@ -15,6 +15,8 @@ import {
 } from '../components/knowledge/KnowledgeDetail';
 import { Page } from '../components/ui';
 import { itemsApi } from '../services/api';
+import { activityApi } from '../services/activity';
+import { useAuth } from '../context/AuthContext';
 import type { ItemDetail, ItemRelatedEntity } from '../types';
 import { SuggestCorrectionLink } from '../components/feedback/GitHubFeedbackLink';
 import { useSeoMetadata } from '../utils/seo';
@@ -50,6 +52,7 @@ export default function ItemDetailPage() {
   const { t } = useTranslation();
   const navigate = useNavigate();
   const location = useLocation();
+  const { isAuthenticated } = useAuth();
   const [item, setItem] = useState<ItemDetail | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(false);
@@ -71,10 +74,25 @@ export default function ItemDetailPage() {
     void itemsApi.getByIdentifier(identifier, controller.signal).then((result) => {
       setItem(result);
       setError(false);
+      if (isAuthenticated && result.id) {
+        void activityApi.record({
+          activity_type: 'view_item',
+          entity_type: 'items',
+          entity_id: String(result.id),
+          metadata: {
+            name: result.item_name,
+            slug: result.slug,
+            normalized_name: result.normalized_name,
+            image_item_id: result.id,
+          },
+        }).catch(() => {
+          // Visit history is non-blocking.
+        });
+      }
       if (result.slug && result.slug !== identifier) navigate(`/items/${result.slug}`, { replace: true, state: location.state });
     }).catch(() => setError(true)).finally(() => setLoading(false));
     return () => controller.abort();
-  }, [identifier, location.state, navigate]);
+  }, [identifier, isAuthenticated, location.state, navigate]);
 
   const relatedByName = useMemo(() => new Map(
     (item?.related_entities || []).map((entity) => [normalizedName(entity.name), entity]),
