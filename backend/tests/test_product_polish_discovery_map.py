@@ -3,9 +3,10 @@ from __future__ import annotations
 from datetime import UTC, datetime, timedelta
 
 from app.knowledge.models.core import KnowledgeEntity, KnowledgeEntityType
+from app.knowledge.services.graph import KnowledgeGraphService, RelationshipInput
 from app.models.creature import Creature
 from app.models.entity_metadata import EntityMetadata
-from app.models.external_data import Item, TibiaWikiQuest
+from app.models.external_data import Item, TibiaWikiNpc, TibiaWikiQuest
 from app.models.hunt_zone import HuntZone
 from app.models.media_asset import MediaAsset
 from app.models.spawn_location import SpawnLocation
@@ -110,6 +111,58 @@ def test_public_map_returns_real_zone_geometry_and_honest_related_context(client
     assert context["hunt_zone"]["geometry_source"] == "tibiamaps_marker"
     assert (context["hunt_zone"]["x"], context["hunt_zone"]["y"]) == (32120, 32220)
     assert context["creatures"][0]["geometry_status"] == "knowledge_only"
+    detail = client.get("/api/v1/hunt-zones/mapped-grounds").json()
+    assert detail["spatial"]["geometry_status"] == "mapped"
+    assert detail["spatial"]["world_map"]["image_url"] == "/api/v1/map/floors/7/image"
+
+
+def test_universal_map_search_uses_only_resolved_local_relationship_geometry(client, db):
+    zone_entity = _entity(db, "hunt_zone", "Evidence Grounds")
+    creature_entity = _entity(db, "creature", "Evidence Beast")
+    item_entity = _entity(db, "item", "Evidence Fang")
+    quest_entity = _entity(db, "quest", "Evidence Trail Quest")
+    npc_entity = _entity(db, "npc", "Evidence Guide")
+    town_entity = _entity(db, "town", "Evidence Town")
+    unmapped_item_entity = _entity(db, "item", "Unmapped Token")
+    floor = WorldMapFloor(
+        provider="tibiamaps/tibia-map-data", upstream_commit="d" * 40,
+        upstream_url="https://github.com/tibiamaps/tibia-map-data", license_name="MIT", attribution="fixture",
+        floor=7, map_path="/tmp/evidence-floor.png", map_sha256="e" * 64,
+        width=2560, height=2048, min_x=31744, min_y=30976, max_x=34304, max_y=33024,
+        source_metadata={}, is_current=True,
+    )
+    zone = HuntZone(name="Evidence Grounds", slug="evidence-grounds", normalized_name="evidence grounds", knowledge_entity_id=zone_entity.uuid)
+    creature = Creature(name="Evidence Beast", slug="evidence-beast", normalized_name="evidence beast", hitpoints=100, experience=100, is_hidden=False, knowledge_entity_id=creature_entity.uuid)
+    item = Item(name="Evidence Fang", normalized_name="evidence fang", slug="evidence-fang", knowledge_entity_id=item_entity.uuid)
+    unmapped_item = Item(name="Unmapped Token", normalized_name="unmapped token", slug="unmapped-token", knowledge_entity_id=unmapped_item_entity.uuid)
+    quest = TibiaWikiQuest(name="Evidence Trail Quest", normalized_name="evidence trail quest", slug="evidence-trail-quest", is_group=False, knowledge_entity_id=quest_entity.uuid)
+    npc = TibiaWikiNpc(name="Evidence Guide", normalized_name="evidence guide", slug="evidence-guide", external_id="npc:guide", source_name="tibiawiki", knowledge_entity_id=npc_entity.uuid)
+    db.add_all([floor, zone, creature, item, unmapped_item, quest, npc]); db.flush()
+    db.add_all([
+        WorldMapMarker(floor_id=floor.id, source_index=1, description="Evidence Grounds", normalized_description="evidence grounds", x=32200, y=32100, floor=7, raw_data={}, resolved_entity_id=zone_entity.uuid, resolution_state="resolved"),
+        WorldMapMarker(floor_id=floor.id, source_index=2, description="Evidence Town", normalized_description="evidence town", x=32300, y=32000, floor=7, raw_data={}, resolved_entity_id=town_entity.uuid, resolution_state="resolved"),
+        SpawnLocation(creature_id=creature.id, hunt_zone_id=zone.id),
+    ])
+    KnowledgeGraphService.upsert(db, RelationshipInput(source_entity_id=item_entity.uuid, relationship_type="dropped_by", target_entity_id=creature_entity.uuid, source_provider_id="tibiawiki"))
+    KnowledgeGraphService.upsert(db, RelationshipInput(source_entity_id=quest_entity.uuid, relationship_type="starts_at_npc", target_entity_id=npc_entity.uuid, source_provider_id="tibiawiki"))
+    KnowledgeGraphService.upsert(db, RelationshipInput(source_entity_id=npc_entity.uuid, relationship_type="located_at", target_entity_id=town_entity.uuid, source_provider_id="tibiawiki"))
+    db.commit()
+
+    creature_result = client.get("/api/v1/map/search", params={"q": "Evidence Beast", "layers": "creature"}).json()["items"][0]
+    item_result = client.get("/api/v1/map/search", params={"q": "Evidence Fang", "layers": "item"}).json()["items"][0]
+    quest_result = client.get("/api/v1/map/search", params={"q": "Evidence Trail", "layers": "quest"}).json()["items"][0]
+    npc_result = client.get("/api/v1/map/search", params={"q": "Evidence Guide", "layers": "npc"}).json()["items"][0]
+    unmapped_result = client.get("/api/v1/map/search", params={"q": "Unmapped Token", "layers": "item"}).json()["items"][0]
+
+    assert (creature_result["x"], creature_result["y"], creature_result["z"]) == (32200, 32100, 7)
+    assert creature_result["spatial_evidence"][0]["relationship"] == "spawn_in_hunt_zone"
+    assert (item_result["x"], item_result["y"]) == (32200, 32100)
+    assert item_result["spatial_evidence"][0]["relationship"].startswith("dropped_by")
+    assert (quest_result["x"], quest_result["y"]) == (32300, 32000)
+    assert quest_result["spatial_evidence"][0]["relationship"] == "starts_at_npc → located_at"
+    assert (npc_result["x"], npc_result["y"]) == (32300, 32000)
+    assert unmapped_result["geometry_status"] == "knowledge_only"
+    assert unmapped_result["x"] is None and unmapped_result["spatial_evidence"] == []
 
 
 def test_planner_returns_stored_rates_access_spawns_and_stable_map_links(client, db):
@@ -133,6 +186,8 @@ def test_planner_returns_stored_rates_access_spawns_and_stable_map_links(client,
     assert row["rate_basis"] == "stored_local_average"
     assert row["location_x"] == 0
     assert row["map_image_url"] is None
+    assert row["spatial"]["geometry_status"] == "knowledge_only"
+    assert row["spatial"]["unmapped_reason"] == "floor_unavailable"
     assert row["requires_premium"] is True
     assert row["creatures"][0]["slug"] == "planner-beast"
     assert row["creatures"][0]["image_url"].startswith("/api/v1/creatures/")

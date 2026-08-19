@@ -112,6 +112,7 @@ class HuntZoneBase(BaseModel):
     missing_fields: Optional[List[str]] = None
     data_sources: Optional[List[str]] = None
     data_version: Optional[int] = None
+    spatial: Optional[dict] = None
 
 
 class HuntZoneCreate(HuntZoneBase):

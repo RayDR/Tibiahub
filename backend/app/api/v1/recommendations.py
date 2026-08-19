@@ -20,11 +20,12 @@ from app.schemas import Vocation
 from app.models import Creature, HuntZone
 from app.models.external_data import Item, TibiaWikiQuest
 from app.services.text_utils import normalize_search_text
+from app.services.map_presentation_service import zone_spatial_presentations
 
 router = APIRouter()
 
 
-def _zone_payload(rec, engine=None, player_level=None):
+def _zone_payload(rec, engine=None, player_level=None, spatial=None):
     zone = rec['zone']
     location_x = zone.location_x if zone.location_x is not None else zone.map_x
     location_y = zone.location_y if zone.location_y is not None else zone.map_y
@@ -47,6 +48,7 @@ def _zone_payload(rec, engine=None, player_level=None):
         "map_image_url": None,
         "map_bounds": zone.map_bounds, "location_x": location_x,
         "location_y": location_y, "location_z": zone.location_z if zone.location_z is not None else zone.map_z,
+        "spatial": spatial,
         "creatures": [{
             "id": spawn.creature.id, "name": spawn.creature.name, "slug": spawn.creature.slug,
             "is_boss": bool(spawn.creature.is_boss), "image_url": f"/api/v1/creatures/{spawn.creature.id}/image",
@@ -94,14 +96,16 @@ async def get_solo_recommendations(
         preferred_zone=zone,
     )
     
+    visible = recommendations[:limit]
+    spatial = zone_spatial_presentations(db, [rec["zone"] for rec in visible])
     return {
         "vocation": vocation,
         "level": level,
         "goal": goal,
         "skip": skip, "limit": limit, "has_more": len(recommendations) > limit,
         "recommendations": [
-            _zone_payload(rec, engine, level)
-            for rec in recommendations[:limit]
+            _zone_payload(rec, engine, level, spatial.get(rec["zone"].id))
+            for rec in visible
         ]
     }
 
@@ -164,6 +168,8 @@ async def get_party_recommendations(
         skip=skip,
     )
     
+    visible = recommendations[:limit]
+    spatial = zone_spatial_presentations(db, [rec["zone"] for rec in visible])
     return {
         "party_size": len(normalized_party),
         "avg_level": sum(m['level'] for m in normalized_party) / len(normalized_party),
@@ -171,8 +177,8 @@ async def get_party_recommendations(
         "goal": goal,
         "skip": skip, "limit": limit, "has_more": len(recommendations) > limit,
         "recommendations": [
-            {**_zone_payload(rec, engine, int(sum(m['level'] for m in normalized_party) / len(normalized_party))), "composition_fit": rec['synergy_bonus']}
-            for rec in recommendations[:limit]
+            {**_zone_payload(rec, engine, int(sum(m['level'] for m in normalized_party) / len(normalized_party)), spatial.get(rec["zone"].id)), "composition_fit": rec['synergy_bonus']}
+            for rec in visible
         ]
     }
 

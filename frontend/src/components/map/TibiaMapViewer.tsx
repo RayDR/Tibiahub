@@ -45,6 +45,19 @@ function Recenter({ position, zoom }: { position?: [number, number]; zoom: numbe
   return null;
 }
 
+function MapLifecycle() {
+  const map = useMap();
+  useEffect(() => {
+    const container = map.getContainer();
+    const refresh = () => map.invalidateSize({ pan: false });
+    const observer = new ResizeObserver(refresh);
+    observer.observe(container);
+    const frame = window.requestAnimationFrame(refresh);
+    return () => { observer.disconnect(); window.cancelAnimationFrame(frame); };
+  }, [map]);
+  return null;
+}
+
 function markerIcon(marker: MapMarker): L.DivIcon {
   const content = marker.imageUrl && marker.imageUrl.startsWith('/')
     ? `<img src="${marker.imageUrl.replace(/"/g, '&quot;')}" alt="" />`
@@ -74,13 +87,18 @@ export default function TibiaMapViewer({ imageUrl, pathfindingUrl, showPathfindi
     return [coordinateMode === 'world' ? py : loaded.height - py, px];
   }, [coordinateMode, loaded, tibiaBounds]);
   const valid = (x: number, y: number) => Boolean(tibiaBounds && x >= tibiaBounds.minX && x < tibiaBounds.maxX && y >= tibiaBounds.minY && y < tibiaBounds.maxY);
-  const renderedMarkers = useMemo(() => !convert ? [] : [...(center ? [{ ...center, label }] : []), ...markers].filter((item) => valid(item.x, item.y)).map((item) => ({ ...item, position: convert(item.x, item.y) })), [center, convert, label, markers, tibiaBounds]);
+  const renderedMarkers = useMemo(() => {
+    if (!convert) return [];
+    const values = [...markers];
+    if (center && !values.some((item) => item.x === center.x && item.y === center.y)) values.unshift({ ...center, label });
+    return values.filter((item) => valid(item.x, item.y)).map((item) => ({ ...item, position: convert(item.x, item.y) }));
+  }, [center, convert, label, markers, tibiaBounds]);
   const renderedRegions = useMemo(() => !convert ? [] : regions.filter((item) => valid(item.minX, item.minY) && valid(item.maxX - 1, item.maxY - 1)).map((item) => ({ ...item, position: [convert(item.minX, item.minY), convert(item.maxX, item.maxY)] as LatLngBoundsExpression })), [convert, regions, tibiaBounds]);
   const renderedPaths = useMemo(() => !convert ? [] : paths.map((path) => ({ ...path, positions: path.points.filter((point) => valid(point.x, point.y) && (point.z == null || point.z === floor)).map((point) => convert(point.x, point.y)) })).filter((path) => path.positions.length >= 2), [convert, floor, paths, tibiaBounds]);
 
-  if (loading) return <div className="grid min-h-56 place-items-center rounded-xl border border-line bg-surface-base/60 text-sm text-content-muted" role="status">{label}</div>;
+  if (loading) return <div className={`grid place-items-center bg-surface-base/60 text-sm text-content-muted ${fill ? 'h-full min-h-[28rem]' : 'min-h-56 rounded-xl border border-line'}`} role="status">{label}</div>;
   if (!loaded || !imageBounds) return <div className="rounded-xl border border-line bg-surface-base/60 px-4 py-5 text-sm text-content-muted">{emptyMessage}</div>;
-  return <div className={`relative w-full overflow-hidden rounded-xl border border-line bg-surface-base ${fill ? 'h-full min-h-[28rem]' : 'h-[clamp(17rem,50vw,30rem)]'}`} aria-label={label}>
+  return <div className={`relative w-full overflow-hidden bg-surface-base ${fill ? 'h-full min-h-[28rem]' : 'h-[clamp(17rem,50vw,30rem)] rounded-xl border border-line'}`} aria-label={label}>
     <MapContainer ref={setMap} crs={L.CRS.Simple} bounds={imageBounds} maxBounds={imageBounds} maxBoundsViscosity={0.85} minZoom={-4} maxZoom={5} zoomControl={false} scrollWheelZoom touchZoom dragging attributionControl={false} className="h-full w-full">
       <ImageOverlay url={loaded.objectUrl} bounds={imageBounds} opacity={1} />
       {showPathfinding && pathfindingUrl && isLocalMapEndpoint(pathfindingUrl) ? <ImageOverlay url={pathfindingUrl} bounds={imageBounds} opacity={0.22} /> : null}
@@ -88,6 +106,7 @@ export default function TibiaMapViewer({ imageUrl, pathfindingUrl, showPathfindi
       {renderedPaths.map((path) => <Polyline key={path.id} positions={path.positions} pathOptions={{ color: 'var(--primary)', weight: 4, opacity: 0.9 }}><Popup>{path.label}</Popup></Polyline>)}
       {renderedMarkers.map((marker) => <Marker key={`${marker.x}:${marker.y}:${marker.label}`} position={marker.position} icon={markerIcon(marker)}><Popup><strong>{marker.label}</strong>{marker.subtitle ? <small className="block">{marker.subtitle}</small> : null}</Popup></Marker>)}
       <Recenter position={renderedMarkers[0]?.position} zoom={coordinateMode === 'world' ? 2 : 0} />
+      <MapLifecycle />
     </MapContainer>
     <Controls map={map} bounds={imageBounds} labels={[zoomInLabel, zoomOutLabel, resetLabel]} />
     {floor != null ? <div className="pointer-events-none absolute bottom-3 left-3 z-[500] rounded-lg border border-line bg-surface-overlay px-3 py-1.5 text-xs font-semibold text-content-primary">{floorLabel || floor}</div> : null}

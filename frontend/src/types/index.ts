@@ -161,6 +161,7 @@ export interface HuntZone {
   missing_fields?: string[] | null;
   data_sources?: string[] | null;
   data_version?: number | null;
+  spatial?: HuntZoneSpatial | null;
   access?: {
     status: 'unknown' | 'documented' | 'restricted';
     minimum_level?: number | null;
@@ -181,6 +182,34 @@ export interface HuntZone {
     creature?: CreatureSimple;
   }>;
   last_synced_at?: string;
+}
+
+export interface WorldMapPresentation {
+  floor: number;
+  image_url: string;
+  pathfinding_url?: string | null;
+  width: number;
+  height: number;
+  bounds: Record<string, unknown>;
+  provider: string;
+  upstream_url: string;
+  upstream_commit: string;
+  map_sha256: string;
+  pathfinding_sha256?: string | null;
+  license: string;
+  attribution: string;
+}
+
+export interface HuntZoneSpatial {
+  geometry_status: 'mapped' | 'knowledge_only';
+  geometry_source?: string | null;
+  marker_label?: string | null;
+  unmapped_reason?: 'missing_coordinates' | 'missing_floor' | 'floor_unavailable' | 'outside_floor_bounds' | null;
+  x?: number | null;
+  y?: number | null;
+  z?: number | null;
+  bounds?: { min_x: number; min_y: number; max_x: number; max_y: number } | null;
+  world_map?: WorldMapPresentation | null;
 }
 
 export interface ItemDropCreature {
