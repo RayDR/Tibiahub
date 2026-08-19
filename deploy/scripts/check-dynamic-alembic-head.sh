@@ -13,6 +13,8 @@ grep -Fq 'EXPECTED_REVISION="${migration_heads[0]}"' "$DEPLOY_SCRIPT"
 grep -Fq 'Resolved Alembic target revision: $EXPECTED_REVISION' "$DEPLOY_SCRIPT"
 
 grep -Fq 'frontend_dependency_fingerprint()' "$DEPLOY_SCRIPT"
+grep -Fq 'cd "$FRONTEND_DIR"' "$DEPLOY_SCRIPT"
+grep -Fq 'sha256sum package.json package-lock.json' "$DEPLOY_SCRIPT"
 grep -Fq 'npm ci --prefer-offline --no-audit --no-fund' "$DEPLOY_SCRIPT"
 grep -Fq '085-preflight-frontend-dependencies' "$DEPLOY_SCRIPT"
 grep -Fq '.tibiahub-dependency-inputs.sha256' "$DEPLOY_SCRIPT"
