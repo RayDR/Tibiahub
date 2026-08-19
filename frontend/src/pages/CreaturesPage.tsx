@@ -16,6 +16,7 @@ import { FontAwesomeIcon } from '@fortawesome/react-fontawesome';
 import { faBook, faScroll } from '@fortawesome/free-solid-svg-icons';
 
 import CreatureCard from '../components/CreatureCard';
+import HuntZoneCard from '../components/HuntZoneCard';
 import ImageWithFallback from '../components/ImageWithFallback';
 import {
   creaturesApi,
@@ -297,7 +298,6 @@ const CreaturesPage: React.FC = () => {
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
   const [skip, setSkip] = useState(0);
   const [hasMore, setHasMore] = useState(false);
-  const [mapPreviewFailed, setMapPreviewFailed] = useState<Record<number, boolean>>({});
   const [, setUsedHighlightsSource] = useState(false);
   const [showCategories, setShowCategories] = useState(false);
   const [categoryImages, setCategoryImages] = useState<Record<string, string>>({});
@@ -328,7 +328,16 @@ const CreaturesPage: React.FC = () => {
   const lastSearchSignatureRef = useRef<string>('');
   const pendingScrollRestoreRef = useRef<number | null>(null);
   const inPageTabSwitchRef = useRef(false);
+  const mountedRef = useRef(true);
   const { isAuthenticated } = useAuth();
+
+  useEffect(() => {
+    mountedRef.current = true;
+    return () => {
+      mountedRef.current = false;
+      activeRequestRef.current?.abort();
+    };
+  }, []);
 
   const selectedSuggestion = useMemo(
     () => decodeSelectedSuggestion(selectedResult),
@@ -733,6 +742,12 @@ const CreaturesPage: React.FC = () => {
   };
 
   async function performSearch(reset: boolean = true) {
+    if (reset) {
+      activeRequestRef.current?.abort();
+      activeRequestRef.current = null;
+      loadMoreLockRef.current = false;
+      setLoadingMore(false);
+    }
     const normalized = effectiveSearchTerm.trim();
     const nextSkip = reset ? 0 : skip;
     const cacheCategory = mode === 'creatures'
@@ -879,6 +894,7 @@ const CreaturesPage: React.FC = () => {
           },
           controller.signal,
         );
+        if (controller.signal.aborted || activeRequestRef.current !== controller) return;
 
         setCreatures((current) =>
           reset
@@ -937,6 +953,7 @@ const CreaturesPage: React.FC = () => {
           },
           controller.signal,
         );
+        if (controller.signal.aborted || activeRequestRef.current !== controller) return;
         setCreatures((current) => (reset ? data : mergeUniqueCreatures(current, data)));
         setSkip(nextSkip + data.length);
         setHasMore(data.length === PAGE_SIZE);
@@ -967,6 +984,7 @@ const CreaturesPage: React.FC = () => {
             controller.signal,
           );
         }
+        if (controller.signal.aborted || activeRequestRef.current !== controller) return;
         setItems((current) => reset ? data : [...current, ...data.filter((row) => !current.some((existing) => existing.normalized_name === row.normalized_name))]);
         setSkip(nextSkip + data.length);
         setHasMore(data.length === PAGE_SIZE);
@@ -988,6 +1006,7 @@ const CreaturesPage: React.FC = () => {
         } else {
           data = [];
         }
+        if (controller.signal.aborted || activeRequestRef.current !== controller) return;
         setQuests((current) => reset ? data : [...current, ...data.filter((row) => !current.some((existing) => (existing.id || existing.slug || existing.name) === (row.id || row.slug || row.name)))]);
         setSkip(nextSkip + data.length);
         setHasMore(data.length === PAGE_SIZE);
@@ -1005,6 +1024,7 @@ const CreaturesPage: React.FC = () => {
         const data = normalized
           ? await huntZonesApi.getAll({ search: normalized || undefined, skip: nextSkip, limit: PAGE_SIZE }, controller.signal)
           : [];
+        if (controller.signal.aborted || activeRequestRef.current !== controller) return;
         setZones((current) => reset ? data : [...current, ...data.filter((row) => !current.some((existing) => existing.id === row.id))]);
         setSkip(nextSkip + data.length);
         setHasMore(data.length === PAGE_SIZE);
@@ -1056,6 +1076,7 @@ const CreaturesPage: React.FC = () => {
       if (axios.isCancel(error) || error?.name === 'CanceledError' || error?.code === 'ERR_CANCELED') {
         return;
       }
+      if (activeRequestRef.current !== controller || !mountedRef.current) return;
       console.error(error);
 
       if (reset) {
@@ -1068,12 +1089,12 @@ const CreaturesPage: React.FC = () => {
           'Failed to load cyclopedia data',
       );
     } finally {
-      if (reset) {
-        setLoading(false);
-      } else {
-        setLoadingMore(false);
-        loadMoreLockRef.current = false;
-      }
+      const isCurrent = activeRequestRef.current === controller;
+      if (!reset) loadMoreLockRef.current = false;
+      if (!isCurrent || !mountedRef.current) return;
+      activeRequestRef.current = null;
+      if (reset) setLoading(false);
+      else setLoadingMore(false);
 
       setInitialLoaded(true);
       // Restore scroll position if returning from a detail page (cache miss path)
@@ -2002,34 +2023,7 @@ const CreaturesPage: React.FC = () => {
               </AppCard>
             ))}
 
-            {mode === 'zones' && zones.map((zone) => (
-              <AppCard key={zone.id} data-cyclopedia-result className="ds-enter overflow-hidden">
-                <div className="relative h-40 bg-surface-base">
-                  {(zone.map_image_url || zone.map_asset_id) && !mapPreviewFailed[zone.id] ? (
-                    <img
-                      src={huntZonesApi.getMapImageUrl(zone.id, false)}
-                      alt={zone.name}
-                      className="h-full w-full object-cover"
-                      loading="lazy"
-                      onError={() => setMapPreviewFailed((prev) => ({ ...prev, [zone.id]: true }))}
-                    />
-                  ) : (
-                    <div className="flex h-full w-full items-center justify-center bg-gradient-to-br from-surface-base via-surface to-surface-base"><KnowledgeCategoryIcon category="zones" label={t('nav.zones')} className="size-20" mediaClassName="size-16" /></div>
-                  )}
-                  <div className="absolute inset-0 bg-transparent" />
-                </div>
-                <div className="p-6">
-                  <Link to={`/hunt-zones/${zone.slug || zone.id}`} state={cyclopediaRouteState} onClick={persistCyclopediaState} className="mb-2 inline-block text-xl font-bold text-primary hover:underline">{zone.name}</Link>
-                  <div className="flex flex-wrap gap-2 text-xs text-content-secondary">
-                    {zone.region || zone.city ? <KnowledgeBadge>{zone.region || zone.city}</KnowledgeBadge> : null}
-                    {(zone.recommended_level ?? zone.min_level ?? 0) > 0 ? <KnowledgeBadge tone="primary">{t('cyclopedia.zones.level', { level: zone.recommended_level ?? zone.min_level })}</KnowledgeBadge> : null}
-                    {zone.difficulty ? <KnowledgeBadge>{zone.difficulty}</KnowledgeBadge> : null}
-                  </div>
-                  <div className="mt-4 grid grid-cols-2 gap-2 text-xs"><div className="rounded-lg border border-line bg-surface-base/50 p-2"><span className="block text-content-muted">{t('cyclopedia.zones.rawExp')}</span><strong>{rawZoneExperience(zone) ? rawZoneExperience(zone).toLocaleString() : t('cyclopedia.zones.notRecorded')}</strong></div><div className="rounded-lg border border-line bg-surface-base/50 p-2"><span className="block text-content-muted">{t('cyclopedia.zones.profit')}</span><strong>{zone.avg_profit_hour ? `${zone.avg_profit_hour.toLocaleString()} gp/h` : zone.profit_rating || t('cyclopedia.zones.notRecorded')}</strong></div><div className="rounded-lg border border-line bg-surface-base/50 p-2"><span className="block text-content-muted">{t('cyclopedia.zones.suggested')}</span><strong>{(zone.recommended_level ?? zone.min_level ?? 0) > 0 ? t('cyclopedia.zones.level', { level: zone.recommended_level ?? zone.min_level }) : t('cyclopedia.zones.needsAnalysis')}</strong></div><div className="rounded-lg border border-line bg-surface-base/50 p-2"><span className="block text-content-muted">{t('cyclopedia.zones.danger')}</span><strong>{zone.danger_rating || zone.difficulty || t('cyclopedia.zones.notRecorded')}</strong></div></div>
-                  <Link to={`/planner?zone=${encodeURIComponent(zone.slug || String(zone.id))}`} className="app-button-secondary app-button-sm mt-4">{t('cyclopedia.zones.comparePlanner')}</Link>
-                </div>
-              </AppCard>
-            ))}
+            {mode === 'zones' && zones.map((zone) => <div key={zone.id} data-cyclopedia-result className="ds-enter h-full"><HuntZoneCard zone={zone} linkState={cyclopediaRouteState} onNavigate={persistCyclopediaState} rawExperience={rawZoneExperience(zone)} /></div>)}
             </div>
           </>
         )}

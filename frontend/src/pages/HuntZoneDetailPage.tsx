@@ -1,5 +1,5 @@
-import { useEffect, useState } from 'react';
-import { Crown, Gauge, Loader2, Sparkles, Users } from 'lucide-react';
+import { lazy, Suspense, useEffect, useState } from 'react';
+import { Crown, Gauge, Loader2, MapPinned, Sparkles, Users } from 'lucide-react';
 import { Link, useLocation, useNavigate, useParams } from 'react-router-dom';
 import { useTranslation } from 'react-i18next';
 
@@ -10,7 +10,11 @@ import { huntZonesApi } from '../services/api';
 import type { HuntZone } from '../types';
 import { SuggestCorrectionLink } from '../components/feedback/GitHubFeedbackLink';
 import { useSeoMetadata } from '../utils/seo';
+import LocalizedMapPreview from '../components/map/LocalizedMapPreview';
+import { tibiaMapApi, type HuntZoneMapContext } from '../services/tibiaMap';
+import { formatDisplayFloor } from '../utils/tibiaFloors';
 
+const TibiaMapViewer = lazy(() => import('../components/map/TibiaMapViewer'));
 
 export default function HuntZoneDetailPage() {
   const { identifier } = useParams<{ identifier: string }>();
@@ -20,6 +24,7 @@ export default function HuntZoneDetailPage() {
   const [zone, setZone] = useState<HuntZone | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(false);
+  const [mapContext, setMapContext] = useState<HuntZoneMapContext | null>(null);
 
   useSeoMetadata(zone ? {
     title: `${zone.name} — Tibia hunt zone`,
@@ -32,13 +37,16 @@ export default function HuntZoneDetailPage() {
   useEffect(() => {
     if (!identifier) return undefined;
     const controller = new AbortController();
+    let current = true;
     setLoading(true);
+    setError(false);
     void huntZonesApi.getByIdentifier(identifier, controller.signal).then((result) => {
+      if (!current) return;
       setZone(result);
-      setError(false);
+      setMapContext(tibiaMapApi.peekHuntZoneContext(result.slug || result.id) || tibiaMapApi.peekHuntZoneContext(result.id));
       if (result.slug && result.slug !== identifier) navigate(`/hunt-zones/${result.slug}`, { replace: true, state: location.state });
-    }).catch(() => setError(true)).finally(() => setLoading(false));
-    return () => controller.abort();
+    }).catch(() => { if (current && !controller.signal.aborted) setError(true); }).finally(() => { if (current) setLoading(false); });
+    return () => { current = false; controller.abort(); };
   }, [identifier, location.state, navigate]);
 
   if (loading) return <Page><div className="flex min-h-[24rem] items-center justify-center text-primary"><Loader2 className="animate-spin" size={42} /></div></Page>;
@@ -64,6 +72,9 @@ export default function HuntZoneDetailPage() {
     zone.avg_profit_hour || zone.profit_rating ? <KnowledgeFact key="profit" label={t('huntZoneDetail.profit')} value={zone.avg_profit_hour ? `${zone.avg_profit_hour.toLocaleString()} gp/h` : zone.profit_rating} /> : null,
     zone.danger_rating || zone.difficulty ? <KnowledgeFact key="danger" label={t('huntZoneDetail.danger')} value={zone.danger_rating || zone.difficulty} /> : null,
   ].filter(Boolean);
+  const spatial = zone.spatial;
+  const worldMap = spatial?.world_map;
+  const hasMap = spatial?.geometry_status === 'mapped' && spatial.x != null && spatial.y != null && Boolean(worldMap);
 
   return <Page>
     <KnowledgeBackLink to={back}>{t('huntZoneDetail.back')}</KnowledgeBackLink>
@@ -71,11 +82,15 @@ export default function HuntZoneDetailPage() {
       eyebrow={t('huntZoneDetail.eyebrow')}
       title={zone.name}
       description={zone.description || undefined}
-      media={<div className="grid aspect-[4/3] place-items-center rounded-2xl border border-line bg-surface-base"><KnowledgeCategoryIcon category="zones" label={t('nav.zones')} className="size-28" mediaClassName="size-24" /></div>}
+      media={hasMap ? <LocalizedMapPreview spatial={spatial} label={t('huntZoneDetail.mapAlt', { name: zone.name })} className="aspect-[4/3] rounded-2xl border border-line" /> : <div className="grid aspect-[4/3] place-items-center rounded-2xl border border-line bg-surface-base"><KnowledgeCategoryIcon category="zones" label={t('nav.zones')} className="size-28" mediaClassName="size-24" /></div>}
       badges={<>{zone.city ? <KnowledgeBadge tone="primary">{zone.city}</KnowledgeBadge> : null}{zone.region && zone.region !== zone.city ? <KnowledgeBadge>{zone.region}</KnowledgeBadge> : null}{zone.difficulty ? <KnowledgeBadge>{zone.difficulty}</KnowledgeBadge> : null}{accessPremiumRequired === true ? <KnowledgeBadge tone="warning">{t('huntZoneDetail.premium')}</KnowledgeBadge> : null}</>}
     />
 
     {quickFacts.length ? <div className="mt-6"><KnowledgeFacts>{quickFacts}</KnowledgeFacts></div> : null}
+
+    <KnowledgeSection className="mt-6" title={t('huntZoneDetail.map')} icon={<MapPinned size={20} />}>
+      {hasMap && spatial && worldMap ? <div className="overflow-hidden rounded-2xl"><Suspense fallback={<div className="grid min-h-72 place-items-center text-content-muted">{t('map.loading')}</div>}><TibiaMapViewer imageUrl={worldMap.image_url} pathfindingUrl={worldMap.pathfinding_url} label={zone.name} floor={spatial.z} floorLabel={spatial.z != null ? t('map.floor', { floor: formatDisplayFloor(spatial.z) }) : undefined} mapBounds={worldMap.bounds} center={{ x: spatial.x as number, y: spatial.y as number }} markers={(mapContext?.markers || []).map((marker) => ({ x: marker.x, y: marker.y, label: marker.name, imageUrl: marker.image_url }))} regions={spatial.bounds ? [{ minX: spatial.bounds.min_x, minY: spatial.bounds.min_y, maxX: spatial.bounds.max_x, maxY: spatial.bounds.max_y, label: zone.name }] : []} paths={(mapContext?.routes || []).map((route) => ({ id: route.id, label: route.name, points: route.points }))} coordinateMode="world" resetLabel={t('map.reset')} zoomInLabel={t('map.zoomIn')} zoomOutLabel={t('map.zoomOut')} emptyMessage={t('huntZoneDetail.mapEmpty')} /></Suspense><div className="mt-3 flex flex-wrap items-center justify-between gap-3 text-xs text-content-muted"><span>{t('huntZoneDetail.coordinates', { x: spatial.x, y: spatial.y, z: spatial.z != null ? formatDisplayFloor(spatial.z) : t('common.unknown') })}</span><Link to={`/map?q=${encodeURIComponent(zone.name)}&entityType=hunt_zone&slug=${encodeURIComponent(zone.slug || String(zone.id))}&floor=${spatial.z}`} className="app-button-secondary app-button-sm">{t('huntZoneDetail.viewMap')}</Link></div></div> : <KnowledgeEmpty>{t('map.locationNotMapped')}</KnowledgeEmpty>}
+    </KnowledgeSection>
 
     <div className="mt-8 space-y-6">
       <div className="grid gap-6 lg:grid-cols-[minmax(0,1.5fr)_minmax(18rem,1fr)]">

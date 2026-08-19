@@ -28,6 +28,7 @@ from app.api.v1.local_media import (
 from app.services.entity_metadata_service import EntityMetadataService
 from app.services.text_utils import normalize_search_text
 from app.services.hunt_service import HuntRecommendationService
+from app.services.map_presentation_service import zone_spatial_presentations
 from app.services import media_asset_service as media_svc
 from app.api.v1.endpoints.auth import get_current_knowledge_editor
 
@@ -142,6 +143,7 @@ def _zone_details(db: Session, zones: list[HuntZoneModel]) -> list[dict]:
         normalized = zone.normalized_name or normalize_search_text(zone.name)
         all_names.extend(_access_quest_names(zone, locations.get(normalized)))
     quest_index = _canonical_quest_index(db, all_names)
+    spatial_by_zone = zone_spatial_presentations(db, zones)
     results: list[dict] = []
     for zone in zones:
         normalized = zone.normalized_name or normalize_search_text(zone.name)
@@ -149,6 +151,7 @@ def _zone_details(db: Session, zones: list[HuntZoneModel]) -> list[dict]:
         access = _zone_access(zone, location, quest_index)
         payload = HuntZone.model_validate(zone).model_dump()
         payload["slug"] = _canonical_zone_slug(zone)
+        payload["spatial"] = spatial_by_zone[zone.id]
         payload["access"] = access.model_dump()
         if not payload.get("min_level") and location and location.minimum_level is not None:
             payload["min_level"] = location.minimum_level

@@ -165,9 +165,10 @@ export const huntZonesApi = {
     goal: 'exp' | 'profit' | 'balanced' = 'exp',
     zone?: string,
     skip: number = 0,
+    signal?: AbortSignal,
   ): Promise<any> => {
     const response = await api.get('/recommendations/solo', {
-      params: { vocation, level, limit, goal, zone, skip },
+      params: { vocation, level, limit, goal, zone, skip }, signal,
     });
     return response.data;
   },
@@ -177,10 +178,11 @@ export const huntZonesApi = {
     goal: 'exp' | 'profit' | 'balanced' = 'exp',
     limit: number = 6,
     skip: number = 0,
+    signal?: AbortSignal,
   ): Promise<any> => {
     // UPDATED: Use new /recommendations/party endpoint
     const response = await api.post('/recommendations/party', party_composition, {
-      params: { goal, limit, skip },
+      params: { goal, limit, skip }, signal,
     });
     return response.data;
   },

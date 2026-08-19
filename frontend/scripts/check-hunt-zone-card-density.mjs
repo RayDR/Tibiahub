@@ -5,14 +5,18 @@ import { fileURLToPath } from 'node:url';
 const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
 const indexCss = fs.readFileSync(path.join(root, 'src/index.css'), 'utf8');
 const cardsCss = fs.readFileSync(path.join(root, 'src/styles/hunt-zone-cards.css'), 'utf8');
+const card = fs.readFileSync(path.join(root, 'src/components/HuntZoneCard.tsx'), 'utf8');
+const cyclopedia = fs.readFileSync(path.join(root, 'src/pages/CreaturesPage.tsx'), 'utf8');
+const planner = fs.readFileSync(path.join(root, 'src/pages/HuntRecommendationsPage.tsx'), 'utf8');
 
 const checks = [
-  [indexCss.includes("@import './styles/hunt-zone-cards.css';"), 'compact Hunt Zone styles must be loaded globally'],
-  [cardsCss.includes("[data-cyclopedia-result]:has(a[href^='/hunt-zones/'])"), 'Cyclopedia Hunt Zone cards must be isolated from other result cards'],
-  [cardsCss.includes('grid-template-columns: repeat(4, minmax(0, 1fr));'), 'desktop layouts must support four compact Hunt Zone cards per row'],
-  [cardsCss.includes("section:has(> article a[href^='/hunt-zones/'])"), 'Planner recommendations must use the compact Hunt Zone grid'],
-  [cardsCss.includes("button:has(> img) > span"), 'Planner creature previews must collapse to compact avatar controls'],
-  [cardsCss.includes('grid-column: 1 / -1;'), 'Planner status rows must span the recommendation grid'],
+  [indexCss.includes("@import './styles/hunt-zone-cards.css';"), 'shared Hunt Zone styles must be loaded globally'],
+  [cardsCss.includes('[data-hunt-zone-card]') && !cardsCss.includes(':has('), 'Hunt Zone layout must use an explicit component contract, not broad relational selectors'],
+  [card.includes('min-h-[21rem]') && card.includes('flex-1 flex-col'), 'shared Hunt Zone cards need a stable aligned height and vertical layout'],
+  [card.includes('LocalizedMapPreview') && card.includes('absolute inset-0'), 'localized maps must fill the card background'],
+  [cyclopedia.includes('<HuntZoneCard') && cyclopedia.includes('xl:grid-cols-4'), 'Cyclopedia must reuse the shared card in its responsive grid'],
+  [planner.includes('<HuntZoneCard') && planner.includes('xl:grid-cols-3'), 'Planner recommendations must reuse the shared aligned card grid'],
+  [planner.includes('col-span-full'), 'Planner status and loading rows must span the recommendation grid'],
 ];
 
 const failed = checks.filter(([ok]) => !ok).map(([, message]) => message);
@@ -22,4 +26,4 @@ if (failed.length) {
   process.exit(1);
 }
 
-console.log('Hunt Zone card density checks passed: Cyclopedia and Planner use compact responsive grids.');
+console.log('Hunt Zone card density checks passed: Cyclopedia and Planner share aligned localized-map cards.');
