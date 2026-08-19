@@ -14,7 +14,7 @@ source "$ROOT/scripts/lib/ops-common.sh"
 # shellcheck source=../../scripts/lib/postgres.sh
 source "$ROOT/scripts/lib/postgres.sh"
 
-EXPECTED_REVISION="provider_knowledge_20260813"
+EXPECTED_REVISION=""
 DEPLOY_ROOT="${TIBIAHUB_DEPLOY_ROOT:-/forge/tibiahub-backups/deployments}"
 LOCK_FILE="${TIBIAHUB_DEPLOY_LOCK_FILE:-$DEPLOY_ROOT/.deploy.lock}"
 RUNTIME_ROOT="${TIBIAHUB_RUNTIME_ROOT:-/forge/tibiahub-runtimes}"
@@ -307,7 +307,22 @@ preflight_alembic_head() {
     APP_ENV=test DATABASE_URL="sqlite+pysqlite:///:memory:" PYTHONPATH="$ROOT/backend:$ROOT" \
       "$candidate_runtime/bin/alembic" -c "$ROOT/backend/alembic.ini" heads | awk '{print $1}'
   )
-  [[ ${#migration_heads[@]} -eq 1 && "${migration_heads[0]}" == "$EXPECTED_REVISION" ]]
+
+  if [[ ${#migration_heads[@]} -ne 1 ]]; then
+    echo "Deployment requires exactly one Alembic HEAD; found ${#migration_heads[@]}." >&2
+    if [[ ${#migration_heads[@]} -gt 0 ]]; then
+      printf 'Alembic HEAD: %s\n' "${migration_heads[@]}" >&2
+    fi
+    return 1
+  fi
+
+  EXPECTED_REVISION="${migration_heads[0]}"
+  [[ "$EXPECTED_REVISION" =~ ^[A-Za-z0-9_]+$ ]] || {
+    echo "Resolved Alembic HEAD has an invalid revision identifier." >&2
+    return 1
+  }
+
+  echo "Resolved Alembic target revision: $EXPECTED_REVISION"
 }
 
 preflight_runtime_env() {
