@@ -442,7 +442,10 @@ frontend_dependency_fingerprint() {
     return 1
   }
 
-  sha256sum "$FRONTEND_DIR/package.json" "$FRONTEND_DIR/package-lock.json" | sha256sum | awk '{print $1}'
+  (
+    cd "$FRONTEND_DIR"
+    sha256sum package.json package-lock.json | sha256sum | awk '{print $1}'
+  )
 }
 
 prepare_frontend_dependencies() {
@@ -652,7 +655,7 @@ state_file="$DEPLOY_ROOT/current.env"
 state_previous_commit=""
 if [[ -f "$state_file" ]]; then
   [[ ! -L "$state_file" ]] || {
-    ops_error "Deployment state file must not be a symlink." >&2
+    ops_error "Deployment state file must not be a symlink."
     exit 2
   }
   state_previous_commit="$(awk -F= '$1 == "deployed_commit" {print $2}' "$state_file")"
