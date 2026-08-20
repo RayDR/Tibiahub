@@ -660,13 +660,20 @@ if [[ -f "$state_file" ]]; then
   }
   state_previous_commit="$(awk -F= '$1 == "deployed_commit" {print $2}' "$state_file")"
 fi
-if [[ -n "$provided_previous_commit" && -n "$state_previous_commit" && "$provided_previous_commit" != "$state_previous_commit" ]]; then
-  ops_error "Provided previous commit does not match recorded deployment state."
-  exit 2
+
+previous_commit_source="recorded"
+if [[ -n "$provided_previous_commit" ]]; then
+  previous_commit="$provided_previous_commit"
+  previous_commit_source="explicit"
+  if [[ -n "$state_previous_commit" && "$provided_previous_commit" != "$state_previous_commit" ]]; then
+    ops_warn "Recorded deployed commit $state_previous_commit differs from explicitly provided previous commit $provided_previous_commit; using the explicit value."
+  fi
+else
+  previous_commit="$state_previous_commit"
 fi
-previous_commit="${state_previous_commit:-$provided_previous_commit}"
+
 [[ "$previous_commit" =~ ^[0-9a-fA-F]{40}$ ]] || {
-  ops_error "The first guarded deployment requires --previous-commit with the deployed 40-character commit."
+  ops_error "No valid recorded deployment commit exists; pass --previous-commit with the deployed 40-character commit."
   exit 2
 }
 git cat-file -e "$previous_commit^{commit}"
@@ -682,6 +689,8 @@ previous_revision="$production_revision"
 {
   printf 'target_commit=%s\n' "$target_commit"
   printf 'previous_commit=%s\n' "$previous_commit"
+  printf 'previous_commit_source=%s\n' "$previous_commit_source"
+  printf 'recorded_previous_commit=%s\n' "$state_previous_commit"
   printf 'target_revision=%s\n' "$EXPECTED_REVISION"
   printf 'previous_revision=%s\n' "$previous_revision"
   printf 'target_runtime=%s\n' "$candidate_runtime"

@@ -21,4 +21,10 @@ grep -Fq '085-preflight-frontend-dependencies' "$DEPLOY_SCRIPT"
 grep -Fq '.tibiahub-dependency-inputs.sha256' "$DEPLOY_SCRIPT"
 ! grep -Fq 'ln -s "$ROOT/frontend/node_modules" "$previous_worktree/frontend/node_modules"' "$DEPLOY_SCRIPT"
 
-echo "Dynamic Alembic deploy target and frontend dependency checks passed."
+grep -Fq 'previous_commit_source="explicit"' "$DEPLOY_SCRIPT"
+grep -Fq 'using the explicit value.' "$DEPLOY_SCRIPT"
+grep -Fq "printf 'previous_commit_source=%s\\n'" "$DEPLOY_SCRIPT"
+grep -Fq "printf 'recorded_previous_commit=%s\\n'" "$DEPLOY_SCRIPT"
+! grep -Fq 'Provided previous commit does not match recorded deployment state.' "$DEPLOY_SCRIPT"
+
+echo "Dynamic Alembic, frontend dependency, and deploy reconciliation checks passed."
