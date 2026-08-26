@@ -32,6 +32,12 @@ SERVICES=(
   tibiahub-email-worker
   tibiahub-sync-worker
 )
+WORKERS=(
+  tibiahub-raffle-scheduler
+  tibiahub-knowledge-worker
+  tibiahub-email-worker
+  tibiahub-sync-worker
+)
 LOCAL_URLS=(
   http://127.0.0.1:8001/api/v1/health
   http://127.0.0.1:8001/api/v1/ready
@@ -597,17 +603,71 @@ wait_for_url() {
   return 1
 }
 
-verify_worker_heartbeats() {
-  worker_heartbeat_count="$(postgres_exec psql -X -A -t -v ON_ERROR_STOP=1 <<'SQL'
+wait_for_worker_readiness() {
+  local attempt worker pm2_state pm2_status heartbeat_state ready
+  local heartbeat_worker heartbeat_time heartbeat_seconds heartbeat_health
+  local -A last_heartbeat=()
+  local -A heartbeat_age=()
+  local -A heartbeat_freshness=()
+
+  for attempt in $(seq 1 30); do
+    pm2_state="$(pm2 jlist)"
+    heartbeat_state="$(postgres_exec psql -X -A -t -F $'\t' -v ON_ERROR_STOP=1 -v readiness_not_before="$worker_readiness_not_before" <<'SQL'
+WITH worker_heartbeats(worker_name, last_heartbeat) AS (
+  SELECT 'tibiahub-raffle-scheduler', max(heartbeat_at) FROM raffle_scheduler_state
+  UNION ALL
+  SELECT 'tibiahub-knowledge-worker', max(last_seen_at) FROM knowledge_worker_heartbeats
+  UNION ALL
+  SELECT 'tibiahub-email-worker', max(last_seen_at) FROM email_worker_heartbeats
+  UNION ALL
+  SELECT 'tibiahub-sync-worker', max(last_seen_at) FROM sync_worker_heartbeats
+)
 SELECT
-  (SELECT EXISTS (SELECT 1 FROM raffle_scheduler_state WHERE heartbeat_at >= now() - interval '5 minutes'))::int
-  + (SELECT EXISTS (SELECT 1 FROM knowledge_worker_heartbeats WHERE last_seen_at >= now() - interval '5 minutes'))::int
-  + (SELECT EXISTS (SELECT 1 FROM email_worker_heartbeats WHERE last_seen_at >= now() - interval '5 minutes'))::int
-  + (SELECT EXISTS (SELECT 1 FROM sync_worker_heartbeats WHERE last_seen_at >= now() - interval '5 minutes'))::int;
+  worker_name,
+  COALESCE(to_char(last_heartbeat AT TIME ZONE 'UTC', 'YYYY-MM-DD"T"HH24:MI:SS.MS"Z"'), 'missing'),
+  COALESCE(GREATEST(0, floor(extract(epoch FROM (now() - last_heartbeat))))::bigint::text, 'unknown'),
+  CASE
+    WHEN last_heartbeat IS NULL THEN 'missing'
+    WHEN last_heartbeat < :'readiness_not_before'::timestamptz THEN 'predeploy'
+    WHEN last_heartbeat < now() - interval '5 minutes' THEN 'stale'
+    ELSE 'fresh'
+  END
+FROM worker_heartbeats;
 SQL
 )"
-  worker_heartbeat_count="${worker_heartbeat_count//$'\n'/}"
-  [[ "$worker_heartbeat_count" == 4 ]]
+
+    last_heartbeat=()
+    heartbeat_age=()
+    heartbeat_freshness=()
+    while IFS=$'\t' read -r heartbeat_worker heartbeat_time heartbeat_seconds heartbeat_health; do
+      last_heartbeat["$heartbeat_worker"]="$heartbeat_time"
+      heartbeat_age["$heartbeat_worker"]="$heartbeat_seconds"
+      heartbeat_freshness["$heartbeat_worker"]="$heartbeat_health"
+    done <<<"$heartbeat_state"
+
+    ready=1
+    for worker in "${WORKERS[@]}"; do
+      if ! jq -e --arg name "$worker" 'any(.[]; .name == $name and .pm2_env.status == "online" and ((.pid // 0) > 0))' <<<"$pm2_state" >/dev/null; then
+        ready=0
+      fi
+      if [[ "${heartbeat_freshness[$worker]:-missing}" != fresh ]]; then
+        ready=0
+      fi
+    done
+    if [[ "$ready" -eq 1 ]]; then
+      return 0
+    fi
+    if [[ "$attempt" -lt 30 ]]; then
+      sleep 2
+    fi
+  done
+
+  echo "Worker readiness timed out after 60 seconds; heartbeats must be at or after $worker_readiness_not_before." >&2
+  for worker in "${WORKERS[@]}"; do
+    pm2_status="$(jq -r --arg name "$worker" '[.[] | select(.name == $name)][0] | if . == null then "absent" else (.pm2_env.status // "unknown") end' <<<"$pm2_state")"
+    echo "Worker $worker: PM2 status=${pm2_status}; last heartbeat=${last_heartbeat[$worker]:-missing}; heartbeat age=${heartbeat_age[$worker]:-unknown}s; freshness=${heartbeat_freshness[$worker]:-missing}" >&2
+  done
+  return 1
 }
 
 preflight_git_state
@@ -744,6 +804,7 @@ if [[ -e "$ROOT/frontend/dist" && ! -d "$ROOT/frontend/dist" ]]; then
 fi
 run_step "220-install-frontend" bash -c 'rm -rf -- "$1" && mv "$2" "$1" && [[ -f "$1/index.html" ]]' bash "$ROOT/frontend/dist" "$staged_dist"
 
+worker_readiness_not_before="$(date -u +'%Y-%m-%dT%H:%M:%S.%6NZ')"
 for service in "${SERVICES[@]}"; do
   run_step "230-start-${service}" start_service_checked "$service"
 done
@@ -755,7 +816,7 @@ for url in "${PUBLIC_URLS[@]}"; do
   run_step "250-health-public-$(sanitize_step_suffix "$url")" wait_for_url "$url"
 done
 
-run_step "260-worker-heartbeats" verify_worker_heartbeats
+run_step "260-worker-heartbeats" wait_for_worker_readiness
 
 completed_at="$(ops_now_utc)"
 state_tmp="$DEPLOY_ROOT/.current.env.$$"

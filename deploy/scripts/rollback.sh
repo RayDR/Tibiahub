@@ -312,3 +312,6 @@ trap - ERR
 
 echo "Rollback restored commit $previous_commit and Alembic revision $restored_revision."
 echo "Rollback evidence remains at $evidence_dir"
+echo "Repository is detached at $previous_commit. To return to the deployment branch, run:"
+echo "  git switch develop"
+echo "  git pull --ff-only origin develop"
