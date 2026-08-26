@@ -97,6 +97,7 @@
   --app-page-padding-top: var(--space-6);
   --app-page-padding-bottom: var(--space-12);
   --app-nav-clearance: 4.75rem;
+  --app-mobile-nav-clearance: 4rem;
   --app-sticky-offset: 4.75rem;
   --sidebar-width: 18rem;
   --control-height-sm: 2.25rem;
@@ -140,12 +141,14 @@
   --duration-slow: 300ms;
   --duration-slower: 500ms;
   --z-base: 0;
-  --z-dropdown: 40;
+  --z-map-overlay: 20;
   --z-sticky: 30;
-  --z-overlay: 50;
-  --z-modal: 60;
-  --z-toast: 70;
-  --z-tooltip: 80;
+  --z-navbar: 40;
+  --z-dropdown: 50;
+  --z-overlay: 60;
+  --z-modal: 70;
+  --z-toast: 80;
+  --z-tooltip: 90;
 
 }
 
@@ -351,12 +354,17 @@ h6 {
 /* Application and workspace shells */
 .app-shell { min-width: 20rem; overflow-x: clip; background: radial-gradient(circle at 50% 0%, rgb(var(--ds-primary) / 0.08), transparent 34rem), var(--surface-base); }
 .app-shell-main { padding-top: var(--app-nav-clearance); padding-bottom: calc(5.25rem + env(safe-area-inset-bottom)); }
+.app-shell-main-map { padding-bottom: 0; }
+.app-primary-nav { isolation: isolate; overflow: visible; }
+.app-primary-nav .ds-container, .app-primary-nav .app-nav-shell { overflow: visible; }
 .app-context-bar { min-height: 2.5rem; display: flex; align-items: center; }
 .app-sticky-offset { top: var(--app-sticky-offset); }
 .app-mobile-nav { padding-bottom: max(var(--space-1), env(safe-area-inset-bottom)); }
 .app-mobile-nav-grid { display: grid; grid-template-columns: repeat(var(--mobile-nav-count, 4), minmax(0, 1fr)); }
 .app-mobile-nav-link { display: flex; min-width: 0; min-height: 3.5rem; flex-direction: column; align-items: center; justify-content: center; gap: 0.125rem; border-radius: var(--radius-md); color: var(--text-muted); font-size: 0.65rem; font-weight: var(--font-weight-medium); }
 .app-mobile-nav-link[data-active="true"] { background: var(--selected); color: var(--primary); }
+.tibia-map-town-label { width: 0 !important; height: 0 !important; border: 0; background: transparent; pointer-events: none; }
+.tibia-map-town-label span { position: absolute; transform: translate(-50%, -50%); white-space: nowrap; border-radius: var(--radius-sm); padding: 0.15rem 0.35rem; background: rgb(var(--ds-surface-base) / 0.72); color: var(--text-primary); box-shadow: 0 1px 4px rgb(var(--ds-shadow) / 0.7); font-size: 0.7rem; font-weight: var(--font-weight-bold); line-height: 1rem; text-shadow: 0 1px 1px rgb(var(--ds-shadow) / 0.8); }
 .workspace-shell { min-width: 0; }
 .workspace-sidebar { min-width: 0; }
 .workspace-nav { display: flex; margin-inline: calc(var(--space-2) * -1); gap: var(--space-2); overflow-x: auto; scroll-snap-type: x proximity; padding: 0 var(--space-2) var(--space-1); scrollbar-width: none; }
@@ -379,6 +387,8 @@ h6 {
 }
 
 @media (min-width: 1024px) {
+  :root,
+  [data-theme] { --app-mobile-nav-clearance: 0rem; }
   .app-shell-main { padding-top: var(--app-nav-clearance); padding-bottom: 0; }
   .workspace-sidebar { position: sticky; top: 6.75rem; align-self: start; }
   .workspace-nav { display: grid; margin: 0; overflow: visible; padding: var(--space-2); border: 1px solid var(--border); border-radius: var(--radius-xl); background: rgb(var(--ds-surface) / 0.72); box-shadow: var(--elevation-1); }

@@ -63,7 +63,7 @@ export default function Navigation() {
 
   return (
     <>
-      <header className="fixed inset-x-0 top-0 z-sticky">
+      <header className="app-primary-nav fixed inset-x-0 top-0 z-navbar">
         <Container className="pt-2 sm:pt-3">
           <div className="app-nav-shell flex items-center justify-between rounded-xl px-2 py-1.5 shadow-lg backdrop-blur-md sm:px-3">
             <Link to="/" className="flex min-h-11 min-w-0 items-center gap-2 rounded-lg px-1.5" aria-label={t('shell.homeLabel')}>
@@ -97,7 +97,7 @@ export default function Navigation() {
         </Container>
       </header>
 
-      <nav className="app-mobile-nav fixed inset-x-0 bottom-0 z-sticky border-t border-line bg-surface-overlay px-1 pt-1 backdrop-blur-md lg:hidden" aria-label={t('shell.mobileNavigation')}>
+      <nav className="app-primary-nav app-mobile-nav fixed inset-x-0 bottom-0 z-navbar border-t border-line bg-surface-overlay px-1 pt-1 backdrop-blur-md lg:hidden" aria-label={t('shell.mobileNavigation')}>
         <div className="app-mobile-nav-grid mx-auto max-w-xl" style={{ '--mobile-nav-count': primaryItems.length } as React.CSSProperties}>
           {primaryItems.map(item => { const Icon = item.icon; return <Link key={item.path} to={item.path} className="app-mobile-nav-link" data-active={isActive(item.path)} aria-label={item.iconOnly ? item.label : undefined} aria-current={isActive(item.path) ? 'page' : undefined}><Icon className="size-5" /><span className={item.iconOnly ? 'sr-only' : 'max-w-full truncate px-1'}>{item.shortLabel || item.label}</span></Link>; })}
         </div>

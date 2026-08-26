@@ -15,6 +15,7 @@ const coreFiles = [
 ];
 const css = source('src/styles/design-system.css');
 const navigation = source('src/components/Navigation.tsx');
+const appShell = source('src/components/shell/AppShell.tsx');
 const overlay = source('src/components/ui/Overlay.tsx');
 const main = source('src/main.tsx');
 const members = source('src/pages/guild/Members.tsx');
@@ -83,6 +84,15 @@ if (!css.includes('--app-content-max-width') || !css.includes('--app-nav-clearan
 if (!css.includes('.app-sticky-offset')) failures.push('shared sticky offset utility class is missing');
 if (navigation.includes('max-w-[90rem]') || navigation.includes('px-2 pt-2 sm:px-4')) failures.push('navigation still hardcodes shell width/gutters instead of using shared Container');
 if (!navigation.includes('<Container')) failures.push('navigation does not use the shared Container primitive');
+for (const token of ['--z-base', '--z-map-overlay', '--z-sticky', '--z-navbar', '--z-dropdown', '--z-modal']) {
+  if (!css.includes(token)) failures.push(`shared layering scale is missing ${token}`);
+}
+const layerOrder = ['--z-base', '--z-map-overlay', '--z-sticky', '--z-navbar', '--z-dropdown', '--z-modal'].map((token) => css.indexOf(token));
+if (!layerOrder.every((position, index) => index === 0 || position > layerOrder[index - 1])) failures.push('shared layering scale is not ordered from page content through modal');
+if (!navigation.includes('app-primary-nav') || !navigation.includes('z-navbar')) failures.push('primary navigation does not own the navbar stacking tier');
+if (!css.includes('.app-primary-nav { isolation: isolate; overflow: visible; }')) failures.push('primary navigation stacking context or overflow contract is incomplete');
+if (!appShell.includes("isMapWorkspace ? children") || !appShell.includes('app-shell-main-map')) failures.push('map workspace does not bypass page framing and mobile footer padding');
+if (cyclopedia.includes("'app-sticky-offset sticky z-40'")) failures.push('Cyclopedia sticky controls still use an unscoped numeric navbar-adjacent layer');
 
 if (!compactStrip.includes('Math.abs(delta) > 6') || !compactStrip.includes('drag.suppressClick = true')) failures.push('compact strip drag threshold/click suppression guard is incomplete');
 if (!compactStrip.includes("if (variant !== 'rail')")) failures.push('compact strip applies drag behavior outside rail variant');
