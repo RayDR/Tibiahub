@@ -191,6 +191,10 @@ body {
   text-rendering: optimizeLegibility;
 }
 
+.leaflet-container {
+  background: var(--surface-base) !important;
+}
+
 button,
 input,
 select,
