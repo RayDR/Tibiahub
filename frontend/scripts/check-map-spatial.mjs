@@ -5,6 +5,7 @@ const expect = (condition, message) => { if (!condition) throw new Error(message
 
 const floor = read('src/utils/tibiaFloors.ts');
 const map = read('src/pages/TibiaMapPage.tsx');
+const mapViewer = read('src/components/map/TibiaMapViewer.tsx');
 const mapService = read('src/services/tibiaMap.ts');
 const card = read('src/components/HuntZoneCard.tsx');
 const cyclopedia = read('src/pages/CreaturesPage.tsx');
@@ -17,6 +18,15 @@ for (const layer of ["'hunt_zone'", "'creature'", "'boss'", "'item'", "'quest'",
   expect(mapService.includes(layer), `Universal map layer missing: ${layer}`);
 }
 expect(map.includes('locationNotMapped'), 'Map selections need an explicit unmapped state.');
+expect(map.includes('100dvh-var(--app-nav-clearance)-var(--app-mobile-nav-clearance)'), 'Map workspace must fill the viewport below primary navigation.');
+expect(map.includes('overflow-x-auto') && map.includes('map.layers.${layer}'), 'Map category chips must remain horizontally scrollable and use universal local layers.');
+expect(map.includes("kind: 'town'") && map.includes('bootstrap?.towns'), 'Town labels must come from authoritative map bootstrap data.');
+expect(map.includes('townMatches') && map.includes('combined = [...townMatches, ...data]'), 'Known authoritative towns must participate in universal map search.');
+expect(map.includes('RECENT_MAP_TARGETS_KEY') && map.includes('entityType: row.entity_type') && !map.includes('x: row.x, y: row.y, z: row.z, name: row.name'), 'Recent map navigation must not persist a second coordinate store.');
+expect(map.includes('controlFooter={floorControl}') && mapViewer.includes('{controlFooter}</Controls>'), 'Floor selection must share the right-side map control stack.');
+expect(mapViewer.includes('scrollWheelZoom') && mapViewer.includes('touchZoom="center"') && mapViewer.includes('doubleClickZoom'), 'Map must support wheel, trackpad, and touch zoom alongside buttons.');
+expect(mapViewer.includes('InitialViewport') && mapViewer.includes('getBoundsZoom(bounds) + 0.5'), 'Initial world framing must use a readable fitted view while retaining reset-to-world.');
+expect(mapViewer.includes('relative isolate z-base') && map.includes('z-map-overlay'), 'Leaflet panes and application map overlays must use bounded stacking contexts.');
 expect(card.includes('LocalizedMapPreview'), 'Hunt Zone cards must use the localized canonical floor preview.');
 expect(cyclopedia.includes('<HuntZoneCard'), 'Cyclopedia Hunt Zones must reuse the shared aligned card.');
 expect(!cyclopedia.includes('getMapImageUrl(zone.id'), 'Cyclopedia cards must not reuse broad provider map fragments.');

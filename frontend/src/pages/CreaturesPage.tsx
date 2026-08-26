@@ -1508,8 +1508,8 @@ const CreaturesPage: React.FC = () => {
         <div
           className={`mx-auto mb-5 w-full ${
             isSearchCompact
-              ? 'app-sticky-offset sticky z-40'
-              : 'relative z-20'
+              ? 'app-sticky-offset sticky z-sticky'
+              : 'relative z-base'
           }`}
         >
           <AppCard

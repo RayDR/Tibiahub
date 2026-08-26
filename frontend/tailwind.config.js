@@ -74,7 +74,7 @@ export default {
         in: 'fade-in var(--duration-slow) var(--ease-emphasized) both',
       },
       zIndex: {
-        base: 'var(--z-base)', dropdown: 'var(--z-dropdown)', sticky: 'var(--z-sticky)', overlay: 'var(--z-overlay)', modal: 'var(--z-modal)', toast: 'var(--z-toast)', tooltip: 'var(--z-tooltip)',
+        base: 'var(--z-base)', 'map-overlay': 'var(--z-map-overlay)', sticky: 'var(--z-sticky)', navbar: 'var(--z-navbar)', dropdown: 'var(--z-dropdown)', overlay: 'var(--z-overlay)', modal: 'var(--z-modal)', toast: 'var(--z-toast)', tooltip: 'var(--z-tooltip)',
       },
     },
   },
