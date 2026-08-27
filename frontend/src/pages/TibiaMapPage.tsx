@@ -103,9 +103,10 @@ export default function TibiaMapPage() {
     return () => { current = false; controller.abort(); };
   }, [floor]);
 
-  const selectResult = (row: TibiaMapResult | null, updateUrl = true, remember = true) => {
+  const selectResult = (row: TibiaMapResult | null, updateUrl = true, remember = true, preferredLocation?: string | null) => {
     setSelected(row);
-    const evidence = row?.spatial_evidence?.[0]
+    const evidence = row?.spatial_evidence?.find((item) => item.label === preferredLocation)
+      || row?.spatial_evidence?.[0]
       || (row?.x != null && row.y != null
         ? { x: row.x, y: row.y, z: row.z, bounds: row.bounds, label: row.name }
         : null);
@@ -148,7 +149,7 @@ export default function TibiaMapPage() {
             (!requestedType || row.entity_type === requestedType)
             && (!requestedSlug || row.slug === requestedSlug)
           )) || combined[0] || null;
-          selectResult(next, false, false);
+          selectResult(next, false, false, params.get('location'));
         })
         .catch(() => { if (current && !controller.signal.aborted) setResults([]); })
         .finally(() => { if (current) setSearchLoading(false); });

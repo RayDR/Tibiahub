@@ -1,31 +1,22 @@
-/* Quest Detail - readable parchment codex treatment.
- *
- * The page keeps the surrounding TibiaHub theme but gives the reading surface
- * a light, high-contrast parchment skin derived from semantic theme tokens.
- */
+/* Quest preview and detail consume the per-theme codex material contract. */
 
 .quest-codex {
-  --quest-paper: color-mix(in srgb, var(--surface-inverse) 92%, rgb(var(--ds-primary)) 8%);
-  --quest-paper-raised: color-mix(in srgb, var(--surface-inverse) 86%, rgb(var(--ds-primary)) 14%);
-  --quest-paper-soft: color-mix(in srgb, var(--surface-inverse) 78%, rgb(var(--ds-primary-active)) 22%);
-  --quest-ink: color-mix(in srgb, var(--text-inverse) 92%, rgb(var(--ds-primary-active)) 8%);
-  --quest-ink-soft: color-mix(in srgb, var(--text-inverse) 76%, rgb(var(--ds-primary-active)) 24%);
-  --quest-ink-muted: color-mix(in srgb, var(--text-inverse) 62%, rgb(var(--ds-primary-active)) 38%);
-  --quest-rule: color-mix(in srgb, rgb(var(--ds-primary-active)) 56%, var(--text-inverse) 44%);
-  --quest-rule-soft: color-mix(in srgb, rgb(var(--ds-primary-active)) 32%, transparent);
-  --quest-accent: color-mix(in srgb, rgb(var(--ds-primary-active)) 82%, var(--text-inverse) 18%);
+  --quest-paper: rgb(var(--quest-surface));
+  --quest-paper-raised: rgb(var(--quest-surface-raised));
+  --quest-paper-soft: rgb(var(--quest-surface-soft));
+  --quest-rule-soft: rgb(var(--quest-rule) / 0.38);
 
   isolation: isolate;
-  border-color: var(--quest-rule);
+  border-color: rgb(var(--quest-rule));
   background:
-    radial-gradient(circle at 12% 10%, rgb(var(--ds-primary) / 0.16), transparent 20rem),
-    radial-gradient(circle at 92% 82%, rgb(var(--ds-primary-active) / 0.12), transparent 24rem),
-    repeating-linear-gradient(0deg, transparent 0 7px, rgb(var(--ds-primary-active) / 0.022) 7px 8px),
+    radial-gradient(circle at 12% 10%, rgb(var(--quest-accent) / 0.13), transparent 20rem),
+    radial-gradient(circle at 92% 82%, rgb(var(--quest-rule) / 0.12), transparent 24rem),
+    repeating-linear-gradient(0deg, transparent 0 7px, rgb(var(--quest-ink) / 0.025) 7px 8px),
     var(--quest-paper);
-  color: var(--quest-ink);
+  color: rgb(var(--quest-ink));
   box-shadow:
     0 1.25rem 3.5rem rgb(var(--ds-shadow) / 0.42),
-    inset 0 0 0 1px color-mix(in srgb, var(--surface-inverse) 20%, transparent);
+    inset 0 0 0 1px rgb(var(--quest-ink) / 0.08);
 }
 
 .quest-codex::after {
@@ -35,14 +26,14 @@
   inset: 0;
   z-index: 0;
   border-radius: inherit;
-  box-shadow: inset 0 0 2.5rem rgb(var(--ds-primary-active) / 0.10);
+  box-shadow: inset 0 0 2.5rem rgb(var(--quest-rule) / 0.14);
 }
 
 .quest-codex__binding {
   position: relative;
   z-index: 2;
   height: 0.35rem;
-  background: linear-gradient(90deg, transparent, var(--quest-accent) 16%, rgb(var(--ds-primary)) 50%, var(--quest-accent) 84%, transparent);
+  background: linear-gradient(90deg, transparent, rgb(var(--quest-accent)) 16%, rgb(var(--quest-rule)) 50%, rgb(var(--quest-accent)) 84%, transparent);
 }
 
 .quest-codex__pages {
@@ -59,7 +50,7 @@
 .quest-codex__title > p,
 .quest-codex a,
 .quest-codex h2 > svg {
-  color: var(--quest-accent);
+  color: rgb(var(--quest-accent));
 }
 
 .quest-codex h1,
@@ -67,24 +58,24 @@
 .quest-codex h3,
 .quest-codex h4,
 .quest-codex .text-content-primary {
-  color: var(--quest-ink) !important;
+  color: rgb(var(--quest-ink)) !important;
 }
 
 .quest-codex p,
 .quest-codex li,
 .quest-codex dd,
 .quest-codex .text-content-secondary {
-  color: var(--quest-ink-soft) !important;
+  color: rgb(var(--quest-ink-soft)) !important;
 }
 
 .quest-codex dt,
 .quest-codex footer,
 .quest-codex .text-content-muted {
-  color: var(--quest-ink-muted) !important;
+  color: rgb(var(--quest-ink-muted)) !important;
 }
 
 .quest-codex .text-primary {
-  color: var(--quest-accent) !important;
+  color: rgb(var(--quest-accent)) !important;
 }
 
 .quest-codex__fact,
@@ -94,13 +85,13 @@
 .quest-codex__subsection {
   border-color: var(--quest-rule-soft) !important;
   background:
-    linear-gradient(145deg, color-mix(in srgb, var(--surface-inverse) 22%, transparent), transparent 58%),
+    linear-gradient(145deg, rgb(var(--quest-ink) / 0.06), transparent 58%),
     var(--quest-paper-raised) !important;
-  box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--surface-inverse) 12%, transparent);
+  box-shadow: inset 0 0 0 1px rgb(var(--quest-ink) / 0.05);
 }
 
 .quest-codex__fact dd {
-  color: var(--quest-ink) !important;
+  color: rgb(var(--quest-ink)) !important;
 }
 
 .quest-codex__toc-link,
@@ -108,21 +99,21 @@
 .quest-codex__reference,
 .quest-codex__creature {
   border-color: var(--quest-rule-soft) !important;
-  background: color-mix(in srgb, var(--surface-inverse) 20%, transparent) !important;
-  color: var(--quest-ink-soft) !important;
+  background: rgb(var(--quest-ink) / 0.055) !important;
+  color: rgb(var(--quest-ink-soft)) !important;
   transition: background var(--duration-fast) var(--ease-standard), border-color var(--duration-fast) var(--ease-standard), color var(--duration-fast) var(--ease-standard);
 }
 
 .quest-codex__toc-link span:first-child {
-  color: var(--quest-accent);
+  color: rgb(var(--quest-accent));
 }
 
 .quest-codex__toc-link:hover,
 .quest-codex__reference:hover,
 .quest-codex__creature:hover {
-  border-color: var(--quest-rule) !important;
-  background: rgb(var(--ds-primary-active) / 0.10) !important;
-  color: var(--quest-ink) !important;
+  border-color: rgb(var(--quest-rule)) !important;
+  background: rgb(var(--quest-accent) / 0.10) !important;
+  color: rgb(var(--quest-ink)) !important;
 }
 
 .quest-codex__mission {
@@ -140,19 +131,19 @@
 }
 
 .quest-codex__mission-marker {
-  border-color: var(--quest-rule) !important;
+  border-color: rgb(var(--quest-rule)) !important;
   background: var(--quest-paper-soft) !important;
-  color: var(--quest-ink) !important;
+  color: rgb(var(--quest-ink)) !important;
 }
 
 .quest-codex .app-button-secondary {
-  border-color: var(--quest-rule) !important;
-  background: color-mix(in srgb, var(--surface-inverse) 24%, transparent) !important;
-  color: var(--quest-ink) !important;
+  border-color: rgb(var(--quest-rule)) !important;
+  background: rgb(var(--quest-ink) / 0.07) !important;
+  color: rgb(var(--quest-ink)) !important;
 }
 
 .quest-codex .app-button-secondary:hover {
-  background: rgb(var(--ds-primary-active) / 0.13) !important;
+  background: rgb(var(--quest-accent) / 0.13) !important;
 }
 
 .quest-codex footer {
@@ -160,7 +151,31 @@
 }
 
 .quest-codex footer a {
-  color: var(--quest-accent) !important;
+  color: rgb(var(--quest-accent)) !important;
+}
+
+.quest-codex__chip,
+.quest-codex__empty,
+.quest-codex__map-stamp {
+  border-color: var(--quest-rule-soft) !important;
+  background: rgb(var(--quest-ink) / 0.055);
+  color: rgb(var(--quest-ink-soft));
+}
+
+@keyframes quest-unroll {
+  from { opacity: 0; transform: translateY(-0.75rem) scaleY(0.84); transform-origin: top; }
+  to { opacity: 1; transform: translateY(0) scaleY(1); transform-origin: top; }
+}
+
+[data-motion="system"] .quest-preview-dialog,
+[data-motion="enhanced"] .quest-preview-dialog,
+[data-motion="system"] .quest-codex,
+[data-motion="enhanced"] .quest-codex {
+  animation: quest-unroll 260ms var(--ease-decelerate) both;
+}
+
+[data-density="compact"] .quest-codex__pages {
+  padding-block: 1.25rem !important;
 }
 
 @media (min-width: 1024px) {

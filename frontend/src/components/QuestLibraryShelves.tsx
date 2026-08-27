@@ -9,6 +9,10 @@ import {
   type QuestBrowseSort,
   type QuestFacets,
 } from '../services/questBrowser';
+import { questsApi } from '../services/api';
+import type { QuestDetail } from '../types';
+import { hasDetailedQuestSummary } from '../utils/questPresentation';
+import QuestPreviewDialog from './quest/QuestPreviewDialog';
 
 interface Props {
   linkState?: unknown;
@@ -56,14 +60,17 @@ export default function QuestLibraryShelves({ linkState, onNavigate }: Props) {
   });
   const [quests, setQuests] = useState<QuestBrowseResult[]>([]);
   const [selected, setSelected] = useState<QuestBrowseResult | null>(null);
+  const [previewDetail, setPreviewDetail] = useState<QuestDetail | null>(null);
+  const [previewLoading, setPreviewLoading] = useState(false);
+  const [previewError, setPreviewError] = useState(false);
   const [skip, setSkip] = useState(0);
   const [hasMore, setHasMore] = useState(false);
   const [loading, setLoading] = useState(true);
   const [loadingMore, setLoadingMore] = useState(false);
   const [error, setError] = useState(false);
   const sentinelRef = useRef<HTMLDivElement | null>(null);
-  const previewRef = useRef<HTMLElement | null>(null);
   const activeBrowseRef = useRef<AbortController | null>(null);
+  const activePreviewRef = useRef<AbortController | null>(null);
   const loadingMoreRef = useRef(false);
 
   useEffect(() => {
@@ -82,7 +89,7 @@ export default function QuestLibraryShelves({ linkState, onNavigate }: Props) {
     return () => controller.abort();
   }, []);
 
-  useEffect(() => () => activeBrowseRef.current?.abort(), []);
+  useEffect(() => () => { activeBrowseRef.current?.abort(); activePreviewRef.current?.abort(); }, []);
 
   const load = useCallback(async (reset: boolean) => {
     if (query.length === 1) {
@@ -168,12 +175,16 @@ export default function QuestLibraryShelves({ linkState, onNavigate }: Props) {
 
   const selectQuest = (quest: QuestBrowseResult) => {
     setSelected(quest);
-    window.requestAnimationFrame(() => {
-      previewRef.current?.scrollIntoView({
-        behavior: window.matchMedia('(prefers-reduced-motion: reduce)').matches ? 'auto' : 'smooth',
-        block: 'nearest',
-      });
-    });
+    setPreviewDetail(null);
+    setPreviewError(false);
+    setPreviewLoading(true);
+    activePreviewRef.current?.abort();
+    const controller = new AbortController();
+    activePreviewRef.current = controller;
+    void questsApi.getById(quest.slug || quest.id || quest.external_id || '', controller.signal)
+      .then((detail) => { if (!controller.signal.aborted) setPreviewDetail(detail); })
+      .catch(() => { if (!controller.signal.aborted) setPreviewError(true); })
+      .finally(() => { if (!controller.signal.aborted) setPreviewLoading(false); });
   };
 
   return (
@@ -218,36 +229,7 @@ export default function QuestLibraryShelves({ linkState, onNavigate }: Props) {
         </div>
       </div>
 
-      {selected ? (
-        <article ref={previewRef} className="relative overflow-hidden rounded-2xl border border-primary/25 bg-surface-base shadow-sm">
-          <div className="grid md:grid-cols-2">
-            <div className="relative border-b border-line p-5 md:border-b-0 md:border-r sm:p-6">
-              <div className="absolute inset-y-3 right-0 w-px bg-line/80" aria-hidden="true" />
-              <p className="text-[10px] font-bold uppercase tracking-[0.2em] text-primary">{t('questDetail.codexEntry')}</p>
-              <h3 className="mt-2 font-serif text-2xl font-bold text-content-primary">{selected.name}</h3>
-              <div className="mt-4 flex flex-wrap gap-2 text-xs">
-                {selected.min_level != null ? <span className="rounded-full border border-line bg-surface-raised px-2.5 py-1 text-content-secondary">{t('questDetail.minimumLevel')}: {selected.min_level}</span> : null}
-                {selected.is_access_quest ? <span className="rounded-full border border-primary/30 bg-primary/10 px-2.5 py-1 font-semibold text-primary">{t('questDetail.access')}</span> : null}
-                {selected.premium_required ? <span className="rounded-full border border-warning/30 bg-warning/10 px-2.5 py-1 text-warning">{t('questDetail.premium')}</span> : null}
-              </div>
-            </div>
-            <div className="flex min-h-40 flex-col justify-between p-5 sm:p-6">
-              <p className="line-clamp-5 text-sm leading-6 text-content-secondary">{selected.description || t('cyclopedia.quests.noDetails')}</p>
-              {(selected.slug || selected.id != null) ? (
-                <Link
-                  to={`/quests/${selected.slug || selected.id}`}
-                  state={linkState}
-                  onClick={() => onNavigate?.()}
-                  className="mt-4 inline-flex items-center gap-2 self-start text-sm font-semibold text-primary hover:underline"
-                >
-                  <BookOpen className="size-4" />
-                  {t('cyclopedia.quests.openDetail')}
-                </Link>
-              ) : null}
-            </div>
-          </div>
-        </article>
-      ) : null}
+      <QuestPreviewDialog open={Boolean(selected)} quest={selected} detail={previewDetail} loading={previewLoading} error={previewError} linkState={linkState} onClose={() => setSelected(null)} onNavigate={onNavigate} />
 
       {loading ? (
         <div className="flex min-h-44 items-center justify-center text-primary"><Loader2 className="size-7 animate-spin" /></div>
@@ -261,11 +243,9 @@ export default function QuestLibraryShelves({ linkState, onNavigate }: Props) {
             {quests.map((quest) => {
               const active = selected && questKey(selected) === questKey(quest);
               return (
-                <button
-                  type="button"
+                <article
                   data-cyclopedia-result
                   key={questKey(quest)}
-                  onClick={() => selectQuest(quest)}
                   className={`group relative min-h-[5.25rem] overflow-hidden rounded-r-xl rounded-l-sm border border-line border-l-4 bg-surface-raised px-4 py-3 text-left shadow-sm transition hover:-translate-y-0.5 hover:border-primary/45 ${active ? 'border-l-primary ring-1 ring-primary/30' : quest.is_access_quest ? 'border-l-primary/70' : 'border-l-content-muted/35'}`}
                 >
                   <div className="flex h-full items-start gap-3">
@@ -275,10 +255,15 @@ export default function QuestLibraryShelves({ linkState, onNavigate }: Props) {
                       <div className="mt-2 flex flex-wrap items-center gap-x-2 gap-y-1 text-[11px] text-content-muted">
                         <span>{t('questDetail.minimumLevel')}: {quest.min_level ?? '—'}</span>
                         {quest.is_access_quest ? <span className="font-semibold text-primary">{t('questDetail.access')}</span> : null}
+                        {!hasDetailedQuestSummary(quest) ? <span>{t('questDetail.noDetailedData')}</span> : null}
+                      </div>
+                      <div className="mt-3 flex flex-wrap gap-2">
+                        <button type="button" onClick={() => selectQuest(quest)} className="app-button-ghost app-button-sm min-h-10">{t('questDetail.preview')}</button>
+                        <Link to={`/quests/${quest.slug || quest.id}`} state={linkState} onClick={() => onNavigate?.()} className="app-button-secondary app-button-sm min-h-10">{t('questDetail.openQuest')}</Link>
                       </div>
                     </div>
                   </div>
-                </button>
+                </article>
               );
             })}
           </div>

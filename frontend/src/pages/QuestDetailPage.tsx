@@ -1,21 +1,23 @@
 import { useEffect, useState, type ReactNode } from 'react';
-import { Link, useLocation, useNavigate, useParams } from 'react-router-dom';
-import { ArrowLeft, ArrowUpRight, BookOpen, Crown, Gift, ListOrdered, Loader2, MapPin, ScrollText, ShieldCheck, UserRound } from 'lucide-react';
+import { useLocation, useNavigate, useParams } from 'react-router-dom';
+import { ArrowLeft, BookOpen, Crown, Gift, ListOrdered, Loader2, MapPin, ScrollText, ShieldCheck, UserRound } from 'lucide-react';
 import { useTranslation } from 'react-i18next';
 
 import { questsApi } from '../services/api';
 import type { QuestDetail, QuestItemValue, QuestNamedValue, QuestRelationship } from '../types';
 import { useAuth } from '../context/AuthContext';
 import { activityApi } from '../services/activity';
-import MapMetadataPanel from '../components/MapMetadataPanel';
 import { Page } from '../components/ui';
 import { KnowledgeEmpty, KnowledgeSection } from '../components/knowledge/KnowledgeDetail';
+import RichEntityLink from '../components/knowledge/RichEntityLink';
+import QuestMapInsets from '../components/quest/QuestMapInsets';
 import { SuggestCorrectionLink } from '../components/feedback/GitHubFeedbackLink';
 import { useSeoMetadata } from '../utils/seo';
 import {
   createCyclopediaRouteState,
   resolveCyclopediaReturnTarget,
 } from '../utils/cyclopediaNavigation';
+import { hasDetailedQuestData } from '../utils/questPresentation';
 
 function Names({ values }: { values: QuestNamedValue[] }) {
   return <ul className="quest-codex__list space-y-2">{values.map((value, index) => <li key={`${value.name}-${index}`} className="quest-codex__list-item rounded-lg border px-3 py-2 text-sm">{value.name}</li>)}</ul>;
@@ -44,7 +46,6 @@ function EntityReferences({
   entity: 'npc' | 'location';
   linkState?: unknown;
 }) {
-  const { t } = useTranslation();
   const deduplicated = values.filter((value, index) => (
     values.findIndex(candidate => candidate.name.trim().toLocaleLowerCase() === value.name.trim().toLocaleLowerCase()) === index
   ));
@@ -58,10 +59,9 @@ function EntityReferences({
         ? relationship.target_entity_type === 'npc'
         : ['location', 'area', 'town'].includes(relationship.target_entity_type))
     ));
-    const content = <><span>{value.name}</span>{resolved && <span className="flex items-center gap-1 text-xs text-primary">{t(`questDetail.open${entity === 'npc' ? 'Npc' : 'Location'}`)}<ArrowUpRight size={13} /></span>}</>;
     return <li key={normalized} className="text-sm">{resolved
-      ? <Link to={`/${entity === 'npc' ? 'npcs' : 'locations'}/${resolved.target_slug}`} state={linkState} className="quest-codex__reference flex min-h-11 items-center justify-between gap-3 rounded-lg border px-3 py-2">{content}</Link>
-      : <div className="quest-codex__reference flex min-h-11 items-center rounded-lg border px-3 py-2">{content}</div>}
+      ? <RichEntityLink target={{ canonicalName: resolved.target_name, entityType: entity, detailRoute: `/${entity === 'npc' ? 'npcs' : 'locations'}/${resolved.target_slug}` }} linkState={linkState} />
+      : <div className="quest-codex__reference flex min-h-11 items-center rounded-lg border px-3 py-2">{value.name}</div>}
     </li>;
   })}</ul>;
 }
@@ -118,6 +118,7 @@ export default function QuestDetailPage() {
     ['locations', t('questDetail.locations')],
   ];
   const relationshipReferences = quest.relationships.filter(relationship => !relationship.mission_id);
+  const hasDetails = hasDetailedQuestData(quest);
 
   return <Page><div>
     <button onClick={() => navigate(backTarget)} className="mb-6 flex min-h-11 items-center gap-2 text-content-secondary hover:text-content-primary"><ArrowLeft size={18} />{t('questDetail.back')}</button>
@@ -130,8 +131,9 @@ export default function QuestDetailPage() {
           <h1 className="mx-auto mt-3 max-w-4xl font-serif text-3xl font-bold sm:text-5xl">{quest.name}</h1>
           {quest.group_name && <p className="mt-3 text-sm font-semibold">{t('questDetail.group', { name: quest.group_name })}</p>}
           <p className="mx-auto mt-6 max-w-3xl text-left text-lg leading-8 sm:text-center">{quest.summary || quest.description || t('questDetail.noDetails')}</p>
-          <Link to={`/map?entityType=quest&slug=${encodeURIComponent(quest.slug || quest.name)}&q=${encodeURIComponent(quest.name)}`} className="app-button-secondary app-button-sm mt-5 inline-flex"><MapPin size={14} />{t('map.openDetails')}</Link>
         </header>
+
+        {!hasDetails ? <div className="quest-codex__empty mx-auto mt-6 max-w-3xl rounded-xl border border-dashed p-4 text-sm"><strong>{t('questDetail.noDetailedData')}</strong><p className="mt-1">{t('questDetail.noDetailedDataHelp')}</p></div> : null}
 
         <div className="mt-8">
           <QuestFacts>
@@ -178,7 +180,8 @@ export default function QuestDetailPage() {
         </KnowledgeSection>
 
         <KnowledgeSection id="locations" className="mt-6" title={t('questDetail.locations')} icon={<MapPin size={20} />}>
-          <div className="grid gap-5 md:grid-cols-2">
+          <div className="grid gap-5 lg:grid-cols-[minmax(14rem,2fr)_minmax(18rem,3fr)]">
+            <div className="grid gap-5 sm:grid-cols-2 lg:grid-cols-1">
             <section className="quest-codex__subsection rounded-xl border p-4">
               <h3 className="mb-3 flex items-center gap-2 font-semibold"><UserRound size={16} />{t('questDetail.npcs')}</h3>
               {quest.starting_npcs.length > 0 || quest.related_npcs.length > 0
@@ -191,15 +194,20 @@ export default function QuestDetailPage() {
                 ? <EntityReferences values={quest.locations} relationships={relationshipReferences} entity="location" linkState={cyclopediaState} />
                 : <KnowledgeEmpty>{t('questDetail.noDetails')}</KnowledgeEmpty>}
             </section>
+            </div>
+            <section className="quest-codex__subsection rounded-xl border p-4">
+              <h3 className="mb-1 flex items-center gap-2 font-semibold"><MapPin size={16} />{t('questDetail.mapLocations')}</h3>
+              <p className="mb-3 text-sm">{t('questDetail.mapLocationsHelp')}</p>
+              <QuestMapInsets entityId={quest.knowledge_entity_id} questName={quest.name} questSlug={quest.slug || String(quest.id)} />
+            </section>
           </div>
         </KnowledgeSection>
 
         {quest.access_unlocks.length > 0 && <KnowledgeSection className="mt-6" title={t('questDetail.access')}><Names values={quest.access_unlocks} /></KnowledgeSection>}
         <section className="quest-codex__section mt-6 rounded-2xl border p-5 sm:p-6">
           <h2 className="mb-4 font-serif text-xl font-bold sm:text-2xl">{t('questDetail.creatures')}</h2>
-          {quest.related_creatures.length ? <div className="grid gap-3 md:grid-cols-2 lg:grid-cols-3">{quest.related_creatures.map(creature => <Link to={`/creatures/${creature.creature_slug || creature.creature_id}`} state={cyclopediaState} key={creature.creature_id} className="quest-codex__creature flex items-center gap-3 rounded-xl border p-3"><img src={`/api/v1/creatures/${creature.creature_id}/image`} alt="" className="size-16 object-contain" /><div><div className="flex items-center gap-2">{creature.is_boss && <Crown size={14} className="text-danger" />}<span className="font-semibold">{creature.creature_name}</span></div><div className="mt-1 text-xs">{creature.classification || t('questDetail.unknownClassification')}</div></div></Link>)}</div> : <KnowledgeEmpty>{t('questDetail.noCreatures')}</KnowledgeEmpty>}
+          {quest.related_creatures.length ? <div className="grid gap-3 md:grid-cols-2 lg:grid-cols-3">{quest.related_creatures.map(creature => <div key={creature.creature_id} className="relative">{creature.is_boss ? <Crown size={14} className="absolute left-3 top-3 z-10 text-danger" /> : null}<RichEntityLink target={{ canonicalName: creature.creature_name, entityType: 'creature', detailRoute: `/creatures/${creature.creature_slug || creature.creature_id}`, imageUrl: `/api/v1/creatures/${creature.creature_id}/image`, summary: creature.classification || undefined }} linkState={cyclopediaState} /></div>)}</div> : <KnowledgeEmpty>{t('questDetail.noCreatures')}</KnowledgeEmpty>}
         </section>
-        <MapMetadataPanel entityId={quest.knowledge_entity_id} />
         <footer className="mt-6 flex flex-wrap items-center gap-3 border-t pt-4 text-xs">{quest.last_synced_at && <span>{t('questDetail.updated', { date: new Date(quest.last_synced_at).toLocaleString() })}</span>}{quest.source_url && <a href={quest.source_url} target="_blank" rel="noreferrer" className="hover:underline">{t('questDetail.source')}</a>}</footer>
         <div className="mt-5 flex justify-end"><SuggestCorrectionLink entityType="Quest" entityName={quest.name} /></div>
       </div>
