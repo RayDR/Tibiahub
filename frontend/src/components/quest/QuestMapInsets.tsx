@@ -11,7 +11,10 @@ import { KnowledgeEmpty } from '../knowledge/KnowledgeDetail';
 import { formatDisplayFloor } from '../../utils/tibiaFloors';
 
 type MapEvidence = { id: string; label: string; x: number; y: number; z: number; bounds?: HuntZoneSpatial['bounds'] };
-const trusted = (value: { confidence: string; verification_state: string }) => value.verification_state === 'verified' || value.confidence === 'verified' || value.confidence === 'high';
+const trusted = (value: { confidence: string; verification_state: string }) => {
+  if (['rejected', 'unresolved', 'ambiguous'].includes(value.verification_state)) return false;
+  return value.verification_state === 'verified' || value.confidence === 'verified' || value.confidence === 'high';
+};
 
 export default function QuestMapInsets({ entityId, questName, questSlug }: { entityId?: string; questName: string; questSlug: string }) {
   const { t } = useTranslation();
