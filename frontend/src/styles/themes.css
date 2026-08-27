@@ -42,6 +42,14 @@
   --ds-chart-4: 134 239 172;
   --ds-chart-5: 250 204 21;
   --ds-chart-6: 252 129 121;
+  --quest-surface: 43 42 39;
+  --quest-surface-raised: 54 52 47;
+  --quest-surface-soft: 69 65 57;
+  --quest-ink: 244 238 223;
+  --quest-ink-soft: 218 207 187;
+  --quest-ink-muted: 181 169 148;
+  --quest-rule: 155 128 75;
+  --quest-accent: 230 192 108;
 }
 
 [data-theme="medieval"] {
@@ -81,6 +89,14 @@
   --ds-chart-4: 110 231 183;
   --ds-chart-5: 251 191 36;
   --ds-chart-6: 248 113 113;
+  --quest-surface: 239 222 190;
+  --quest-surface-raised: 247 233 205;
+  --quest-surface-soft: 226 201 159;
+  --quest-ink: 48 34 24;
+  --quest-ink-soft: 76 55 37;
+  --quest-ink-muted: 111 83 57;
+  --quest-rule: 139 99 47;
+  --quest-accent: 112 69 28;
 }
 
 [data-theme="midnight-arcana"] {
@@ -120,6 +136,14 @@
   --ds-chart-4: 94 234 212;
   --ds-chart-5: 253 224 71;
   --ds-chart-6: 251 113 133;
+  --quest-surface: 10 14 35;
+  --quest-surface-raised: 18 23 51;
+  --quest-surface-soft: 31 34 69;
+  --quest-ink: 239 236 255;
+  --quest-ink-soft: 205 198 234;
+  --quest-ink-muted: 157 149 193;
+  --quest-rule: 115 101 167;
+  --quest-accent: 190 168 255;
 }
 
 [data-theme="blood-moon"] {
@@ -159,6 +183,14 @@
   --ds-chart-4: 74 222 128;
   --ds-chart-5: 251 191 36;
   --ds-chart-6: 251 113 133;
+  --quest-surface: 43 12 22;
+  --quest-surface-raised: 61 18 30;
+  --quest-surface-soft: 82 27 39;
+  --quest-ink: 255 232 226;
+  --quest-ink-soft: 233 194 190;
+  --quest-ink-muted: 194 143 145;
+  --quest-rule: 165 65 76;
+  --quest-accent: 255 139 120;
 }
 
 [data-theme="high-contrast"] {
@@ -198,4 +230,12 @@
   --ds-chart-4: 74 255 130;
   --ds-chart-5: 255 211 77;
   --ds-chart-6: 255 107 107;
+  --quest-surface: 0 0 0;
+  --quest-surface-raised: 14 14 14;
+  --quest-surface-soft: 30 30 30;
+  --quest-ink: 255 255 255;
+  --quest-ink-soft: 245 245 245;
+  --quest-ink-muted: 212 212 212;
+  --quest-rule: 255 255 255;
+  --quest-accent: 255 225 0;
 }

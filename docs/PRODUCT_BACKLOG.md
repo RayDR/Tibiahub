@@ -2,7 +2,7 @@
 
 This file tracks product work that must not be lost between implementation passes. It is intentionally separate from active PR scope and from the P0 Knowledge Layer closure report.
 
-## NPC canonical knowledge and commerce relationships
+## Issue #60 — NPC canonical knowledge and commerce relationships
 
 Status: pending
 Priority: high after the current Cyclopedia/navigation work
@@ -22,6 +22,8 @@ Required outcomes:
 - Runtime reads remain PostgreSQL-only. Provider synchronization/reconciliation belongs to admin/jobs.
 
 Before UI implementation, audit current NPC canonical coverage, raw TibiaWiki documents, external IDs, media coverage, locations, quest/access relations and existing item trade fields so historical data can be reused rather than duplicated.
+
+This is the next product loop after Quest UX. Keep it as a dedicated issue/PR so NPC commerce normalization and Loot filtering do not leak into Quest presentation work.
 
 ## Full localization and automatic content translation
 

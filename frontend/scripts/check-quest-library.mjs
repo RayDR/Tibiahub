@@ -15,6 +15,7 @@ const checks = [
   [library.includes("sort_by: sortBy"), 'quest sorting must be server-backed'],
   [library.includes('IntersectionObserver'), 'quest library must auto-paginate'],
   [library.includes('is_access_quest'), 'quest books must use explicit access evidence'],
+  [library.includes("t('questDetail.preview')") && library.includes("t('questDetail.openQuest')"), 'quest books must expose explicit Preview and Open Quest actions'],
   [client.includes("'/quests/browse'"), 'quest browser client must use the fixed browse endpoint'],
   [client.includes("'/quests/facets'"), 'quest browser client must load canonical facets'],
 ];
