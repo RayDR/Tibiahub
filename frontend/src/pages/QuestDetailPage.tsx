@@ -91,7 +91,7 @@ export default function QuestDetailPage() {
         const data = await questsApi.getById(questId, controller.signal);
         setQuest(data);
         if (data.slug && data.slug !== questId) {
-          navigate(`/quests/${data.slug}${location.search}${location.hash}`, { replace: true, state: location.state });
+          navigate(`/quests/${data.slug}${window.location.search}${window.location.hash}`, { replace: true, state: location.state });
         }
         if (isAuthenticated && data.id) void activityApi.record({ activity_type: 'view_quest', entity_type: 'quest', entity_id: String(data.id), metadata: { name: data.name } }).catch(() => undefined);
       } catch {
@@ -100,7 +100,7 @@ export default function QuestDetailPage() {
     };
     void run();
     return () => controller.abort();
-  }, [questId, isAuthenticated, location.hash, location.search, location.state, navigate, t]);
+  }, [questId, isAuthenticated, location.state, navigate, t]);
 
   useEffect(() => {
     if (!quest || !location.hash) return undefined;
