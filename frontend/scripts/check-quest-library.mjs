@@ -15,7 +15,9 @@ const checks = [
   [library.includes("sort_by: sortBy"), 'quest sorting must be server-backed'],
   [library.includes('IntersectionObserver'), 'quest library must auto-paginate'],
   [library.includes('is_access_quest'), 'quest books must use explicit access evidence'],
-  [library.includes("t('questDetail.preview')") && library.includes("t('questDetail.openQuest')"), 'quest books must expose explicit Preview and Open Quest actions'],
+  [library.includes("onClick={() => selectQuest(quest)}") && library.includes("t('questDetail.previewTitle'"), 'the Quest card surface must open the preview without a separate Preview button'],
+  [!library.includes("t('questDetail.preview')"), 'Quest cards must not render a redundant Preview button'],
+  [library.includes("t('questDetail.openQuest')"), 'Quest cards must keep an explicit Open Quest bypass action'],
   [client.includes("'/quests/browse'"), 'quest browser client must use the fixed browse endpoint'],
   [client.includes("'/quests/facets'"), 'quest browser client must load canonical facets'],
 ];
@@ -26,4 +28,4 @@ if (failures.length) {
   process.exit(1);
 }
 
-console.log('Quest Library checks passed: canonical browse, compact books, Access filter, sorting, and infinite scrolling are wired.');
+console.log('Quest Library checks passed: canonical browse, card-driven previews, explicit Open Quest, Access filter, sorting, and infinite scrolling are wired.');
