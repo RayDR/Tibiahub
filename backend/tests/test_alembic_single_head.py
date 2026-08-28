@@ -15,7 +15,7 @@ def test_alembic_has_single_head():
 
     heads = ScriptDirectory.from_config(config).get_heads()
 
-    assert heads == ["hunt_zone_registry_20260815"]
+    assert heads == ["quest_completion_20260828"]
 
 
 def test_hunt_zone_registry_migration_quotes_reserved_symmetric_identifier():
