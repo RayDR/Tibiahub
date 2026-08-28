@@ -1,43 +1,79 @@
-# Knowledge Quest Adapter — Stage 2A-5
+# Knowledge Quest Adapter — canonical overview + repair workflow
 
-Stage 2A-5 imports TibiaWiki quest pages through the durable Knowledge worker and serves normalized Quest data exclusively from PostgreSQL. The provider remains disabled by default, no job is enqueued at startup, and catalog execution always requires an explicit bounded batch and confirmation.
+TibiaHub imports TibiaWiki Quest knowledge through the durable Knowledge worker and serves normalized Quest data exclusively from local PostgreSQL. Provider access is never part of public GET requests. Raw provider responses are retained as immutable `KnowledgeDocument` evidence and parser compatibility transforms operate on copies only.
 
-## Source and jobs
+## Canonical sources and jobs
 
-The existing TibiaWiki MediaWiki API remains the source. `Category:Quests` supplies a continuation-token catalog; `action=parse` supplies stable page IDs, wikitext, and links for details. `quest_catalog` stores each catalog response and creates at most 50 idempotent detail children. A group page can create at most 50 bounded child-page jobs. `quest_detail` imports one page, and `quest_renormalize` replays the latest immutable `quest:<page-id>` document without network access. There is no claimed incremental feed.
+The canonical Quest catalog is **`Category:Quest Overview Pages`**. The older mixed `Category:Quests` category is not the production discovery source. `quest_catalog` follows MediaWiki continuation tokens in bounded batches of at most 50 and creates idempotent `quest_detail` children for the overview pages.
 
-Raw response shapes remain inside the adapter. Known infobox and mission sections become a provider-neutral DTO, while unknown envelope fields remain in `knowledge_documents.raw_json` and safely stripped, unparsed section text remains in parser metadata. Executable markup is rejected. Partial mission parses are stored but never normalized over valid local data.
+`quest_detail` fetches one overview page by stable MediaWiki page ID. The production `TibiaWikiOverviewQuestAdapter` also schedules one bounded `quest_spoiler_detail` child for `<Quest name>/Spoiler`. A missing spoiler page is a successful no-op. When a spoiler exists, its raw response is retained separately as `quest_spoiler:<parent-page-id>` but is normalized as **auxiliary evidence for the parent Quest**, never as a second public Quest entity.
 
-## Identity and ownership
+`quest_renormalize` replays the latest immutable `quest:<page-id>` document with no provider request. Focused repair tooling must resolve the registered production adapter rather than instantiating the legacy base adapter directly.
 
-Quest identity is provider + `quest` + numeric MediaWiki page ID. An existing external mapping wins, followed by an exact normalized canonical name or approved alias. Fuzzy matching is never used. Same-name pages with different provider IDs receive distinct UUIDs and slugs. Missions use a provider mission ID when available; otherwise their identity is normalized title plus stable sequence within the quest.
+## Current TibiaWiki compatibility
 
-TibiaWiki may own the official English name, current description and summary, mission structure, level and status flags, explicit requirements, rewards, and related entity references. Protected fields, editorial walkthroughs, verified routes, custom map steps, community recommendations, manually corrected relationships, and future translated guides remain locally owned. Missing or empty provider fields do not erase populated values, and protected relationship records are not overwritten. Canonical Quest `data_version` changes only when Quest or Mission data changes.
+Current Quest overview templates use provider-specific aliases that differ from the provider-neutral DTO:
 
-## Relationships and access
+- `lvl` → canonical `minimum_level`
+- `legend` → canonical description
 
-One provenance-bearing relationship stores each directed fact. Exact names and approved aliases can resolve existing Quest, Item, Creature, Boss, or Access entities; ambiguous and unresolved names remain reviewable and are never guessed. NPC and Location references are initially stored as unresolved names and are resolved only after their adapters import one unique exact canonical name or approved alias. No coordinates or routes are fabricated.
+Those aliases are translated only in the temporary parsing copy. Retained raw evidence is unchanged.
 
-Access unlocks create or reuse an `access` KnowledgeEntity and a minimal `knowledge_accesses` bridge containing an access code, name, description, unlocking Quest, requirements, destination name, and provider metadata. It deliberately contains no map geometry.
+Short Quests and Mini World Changes often keep their walkthrough in a top-level `Method` section instead of a nested `Missions` structure. The production adapter conservatively exposes the direct `Method` prose as one mission. Nested sections such as statistics are not converted into fake missions. This transform also operates only on the parsing copy.
 
-## Local reads and operations
+The parser deliberately does **not** infer requirements, rewards, NPCs, or coordinates from arbitrary prose. Explicit provider fields and structured labels may become canonical facts; ambiguous prose stays unstructured until a later evidence-aware/editorial workflow can approve it.
 
-`GET /api/v1/quests/` supports pagination plus category, level, premium, repeatable, and group filters. `GET /api/v1/quests/{identifier}` accepts a local row ID, provider page ID, slug, or exact normalized name and returns ordered missions and safe relationships. Neither endpoint calls TibiaWiki or exposes raw wikitext.
+## Identity, ownership, and provenance
 
-The admin Knowledge Operations page exposes only registered quest catalog/detail/renormalize jobs, including parent/child state and Quest attempt metrics. The safe CLI supports `--quest-name`; catalog jobs require `--confirm-catalog-sync` and an explicit `--batch-limit`.
+Quest identity is provider + `quest` + the numeric overview-page MediaWiki ID. An existing external mapping wins, followed by one exact canonical name or approved alias. Fuzzy matching is never used. Same-name provider variants remain separate when identity evidence requires it.
 
-## Production gate and one-page smoke
+Missions use a provider mission ID when available; otherwise identity is normalized title plus stable sequence inside the Quest. Spoiler evidence deliberately reuses the parent overview ID, so it can enrich the same canonical Quest without creating a `/Spoiler` entity.
 
-Do not apply the migration, enable TibiaWiki, or start the production Knowledge worker until the PostgreSQL cutover is independently confirmed. After that gate, enable the registered provider deliberately and enqueue only one known page first:
+TibiaWiki may own the official English name, current description/summary, mission structure, levels/status flags, explicit requirements/rewards, and related entity references. Protected fields, editorial walkthroughs, verified routes, custom map steps, community recommendations, manually corrected relationships, and future translated guides remain locally owned. Missing provider fields do not erase populated local values.
+
+Every normalized relationship preserves source provider/document identity. Exact canonical names and approved aliases may resolve existing Quest, Item, Creature, Boss, NPC, Location, or Access entities. Ambiguous and unresolved names stay reviewable and are never guessed. No coordinates or routes are fabricated.
+
+## Local reads
+
+`GET /api/v1/quests/` supports local pagination and Quest filters. `GET /api/v1/quests/{identifier}` accepts a local row ID, provider page ID, slug, or exact normalized name and returns ordered missions plus safe relationships. Neither endpoint calls TibiaWiki or exposes raw wikitext/spoiler documents.
+
+## Repair workflow
+
+Use `scripts/repair-quest-knowledge.py` for production-safe Quest repair. It is audit-only unless an explicit repair phase and confirmation are provided.
+
+Recommended order:
 
 ```bash
-backend/venv/bin/python scripts/enqueue-knowledge-job.py \
-  --provider tibiawiki \
-  --entity-type quest \
-  --job-type quest_detail \
-  --external-id 700 \
-  --quest-name "Explorer Society Quest" \
-  --confirm-enqueue-knowledge-job
+# 1. Inventory current coverage only.
+python scripts/repair-quest-knowledge.py
+
+# 2. Replay retained overview documents without network access.
+python scripts/repair-quest-knowledge.py \
+  --replay-existing \
+  --offset 0 \
+  --limit 100 \
+  --wait \
+  --confirm 'REPAIR TIBIAHUB QUEST KNOWLEDGE'
+
+# Repeat with the printed next_offset until retained documents are covered.
+
+# 3. Refresh the canonical overview catalog and detail/spoiler evidence.
+python scripts/repair-quest-knowledge.py \
+  --refresh-catalog \
+  --batch-limit 50 \
+  --wait \
+  --confirm 'REPAIR TIBIAHUB QUEST KNOWLEDGE'
 ```
 
-Verify the job, immutable document, mapping, Quest, ordered missions, relationships, and local API before considering a separately confirmed bounded catalog batch. Maps/PostGIS, media downloads, unified search, embeddings, and AI remain deferred.
+If TibiaWiki is intentionally disabled, `--enable-provider` must be supplied explicitly together with `--refresh-catalog`; the repair script never silently enables a provider.
+
+After the durable jobs finish, run exact-only reconciliation rather than a destructive rebuild:
+
+```bash
+python scripts/reconcile-knowledge-layer.py --dry-run
+python scripts/reconcile-knowledge-layer.py \
+  --apply \
+  --confirm APPLY-P0-KNOWLEDGE-CLOSURE
+```
+
+Then validate graph/spatial consistency and smoke the Quest/Cyclopedia APIs. This workflow never truncates canonical tables and never invents missing facts.
