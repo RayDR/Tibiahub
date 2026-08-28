@@ -15,6 +15,7 @@ from app.models.external_data import TibiaWikiQuest
 from app.models.quest_progress import QuestCompletion
 from app.models.user import User
 from app.models.user_character import UserCharacter
+from app.services.text_utils import normalize_search_text
 
 router = APIRouter(prefix="/quest-progress", tags=["Quest Progress"])
 
@@ -33,12 +34,17 @@ class QuestCompletionResponse(BaseModel):
 def _quest_by_identifier(db: Session, identifier: str) -> TibiaWikiQuest:
     query = db.query(TibiaWikiQuest)
     if identifier.isdigit():
-        quest = query.filter(TibiaWikiQuest.id == int(identifier)).first()
+        quest = query.filter(
+            or_(
+                TibiaWikiQuest.id == int(identifier),
+                TibiaWikiQuest.external_id == identifier,
+            )
+        ).first()
     else:
         quest = query.filter(
             or_(
                 TibiaWikiQuest.slug == identifier,
-                TibiaWikiQuest.external_id == identifier,
+                TibiaWikiQuest.normalized_name == normalize_search_text(identifier),
             )
         ).first()
     if quest is None:
@@ -61,7 +67,11 @@ def _verified_character(db: Session, user_id: int, character_id: int) -> UserCha
     return character
 
 
-def _response(quest: TibiaWikiQuest, character: UserCharacter, completion: QuestCompletion | None) -> QuestCompletionResponse:
+def _response(
+    quest: TibiaWikiQuest,
+    character: UserCharacter,
+    completion: QuestCompletion | None,
+) -> QuestCompletionResponse:
     return QuestCompletionResponse(
         quest_id=quest.id,
         character_id=character.id,
@@ -117,10 +127,8 @@ def set_quest_completion(
                 completed_at=datetime.now(UTC),
             )
             db.add(completion)
-        else:
-            completion.completed_at = datetime.now(UTC)
-        db.commit()
-        db.refresh(completion)
+            db.commit()
+            db.refresh(completion)
         return _response(quest, character, completion)
 
     if completion is not None:
