@@ -11,6 +11,7 @@ import { Dialog } from '../ui/Overlay';
 const normalizeName = (value: string) => value.trim().toLocaleLowerCase();
 
 const itemCache = new Map<string, Promise<ItemDetail | null>>();
+const questCache = new Map<string, Promise<QuestDetail | null>>();
 
 async function resolveLocalItem(name: string, preferredIdentifier?: string): Promise<ItemDetail | null> {
   const cacheKey = `${preferredIdentifier || ''}:${normalizeName(name)}`;
@@ -36,6 +37,33 @@ async function resolveLocalItem(name: string, preferredIdentifier?: string): Pro
     }
   })();
   itemCache.set(cacheKey, lookup);
+  return lookup;
+}
+
+async function resolveLocalQuest(name: string, preferredIdentifier?: string): Promise<QuestDetail | null> {
+  const cacheKey = `${preferredIdentifier || ''}:${normalizeName(name)}`;
+  const existing = questCache.get(cacheKey);
+  if (existing) return existing;
+
+  const lookup = (async () => {
+    if (preferredIdentifier) {
+      try {
+        return await questsApi.getById(preferredIdentifier);
+      } catch {
+        // Continue with exact canonical-name matching only.
+      }
+    }
+    try {
+      const results = await questsApi.search(name, 12);
+      const exact = results.filter((row) => normalizeName(row.name) === normalizeName(name));
+      if (exact.length !== 1) return null;
+      const identifier = exact[0].slug || exact[0].id;
+      return identifier != null ? await questsApi.getById(identifier) : null;
+    } catch {
+      return null;
+    }
+  })();
+  questCache.set(cacheKey, lookup);
   return lookup;
 }
 
@@ -76,46 +104,45 @@ export default function QuestReference({
     [kind, relationships, value.name],
   );
   const [item, setItem] = useState<ItemDetail | null>(null);
-  const [itemLoading, setItemLoading] = useState(kind === 'item');
+  const [questTarget, setQuestTarget] = useState<QuestDetail | null>(null);
+  const [targetLoading, setTargetLoading] = useState(true);
   const [imageFailed, setImageFailed] = useState(false);
   const [previewOpen, setPreviewOpen] = useState(false);
-  const [questPreview, setQuestPreview] = useState<QuestDetail | null>(null);
-  const [previewLoading, setPreviewLoading] = useState(false);
-  const [previewFailed, setPreviewFailed] = useState(false);
 
   useEffect(() => {
-    if (kind !== 'item') return undefined;
     let current = true;
-    setItemLoading(true);
+    setTargetLoading(true);
     setImageFailed(false);
-    void resolveLocalItem(value.name, resolved?.target_slug).then((result) => {
-      if (current) setItem(result);
+
+    const request = kind === 'item'
+      ? resolveLocalItem(value.name, resolved?.target_slug)
+      : resolveLocalQuest(value.name, resolved?.target_slug);
+
+    void request.then((result) => {
+      if (!current) return;
+      if (kind === 'item') {
+        setItem(result as ItemDetail | null);
+        setQuestTarget(null);
+      } else {
+        setQuestTarget(result as QuestDetail | null);
+        setItem(null);
+      }
     }).finally(() => {
-      if (current) setItemLoading(false);
+      if (current) setTargetLoading(false);
     });
+
     return () => { current = false; };
   }, [kind, resolved?.target_slug, value.name]);
 
   const amount = 'amount' in value ? value.amount : 1;
   const itemIdentifier = item?.slug || item?.id || resolved?.target_slug;
+  const questIdentifier = questTarget?.slug || questTarget?.id || resolved?.target_slug;
   const route = kind === 'item'
     ? itemIdentifier != null ? `/items/${itemIdentifier}` : null
-    : resolved?.target_slug ? `/quests/${resolved.target_slug}` : null;
+    : questIdentifier != null ? `/quests/${questIdentifier}` : null;
   const imageUrl = kind === 'item' && item?.id != null
     ? `/api/v1/items/${item.id}/image?placeholder=false`
     : null;
-
-  const openPreview = () => {
-    if (!previewable || !route) return;
-    setPreviewOpen(true);
-    setPreviewFailed(false);
-    if (kind === 'item' || questPreview || !resolved?.target_slug) return;
-    setPreviewLoading(true);
-    void questsApi.getById(resolved.target_slug)
-      .then(setQuestPreview)
-      .catch(() => setPreviewFailed(true))
-      .finally(() => setPreviewLoading(false));
-  };
 
   const content = (
     <>
@@ -128,7 +155,9 @@ export default function QuestReference({
             onError={() => setImageFailed(true)}
           />
         ) : kind === 'item' ? (
-          itemLoading ? <Loader2 className="size-4 animate-spin" /> : <Package className="size-4" />
+          targetLoading ? <Loader2 className="size-4 animate-spin" /> : <Package className="size-4" />
+        ) : targetLoading ? (
+          <Loader2 className="size-4 animate-spin" />
         ) : (
           <BookOpen className="size-4" />
         )}
@@ -152,7 +181,7 @@ export default function QuestReference({
       {previewable && route ? (
         <button
           type="button"
-          onClick={openPreview}
+          onClick={() => setPreviewOpen(true)}
           className="app-button-ghost app-button-sm shrink-0 px-2"
           aria-label={t('questDetail.previewEntity', { name: value.name })}
         >
@@ -180,7 +209,12 @@ export default function QuestReference({
           </div>
         </div>
         <div className="p-5">
-          {kind === 'item' && item ? (
+          {targetLoading ? (
+            <div className="flex items-center gap-2 text-sm text-content-secondary">
+              <Loader2 className="size-4 animate-spin" />
+              {t('questEnhancement.loadingPreview')}
+            </div>
+          ) : kind === 'item' && item ? (
             <div className="space-y-2 text-sm text-content-secondary">
               {item.description ? <p className="leading-6">{item.description}</p> : <p>{t('questDetail.noCompactDetails')}</p>}
               <div className="flex flex-wrap gap-2 text-xs">
@@ -188,18 +222,17 @@ export default function QuestReference({
                 {item.item_type ? <span className="ds-badge">{item.item_type}</span> : null}
               </div>
             </div>
-          ) : kind === 'quest' ? (
-            previewLoading ? <p className="text-sm text-content-secondary">{t('questEnhancement.loadingPreview')}</p>
-              : questPreview ? <div className="space-y-3 text-sm text-content-secondary">
-                <p className="leading-6">{questPreview.summary || questPreview.description || t('questDetail.noCompactDetails')}</p>
-                <div className="flex flex-wrap gap-2 text-xs">
-                  {questPreview.min_level != null ? <span className="ds-badge">{t('questDetail.minimumLevel')}: {questPreview.min_level}</span> : null}
-                  {questPreview.duration ? <span className="ds-badge">{t('questEnhancement.duration')}: {questPreview.duration}</span> : null}
-                </div>
-              </div> : <p className="text-sm text-content-secondary">{t('questEnhancement.previewUnavailable')}</p>
-          ) : previewFailed || !item ? (
+          ) : kind === 'quest' && questTarget ? (
+            <div className="space-y-3 text-sm text-content-secondary">
+              <p className="leading-6">{questTarget.summary || questTarget.description || t('questDetail.noCompactDetails')}</p>
+              <div className="flex flex-wrap gap-2 text-xs">
+                {questTarget.min_level != null ? <span className="ds-badge">{t('questDetail.minimumLevel')}: {questTarget.min_level}</span> : null}
+                {questTarget.duration ? <span className="ds-badge">{t('questEnhancement.duration')}: {questTarget.duration}</span> : null}
+              </div>
+            </div>
+          ) : (
             <p className="text-sm text-content-secondary">{t('questEnhancement.previewUnavailable')}</p>
-          ) : null}
+          )}
 
           <div className="mt-5 flex justify-end gap-2">
             <button type="button" onClick={() => setPreviewOpen(false)} className="app-button-ghost app-button-sm">{t('common.close')}</button>
