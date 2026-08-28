@@ -10,6 +10,7 @@ from app.models.user_character import UserCharacter
 from app.models.auth_security import AuthOneTimeToken, AuthRequestEvent
 from app.models.character_ownership import CharacterOwnershipClaim, CharacterOwnershipHistory
 from app.models.quest import Quest
+from app.models.quest_progress import QuestCompletion
 from app.models.settings import SystemSettings
 from app.models.user_activity import UserActivity
 from app.models.catalog import Catalog
@@ -66,6 +67,7 @@ __all__ = [
     "CharacterOwnershipClaim",
     "CharacterOwnershipHistory",
     "Quest",
+    "QuestCompletion",
     "SystemSettings",
     "UserActivity",
     "Catalog",
