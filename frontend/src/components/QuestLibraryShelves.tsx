@@ -246,22 +246,28 @@ export default function QuestLibraryShelves({ linkState, onNavigate }: Props) {
                 <article
                   data-cyclopedia-result
                   key={questKey(quest)}
-                  className={`group relative min-h-[5.25rem] overflow-hidden rounded-r-xl rounded-l-sm border border-line border-l-4 bg-surface-raised px-4 py-3 text-left shadow-sm transition hover:-translate-y-0.5 hover:border-primary/45 ${active ? 'border-l-primary ring-1 ring-primary/30' : quest.is_access_quest ? 'border-l-primary/70' : 'border-l-content-muted/35'}`}
+                  className={`group relative min-h-[5.25rem] overflow-hidden rounded-r-xl rounded-l-sm border border-line border-l-4 bg-surface-raised text-left shadow-sm transition hover:-translate-y-0.5 hover:border-primary/45 ${active ? 'border-l-primary ring-1 ring-primary/30' : quest.is_access_quest ? 'border-l-primary/70' : 'border-l-content-muted/35'}`}
                 >
-                  <div className="flex h-full items-start gap-3">
-                    <BookOpen className="mt-0.5 size-4 shrink-0 text-primary/80" />
-                    <div className="min-w-0 flex-1">
-                      <strong className="line-clamp-2 text-sm leading-5 text-content-primary">{quest.name}</strong>
-                      <div className="mt-2 flex flex-wrap items-center gap-x-2 gap-y-1 text-[11px] text-content-muted">
-                        <span>{t('questDetail.minimumLevel')}: {quest.min_level ?? '—'}</span>
-                        {quest.is_access_quest ? <span className="font-semibold text-primary">{t('questDetail.access')}</span> : null}
-                        {!hasDetailedQuestSummary(quest) ? <span>{t('questDetail.noDetailedData')}</span> : null}
-                      </div>
-                      <div className="mt-3 flex flex-wrap gap-2">
-                        <button type="button" onClick={() => selectQuest(quest)} className="app-button-ghost app-button-sm min-h-10">{t('questDetail.preview')}</button>
-                        <Link to={`/quests/${quest.slug || quest.id}`} state={linkState} onClick={() => onNavigate?.()} className="app-button-secondary app-button-sm min-h-10">{t('questDetail.openQuest')}</Link>
+                  <button
+                    type="button"
+                    onClick={() => selectQuest(quest)}
+                    className="block w-full px-4 pb-2 pt-3 text-left focus-visible:outline-offset-[-2px]"
+                    aria-label={t('questDetail.previewTitle', { name: quest.name })}
+                  >
+                    <div className="flex items-start gap-3">
+                      <BookOpen className="mt-0.5 size-4 shrink-0 text-primary/80" />
+                      <div className="min-w-0 flex-1">
+                        <strong className="line-clamp-2 text-sm leading-5 text-content-primary">{quest.name}</strong>
+                        <div className="mt-2 flex flex-wrap items-center gap-x-2 gap-y-1 text-[11px] text-content-muted">
+                          <span>{t('questDetail.minimumLevel')}: {quest.min_level ?? '—'}</span>
+                          {quest.is_access_quest ? <span className="font-semibold text-primary">{t('questDetail.access')}</span> : null}
+                          {!hasDetailedQuestSummary(quest) ? <span>{t('questDetail.noDetailedData')}</span> : null}
+                        </div>
                       </div>
                     </div>
+                  </button>
+                  <div className="flex justify-end px-4 pb-3">
+                    <Link to={`/quests/${quest.slug || quest.id}`} state={linkState} onClick={() => onNavigate?.()} className="app-button-secondary app-button-sm min-h-10">{t('questDetail.openQuest')}</Link>
                   </div>
                 </article>
               );
