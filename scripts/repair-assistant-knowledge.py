@@ -15,7 +15,7 @@ sys.path.insert(0, str(ROOT / "backend"))
 
 from app.core.config import settings
 from app.db.database import SessionLocal, verify_connection_and_schema
-from app.knowledge.adapters import KnowledgeDocumentDTO, KnowledgeNormalizationContext, TibiaWikiQuestAdapter
+from app.knowledge.adapters import KnowledgeAdapterRegistry, KnowledgeDocumentDTO, KnowledgeNormalizationContext
 from app.knowledge.dto import QuestKnowledgeDTO
 from app.knowledge.models import KnowledgeDocument
 from app.knowledge.services.normalization import KnowledgeNormalizationService
@@ -56,7 +56,11 @@ def main() -> None:
         raise SystemExit("Refusing to modify a database other than tibiahub.")
 
     verify_connection_and_schema()
-    adapter = TibiaWikiQuestAdapter()
+    adapter = KnowledgeAdapterRegistry().resolve(
+        "tibiawiki",
+        "quest_renormalize",
+        "quest",
+    )
     report: list[dict[str, object]] = []
 
     with SessionLocal() as db:
@@ -84,6 +88,7 @@ def main() -> None:
                 "retrieved_at": row.retrieved_at.isoformat(),
                 "normalization_action": normalized.action,
                 "warnings": list(normalized.warnings),
+                "adapter": type(adapter).__name__,
             }
             if normalized.canonical_data is not None:
                 quest = QuestKnowledgeDTO.from_canonical_data(normalized.canonical_data)
