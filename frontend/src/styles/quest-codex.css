@@ -48,8 +48,11 @@
 
 .quest-codex__title > svg,
 .quest-codex__title > p,
-.quest-codex a,
 .quest-codex h2 > svg {
+  color: rgb(var(--quest-accent));
+}
+
+.quest-codex a:not(.app-button-primary):not(.app-button-secondary):not(.app-button-ghost):not(.app-button-danger) {
   color: rgb(var(--quest-accent));
 }
 
@@ -82,7 +85,9 @@
 .quest-codex__contents,
 .quest-codex section.rounded-2xl,
 .quest-codex__section,
-.quest-codex__subsection {
+.quest-codex__subsection,
+.quest-codex__preview-section,
+.quest-codex__progress {
   border-color: var(--quest-rule-soft) !important;
   background:
     linear-gradient(145deg, rgb(var(--quest-ink) / 0.06), transparent 58%),
@@ -104,6 +109,11 @@
   transition: background var(--duration-fast) var(--ease-standard), border-color var(--duration-fast) var(--ease-standard), color var(--duration-fast) var(--ease-standard);
 }
 
+.quest-codex__reference-icon {
+  background: rgb(var(--quest-ink) / 0.075);
+  color: rgb(var(--quest-accent));
+}
+
 .quest-codex__toc-link span:first-child {
   color: rgb(var(--quest-accent));
 }
@@ -114,6 +124,14 @@
   border-color: rgb(var(--quest-rule)) !important;
   background: rgb(var(--quest-accent) / 0.10) !important;
   color: rgb(var(--quest-ink)) !important;
+}
+
+.quest-codex__preview-section > summary svg {
+  transition: transform var(--duration-fast) var(--ease-standard);
+}
+
+.quest-codex__preview-section[open] > summary svg {
+  transform: rotate(180deg);
 }
 
 .quest-codex__mission {
@@ -136,16 +154,6 @@
   color: rgb(var(--quest-ink)) !important;
 }
 
-.quest-codex .app-button-secondary {
-  border-color: rgb(var(--quest-rule)) !important;
-  background: rgb(var(--quest-ink) / 0.07) !important;
-  color: rgb(var(--quest-ink)) !important;
-}
-
-.quest-codex .app-button-secondary:hover {
-  background: rgb(var(--quest-accent) / 0.13) !important;
-}
-
 .quest-codex footer {
   border-color: var(--quest-rule-soft) !important;
 }
@@ -162,6 +170,10 @@
   color: rgb(var(--quest-ink-soft));
 }
 
+.quest-codex__mobile-sticky-title {
+  display: none;
+}
+
 @keyframes quest-unroll {
   from { opacity: 0; transform: translateY(-0.75rem) scaleY(0.84); transform-origin: top; }
   to { opacity: 1; transform: translateY(0) scaleY(1); transform-origin: top; }
@@ -176,6 +188,27 @@
 
 [data-density="compact"] .quest-codex__pages {
   padding-block: 1.25rem !important;
+}
+
+@media (max-width: 639px) {
+  .quest-codex__mobile-sticky-title {
+    position: sticky;
+    top: calc(var(--app-sticky-offset) + var(--space-2));
+    z-index: var(--z-sticky);
+    display: flex;
+    width: fit-content;
+    max-width: 90%;
+    align-items: center;
+    gap: var(--space-2);
+    margin: var(--space-3) 0 0 auto;
+    border: 1px solid var(--quest-rule-soft);
+    border-radius: var(--radius-full);
+    padding: var(--space-2) var(--space-3);
+    background: rgb(var(--quest-surface) / 0.96);
+    color: rgb(var(--quest-ink));
+    box-shadow: var(--elevation-2);
+    backdrop-filter: blur(10px);
+  }
 }
 
 @media (min-width: 1024px) {
