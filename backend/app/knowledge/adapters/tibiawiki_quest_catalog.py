@@ -28,7 +28,11 @@ from app.knowledge.services.failures import OversizedProviderResponseError
 
 QUEST_OVERVIEW_CATALOG = "Category:Quest Overview Pages"
 QUEST_SPOILER_SUFFIX = "/Spoiler"
-_LEVEL_TWO_HEADING = re.compile(r"^\s*==\s*(.+?)\s*==\s*$")
+# Match exactly level-two headings. Without the negative lookahead, a line like
+# ``=== Statistics ===`` also matches the level-two expression because the
+# third ``=`` can be consumed by the capture group. That prematurely ends a
+# Method section and lets nested evidence headings become fake missions.
+_LEVEL_TWO_HEADING = re.compile(r"^\s*==(?!=)\s*(.+?)\s*==\s*$")
 _NESTED_HEADING = re.compile(r"^\s*={3,5}\s*(.+?)\s*={3,5}\s*$")
 
 
