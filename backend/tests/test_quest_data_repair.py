@@ -29,7 +29,13 @@ class RecordingOverviewClient(HttpTibiaWikiQuestOverviewClient):
 
 class RepairFixtureClient:
     def fetch_catalog(self, *, continuation: str | None, limit: int):
-        return {"query": {"categorymembers": []}}
+        return {
+            "query": {
+                "categorymembers": [
+                    {"pageid": 700, "ns": 0, "title": "Bored Mini World Change"},
+                ],
+            },
+        }
 
     def fetch_detail(self, *, external_id: str | None, page_title: str | None):
         if page_title and page_title.endswith("/Spoiler"):
@@ -63,7 +69,9 @@ Dialogue omitted.
             "parse": {
                 "pageid": int(external_id or 700),
                 "title": page_title or "Bored Mini World Change",
-                "links": [],
+                # This ordinary related-Quest link used to make the base parser
+                # classify an overview page as a non-public group.
+                "links": [{"*": "Blood Herb Quest", "ns": 0, "exists": ""}],
                 "wikitext": {
                     "*": """{{Infobox Quest
 |name=Bored Mini World Change
@@ -77,7 +85,11 @@ Dialogue omitted.
         }
 
 
-def _request(job_type: str, payload: dict | None = None) -> KnowledgeFetchRequest:
+def _request(
+    job_type: str,
+    payload: dict | None = None,
+    scope: dict | None = None,
+) -> KnowledgeFetchRequest:
     return KnowledgeFetchRequest(
         job_id=uuid4(),
         attempt_id=uuid4(),
@@ -85,7 +97,7 @@ def _request(job_type: str, payload: dict | None = None) -> KnowledgeFetchReques
         provider_code="tibiawiki",
         job_type=job_type,
         entity_type="quest",
-        scope={},
+        scope=scope or {},
         payload=payload or {},
     )
 
@@ -105,6 +117,17 @@ def test_production_quest_catalog_uses_overview_pages():
     client.fetch_catalog(continuation=None, limit=50)
     assert client.params["cmtitle"] == QUEST_OVERVIEW_CATALOG
     assert QUEST_OVERVIEW_CATALOG == "Category:Quest Overview Pages"
+
+
+def test_catalog_child_carries_overview_membership_evidence():
+    adapter = TibiaWikiOverviewQuestAdapter(RepairFixtureClient())
+    result = adapter.fetch(_request("quest_catalog", scope={"batch_limit": 50}))
+    detail = next(child for child in result.child_jobs if child.job_type == "quest_detail")
+    assert detail.payload == {
+        "external_id": "700",
+        "page_title": "Bored Mini World Change",
+        "catalog_source": QUEST_OVERVIEW_CATALOG,
+    }
 
 
 def test_compatibility_copy_maps_current_aliases_and_standalone_method_without_mutating_raw():
@@ -128,19 +151,30 @@ def test_compatibility_copy_maps_current_aliases_and_standalone_method_without_m
     assert "=== Statistics ===" not in patched
 
 
-def test_quest_detail_enqueues_spoiler_as_auxiliary_evidence():
+def test_quest_detail_enqueues_spoiler_and_preserves_overview_leaf_evidence():
     adapter = TibiaWikiOverviewQuestAdapter(RepairFixtureClient())
     result = adapter.fetch(_request(
         "quest_detail",
-        {"external_id": "700", "page_title": "Bored Mini World Change"},
+        {
+            "external_id": "700",
+            "page_title": "Bored Mini World Change",
+            "catalog_source": QUEST_OVERVIEW_CATALOG,
+        },
     ))
 
+    assert result.documents[0].metadata["catalog_source"] == QUEST_OVERVIEW_CATALOG
     spoiler_children = [child for child in result.child_jobs if child.job_type == "quest_spoiler_detail"]
     assert len(spoiler_children) == 1
     assert spoiler_children[0].payload == {
         "parent_external_id": "700",
         "page_title": "Bored Mini World Change/Spoiler",
     }
+
+    normalized = adapter.normalize(result.documents[0], _context())
+    dto = QuestKnowledgeDTO.from_canonical_data(normalized.canonical_data)
+    assert dto.is_group is False
+    assert "is_group" in dto.supplied_fields
+    assert dto.provider_metadata["catalog_source"] == QUEST_OVERVIEW_CATALOG
 
 
 def test_spoiler_normalizes_into_parent_quest_with_one_method_mission_and_retains_raw_identity():
@@ -164,12 +198,24 @@ def test_spoiler_normalizes_into_parent_quest_with_one_method_mission_and_retain
     assert dto.canonical_name == "Bored Mini World Change"
     assert dto.minimum_level == 0
     assert dto.description == "The witch Wyda is bored."
+    assert dto.is_group is False
+    assert dto.provider_metadata["catalog_source"] == QUEST_OVERVIEW_CATALOG
     assert [mission.title for mission in dto.missions] == ["Method"]
     assert "Bring a Blood Herb" in (dto.missions[0].description or "")
     assert "Statistics" not in [mission.title for mission in dto.missions]
     assert document.raw_json == raw_before
     assert document.raw_json["parse"]["pageid"] == 1700
     assert document.raw_json["parse"]["title"].endswith("/Spoiler")
+
+
+def test_manual_detail_without_catalog_evidence_does_not_claim_overview_membership():
+    adapter = TibiaWikiOverviewQuestAdapter(RepairFixtureClient())
+    result = adapter.fetch(_request(
+        "quest_detail",
+        {"external_id": "700", "page_title": "Bored Mini World Change"},
+    ))
+    assert "catalog_source" not in result.documents[0].metadata
+    assert not any(child.job_type == "quest_spoiler_detail" for child in result.child_jobs)
 
 
 def test_registry_exposes_production_adapter_for_replay_and_spoiler_jobs():
