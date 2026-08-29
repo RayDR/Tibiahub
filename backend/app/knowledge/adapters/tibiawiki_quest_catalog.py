@@ -125,6 +125,28 @@ def _compatibility_document(document: KnowledgeDocumentDTO) -> KnowledgeDocument
     return replace(document, raw_json=raw)
 
 
+def _mark_overview_leaf(result: KnowledgeNormalizationResult) -> KnowledgeNormalizationResult:
+    """Apply source-backed public-Quest classification to canonical data.
+
+    Membership in ``Category:Quest Overview Pages`` is affirmative provider
+    evidence that the page is a Quest overview. Linking to other Quest pages is
+    not evidence that the page is merely a grouping page. Preserve that source
+    fact in parser metadata so the old child-link heuristic cannot hide almost
+    every canonical Quest from the public catalog.
+    """
+    if result.action != "upsert" or not isinstance(result.canonical_data, dict):
+        return result
+    canonical = deepcopy(result.canonical_data)
+    canonical["is_group"] = False
+    supplied = set(canonical.get("supplied_fields") or [])
+    supplied.add("is_group")
+    canonical["supplied_fields"] = sorted(supplied)
+    provider_metadata = dict(canonical.get("provider_metadata") or {})
+    provider_metadata["catalog_source"] = QUEST_OVERVIEW_CATALOG
+    canonical["provider_metadata"] = provider_metadata
+    return replace(result, canonical_data=canonical)
+
+
 class HttpTibiaWikiQuestOverviewClient(HttpTibiaWikiQuestClient):
     """Discover quest overview pages, never the mixed parent quest category."""
 
@@ -163,6 +185,19 @@ class TibiaWikiOverviewQuestAdapter(TibiaWikiQuestAdapter):
             raise ValueError("Quest spoiler page titles must be safe")
 
     def fetch(self, request: KnowledgeFetchRequest) -> KnowledgeFetchResult:
+        if request.job_type == "quest_catalog":
+            result = super().fetch(request)
+            children = tuple(
+                replace(
+                    child,
+                    payload={**child.payload, "catalog_source": QUEST_OVERVIEW_CATALOG},
+                )
+                if child.job_type == "quest_detail"
+                else child
+                for child in result.child_jobs
+            )
+            return replace(result, child_jobs=children)
+
         if request.job_type == "quest_spoiler_detail":
             raw = self.client.fetch_detail(
                 external_id=None,
@@ -193,6 +228,7 @@ class TibiaWikiOverviewQuestAdapter(TibiaWikiQuestAdapter):
                     "parent_page_title": parent_title,
                     "spoiler_page_id": spoiler_page_id,
                     "page_title": str(request.payload["page_title"]),
+                    "catalog_source": QUEST_OVERVIEW_CATALOG,
                 },
             )
             return KnowledgeFetchResult(
@@ -204,7 +240,17 @@ class TibiaWikiOverviewQuestAdapter(TibiaWikiQuestAdapter):
         if request.job_type != "quest_detail" or not result.documents:
             return result
 
-        document = result.documents[0]
+        if request.payload.get("catalog_source") != QUEST_OVERVIEW_CATALOG:
+            return result
+
+        document = replace(
+            result.documents[0],
+            metadata={
+                **result.documents[0].metadata,
+                "catalog_source": QUEST_OVERVIEW_CATALOG,
+            },
+        )
+        result = replace(result, documents=(document, *result.documents[1:]))
         external_id = str(document.metadata.get("external_id") or "").strip()
         page_title = str(document.metadata.get("page_title") or "").strip()
         if not external_id.isdigit() or not page_title or page_title.endswith(QUEST_SPOILER_SUFFIX):
@@ -237,7 +283,10 @@ class TibiaWikiOverviewQuestAdapter(TibiaWikiQuestAdapter):
     ) -> KnowledgeNormalizationResult:
         compatible = _compatibility_document(document)
         if compatible.metadata.get("document_kind") != "quest_spoiler":
-            return super().normalize(compatible, context)
+            normalized = super().normalize(compatible, context)
+            if compatible.metadata.get("catalog_source") == QUEST_OVERVIEW_CATALOG:
+                return _mark_overview_leaf(normalized)
+            return normalized
 
         parent_external_id = str(compatible.metadata.get("parent_external_id") or "").strip()
         parent_title = str(compatible.metadata.get("parent_page_title") or "").strip()
@@ -263,4 +312,4 @@ class TibiaWikiOverviewQuestAdapter(TibiaWikiQuestAdapter):
                 "page_title": parent_title,
             },
         )
-        return TibiaWikiQuestAdapter.normalize(self, parent_document, context)
+        return _mark_overview_leaf(TibiaWikiQuestAdapter.normalize(self, parent_document, context))
