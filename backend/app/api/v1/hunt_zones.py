@@ -455,7 +455,7 @@ async def create_hunt_zone(
     # is ``quest_id`` and is intentionally managed by knowledge workflows.
     db_zone = HuntZoneModel(**zone.model_dump(exclude={
         "quest_name", "quest_slug", "vocation_recommendations", "canonical_id",
-        "missing_fields", "data_sources",
+        "missing_fields", "data_sources", "spatial",
     }))
     db.add(db_zone)
     db.flush()

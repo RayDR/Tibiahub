@@ -117,7 +117,10 @@ def create_hunt_zone(zone: HuntZoneCreate, db: Session = Depends(get_db)):
     if db_zone:
         raise HTTPException(status_code=400, detail="Hunt zone already exists")
     
-    db_zone = HuntZone(**zone.model_dump())
+    db_zone = HuntZone(**zone.model_dump(exclude={
+        "quest_name", "quest_slug", "vocation_recommendations", "canonical_id",
+        "missing_fields", "data_sources", "spatial",
+    }))
     db.add(db_zone)
     db.commit()
     db.refresh(db_zone)
@@ -131,7 +134,10 @@ def update_hunt_zone(zone_id: int, zone: HuntZoneCreate, db: Session = Depends(g
     if not db_zone:
         raise HTTPException(status_code=404, detail="Hunt zone not found")
     
-    for key, value in zone.model_dump().items():
+    for key, value in zone.model_dump(exclude={
+        "quest_name", "quest_slug", "vocation_recommendations", "canonical_id",
+        "missing_fields", "data_sources", "spatial",
+    }).items():
         setattr(db_zone, key, value)
     
     db.commit()
