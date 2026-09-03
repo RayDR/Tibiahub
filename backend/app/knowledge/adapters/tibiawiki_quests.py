@@ -214,6 +214,8 @@ def _parse_missions(wikitext: str) -> tuple[tuple[QuestMissionDTO, ...], list[di
     missions: list[QuestMissionDTO] = []
     unparsed: list[dict[str, str]] = []
     saw_mission_section = False
+    saw_numbered_heading = False
+    saw_unnumbered_heading = False
     for level, heading, lines in _sections(wikitext):
         normalized_heading = normalize_name(heading)
         if level == 2:
@@ -229,7 +231,10 @@ def _parse_missions(wikitext: str) -> tuple[tuple[QuestMissionDTO, ...], list[di
         title_match = _MISSION_TITLE.match(heading)
         if not title_match:
             continue
-        sequence = int(title_match.group(1)) if title_match.group(1) else len(missions) + 1
+        provider_sequence = title_match.group(1)
+        saw_numbered_heading = saw_numbered_heading or provider_sequence is not None
+        saw_unnumbered_heading = saw_unnumbered_heading or provider_sequence is None
+        sequence = int(provider_sequence) if provider_sequence else len(missions) + 1
         title = (title_match.group(2) or heading).strip()
         objectives: list[str] = []
         prose: list[str] = []
@@ -262,6 +267,16 @@ def _parse_missions(wikitext: str) -> tuple[tuple[QuestMissionDTO, ...], list[di
             related_npcs=npcs, related_creatures=creatures, locations=locations,
             supplied_fields=frozenset(supplied),
         ))
+    sequences = [mission.sequence for mission in missions]
+    if (
+        saw_numbered_heading
+        and saw_unnumbered_heading
+        and len(sequences) != len(set(sequences))
+    ):
+        missions = [
+            replace(mission, sequence=sequence)
+            for sequence, mission in enumerate(missions, start=1)
+        ]
     return tuple(missions), unparsed, saw_mission_section
 
 

@@ -134,9 +134,26 @@ def test_quest_detail_extracts_missions_requirements_rewards_and_safe_unparsed_s
     assert [(value.name, value.amount) for value in dto.required_items] == [("Rope", 2), ("Shovel", 1)]
     assert [value.name for value in dto.rewarded_items] == ["Gold Coin", "Explorer Brooch"]
     assert [value.title for value in dto.missions] == ["Joining the Explorers", "The Calassa Expedition"]
+    assert [value.sequence for value in dto.missions] == [1, 2]
     assert dto.missions[0].objectives == ("Obtain a recommendation.",)
     assert dto.provider_metadata["unparsed_sections"][0]["heading"] == "Historical Notes"
     assert result.documents[0].raw_json["future_envelope_field"] == "retained"
+
+
+def test_quest_detail_preserves_unique_fully_numbered_provider_sequences():
+    raw = fixture("tibiawiki_quest_detail.json")
+    raw["parse"]["wikitext"]["*"] = raw["parse"]["wikitext"]["*"].replace(
+        "Mission 2: The Calassa Expedition",
+        "Mission 3: The Calassa Expedition",
+    )
+    adapter = TibiaWikiQuestAdapter(FixtureQuestClient())
+    result = KnowledgeFetchResult(documents=(detail_document(raw),))
+
+    assert adapter.validate(result).valid
+
+    normalized = adapter.normalize(result.documents[0], context())
+    dto = QuestKnowledgeDTO.from_canonical_data(normalized.canonical_data)
+    assert [mission.sequence for mission in dto.missions] == [1, 3]
 
 
 
