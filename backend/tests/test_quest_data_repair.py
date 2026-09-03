@@ -85,6 +85,33 @@ Dialogue omitted.
         }
 
 
+class MixedMissionFixtureClient(RepairFixtureClient):
+    def fetch_detail(self, *, external_id: str | None, page_title: str | None):
+        if page_title and page_title.endswith("/Spoiler"):
+            return {
+                "parse": {
+                    "pageid": 51842,
+                    "title": page_title,
+                    "links": [],
+                    "wikitext": {
+                        "*": """{{Infobox Quest
+|name=Children of the Revolution Quest
+|description=Help the lizard resistance.
+}}
+== Missions ==
+=== Prove Your Worzz! ===
+intro text
+=== Mission 1: Corruption ===
+mission text
+=== Mission 2: Something Else ===
+mission text
+""",
+                    },
+                }
+            }
+        return super().fetch_detail(external_id=external_id, page_title=page_title)
+
+
 def _request(
     job_type: str,
     payload: dict | None = None,
@@ -206,6 +233,29 @@ def test_spoiler_normalizes_into_parent_quest_with_one_method_mission_and_retain
     assert document.raw_json == raw_before
     assert document.raw_json["parse"]["pageid"] == 1700
     assert document.raw_json["parse"]["title"].endswith("/Spoiler")
+
+
+def test_spoiler_recovers_mixed_mission_sequence_collision_in_provider_order():
+    adapter = TibiaWikiOverviewQuestAdapter(MixedMissionFixtureClient())
+    result = adapter.fetch(_request(
+        "quest_spoiler_detail",
+        {
+            "parent_external_id": "41842",
+            "page_title": "Children of the Revolution Quest/Spoiler",
+        },
+    ))
+
+    assert adapter.validate(result).valid
+
+    normalized = adapter.normalize(result.documents[0], _context())
+    dto = QuestKnowledgeDTO.from_canonical_data(normalized.canonical_data)
+
+    assert [mission.sequence for mission in dto.missions] == [1, 2, 3]
+    assert [mission.title for mission in dto.missions] == [
+        "Prove Your Worzz!",
+        "Corruption",
+        "Something Else",
+    ]
 
 
 def test_manual_detail_without_catalog_evidence_does_not_claim_overview_membership():
