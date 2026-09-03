@@ -14,7 +14,8 @@ from app.knowledge.adapters.protocol import (
 )
 from app.knowledge.adapters.tibiawiki_creatures import HttpTibiaWikiCreatureClient, MAX_CREATURE_PAYLOAD_BYTES
 from app.knowledge.dto import (
-    LocationKnowledgeDTO, NamedKnowledgeReference, NpcKnowledgeDTO, NpcTradeReference,
+    LocationKnowledgeDTO, NamedKnowledgeReference, NpcDestinationReference,
+    NpcKnowledgeDTO, NpcTradeReference,
 )
 from app.knowledge.indexing import normalize_name
 from app.knowledge.services.failures import (
@@ -29,12 +30,18 @@ from app.services.text_utils import slugify
 
 MAX_REFERENCE_PAYLOAD_BYTES = MAX_CREATURE_PAYLOAD_BYTES
 MAX_REFERENCE_CATALOG_BATCH = 50
+MAX_NPC_DETAIL_BATCH_BYTES = 10 * 1024 * 1024
+NPC_CATALOG_CONTINUATION_PRIORITY = 190
 _UNSAFE_TEXT = re.compile(r"<\s*script\b|javascript\s*:|\bon(?:error|load)\s*=", re.I)
+_NON_ENTITY_NPC_TITLES = frozenset({
+    "...", "deprecated npcs", "npc outfitter codes", "npc sounds", "npcs", "traders",
+})
 
 
 class TibiaWikiNamedEntityClient(Protocol):
     def fetch_catalog(self, *, continuation: str | None, limit: int) -> dict[str, Any]: ...
     def fetch_detail(self, *, external_id: str | None, page_title: str | None) -> dict[str, Any]: ...
+    def fetch_details(self, *, members: list[dict[str, str]]) -> dict[str, Any]: ...
 
 
 class HttpTibiaWikiNamedEntityClient(HttpTibiaWikiCreatureClient):
@@ -62,6 +69,18 @@ class HttpTibiaWikiNamedEntityClient(HttpTibiaWikiCreatureClient):
             raise ValueError("Detail jobs require an external ID or page title")
         return self._request(params)
 
+    def fetch_details(self, *, members: list[dict[str, str]]) -> dict[str, Any]:
+        page_ids = [member["external_id"] for member in members]
+        return self._request({
+            "action": "query",
+            "pageids": "|".join(page_ids),
+            "prop": "revisions",
+            "rvprop": "content",
+            "rvslots": "main",
+            "format": "json",
+            "formatversion": "2",
+        })
+
 
 def _size(value: dict[str, Any]) -> int:
     return len(json.dumps(value, ensure_ascii=False, separators=(",", ":")).encode())
@@ -86,7 +105,70 @@ def _names(params: dict[str, str], *keys: str) -> tuple[tuple[NamedKnowledgeRefe
     names = _extract_links(value)
     if not names:
         names = [part.strip() for part in re.split(r"[,;\n]", _strip_markup(value)) if part.strip()]
+    # Provider placeholders are absence markers, not named canonical evidence.
+    names = [name for name in names if name.strip().casefold() not in {"-", "--", "n/a", "none", "unknown"}]
+    if not names:
+        return (), False
     return tuple(NamedKnowledgeReference(name=name) for name in dict.fromkeys(names)), supplied
+
+
+def _structured_location_names(
+    params: dict[str, str],
+    raw_location: str | None,
+) -> tuple[tuple[NamedKnowledgeReference, ...], str | None]:
+    """Keep provider place fields separate from arbitrary location prose."""
+    values: list[str] = []
+    subarea = _strip_markup(params.get("subarea") or "").strip()
+    if subarea:
+        values.append(subarea)
+    for key, value in params.items():
+        if not re.fullmatch(r"city\d*", key):
+            continue
+        name = _strip_markup(value).strip()
+        if name:
+            values.append(name)
+    if not values and raw_location:
+        links = _extract_links(raw_location)
+        stripped = _strip_markup(raw_location).strip(" .")
+        if len(links) == 1 and normalize_name(stripped) == normalize_name(links[0]):
+            values.append(links[0])
+    unique = tuple(
+        NamedKnowledgeReference(name=value)
+        for value in dict.fromkeys(values)
+        if normalize_name(value)
+    )
+    if not unique:
+        return (), "text_only" if raw_location else None
+    if "predictloc" in params:
+        return unique, "moving"
+    if len([key for key in params if re.fullmatch(r"city\d*", key)]) > 1:
+        return unique, "multiple"
+    return unique, "static"
+
+
+_TRANSPORT_CELL_RE = re.compile(
+    r"\{\{\s*TransportCell\s*\|\s*([^|}\n]+?)(?:\|\s*([\d,]+))?(?:\||}})",
+    re.IGNORECASE,
+)
+
+
+def _transport_destinations(wikitext: str) -> tuple[NpcDestinationReference, ...]:
+    values: list[NpcDestinationReference] = []
+    seen: set[str] = set()
+    for match in _TRANSPORT_CELL_RE.finditer(wikitext):
+        name = _strip_markup(match.group(1)).strip()
+        normalized = normalize_name(name)
+        if not normalized or normalized in seen:
+            continue
+        price_text = (match.group(2) or "").replace(",", "")
+        price = int(price_text) if price_text.isdigit() else None
+        values.append(NpcDestinationReference(
+            name=name,
+            price=price,
+            currency="gold_coin" if price is not None else None,
+        ))
+        seen.add(normalized)
+    return tuple(values)
 
 
 def _envelope(raw: dict[str, Any]) -> tuple[str, str, str, dict[str, str]]:
@@ -109,27 +191,45 @@ def _npc_parts(raw: dict[str, Any]) -> tuple[str, str, str, NpcKnowledgeDTO]:
     title, title_supplied = _text(params, "title")
     occupation, occupation_supplied = _text(params, "job", "occupation", "profession")
     sex, sex_supplied = _text(params, "sex", "gender")
-    location, location_supplied = _text(params, "location", "city")
+    raw_location, location_supplied = _first(params, "location")
+    location_text = _strip_markup(raw_location or "") or None
+    location_names, location_mode = _structured_location_names(params, raw_location)
+    location = location_names[0].name if location_names and location_mode == "static" else None
     description, description_supplied = _text(params, "description", "notes")
     buys, buys_supplied = _names(params, "buys", "buyfrom", "buy from")
     sells, sells_supplied = _names(params, "sells", "sellsto", "sells to")
-    destinations, destinations_supplied = _names(params, "destinations", "destination", "travelsto")
+    named_destinations, destinations_supplied = _names(params, "destinations", "destination", "travelsto")
+    transport_destinations = _transport_destinations(wikitext)
+    destinations = transport_destinations or tuple(
+        NpcDestinationReference(name=value.name) for value in named_destinations
+    )
+    destinations_supplied = destinations_supplied or bool(transport_destinations)
     quests, quests_supplied = _names(params, "quests", "relatedquests", "related quests")
     supplied = frozenset(key for key, flag in {
         "canonical_name": name_supplied, "title": title_supplied, "occupation": occupation_supplied,
-        "sex": sex_supplied, "location_name": location_supplied, "description": description_supplied,
+        "sex": sex_supplied, "location_name": bool(location_names),
+        "location_text": location_supplied, "location_names": bool(location_names),
+        "location_mode": location_mode is not None, "description": description_supplied,
         "buys": buys_supplied, "sells": sells_supplied, "destinations": destinations_supplied,
         "related_quests": quests_supplied, "image_reference": True, "source_reference": True, "slug": True,
     }.items() if flag)
     aliases = () if normalize_name(page_title) == normalize_name(canonical_name) else (page_title,)
     dto = NpcKnowledgeDTO(
         external_id=external_id, canonical_name=canonical_name, slug=slugify(canonical_name), aliases=aliases,
-        title=title, occupation=occupation, sex=sex, location_name=location, description=description,
+        title=title, occupation=occupation, sex=sex, location_name=location,
+        location_text=location_text, location_names=location_names, location_mode=location_mode,
+        description=description,
         buys=tuple(NpcTradeReference(name=value.name) for value in buys),
         sells=tuple(NpcTradeReference(name=value.name) for value in sells),
         destinations=destinations, related_quests=quests,
         image_reference=_build_sprite_url(canonical_name), source_reference=_build_wiki_page_url(page_title),
-        provider_metadata={"page_title": page_title, "template_parameters": sorted(params)},
+        provider_metadata={
+            "page_title": page_title,
+            "template_parameters": sorted(params),
+            "location_text": location_text,
+            "location_names": [value.name for value in location_names],
+            "location_mode": location_mode,
+        },
         supplied_fields=supplied,
     )
     return external_id, page_title, wikitext, replace(dto, is_partial=not dto.sufficient_detail)
@@ -254,7 +354,10 @@ class _TibiaWikiNamedEntityAdapter:
 
     @property
     def job_types(self) -> tuple[str, ...]:
-        return tuple(f"{self.entity_type}_{suffix}" for suffix in ("catalog", "detail", "renormalize"))
+        suffixes = ["catalog", "detail", "renormalize"]
+        if self.entity_type == "npc":
+            suffixes.append("detail_batch")
+        return tuple(f"{self.entity_type}_{suffix}" for suffix in suffixes)
 
     def supports(self, job_type: str, entity_type: str | None) -> bool:
         return entity_type == self.entity_type and job_type in self.job_types
@@ -266,6 +369,18 @@ class _TibiaWikiNamedEntityAdapter:
                 raise ValueError("Catalog jobs require an explicit batch_limit between 1 and 50")
             if payload or set(scope) != {"batch_limit"}:
                 raise ValueError("Manual catalog jobs accept only batch_limit")
+            return
+        if job_type == "npc_detail_batch":
+            members = payload.get("members")
+            if scope or set(payload) != {"members"} or not isinstance(members, list) or not 1 <= len(members) <= 50:
+                raise ValueError("NPC detail batches require between 1 and 50 stable members")
+            for member in members:
+                if not isinstance(member, dict) or set(member) != {"external_id", "page_title"}:
+                    raise ValueError("NPC detail batches require stable page IDs and titles")
+                external_id = str(member.get("external_id") or "").strip()
+                page_title = str(member.get("page_title") or "").strip()
+                if not external_id.isdigit() or len(external_id) > 20 or not page_title or len(page_title) > 255:
+                    raise ValueError("NPC detail batch identifiers are invalid")
             return
         if set(payload) - {"external_id", "page_title"} or set(scope) - {"language"}:
             raise ValueError("Detail jobs accept only stable identifiers")
@@ -283,6 +398,8 @@ class _TibiaWikiNamedEntityAdapter:
     def fetch(self, request: KnowledgeFetchRequest) -> KnowledgeFetchResult:
         if request.job_type.endswith("_catalog"):
             return self._fetch_catalog(request)
+        if request.job_type == "npc_detail_batch":
+            return self._fetch_npc_detail_batch(request)
         stored = request.job_type.endswith("_renormalize") and "_stored_document" in request.payload
         raw = request.payload.get("_stored_document") if stored else self.client.fetch_detail(
             external_id=str(request.payload.get("external_id") or "").strip() or None,
@@ -309,6 +426,71 @@ class _TibiaWikiNamedEntityAdapter:
             provider_metadata={"source": "stored_document" if stored else "tibiawiki"},
         )
 
+    def _fetch_npc_detail_batch(self, request: KnowledgeFetchRequest) -> KnowledgeFetchResult:
+        members = request.payload.get("members")
+        if not isinstance(members, list):
+            raise MalformedProviderPayloadError()
+        raw = self.client.fetch_details(members=members)
+        if _size(raw) > MAX_NPC_DETAIL_BATCH_BYTES or raw.get("error"):
+            raise OversizedProviderResponseError() if _size(raw) > MAX_NPC_DETAIL_BATCH_BYTES else ProviderResponseEnvelopeError()
+        pages = (raw.get("query") or {}).get("pages")
+        if not isinstance(pages, list):
+            raise MalformedProviderPayloadError()
+        documents: list[KnowledgeDocumentDTO] = []
+        invalid = 0
+        for page in pages:
+            revisions = page.get("revisions") if isinstance(page, dict) else None
+            slot = ((revisions or [{}])[0].get("slots") or {}).get("main") if revisions else None
+            wikitext = slot.get("content") if isinstance(slot, dict) else None
+            converted = {"parse": {
+                "pageid": page.get("pageid") if isinstance(page, dict) else None,
+                "title": page.get("title") if isinstance(page, dict) else None,
+                "wikitext": {"*": wikitext},
+            }}
+            try:
+                external_id, page_title, _wikitext, dto = self.parts(converted)
+            except (KeyError, TypeError, ValueError, MalformedProviderPayloadError):
+                invalid += 1
+                raw_external_id = str(page.get("pageid") or "").strip() if isinstance(page, dict) else ""
+                raw_title = str(page.get("title") or "").strip() if isinstance(page, dict) else ""
+                if raw_external_id.isdigit() and raw_title:
+                    documents.append(KnowledgeDocumentDTO(
+                        self.provider_code,
+                        f"npc_raw:{raw_external_id}",
+                        converted,
+                        version="mediawiki-v1",
+                        language="en",
+                        metadata={
+                            "document_kind": "npc_raw_detail",
+                            "external_id": raw_external_id,
+                            "page_title": raw_title,
+                            "batch_fetch": True,
+                            "raw_only_reason": "malformed_or_insufficient_detail",
+                        },
+                    ))
+                continue
+            documents.append(KnowledgeDocumentDTO(
+                self.provider_code,
+                f"npc:{external_id}",
+                converted,
+                version="mediawiki-v1",
+                language="en",
+                metadata={
+                    "document_kind": "npc_detail",
+                    "external_id": external_id,
+                    "page_title": page_title,
+                    "batch_fetch": True,
+                },
+            ))
+            invalid += int(dto.is_partial)
+        if not documents:
+            raise MalformedProviderPayloadError()
+        return KnowledgeFetchResult(
+            documents=tuple(documents),
+            partial=invalid > 0,
+            provider_metadata={"source": "tibiawiki_batch", "invalid_members": invalid},
+        )
+
     def _fetch_catalog(self, request: KnowledgeFetchRequest) -> KnowledgeFetchResult:
         continuation = str(request.scope.get("continuation") or "").strip() or None
         limit = int(request.scope["batch_limit"])
@@ -321,24 +503,39 @@ class _TibiaWikiNamedEntityAdapter:
         if not isinstance(members, list):
             raise MalformedProviderPayloadError()
         children: list[KnowledgeChildJobRequest] = []
+        valid_members: list[dict[str, str]] = []
         invalid = 0
         for member in members:
             external_id = str(member.get("pageid") or "").strip() if isinstance(member, dict) else ""
             title = str(member.get("title") or "").strip() if isinstance(member, dict) else ""
-            if not external_id.isdigit() or not title or ":" in title or len(title) > 255:
+            if (
+                not external_id.isdigit() or not title or ":" in title or len(title) > 255
+                or (self.entity_type == "npc" and title.strip().casefold() in _NON_ENTITY_NPC_TITLES)
+            ):
                 invalid += 1
                 continue
+            valid_members.append({"external_id": external_id, "page_title": title})
+        if self.entity_type == "npc" and valid_members:
             children.append(KnowledgeChildJobRequest(
-                job_type=f"{self.entity_type}_detail", entity_type=self.entity_type,
-                payload={"external_id": external_id, "page_title": title},
-                priority=100, allow_completed_recreate=True,
+                job_type="npc_detail_batch", entity_type="npc",
+                payload={"members": valid_members}, priority=100,
+                allow_completed_recreate=True,
             ))
+        else:
+            children.extend(
+                KnowledgeChildJobRequest(
+                    job_type=f"{self.entity_type}_detail", entity_type=self.entity_type,
+                    payload=member, priority=100, allow_completed_recreate=True,
+                )
+                for member in valid_members
+            )
         next_token = str((raw.get("continue") or {}).get("cmcontinue") or "").strip() or None
         if next_token:
             children.append(KnowledgeChildJobRequest(
                 job_type=f"{self.entity_type}_catalog", entity_type=self.entity_type,
                 scope={"batch_limit": limit, "continuation": next_token},
-                priority=90, allow_completed_recreate=True,
+                priority=(NPC_CATALOG_CONTINUATION_PRIORITY if self.entity_type == "npc" else 90),
+                allow_completed_recreate=True,
             ))
         return KnowledgeFetchResult(
             documents=(KnowledgeDocumentDTO(
@@ -346,8 +543,13 @@ class _TibiaWikiNamedEntityAdapter:
                 version="mediawiki-v1",
                 metadata={"document_kind": f"{self.entity_type}_catalog", "batch_limit": limit},
             ),),
-            cursor={"continuation": next_token, "members_processed": len(children) - int(bool(next_token))},
-            partial=invalid > 0, provider_metadata={"invalid_members": invalid}, child_jobs=tuple(children),
+            cursor={"continuation": next_token, "members_processed": len(valid_members)},
+            partial=invalid > 0,
+            provider_metadata={
+                "invalid_members": invalid,
+                **({"discovered": len(valid_members)} if self.entity_type == "npc" else {}),
+            },
+            child_jobs=tuple(children),
         )
 
     def validate(self, result: KnowledgeFetchResult) -> KnowledgeValidationResult:
@@ -359,6 +561,9 @@ class _TibiaWikiNamedEntityAdapter:
                 return KnowledgeValidationResult(False, classification="invalid", safe_errors=("invalid_envelope",))
             if document.raw_json.get("error"):
                 return KnowledgeValidationResult(False, classification="provider_error", safe_errors=("provider_error",))
+            if document.metadata.get("document_kind") == "npc_raw_detail":
+                partial = True
+                continue
             if document.metadata.get("document_kind") == f"{self.entity_type}_catalog":
                 members = (document.raw_json.get("query") or {}).get("categorymembers")
                 if not isinstance(members, list) or not members:

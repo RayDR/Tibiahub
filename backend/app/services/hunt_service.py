@@ -5,6 +5,7 @@ from sqlalchemy.orm import Session
 from typing import List, Optional
 from app.models import HuntZone, Creature, SpawnLocation
 from app.schemas import HuntRecommendation, HuntZone as HuntZoneSchema, CreatureSimple
+from app.services.hunt_zone_projection_service import public_zone_fields
 
 
 class HuntRecommendationService:
@@ -69,7 +70,10 @@ class HuntRecommendationService:
                 
                 recommendations.append(
                     HuntRecommendation(
-                        zone=HuntZoneSchema.from_orm(zone),
+                        zone=HuntZoneSchema.model_validate({
+                            **public_zone_fields(zone),
+                            "id": zone.id,
+                        }),
                         score=score,
                         reasons=reasons,
                         creatures=creatures

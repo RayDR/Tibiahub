@@ -1,6 +1,7 @@
 import { FormEvent, useCallback, useEffect, useRef, useState } from "react";
 import { Link, useParams } from "react-router-dom";
 import { useTranslation } from "react-i18next";
+import { formatDate, formatDateTime } from "../../utils/locale";
 import {
   CalendarClock,
   CheckCircle2,
@@ -13,7 +14,7 @@ import {
 import {
   AssistanceBanner,
   EmptyState,
-  WorkspaceHeader,
+  WorkspaceContentHeader,
 } from "../../components/workspace/WorkspacePrimitives";
 import {
   InlineError,
@@ -26,20 +27,23 @@ import {
 import {
   LeadershipAction,
   LeadershipApplication,
+  LeadershipScope,
   LeadershipSummary,
   leadershipApi,
 } from "../../services/leadership";
 import { useConfirmation } from "../../context/ConfirmationContext";
+import { useGuildContext } from "../../utils/guildContext";
 
 export default function LeadershipApplicationDetail({
   admin = false,
 }: {
   admin?: boolean;
 }) {
-  const { t } = useTranslation();
+  const { t, i18n } = useTranslation();
   const confirmation = useConfirmation();
   const params = useParams();
   const guildKey = admin ? params.guildKey : undefined;
+  const selectedGuild = useGuildContext();
   const id = Number(params.applicationId);
   const [application, setApplication] = useState<LeadershipApplication | null>(
     null,
@@ -54,8 +58,8 @@ export default function LeadershipApplicationDetail({
     : undefined;
   const load = useCallback(async () => {
     const [appResult, summaryResult] = await Promise.allSettled([
-      leadershipApi.application(id, guildKey),
-      leadershipApi.summary(guildKey),
+      leadershipApi.application(id, { guildKey, guildName: selectedGuild }),
+      leadershipApi.summary({ guildKey, guildName: selectedGuild }),
     ]);
     if (appResult.status === "fulfilled") setApplication(appResult.value);
     if (summaryResult.status === "fulfilled") setSummary(summaryResult.value);
@@ -63,7 +67,7 @@ export default function LeadershipApplicationDetail({
       application: appResult.status === "rejected",
       summary: summaryResult.status === "rejected",
     });
-  }, [id, guildKey]);
+  }, [id, guildKey, selectedGuild]);
   useEffect(() => {
     void load();
   }, [load]);
@@ -107,8 +111,8 @@ export default function LeadershipApplicationDetail({
     if (!reason) return Promise.resolve();
     return action(() =>
       target === "rejected"
-        ? leadershipApi.decision(application.id, "rejected", reason, guildKey)
-        : leadershipApi.status(application.id, "cancelled", reason, guildKey),
+        ? leadershipApi.decision(application.id, "rejected", reason, { guildKey, guildName: selectedGuild })
+        : leadershipApi.status(application.id, "cancelled", reason, { guildKey, guildName: selectedGuild }),
     );
   };
   return (
@@ -118,14 +122,13 @@ export default function LeadershipApplicationDetail({
         candidate={application.character_name}
         adminBase={adminBase}
       />
-      <WorkspaceHeader
+      <WorkspaceContentHeader
         title={application.character_name}
-        subtitle={application.opening_title}
-        badge={t(`leadership.status.${application.status}`)}
+        description={application.opening_title}
         action={
           <Link
             to={`${adminBase || "/guild"}/leadership/recruitment`}
-            className="inline-flex min-h-11 items-center rounded-lg border border-line px-4"
+            className="app-button-secondary inline-flex min-h-11 items-center rounded-lg border border-line px-4"
           >
             {t("leadership.actions.backToPipeline")}
           </Link>
@@ -167,7 +170,7 @@ export default function LeadershipApplicationDetail({
               <StatusChip status={application.status} />
               <span className="rounded-full border border-line px-2.5 py-1 text-xs">
                 {t("leadership.conduct.accepted")} ·{" "}
-                {new Date(application.conduct_agreed_at).toLocaleDateString()}
+                {formatDate(application.conduct_agreed_at, i18n.resolvedLanguage || i18n.language)}
               </span>
             </div>
           </SectionCard>
@@ -219,7 +222,7 @@ export default function LeadershipApplicationDetail({
                           : "applicant_reply",
                         body,
                       },
-                      guildKey,
+                      { guildKey, guildName: selectedGuild },
                     ),
                   )
                 }
@@ -247,7 +250,7 @@ export default function LeadershipApplicationDetail({
                         message_type: "internal_comment",
                         body,
                       },
-                      guildKey,
+                      { guildKey, guildName: selectedGuild },
                     ),
                   )
                 }
@@ -260,7 +263,7 @@ export default function LeadershipApplicationDetail({
               application={application}
               manager={manager}
               busy={busy}
-              guildKey={guildKey}
+              scope={{ guildKey, guildName: selectedGuild }}
               run={action}
             />
           )}
@@ -268,7 +271,7 @@ export default function LeadershipApplicationDetail({
             <VoteSection
               application={application}
               busy={busy}
-              guildKey={guildKey}
+              scope={{ guildKey, guildName: selectedGuild }}
               run={action}
             />
           )}
@@ -277,7 +280,7 @@ export default function LeadershipApplicationDetail({
               application={application}
               manager={manager}
               busy={busy}
-              guildKey={guildKey}
+              scope={{ guildKey, guildName: selectedGuild }}
               run={action}
             />
           )}
@@ -289,7 +292,7 @@ export default function LeadershipApplicationDetail({
               busy={busy}
               run={action}
               application={application}
-              guildKey={guildKey}
+              scope={{ guildKey, guildName: selectedGuild }}
               reasonAction={reasonAction}
             />
             {application.valid_actions.length === 0 && (
@@ -330,7 +333,7 @@ export default function LeadershipApplicationDetail({
                   void executeSimple(
                     actionName,
                     application,
-                    guildKey,
+                    { guildKey, guildName: selectedGuild },
                     action,
                     reasonAction,
                     t,
@@ -349,16 +352,16 @@ type Run = (work: () => Promise<unknown>) => Promise<void>;
 async function executeSimple(
   name: LeadershipAction,
   app: LeadershipApplication,
-  guildKey: string | undefined,
+  scope: LeadershipScope,
   run: Run,
   reasonAction: (target: "rejected" | "cancelled") => Promise<void>,
   t: (key: string) => string,
   askConfirm: (message: string) => Promise<boolean>,
 ) {
-  if (name === "withdraw") return run(() => leadershipApi.withdraw(app.id));
+  if (name === "withdraw") return run(() => leadershipApi.withdraw(app.id, scope));
   if (name === "start_review" || name === "return_to_review")
     return run(() =>
-      leadershipApi.status(app.id, "under_review", undefined, guildKey),
+      leadershipApi.status(app.id, "under_review", undefined, scope),
     );
   if (name === "request_information")
     return run(() =>
@@ -366,18 +369,18 @@ async function executeSimple(
         app.id,
         "more_information_requested",
         undefined,
-        guildKey,
+        scope,
       ),
     );
   if (name === "start_voting")
     return run(() =>
-      leadershipApi.status(app.id, "voting", undefined, guildKey),
+      leadershipApi.status(app.id, "voting", undefined, scope),
     );
   if (name === "accept") {
     if (!(await askConfirm(t("leadership.confirmations.accept"))))
       return Promise.resolve();
     return run(() =>
-      leadershipApi.decision(app.id, "accepted", undefined, guildKey),
+      leadershipApi.decision(app.id, "accepted", undefined, scope),
     );
   }
   if (name === "reject") return reasonAction("rejected");
@@ -389,14 +392,14 @@ function ActionList({
   busy,
   run,
   application,
-  guildKey,
+  scope,
   reasonAction,
 }: {
   actions: LeadershipAction[];
   busy: boolean;
   run: Run;
   application: LeadershipApplication;
-  guildKey?: string;
+  scope: LeadershipScope;
   reasonAction: (target: "rejected" | "cancelled") => Promise<void>;
 }) {
   const { t } = useTranslation();
@@ -423,7 +426,7 @@ function ActionList({
             void executeSimple(
               name,
               application,
-              guildKey,
+              scope,
               run,
               reasonAction,
               t,
@@ -463,11 +466,12 @@ function Message({
 }: {
   item: LeadershipApplication["messages"][number];
 }) {
+  const { i18n } = useTranslation();
   return (
     <article className="rounded-lg bg-surface-base p-3">
       <div className="flex flex-wrap justify-between gap-2 text-xs text-content-muted">
         <span>{item.author_name}</span>
-        <time>{new Date(item.created_at).toLocaleString()}</time>
+        <time>{formatDateTime(item.created_at, i18n.resolvedLanguage || i18n.language)}</time>
       </div>
       <p className="mt-1 whitespace-pre-wrap text-sm">{item.body}</p>
     </article>
@@ -515,16 +519,16 @@ function InterviewSection({
   application,
   manager,
   busy,
-  guildKey,
+  scope,
   run,
 }: {
   application: LeadershipApplication;
   manager: boolean;
   busy: boolean;
-  guildKey?: string;
+  scope: LeadershipScope;
   run: Run;
 }) {
-  const { t } = useTranslation();
+  const { t, i18n } = useTranslation();
   const interview = application.interview;
   const submit = async (event: FormEvent<HTMLFormElement>) => {
     event.preventDefault();
@@ -541,7 +545,7 @@ function InterviewSection({
           interview_notes: form.get("notes"),
           completed: false,
         },
-        guildKey,
+        scope,
       ),
     );
   };
@@ -553,7 +557,7 @@ function InterviewSection({
       {interview && (
         <div className="rounded-lg bg-surface-base p-3">
           <p className="font-medium">
-            {new Date(interview.scheduled_at).toLocaleString()}
+            {formatDateTime(interview.scheduled_at, i18n.resolvedLanguage || i18n.language)}
           </p>
           <p className="text-sm text-content-secondary">
             {interview.timezone} · {interview.meeting_location}
@@ -622,12 +626,12 @@ function InterviewSection({
 function VoteSection({
   application,
   busy,
-  guildKey,
+  scope,
   run,
 }: {
   application: LeadershipApplication;
   busy: boolean;
-  guildKey?: string;
+  scope: LeadershipScope;
   run: Run;
 }) {
   const { t } = useTranslation();
@@ -672,7 +676,7 @@ function VoteSection({
         disabled={busy}
         onClick={() =>
           void run(() =>
-            leadershipApi.vote(application.id, vote, comment, guildKey),
+            leadershipApi.vote(application.id, vote, comment, scope),
           )
         }
         className="min-h-11 w-full rounded-lg bg-primary font-semibold text-content-inverse"
@@ -691,16 +695,16 @@ function Onboarding({
   application,
   manager,
   busy,
-  guildKey,
+  scope,
   run,
 }: {
   application: LeadershipApplication;
   manager: boolean;
   busy: boolean;
-  guildKey?: string;
+  scope: LeadershipScope;
   run: Run;
 }) {
-  const { t } = useTranslation();
+  const { t, i18n } = useTranslation();
   const confirmation = useConfirmation();
   const assignment = application.assignment;
   const [note, setNote] = useState("");
@@ -723,7 +727,7 @@ function Onboarding({
           </dt>
           <dd>
             {application.final_decision_at
-              ? new Date(application.final_decision_at).toLocaleString()
+              ? formatDateTime(application.final_decision_at, i18n.resolvedLanguage || i18n.language)
               : t("leadership.common.unknown")}
           </dd>
         </div>
@@ -742,7 +746,7 @@ function Onboarding({
             <dt className="text-content-muted">
               {t("leadership.onboarding.completedAt")}
             </dt>
-            <dd>{new Date(assignment.in_game_promoted_at).toLocaleString()}</dd>
+            <dd>{formatDateTime(assignment.in_game_promoted_at, i18n.resolvedLanguage || i18n.language)}</dd>
           </div>
         )}
       </dl>
@@ -762,7 +766,7 @@ function Onboarding({
             onClick={async () => {
               if (await confirmation.confirm(t("leadership.confirmations.promotion")))
                 void run(() =>
-                  leadershipApi.promotion(assignment.id, true, note, guildKey),
+                  leadershipApi.promotion(assignment.id, true, note, scope),
                 );
             }}
             className="min-h-11 rounded-lg bg-success px-4 font-semibold text-content-on-primary"

@@ -243,9 +243,16 @@ def persist_map_region(
             current.source_document_id = document.uuid
         return current
     transition = _version_transition(current)
+    geometry_bounds = dto.geometry_bounds
     row = SpatialMapRegion(
         knowledge_entity_id=entity.uuid, location_entity_id=location.uuid if location else None,
-        external_id=dto.external_id, name=dto.name, min_z=dto.minimum_z, max_z=dto.maximum_z,
+        external_id=dto.external_id, name=dto.name,
+        min_x=geometry_bounds[0] if geometry_bounds else None,
+        min_y=geometry_bounds[1] if geometry_bounds else None,
+        min_z=dto.minimum_z if dto.minimum_z is not None else (geometry_bounds[2] if geometry_bounds else None),
+        max_x=geometry_bounds[3] if geometry_bounds else None,
+        max_y=geometry_bounds[4] if geometry_bounds else None,
+        max_z=dto.maximum_z if dto.maximum_z is not None else (geometry_bounds[5] if geometry_bounds else None),
         unresolved_location_name=None if location else dto.location_name,
         normalized_unresolved_location_name=normalize_name(dto.location_name or "") or None,
         source_provider_id=provider, source_document_id=document.uuid if document else None,

@@ -39,6 +39,30 @@ const publicPageFiles = [
   'src/pages/VerifyEmail.tsx',
   'src/pages/NotFound.tsx',
 ];
+const workspaceSectionFiles = [
+  'src/pages/guild/Dashboard.tsx',
+  'src/pages/guild/Members.tsx',
+  'src/pages/guild/Announcements.tsx',
+  'src/pages/guild/Events.tsx',
+  'src/pages/guild/Leadership.tsx',
+  'src/pages/guild/LeadershipRecruitment.tsx',
+  'src/pages/guild/GuildHuntPlanner.tsx',
+  'src/pages/guild/RafflesWorkspace.tsx',
+  'src/pages/guild/Raffle.tsx',
+  'src/pages/guild/Notifications.tsx',
+  'src/pages/Admin/Overview.tsx',
+  'src/pages/Admin/Users.tsx',
+  'src/pages/Admin/GuildDirectory.tsx',
+  'src/pages/Admin/AssistanceHub.tsx',
+  'src/pages/Admin/RaffleAssistance.tsx',
+  'src/pages/Admin/AdminGuildWorkspace.tsx',
+  'src/pages/Admin/DataTools.tsx',
+  'src/pages/Admin/AuditHub.tsx',
+  'src/pages/Admin/MaintenanceControl.tsx',
+  'src/pages/Admin/Maintenance.tsx',
+  'src/pages/Admin/Settings.tsx',
+  'src/pages/Admin/ThemePlayground.tsx',
+];
 
 const publicRootAllowlist = {
   maxWidth: new Set(),
@@ -70,6 +94,13 @@ function readRootClassEntries(text) {
 for (const token of ['app-shell-main', 'app-mobile-nav', 'app-context-bar', 'workspace-nav', 'workspace-content', 'responsive-card-list', 'responsive-data-table']) {
   if (!css.includes(`.${token}`)) failures.push(`design-system.css is missing .${token}`);
 }
+for (const token of ['--workspace-sidebar-width', '--workspace-shell-gap', '--workspace-section-gap']) {
+  if (!css.includes(token)) failures.push(`design-system.css is missing ${token}`);
+}
+for (const className of ['workspace-shell-body', 'workspace-content-header', 'workspace-content-header-actions', 'workspace-page']) {
+  if (!css.includes(`.${className}`)) failures.push(`design-system.css is missing .${className}`);
+}
+if (!css.includes('.workspace-nav-link:focus-visible') || !css.includes('.workspace-nav-link[aria-disabled="true"]')) failures.push('workspace navigation focus-visible or disabled states are incomplete');
 for (const width of viewportWidths) {
   if (width < 320) failures.push(`unsupported viewport ${width}px`);
 }
@@ -93,6 +124,14 @@ if (!navigation.includes('app-primary-nav') || !navigation.includes('z-navbar'))
 if (!css.includes('.app-primary-nav { isolation: isolate; overflow: visible; }')) failures.push('primary navigation stacking context or overflow contract is incomplete');
 if (!appShell.includes("isMapWorkspace ? children") || !appShell.includes('app-shell-main-map')) failures.push('map workspace does not bypass page framing and mobile footer padding');
 if (cyclopedia.includes("'app-sticky-offset sticky z-40'")) failures.push('Cyclopedia sticky controls still use an unscoped numeric navbar-adjacent layer');
+if (!source('src/components/workspace/WorkspacePrimitives.tsx').includes("aria-current={active ? 'page' : undefined}")) failures.push('workspace navigation does not expose its current section');
+
+for (const file of workspaceSectionFiles) {
+  const text = source(file);
+  if (!text.includes('workspace-page')) failures.push(`${file}: workspace page does not use the shared section-spacing contract`);
+  if (!text.includes('WorkspaceContentHeader')) failures.push(`${file}: workspace page does not use the shared content header`);
+  if (/<PageHeader\b|<h1\b/.test(text)) failures.push(`${file}: workspace page still defines an independent h1-level header`);
+}
 
 if (!compactStrip.includes('Math.abs(delta) > 6') || !compactStrip.includes('drag.suppressClick = true')) failures.push('compact strip drag threshold/click suppression guard is incomplete');
 if (!compactStrip.includes("if (variant !== 'rail')")) failures.push('compact strip applies drag behavior outside rail variant');

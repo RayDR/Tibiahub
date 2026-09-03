@@ -1,4 +1,4 @@
-from sqlalchemy import CheckConstraint, Column, ForeignKey, Index, Integer, String, Text, DateTime, UniqueConstraint, func
+from sqlalchemy import CheckConstraint, Column, ForeignKey, Index, Integer, String, Text, DateTime, UniqueConstraint, Uuid, func
 from sqlalchemy.orm import relationship
 from app.db.database import Base
 from app.db.types import JSONBType
@@ -32,6 +32,7 @@ class GuildHunt(Base):
         CheckConstraint("required_ek >= 0 AND required_ed >= 0 AND required_rp >= 0 AND required_ms >= 0", name="ck_guild_hunt_nonnegative_roles"),
         Index("ix_guild_hunts_guild_schedule", "guild_name", "scheduled_at"),
         Index("ix_guild_hunts_guild_status", "guild_name", "status"),
+        Index("ix_guild_hunts_hunting_zone_id", "hunting_zone_id"),
     )
 
     id = Column(Integer, primary_key=True)
@@ -41,6 +42,11 @@ class GuildHunt(Base):
     server_name = Column(String(100), nullable=False)
     location = Column(String(200), nullable=False)
     target = Column(String(200), nullable=False)
+    hunting_zone_id = Column(
+        Uuid(as_uuid=True),
+        ForeignKey("knowledge_entities.uuid", ondelete="RESTRICT"),
+        nullable=True,
+    )
     recommended_level = Column(Integer, nullable=False)
     recommended_vocations = Column(JSONBType, nullable=False, default=list)
     maximum_participants = Column(Integer, nullable=False)

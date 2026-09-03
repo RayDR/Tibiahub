@@ -63,10 +63,10 @@ export default function GuildLayout() {
     subtitle={t('workspace.guild.context', { character: context.representative_character_name || user?.tibia_character_name || user?.username })}
     badge={t('workspace.guild.commandCenter')}
     icon={<span className="grid size-10 place-items-center rounded-lg bg-primary-subtle"><Shield className="size-5" /></span>}
-    action={<div className="flex flex-wrap items-center gap-2">
-      {guilds.length > 1 && <label className="grid gap-1 text-xs text-content-muted">
+    action={<div className="flex min-w-0 max-w-full flex-wrap items-center gap-2">
+      {guilds.length > 1 && <label className="grid min-w-0 max-w-full gap-1 text-xs text-content-muted">
         <span>{t('workspace.guild.selectGuild')}</span>
-        <select value={selectedGuild} onChange={event => setSelectedGuild(event.target.value)} className="min-h-11 rounded-lg border border-line bg-surface px-3 text-sm text-content-primary">
+        <select value={selectedGuild} onChange={event => setSelectedGuild(event.target.value)} className="min-h-11 max-w-full rounded-lg border border-line bg-surface px-3 text-sm text-content-primary">
           {guilds.map(item => <option key={item.guild_name} value={item.guild_name}>{item.guild_name}</option>)}
         </select>
       </label>}

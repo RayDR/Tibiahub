@@ -1,6 +1,7 @@
 from pydantic import BaseModel, ConfigDict, Field, field_validator, model_validator
 from typing import Literal, Optional
 from datetime import datetime
+from uuid import UUID
 
 class HuntBase(BaseModel):
     name: str
@@ -49,6 +50,7 @@ class GuildHuntCreate(BaseModel):
     server_name: str = Field(min_length=1, max_length=100)
     location: str = Field(min_length=2, max_length=200)
     target: str = Field(min_length=2, max_length=200)
+    hunting_zone_id: UUID | None = None
     recommended_level: int = Field(ge=1, le=9999)
     recommended_vocations: list[VocationCode] = Field(default_factory=list, max_length=4)
     maximum_participants: int = Field(ge=1, le=100)
@@ -79,6 +81,7 @@ class GuildHuntUpdate(BaseModel):
     server_name: str | None = Field(default=None, min_length=1, max_length=100)
     location: str | None = Field(default=None, min_length=2, max_length=200)
     target: str | None = Field(default=None, min_length=2, max_length=200)
+    hunting_zone_id: UUID | None = None
     recommended_level: int | None = Field(default=None, ge=1, le=9999)
     recommended_vocations: list[VocationCode] | None = Field(default=None, max_length=4)
     maximum_participants: int | None = Field(default=None, ge=1, le=100)
@@ -111,6 +114,47 @@ class GuildHuntParticipantResponse(BaseModel):
     left_at: datetime | None
 
 
+class GuildHuntZoneCreatureSummary(BaseModel):
+    id: int | None = None
+    canonical_id: UUID | None = None
+    name: str
+    slug: str | None = None
+    is_boss: bool | None = None
+    image_url: str | None = None
+
+
+class GuildHuntZoneQuestSummary(BaseModel):
+    id: int | None = None
+    canonical_id: UUID | None = None
+    name: str
+    slug: str | None = None
+
+
+class GuildHuntZoneSummary(BaseModel):
+    canonical_id: UUID
+    domain_id: int | None = None
+    name: str
+    slug: str | None = None
+    city: str | None = None
+    region: str | None = None
+    min_level: int | None = None
+    max_level: int | None = None
+    recommended_level: int | None = None
+    recommended_vocations: list[str] | None = None
+    difficulty: str | None = None
+    creature_count: int = 0
+    boss_count: int = 0
+    creature_preview: list[GuildHuntZoneCreatureSummary] = Field(default_factory=list)
+    access_required: bool | None = None
+    access_quest_count: int = 0
+    access_quests: list[GuildHuntZoneQuestSummary] = Field(default_factory=list)
+    spatial_state: str = "knowledge_only"
+    map_available: bool = False
+    map_floor: int | None = None
+    media_url: str | None = None
+    is_current: bool = True
+
+
 class GuildHuntResponse(BaseModel):
     model_config = ConfigDict(from_attributes=True)
 
@@ -121,6 +165,8 @@ class GuildHuntResponse(BaseModel):
     server_name: str
     location: str
     target: str
+    hunting_zone_id: UUID | None
+    hunting_zone_summary: GuildHuntZoneSummary | None = None
     recommended_level: int
     recommended_vocations: list[VocationCode]
     maximum_participants: int

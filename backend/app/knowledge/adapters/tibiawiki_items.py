@@ -143,6 +143,59 @@ def _list_param(params: dict[str, str], *keys: str) -> tuple[tuple[str, ...], bo
     return tuple(dict.fromkeys(values)), supplied
 
 
+def _npc_trade_param(
+    params: dict[str, str],
+    *keys: str,
+) -> tuple[tuple[ItemNpcReference, ...], bool]:
+    """Parse only explicit per-NPC prices; unspecified prices stay unknown."""
+    raw, supplied = _first_param(params, *keys)
+    if raw is None:
+        return (), supplied
+    text = _strip_markup(raw).strip()
+    if not text or text.casefold() in {"-", "--", "n/a", "none", "unknown"}:
+        return (), supplied
+    protected = re.sub(r"(?<=\d),(?=\d)", "", text)
+    values: list[ItemNpcReference] = []
+    seen: set[tuple[str, int | float | None, str | None]] = set()
+    for token in protected.split(","):
+        candidate, separator, raw_qualifier = token.partition(";")
+        candidate = candidate.strip()
+        qualifier = raw_qualifier.strip() if separator else None
+        # ``sayname`` is a MediaWiki display directive. Other suffixes (for
+        # example a liquid contained by a vial) are real offer qualifiers.
+        if qualifier and qualifier.casefold() == "sayname":
+            qualifier = None
+        if not candidate:
+            continue
+        match = re.match(r"^(.*?):\s*(\d+(?:\.\d+)?)(?:\s+(.+?))?$", candidate)
+        name = (match.group(1) if match else candidate).strip()
+        price_text = match.group(2) if match else None
+        price = (
+            float(price_text) if price_text and "." in price_text
+            else int(price_text) if price_text
+            else None
+        )
+        raw_currency = match.group(3).strip() if match and match.group(3) else None
+        currency = (
+            re.sub(r"[^a-z0-9]+", "_", raw_currency.casefold()).strip("_")
+            if raw_currency
+            else "gold_coin" if isinstance(price, int)
+            else None
+        )
+        normalized = normalize_name(name)
+        identity = (normalized, price, qualifier)
+        if not normalized or name.casefold() in {"-", "--", "n/a", "none", "unknown"} or identity in seen:
+            continue
+        values.append(ItemNpcReference(
+            name=name,
+            price=price,
+            currency=currency,
+            qualifier=qualifier,
+        ))
+        seen.add(identity)
+    return tuple(values), supplied
+
+
 def _structured_values(params: dict[str, str], keys: tuple[str, ...]) -> tuple[dict[str, str], bool]:
     values: dict[str, str] = {}
     supplied = False
@@ -189,8 +242,8 @@ def _item_parts(raw: dict[str, Any]) -> tuple[str, str, str, ItemKnowledgeDTO]:
     imbuement_slots, imbuement_supplied = _int_param(params, "imbueslots", "imbuementslots")
     description, description_supplied = _text_param(params, "flavortext", "description")
     notes, notes_supplied = _text_param(params, "notes", "note")
-    buy_names, buy_supplied = _list_param(params, "buyfrom", "buy from")
-    sell_names, sell_supplied = _list_param(params, "sellto", "sell to")
+    buy_from, buy_supplied = _npc_trade_param(params, "buyfrom", "buy from")
+    sell_to, sell_supplied = _npc_trade_param(params, "sellto", "sell to")
     creature_names, dropped_supplied = _list_param(params, "droppedby", "dropped by")
     rewards_from, rewards_supplied = _list_param(params, "rewardfrom", "rewardsfrom", "reward from")
     required_for, required_supplied = _list_param(params, "requiredfor", "required for")
@@ -267,8 +320,8 @@ def _item_parts(raw: dict[str, Any]) -> tuple[str, str, str, ItemKnowledgeDTO]:
         bonuses=bonuses,
         description=description,
         notes=notes,
-        buy_from=tuple(ItemNpcReference(name=name) for name in buy_names),
-        sell_to=tuple(ItemNpcReference(name=name) for name in sell_names),
+        buy_from=buy_from,
+        sell_to=sell_to,
         dropped_by=tuple(ItemCreatureReference(name=name) for name in creature_names),
         rewards_from=rewards_from,
         required_for=required_for,

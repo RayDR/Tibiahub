@@ -2,7 +2,8 @@ from __future__ import annotations
 
 import asyncio
 
-from app.models import Creature
+from app.models import Creature, HuntZone
+from app.models.media_asset import MediaAsset
 from app.services import media_asset_service
 from app.services.sync_service import SyncService
 
@@ -126,3 +127,65 @@ def test_image_sync_skips_hidden_and_missing_media(
     assert result["skipped"] == 1
     assert result["errors"] == 0
     assert result["status"] == "success"
+
+
+def test_image_sync_links_cached_hunt_zone_media_through_map_asset_id(db, monkeypatch):
+    zone = HuntZone(
+        name="Illustrated Grounds",
+        normalized_name="illustrated grounds",
+        slug="illustrated-grounds",
+        source_provider="tibiawiki",
+        external_id="2301",
+        supplied_fields=["image_reference"],
+        map_image_url=(
+            "https://tibia.fandom.com/wiki/"
+            "Special:FilePath/Illustrated_Grounds.png"
+        ),
+    )
+    db.add(zone)
+    db.flush()
+
+    async def cached(
+        target_db,
+        *,
+        asset_key,
+        source_url,
+        force_refetch=False,
+        retry_failed=False,
+    ):
+        asset = MediaAsset(
+            asset_key=asset_key,
+            source_url=source_url,
+            status="cached",
+        )
+        target_db.add(asset)
+        target_db.flush()
+        return media_asset_service.MediaFetchOutcome(asset=asset, result="created")
+
+    monkeypatch.setattr(media_asset_service, "cache_media_asset", cached)
+
+    result = asyncio.run(SyncService.sync_images(db))
+    db.refresh(zone)
+
+    assert result["total"] == 1 and result["created"] == 1
+    assert zone.map_asset_id is not None
+    assert not hasattr(zone, "image_asset_id")
+    assert db.get(MediaAsset, zone.map_asset_id).asset_key == "zone:tibiawiki:2301"
+
+
+def test_image_sync_ignores_legacy_tibiamaps_floor_placeholder(db, monkeypatch):
+    db.add(HuntZone(
+        name="Legacy Free Text",
+        normalized_name="legacy free text",
+        slug="legacy-free-text",
+        source_provider="tibiamaps",
+        map_image_url="https://tibiamaps.github.io/tibia-map-data/floor-07-map.png",
+    ))
+    db.flush()
+
+    async def unexpected(*args, **kwargs):
+        raise AssertionError("legacy floor placeholder must not be cached as zone media")
+
+    monkeypatch.setattr(media_asset_service, "cache_media_asset", unexpected)
+    result = asyncio.run(SyncService.sync_images(db))
+    assert result["total"] == 0

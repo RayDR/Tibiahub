@@ -171,6 +171,32 @@ def _bridge_npc(db: Session, entity: KnowledgeEntity, dto: NpcKnowledgeDTO):
         )
         db.add(row)
         db.flush()
+    changed = False
+    protected = set(row.protected_fields or [])
+    placeholders = {"-", "--", "n/a", "none", "unknown"}
+    for field in ("buys", "sells", "destinations", "related_quests"):
+        current = getattr(row, field) or []
+        if (
+            not created
+            and field not in protected
+            and field not in dto.supplied_fields
+            and current
+            and all(
+                isinstance(value, dict)
+                and str(value.get("name") or "").strip().casefold() in placeholders
+                for value in current
+            )
+        ):
+            setattr(row, field, [])
+            changed = True
+    if (
+        not created
+        and "location_name" not in protected
+        and dto.location_mode in {"moving", "multiple"}
+        and row.location_name is not None
+    ):
+        row.location_name = None
+        changed = True
     changed = _assign_bridge(row, dto, (
         ("name", dto.canonical_name, None), ("normalized_name", normalize_search_text(dto.canonical_name), None),
         ("slug", entity.slug, None), ("external_id", dto.external_id, None), ("source_name", "tibiawiki", None),
@@ -184,7 +210,7 @@ def _bridge_npc(db: Session, entity: KnowledgeEntity, dto: NpcKnowledgeDTO):
         ("related_quests", [asdict(value) for value in dto.related_quests], "related_quests"),
         ("provider_metadata", dict(dto.provider_metadata), None),
         ("supplied_fields", sorted(dto.supplied_fields), None),
-    ), created=created)
+    ), created=created) or changed
     if not created and changed:
         row.data_version = max(1, row.data_version or 1) + 1
     row.last_synced_at = datetime.now(UTC)
@@ -357,6 +383,7 @@ def _upsert_named_relationship(
     source_document_ref: str | None,
     source_scope: str,
     context: str,
+    source_context: dict | None = None,
 ) -> UUID:
     matches = exact_place_candidates(db, target_name, candidate_types)
     target = matches[0] if len(matches) == 1 else None
@@ -376,6 +403,7 @@ def _upsert_named_relationship(
             "context": context,
             "resolution_policy": "exact_name_or_alias_only",
             "candidate_entity_ids": [str(match.uuid) for match in matches] if len(matches) > 1 else [],
+            **dict(source_context or {}),
         },
     ))
     return mutation.relationship.id
@@ -393,13 +421,27 @@ def _sync_npc_location_relationships(
     source_document_ref = f"{'npc' if isinstance(dto, NpcKnowledgeDTO) else 'location'}:{dto.external_id}"
     if isinstance(dto, NpcKnowledgeDTO):
         relationship_types.add("located_at")
-        if dto.location_name:
+        location_names = [value.name for value in dto.location_names]
+        if not location_names and dto.location_name:
+            location_names.append(dto.location_name)
+        for location_name in location_names:
             current_ids.add(_upsert_named_relationship(
                 db, source_entity=entity, relationship_type="located_at",
-                target_name=dto.location_name, candidate_types=PLACE_ENTITY_TYPES,
+                target_name=location_name, candidate_types=PLACE_ENTITY_TYPES,
                 unresolved_type="location", provider_id=provider_id,
                 source_document_ref=source_document_ref, source_scope="location",
                 context="npc.location_name",
+                source_context={"location_mode": dto.location_mode},
+            ))
+        relationship_types.add("travels_to")
+        for destination in dto.destinations:
+            current_ids.add(_upsert_named_relationship(
+                db, source_entity=entity, relationship_type="travels_to",
+                target_name=destination.name, candidate_types=PLACE_ENTITY_TYPES,
+                unresolved_type="location", provider_id=provider_id,
+                source_document_ref=source_document_ref, source_scope="destination",
+                context="npc.structured_transport_destination",
+                source_context={"price": destination.price, "currency": destination.currency},
             ))
     elif entity.entity_type == "location":
         relationship_types.add("contained_in")
@@ -423,9 +465,16 @@ def _sync_npc_location_relationships(
             ))
     if relationship_types:
         KnowledgeGraphService.reconcile_provider(
-            db, source_entity_id=entity.uuid, source_scope="location" if isinstance(dto, NpcKnowledgeDTO) else "parent",
-            provider_id=provider_id, relationship_types=relationship_types, current_ids=current_ids,
+            db, source_entity_id=entity.uuid,
+            source_scope="parent" if not isinstance(dto, NpcKnowledgeDTO) else "location",
+            provider_id=provider_id,
+            relationship_types=relationship_types - {"travels_to"}, current_ids=current_ids,
         )
+        if isinstance(dto, NpcKnowledgeDTO):
+            KnowledgeGraphService.reconcile_provider(
+                db, source_entity_id=entity.uuid, source_scope="destination",
+                provider_id=provider_id, relationship_types={"travels_to"}, current_ids=current_ids,
+            )
     return len(current_ids)
 
 

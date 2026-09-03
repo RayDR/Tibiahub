@@ -5,29 +5,57 @@ import { useToast } from "../../context/ToastContext";
 import { useTranslation } from "react-i18next";
 
 import {
+  AlertCircle,
   Plus,
   Megaphone,
   Loader2,
   Filter,
   X,
   CalendarClock,
+  Trash2,
   User,
 } from "lucide-react";
 import { useGuildContext } from "../../utils/guildContext";
 import { useGuildCapability } from "../../hooks/useGuildCapability";
+import { useConfirmation } from "../../context/ConfirmationContext";
+import {
+  Alert,
+  DegradedState,
+  Dialog,
+  DialogBody,
+  DialogFooter,
+  DialogHeader,
+  ErrorState,
+  FormField,
+  Input,
+  Select,
+  Textarea,
+} from "../../components/ui";
+import { WorkspaceContentHeader } from "../../components/workspace/WorkspacePrimitives";
+import {
+  type AnnouncementPageState,
+  emptyAnnouncementPage,
+  loadAnnouncementWindow,
+} from "./announcementPagination";
+import { formatDate, formatDateTime } from "../../utils/locale";
+
+const LIMIT = 10;
 
 export default function Announcements() {
   const { user } = useAuth();
-  const { t } = useTranslation();
+  const { t, i18n } = useTranslation();
   const toast = useToast();
+  const confirmation = useConfirmation();
   const guildName = useGuildContext(user);
   const { canManageGuild } = useGuildCapability("announcements.manage");
 
-  const [announcements, setAnnouncements] = useState<Announcement[]>([]);
+  const [page, setPage] = useState(() =>
+    emptyAnnouncementPage<Announcement>(),
+  );
   const [loading, setLoading] = useState(true);
   const [loadingMore, setLoadingMore] = useState(false);
-  const [hasMore, setHasMore] = useState(true);
   const [showModal, setShowModal] = useState(false);
+  const [createError, setCreateError] = useState(false);
   const [detailModal, setDetailModal] = useState<Announcement | null>(null);
   const [formData, setFormData] = useState({
     title: "",
@@ -44,8 +72,70 @@ export default function Announcements() {
     dateTo: "",
   });
   const [showFilters, setShowFilters] = useState(false);
-  const [skip, setSkip] = useState(0);
-  const LIMIT = 10;
+  const pageRef = useRef(page);
+  const requestSequence = useRef(0);
+  const requestInFlight = useRef(false);
+
+  const commitPage = useCallback(
+    (nextPage: AnnouncementPageState<Announcement>) => {
+      pageRef.current = nextPage;
+      setPage(nextPage);
+    },
+    [],
+  );
+
+  const loadData = useCallback(
+    async (reset = false) => {
+      if (!guildName) {
+        requestSequence.current += 1;
+        requestInFlight.current = false;
+        commitPage(emptyAnnouncementPage<Announcement>());
+        setLoading(false);
+        setLoadingMore(false);
+        return;
+      }
+      if (!reset && requestInFlight.current) return;
+
+      const requestId = ++requestSequence.current;
+      requestInFlight.current = true;
+      const startingPage = reset
+        ? emptyAnnouncementPage<Announcement>()
+        : pageRef.current;
+      if (reset) {
+        commitPage(startingPage);
+        setLoading(true);
+      } else {
+        if (startingPage.additionalError) {
+          commitPage({ ...startingPage, additionalError: false });
+        }
+        setLoadingMore(true);
+      }
+
+      const result = await loadAnnouncementWindow({
+        state: startingPage,
+        reset,
+        limit: LIMIT,
+        guildName,
+        request: guildApi.getAnnouncements,
+      });
+      if (requestId !== requestSequence.current) return;
+
+      commitPage(result.state);
+      if (result.error) {
+        console.error("Failed to load announcements", result.error);
+      }
+      requestInFlight.current = false;
+      setLoading(false);
+      setLoadingMore(false);
+    },
+    [commitPage, guildName],
+  );
+
+  const loadMore = useCallback(() => {
+    if (!loadingMore && page.hasMore && !page.additionalError) {
+      void loadData(false);
+    }
+  }, [loadData, loadingMore, page.additionalError, page.hasMore]);
 
   // Infinite scroll
   const observer = useRef<IntersectionObserver | null>(null);
@@ -54,78 +144,64 @@ export default function Announcements() {
       if (loadingMore) return;
       if (observer.current) observer.current.disconnect();
       observer.current = new IntersectionObserver((entries) => {
-        if (entries[0].isIntersecting && hasMore) {
+        if (entries[0].isIntersecting && page.hasMore && !page.additionalError) {
           loadMore();
         }
       });
       if (node) observer.current.observe(node);
     },
-    [loadingMore, hasMore],
+    [loadMore, loadingMore, page.additionalError, page.hasMore],
   );
 
   const canCreate = canManageGuild(guildName);
 
-  const loadData = async (reset = false) => {
-    try {
-      const currentSkip = reset ? 0 : skip;
-      if (reset) {
-        setLoading(true);
-        setSkip(0);
-      } else {
-        setLoadingMore(true);
-      }
-
-      if (!guildName) {
-        setAnnouncements([]);
-        return;
-      }
-      const data = await guildApi.getAnnouncements(
-        currentSkip,
-        LIMIT,
-        guildName,
-      );
-
-      if (reset) {
-        setAnnouncements(data);
-      } else {
-        setAnnouncements((prev) => [...prev, ...data]);
-      }
-
-      setHasMore(data.length === LIMIT);
-      if (!reset) setSkip((prev) => prev + LIMIT);
-    } catch (error) {
-      console.error("Failed to load announcements", error);
-    } finally {
-      setLoading(false);
-      setLoadingMore(false);
-    }
-  };
-
-  const loadMore = () => {
-    if (!loadingMore && hasMore) {
-      loadData(false);
-    }
-  };
-
   useEffect(() => {
-    loadData(true);
-  }, [filters, guildName]);
+    void loadData(true);
+    return () => {
+      requestSequence.current += 1;
+      requestInFlight.current = false;
+    };
+  }, [filters, guildName, loadData]);
 
   const handleCreate = async (e: React.FormEvent) => {
     e.preventDefault();
+    if (creating) return;
     setCreating(true);
+    setCreateError(false);
     try {
       if (!guildName) throw new Error("Missing guild context");
       await guildApi.createAnnouncement(formData, guildName);
       setShowModal(false);
       setFormData({ title: "", content: "", type: "general" });
-      loadData(true);
-      toast.success("Announcement created successfully!");
+      void loadData(true);
+      toast.success(t("announcementUI.created"));
     } catch (error) {
       console.error("Failed to create announcement", error);
-      toast.error("Failed to create announcement");
+      setCreateError(true);
+      toast.error(t("announcementUI.errors.create"));
     } finally {
       setCreating(false);
+    }
+  };
+
+  const handleDelete = async (announcement: Announcement) => {
+    const confirmed = await confirmation.confirm(
+      t("announcementUI.confirmDelete", { title: announcement.title }),
+      {
+        title: t("common.delete"),
+        confirmLabel: t("common.delete"),
+        danger: true,
+      },
+    );
+    if (!confirmed) return;
+
+    try {
+      await guildApi.deleteAnnouncement(announcement.id);
+      setDetailModal(null);
+      await loadData(true);
+      toast.success(t("announcementUI.deleted"));
+    } catch {
+      toast.error(t("announcementUI.errors.delete"));
     }
   };
 
@@ -154,105 +230,86 @@ export default function Announcements() {
     setFilters({ type: "", author: "", dateFrom: "", dateTo: "" });
   };
 
+  const announcements = page.items;
   const filteredAnnouncements = applyFilters(announcements);
 
   return (
-    <div className="space-y-8">
-      <div className="border-b border-primary/30 pb-6">
-        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
-          <h1 className="text-4xl lg:text-5xl font-bold text-content-primary flex items-center gap-3">
-            <div className="p-3 bg-gradient-to-br from-primary/20 to-primary/20 rounded-lg">
-              <Megaphone className="w-8 h-8 lg:w-10 lg:h-10 text-primary" />
-            </div>
-            {t("guild.announcements")}
-          </h1>
-
-          <div className="flex gap-3">
+    <div className="workspace-page">
+      <WorkspaceContentHeader
+        title={t("guild.announcements")}
+        description={guildName}
+        icon={<Megaphone />}
+        action={
+          <>
             <button
               onClick={() => setShowFilters(!showFilters)}
-              className="flex items-center gap-2 bg-surface/80 hover:bg-surface-raised/80 border border-line hover:border-primary/40 text-content-primary px-4 py-3 rounded-lg transition-all font-semibold text-base"
+              className="app-button-secondary"
             >
-              <Filter className="w-5 h-5" />
+              <Filter className="size-4" />
               <span className="hidden xs:inline">{t("guild.filters")}</span>
             </button>
 
             {canCreate && (
               <button
                 onClick={() => setShowModal(true)}
-                className="flex items-center gap-2 rounded-lg bg-gradient-to-r from-primary to-primary-hover px-4 py-3 text-base font-semibold text-content-inverse shadow-sm transition-all hover:shadow-primary/30"
+                className="app-button-primary"
               >
-                <Plus className="w-5 h-5" />
+                <Plus className="size-4" />
                 <span className="hidden xs:inline">{t("guild.create")}</span>
               </button>
             )}
-          </div>
-        </div>
-      </div>
+          </>
+        }
+      />
 
       {/* Filters Panel */}
       {showFilters && (
         <div className="rounded-xl bg-surface-raised p-6 shadow-sm">
           <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-5">
-            <div>
-              <label className="block text-xs font-bold text-content-secondary mb-2 uppercase tracking-wider">
-                {t("guild.type")}
-              </label>
-              <select
+            <FormField label={t("guild.type")}>
+              <Select
                 value={filters.type}
                 onChange={(e) =>
                   setFilters({ ...filters, type: e.target.value })
                 }
-                className="w-full bg-surface-base/60 border-2 border-line/60 hover:border-line rounded-lg p-3 text-content-primary text-sm focus:border-primary focus:outline-none focus:ring-2 focus:ring-primary/20 transition-all"
               >
                 <option value="">{t("common.filter")}...</option>
                 <option value="general">{t("guild.types.general")}</option>
                 <option value="hunt">{t("guild.types.hunt")}</option>
                 <option value="contest">{t("guild.types.contest")}</option>
-              </select>
-            </div>
+              </Select>
+            </FormField>
 
-            <div>
-              <label className="block text-xs font-bold text-content-secondary mb-2 uppercase tracking-wider">
-                {t("guild.author")}
-              </label>
-              <input
+            <FormField label={t("guild.author")}>
+              <Input
                 type="text"
                 value={filters.author}
                 onChange={(e) =>
                   setFilters({ ...filters, author: e.target.value })
                 }
                 placeholder={t("common.search") + "..."}
-                className="w-full rounded-lg bg-surface px-3 py-3 text-sm text-content-primary placeholder:text-content-muted focus:outline-none focus:ring-2 focus:ring-primary/20"
               />
-            </div>
+            </FormField>
 
-            <div>
-              <label className="block text-xs font-bold text-content-secondary mb-2 uppercase tracking-wider">
-                {t("guild.filterByDate")} (desde)
-              </label>
-              <input
+            <FormField label={`${t("guild.filterByDate")} (desde)`}>
+              <Input
                 type="date"
                 value={filters.dateFrom}
                 onChange={(e) =>
                   setFilters({ ...filters, dateFrom: e.target.value })
                 }
-                className="w-full bg-surface-base/60 border-2 border-line/60 hover:border-line rounded-lg p-3 text-content-primary text-sm focus:border-primary focus:outline-none focus:ring-2 focus:ring-primary/20 transition-all"
               />
-            </div>
+            </FormField>
 
-            <div>
-              <label className="block text-xs font-bold text-content-secondary mb-2 uppercase tracking-wider">
-                {t("guild.filterByDate")} (hasta)
-              </label>
-              <input
+            <FormField label={`${t("guild.filterByDate")} (hasta)`}>
+              <Input
                 type="date"
                 value={filters.dateTo}
                 onChange={(e) =>
                   setFilters({ ...filters, dateTo: e.target.value })
                 }
-                className="w-full bg-surface-base/60 border-2 border-line/60 hover:border-line rounded-lg p-3 text-content-primary text-sm focus:border-primary focus:outline-none focus:ring-2 focus:ring-primary/20 transition-all"
               />
-            </div>
+            </FormField>
           </div>
 
           <div className="mt-5 flex justify-end">
@@ -271,6 +328,20 @@ export default function Announcements() {
         <div className="flex justify-center p-12">
           <Loader2 className="w-8 h-8 animate-spin text-primary" />
         </div>
+      ) : page.initialError ? (
+        <ErrorState
+          icon={<AlertCircle className="mx-auto h-10 w-10" />}
+          title={t("announcementUI.errors.initial")}
+          description={t("announcementUI.errors.initialHelp")}
+          action={
+            <button
+              onClick={() => void loadData(true)}
+              className="min-h-11 rounded-lg border border-line px-4 font-semibold"
+            >
+              {t("common.retry")}
+            </button>
+          }
+        />
       ) : (
         <div className="space-y-6">
           {filteredAnnouncements.map((ann, index) => {
@@ -315,7 +386,7 @@ export default function Announcements() {
                       <div className="flex items-center gap-2 lg:justify-end">
                         <CalendarClock className="w-4 h-4 flex-shrink-0 text-primary/70" />
                         <span className="font-medium">
-                          {new Date(ann.created_at).toLocaleDateString()}
+                          {formatDate(ann.created_at, i18n.resolvedLanguage || i18n.language)}
                         </span>
                       </div>
                       <div className="flex items-center gap-2 lg:justify-end">
@@ -335,7 +406,7 @@ export default function Announcements() {
 
                   <div className="mt-4 pt-4 border-t border-line/50 flex items-center justify-end">
                     <span className="text-xs text-content-muted group-hover:text-primary/70 transition-colors">
-                      Click para ver más →
+                      {t("announcementUI.viewMore")} →
                     </span>
                   </div>
                 </div>
@@ -349,7 +420,23 @@ export default function Announcements() {
             </div>
           )}
 
-          {!hasMore && announcements.length > 0 && (
+          {page.additionalError && (
+            <DegradedState
+              icon={<AlertCircle className="h-5 w-5" />}
+              title={t("announcementUI.errors.more")}
+              description={t("announcementUI.errors.moreHelp")}
+              action={
+                <button
+                  onClick={() => void loadData(false)}
+                  className="min-h-11 rounded-lg border border-line px-4 font-semibold"
+                >
+                  {t("announcementUI.retryMore")}
+                </button>
+              }
+            />
+          )}
+
+          {!page.hasMore && announcements.length > 0 && (
             <div className="text-center py-8">
               <p className="text-sm text-content-muted font-medium">
                 {t("guild.noMoreResults")}
@@ -366,7 +453,7 @@ export default function Announcements() {
                 {t("guild.noAnnouncements")}
               </p>
               <p className="text-content-muted text-sm mt-2">
-                Vuelve más tarde para nuevos anuncios
+                {t("announcementUI.emptyHelp")}
               </p>
             </div>
           )}
@@ -375,25 +462,8 @@ export default function Announcements() {
 
       {/* Detail Modal */}
       {detailModal && (
-        <div
-          className="fixed inset-0 bg-surface-base/90 backdrop-blur-md z-modal flex items-center justify-center p-4"
-          onClick={() => setDetailModal(null)}
-        >
-          <div
-            className="bg-gradient-to-b from-surface to-surface-base border-2 border-line/80 rounded-2xl w-full max-w-4xl shadow-2xl max-h-[85vh] overflow-y-auto"
-            onClick={(e) => e.stopPropagation()}
-          >
-            <div
-              className={`h-3 w-full ${
-                detailModal.type === "contest"
-                  ? "bg-gradient-to-r from-accent to-accent"
-                  : detailModal.type === "hunt"
-                    ? "bg-gradient-to-r from-danger to-danger"
-                    : "bg-gradient-to-r from-primary to-primary-hover"
-              }`}
-            />
-
-            <div className="sticky top-0 bg-surface-base/95 backdrop-blur p-8 border-b-2 border-line/50 flex items-start justify-between">
+        <Dialog open onClose={() => setDetailModal(null)} label={detailModal.title} className="ds-dialog-lg">
+            <DialogHeader>
               <div className="flex-1 pr-4">
                 <div className="flex items-center gap-3 mb-4">
                   <span
@@ -408,9 +478,9 @@ export default function Announcements() {
                     {t(`guild.types.${detailModal.type}`)}
                   </span>
                 </div>
-                <h3 className="text-3xl lg:text-4xl font-bold text-content-primary leading-tight break-words">
+                <h2 className="text-2xl font-bold text-content-primary leading-tight break-words">
                   {detailModal.title}
-                </h3>
+                </h2>
                 <div className="flex flex-col sm:flex-row sm:items-center gap-3 sm:gap-6 mt-4 text-sm">
                   <div className="flex items-center gap-2 text-content-secondary">
                     <User className="w-5 h-5 text-primary/70" />
@@ -423,106 +493,119 @@ export default function Announcements() {
                   <div className="flex items-center gap-2 text-content-secondary">
                     <CalendarClock className="w-5 h-5 text-primary/70" />
                     <span className="font-medium">
-                      {new Date(detailModal.created_at).toLocaleString()}
+                      {formatDateTime(detailModal.created_at, i18n.resolvedLanguage || i18n.language)}
                     </span>
                   </div>
                 </div>
               </div>
               <button
+                type="button"
                 onClick={() => setDetailModal(null)}
-                className="text-content-secondary hover:text-content-primary hover:bg-surface p-2 rounded-lg transition-colors flex-shrink-0"
+                className="app-button-ghost app-button-sm flex-shrink-0"
+                aria-label={t("guild.cancel")}
               >
-                <X className="w-6 h-6" />
+                <X className="size-4" />
               </button>
-            </div>
+            </DialogHeader>
 
-            <div className="p-8 lg:p-10">
+            <DialogBody>
               <div className="prose prose-invert prose-lg max-w-none text-content-secondary whitespace-pre-line leading-relaxed">
                 {detailModal.content}
               </div>
-            </div>
-          </div>
-        </div>
+            </DialogBody>
+            {canCreate ? (
+              <DialogFooter>
+                <button
+                  type="button"
+                  onClick={() => void handleDelete(detailModal)}
+                  className="app-button-danger"
+                >
+                  <Trash2 className="size-4" />
+                  {t("common.delete")}
+                </button>
+              </DialogFooter>
+            ) : null}
+        </Dialog>
       )}
 
       {/* Create Modal */}
-      {showModal && (
-        <div className="fixed inset-0 bg-surface-base/90 backdrop-blur-md z-modal flex items-center justify-center p-4">
-          <div className="bg-gradient-to-b from-surface to-surface-base border-2 border-line/80 rounded-2xl w-full max-w-2xl shadow-2xl">
-            <div className="p-8 border-b-2 border-line/50">
+      <Dialog
+        open={showModal}
+        onClose={() => { if (!creating) setShowModal(false); }}
+        label={`${t("guild.create")} ${t("guild.announcements")}`}
+        descriptionId="announcement-create-description"
+        className="ds-dialog-lg"
+      >
+            <form onSubmit={handleCreate} className="flex min-h-0 flex-1 flex-col">
+            <DialogHeader>
               <div className="flex items-center gap-3 mb-2">
-                <Megaphone className="w-6 h-6 text-primary" />
-                <h3 className="text-2xl font-bold text-content-primary">
+                <Megaphone className="size-5 text-primary" />
+                <h2 className="text-xl font-semibold text-content-primary">
                   {t("guild.create")} {t("guild.announcements")}
-                </h3>
+                </h2>
               </div>
-              <p className="text-content-secondary text-sm">
+              <p id="announcement-create-description" className="text-content-secondary text-sm">
                 {t("guild.announcements")} ({t("guild.create")})
               </p>
-            </div>
+            </DialogHeader>
 
-            <form onSubmit={handleCreate} className="p-8 space-y-6">
-              <div>
-                <label className="block text-sm font-bold text-content-secondary mb-3 uppercase tracking-wider">
-                  {t("guild.title")}
-                </label>
-                <input
+            <DialogBody className="space-y-5">
+              {createError ? <Alert tone="danger">{t("announcementUI.errors.create")}</Alert> : null}
+              <FormField label={t("guild.title")} required>
+                <Input
                   type="text"
                   required
+                  disabled={creating}
                   value={formData.title}
                   onChange={(e) =>
                     setFormData({ ...formData, title: e.target.value })
                   }
-                  placeholder="Escribir el título del anuncio..."
-                  className="w-full rounded-lg bg-surface px-4 py-3 text-base text-content-primary placeholder:text-content-muted focus:outline-none focus:ring-2 focus:ring-primary/20"
+                  placeholder={t("announcementUI.titlePlaceholder")}
                 />
-              </div>
+              </FormField>
 
-              <div>
-                <label className="block text-sm font-bold text-content-secondary mb-3 uppercase tracking-wider">
-                  {t("guild.type")}
-                </label>
-                <select
+              <FormField label={t("guild.type")}>
+                <Select
                   value={formData.type}
+                  disabled={creating}
                   onChange={(e) =>
                     setFormData({ ...formData, type: e.target.value })
                   }
-                  className="w-full bg-surface-base/80 border-2 border-line/60 rounded-lg px-4 py-3 text-content-primary focus:border-primary focus:outline-none focus:ring-2 focus:ring-primary/20 transition-all text-base"
                 >
                   <option value="general">{t("guild.types.general")}</option>
                   <option value="contest">{t("guild.types.contest")}</option>
                   <option value="hunt">{t("guild.types.hunt")}</option>
-                </select>
-              </div>
+                </Select>
+              </FormField>
 
-              <div>
-                <label className="block text-sm font-bold text-content-secondary mb-3 uppercase tracking-wider">
-                  {t("guild.content")}
-                </label>
-                <textarea
+              <FormField label={t("guild.content")} required>
+                <Textarea
                   required
                   rows={8}
+                  disabled={creating}
                   value={formData.content}
                   onChange={(e) =>
                     setFormData({ ...formData, content: e.target.value })
                   }
-                  placeholder="Escribir el contenido del anuncio..."
-                  className="w-full rounded-lg bg-surface px-4 py-3 font-mono text-sm leading-relaxed text-content-primary placeholder:text-content-muted focus:outline-none focus:ring-2 focus:ring-primary/20"
+                  placeholder={t("announcementUI.contentPlaceholder")}
+                  className="font-mono"
                 />
-              </div>
+              </FormField>
+            </DialogBody>
 
-              <div className="flex justify-end gap-4 mt-8 pt-6 border-t border-line/50">
+              <DialogFooter>
                 <button
                   type="button"
                   onClick={() => setShowModal(false)}
-                  className="px-6 py-2.5 text-content-secondary hover:text-content-primary hover:bg-surface/50 rounded-lg font-semibold transition-all text-base"
+                  disabled={creating}
+                  className="app-button-secondary"
                 >
                   {t("guild.cancel")}
                 </button>
                 <button
                   type="submit"
                   disabled={creating}
-                  className="rounded-lg bg-gradient-to-r from-primary to-primary-hover px-6 py-2.5 text-base font-semibold text-content-inverse shadow-sm transition-all hover:shadow-primary/30 disabled:cursor-not-allowed disabled:opacity-50"
+                  className="app-button-primary"
                 >
                   {creating ? (
                     <span className="flex items-center gap-2">
@@ -533,11 +616,9 @@ export default function Announcements() {
                     t("guild.create")
                   )}
                 </button>
-              </div>
+              </DialogFooter>
             </form>
-          </div>
-        </div>
-      )}
+      </Dialog>
     </div>
   );
 }

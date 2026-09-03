@@ -1,3 +1,4 @@
+from pathlib import Path
 import subprocess
 import sys
 
@@ -17,6 +18,7 @@ runpy.run_module('app.knowledge.workers.knowledge_worker', run_name='knowledge_w
         capture_output=True,
         text=True,
         check=False,
+        cwd=Path(__file__).resolve().parents[1],
     )
 
     assert result.returncode == 0, result.stderr

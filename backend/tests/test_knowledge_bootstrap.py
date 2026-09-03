@@ -82,6 +82,7 @@ def test_full_sync_has_deterministic_executable_provider_roots_and_is_idempotent
         ("tibiadata", "boss", "boosted_bosses_current"),
     ]
     first = KnowledgeFullSyncService.enqueue(db, batch_limit=25, enable_provider_ids={"tibiawiki"})
+    assert "hunt_zone" in db.get(KnowledgeProvider, "tibiawiki").supports_entities
     second = KnowledgeFullSyncService.enqueue(db, batch_limit=25, enable_provider_ids={"tibiawiki"})
     assert first.created_count == 11
     assert second.created_count == 0

@@ -8,6 +8,8 @@ from sqlalchemy.orm import Session
 
 from app.knowledge.adapters.registry import KnowledgeAdapterRegistry
 from app.knowledge.models import KnowledgeDocument, KnowledgeJob, KnowledgeProvider
+from app.knowledge.providers import INITIAL_PROVIDERS
+from app.knowledge.registry import ProviderRegistry
 from app.knowledge.services.jobs import EnqueueKnowledgeJob, KnowledgeJobService
 from app.models.workspace_audit import WorkspaceAudit
 
@@ -82,7 +84,11 @@ class KnowledgeBootstrapService:
             raise ValueError("bootstrap_confirmation_required")
         if not 1 <= batch_limit <= 50:
             raise ValueError("bootstrap_batch_limit_invalid")
-        provider = db.get(KnowledgeProvider, "tibiawiki")
+        definition = next(
+            value for value in INITIAL_PROVIDERS if value.provider_id == "tibiawiki"
+        )
+        provider = ProviderRegistry.register(db, definition)
+        db.flush()
         if provider is None:
             raise ValueError("bootstrap_provider_missing")
 
@@ -165,6 +171,12 @@ class KnowledgeFullSyncService:
     ) -> KnowledgeFullSyncResult:
         if not 1 <= batch_limit <= 50:
             raise ValueError("full_sync_batch_limit_invalid")
+        # Provider capability definitions are application configuration. Keep
+        # durable rows aligned whenever the production Full Sync plans work,
+        # rather than requiring a one-off data repair for a newly supported
+        # entity family such as Hunting Zones.
+        ProviderRegistry.register_initial(db)
+        db.flush()
         registry = adapters or KnowledgeAdapterRegistry()
         jobs: list[KnowledgeJob] = []
         created = skipped = 0

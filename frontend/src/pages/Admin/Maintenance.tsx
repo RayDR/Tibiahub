@@ -13,8 +13,8 @@ import {
   Dialog,
   EmptyState,
   LoadingState,
-  PageHeader,
 } from "../../components/ui";
+import { WorkspaceContentHeader } from "../../components/workspace/WorkspacePrimitives";
 import { useToast } from "../../context/ToastContext";
 import {
   MaintenanceCategory,
@@ -58,12 +58,12 @@ export default function Maintenance() {
     return () => window.clearTimeout(handle);
   }, [load]);
   return (
-    <div className="space-y-6">
-      <PageHeader
-        size="lg"
+    <div className="workspace-page">
+      <WorkspaceContentHeader
         eyebrow={t("maintenance.eyebrow")}
         title={t("maintenance.title")}
-        subtitle={t("maintenance.subtitle")}
+        description={t("maintenance.subtitle")}
+        icon={<DatabaseZap />}
       />
       <section className="rounded-2xl bg-warning-subtle p-4 text-warning">
         <div className="flex items-start gap-3">

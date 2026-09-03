@@ -1,5 +1,5 @@
 import axios, { type AxiosRequestConfig } from 'axios';
-import type { Creature, CreatureSimple, HuntZone, ItemDetail, ItemSearchResult, LocationKnowledgeDetail, NpcKnowledgeDetail, QuestDetail, QuestSearchResult, SpatialRouteMetadata, Vocation } from '../types';
+import type { Creature, CreatureSimple, HuntZone, ItemDetail, ItemSearchResult, LocationKnowledgeDetail, NpcDirectoryPage, NpcKnowledgeDetail, QuestDetail, QuestSearchResult, SpatialRouteMetadata, Vocation } from '../types';
 import { cachedKnowledgeRead, knowledgeCacheKey } from './knowledgeRequestCache';
 
 const API_BASE_URL = import.meta.env.VITE_API_URL || '/api/v1';
@@ -119,7 +119,7 @@ export const creaturesApi = {
 };
 
 export const huntZonesApi = {
-  getAll: async (filters: { skip?: number; limit?: number; min_level?: number; max_level?: number; city?: string; search?: string } = {}, signal?: AbortSignal): Promise<HuntZone[]> => (
+  getAll: async (filters: { skip?: number; limit?: number; min_level?: number; max_level?: number; city?: string; search?: string; canonical_only?: boolean } = {}, signal?: AbortSignal): Promise<HuntZone[]> => (
     cachedGet<HuntZone[]>('/hunt-zones/', { params: filters, signal })
   ),
 
@@ -226,6 +226,10 @@ export const questsApi = {
 };
 
 export const namedKnowledgeApi = {
+  listNpcs: async (params: { search?: string; location?: string; skip?: number; limit?: number } = {}, signal?: AbortSignal): Promise<NpcDirectoryPage> => (
+    cachedGet<NpcDirectoryPage>('/npcs/directory', { params, signal })
+  ),
+
   getNpc: async (identifier: string, signal?: AbortSignal): Promise<NpcKnowledgeDetail> => (
     cachedGet<NpcKnowledgeDetail>(`/npcs/${encodeURIComponent(identifier)}`, { signal })
   ),

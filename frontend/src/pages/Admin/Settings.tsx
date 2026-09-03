@@ -1,7 +1,10 @@
 import { useState, useEffect } from 'react';
 import { guildManagementApi } from '../../services/guildManagement';
-import { Settings as SettingsIcon, Save, RefreshCw, CheckCircle, XCircle } from 'lucide-react';
+import { useTranslation } from 'react-i18next';
+import { Settings as SettingsIcon, Save } from 'lucide-react';
 import EmailDiagnosticsPanel from '../../components/admin/EmailDiagnosticsPanel';
+import { WorkspaceContentHeader } from '../../components/workspace/WorkspacePrimitives';
+import { Alert, ErrorState, FormField, Input, LoadingState } from '../../components/ui';
 import {
     CREATURE_CATEGORIES,
     normalizeCategoryKey,
@@ -25,9 +28,11 @@ const CREATURE_CATEGORY_KEYS = CREATURE_CATEGORIES
     }));
 
 export default function AdminSettings() {
+    const { t } = useTranslation();
     const [settings, setSettings] = useState<SystemSettings | null>(null);
     const [loading, setLoading] = useState(true);
     const [saving, setSaving] = useState(false);
+    const [loadError, setLoadError] = useState(false);
     const [message, setMessage] = useState<{ type: 'success' | 'error'; text: string } | null>(null);
 
     useEffect(() => {
@@ -35,11 +40,14 @@ export default function AdminSettings() {
     }, []);
 
     const loadSettings = async () => {
+        setLoading(true);
+        setLoadError(false);
         try {
             const data = await guildManagementApi.getSettings();
             setSettings(data);
         } catch (error) {
             console.error('Failed to load settings:', error);
+            setLoadError(true);
         } finally {
             setLoading(false);
         }
@@ -53,10 +61,10 @@ export default function AdminSettings() {
 
         try {
             await guildManagementApi.updateSettings(settings);
-            setMessage({ type: 'success', text: 'Settings saved successfully!' });
+            setMessage({ type: 'success', text: t('adminSettings.messages.saved') });
         } catch (error) {
             console.error('Failed to save settings:', error);
-            setMessage({ type: 'error', text: 'Failed to save settings' });
+            setMessage({ type: 'error', text: t('adminSettings.messages.saveError') });
         } finally {
             setSaving(false);
         }
@@ -84,74 +92,59 @@ export default function AdminSettings() {
         try {
             const result = await guildManagementApi.uploadCategoryImage(category, file);
             updateCategoryImage(category, result.image_url);
-            setMessage({ type: 'success', text: `Image uploaded for ${category}` });
+            setMessage({ type: 'success', text: t('adminSettings.messages.imageUploaded', { category }) });
         } catch (error) {
             console.error('Failed to upload category image:', error);
-            setMessage({ type: 'error', text: `Failed upload for ${category}` });
+            setMessage({ type: 'error', text: t('adminSettings.messages.imageError', { category }) });
         }
     };
 
     if (loading) {
-        return (
-            <div className="flex items-center justify-center min-h-[400px]">
-                <RefreshCw className="w-8 h-8 animate-spin text-danger" />
-            </div>
-        );
+        return <LoadingState title={t('adminSettings.states.loading')} />;
     }
 
-    if (!settings) {
-        return <div className="text-center text-content-secondary">Failed to load settings</div>;
+    if (loadError || !settings) {
+        return <ErrorState title={t('adminSettings.states.error')} description={t('adminSettings.states.errorHelp')} action={<button type="button" onClick={() => void loadSettings()} className="app-button-secondary">{t('common.retry')}</button>} />;
     }
 
     return (
-        <div className="space-y-6">
-            <div className="flex items-center justify-between">
-                <h1 className="text-3xl font-serif text-content-primary flex items-center gap-3">
-                    <SettingsIcon className="w-8 h-8 text-danger" />
-                    System Settings
-                </h1>
-                <button
+        <div className="workspace-page">
+            <WorkspaceContentHeader
+                title={t('adminSettings.title')}
+                icon={<SettingsIcon />}
+                action={<button
                     onClick={handleSave}
                     disabled={saving}
-                    className="flex items-center gap-2 bg-danger hover:bg-danger-hover disabled:bg-surface-raised disabled:text-content-muted text-content-on-primary px-6 py-2.5 rounded-md transition-colors font-medium"
+                    className="app-button-primary"
                 >
                     <Save className="w-4 h-4" />
-                    {saving ? 'Saving...' : 'Save Changes'}
-                </button>
-            </div>
+                    {saving ? t('adminSettings.actions.saving') : t('adminSettings.actions.save')}
+                </button>}
+            />
 
             {message && (
-                <div className={`p-4 rounded-lg border flex items-center gap-3 ${
-                    message.type === 'success'
-                        ? 'bg-success/20 border-success/50 text-success'
-                        : 'bg-danger/20 border-danger/50 text-danger'
-                }`}>
-                    {message.type === 'success' ? (
-                        <CheckCircle className="w-5 h-5" />
-                    ) : (
-                        <XCircle className="w-5 h-5" />
-                    )}
-                    {message.text}
-                </div>
+                <Alert tone={message.type === 'success' ? 'success' : 'danger'}>{message.text}</Alert>
             )}
 
             <div className="space-y-6">
                 <EmailDiagnosticsPanel />
                 {/* Tibia Validation Settings */}
                 <div className="bg-surface-base/50 border border-line rounded-lg p-6">
-                    <h2 className="text-xl font-semibold text-content-primary mb-4">Tibia Character Validation</h2>
+                    <h2 className="text-xl font-semibold text-content-primary mb-4">{t('adminSettings.validation.title')}</h2>
 
                     <div className="space-y-4">
                         <div className="flex items-center justify-between">
                             <div>
-                                <h3 className="font-medium text-content-primary">Enable Validation</h3>
-                                <p className="text-sm text-content-secondary">Validate character names against Tibia API during registration</p>
+                                <h3 className="font-medium text-content-primary">{t('adminSettings.validation.enabled')}</h3>
+                                <p className="text-sm text-content-secondary">{t('adminSettings.validation.enabledHelp')}</p>
                             </div>
                             <label className="relative inline-flex items-center cursor-pointer">
                                 <input
                                     type="checkbox"
+                                    aria-label={t('adminSettings.validation.enabledAria')}
                                     checked={settings.tibia_validation_enabled}
                                     onChange={(e) => updateSetting('tibia_validation_enabled', e.target.checked)}
+                                    disabled={saving}
                                     className="sr-only peer"
                                 />
                                 <div className="w-11 h-6 bg-surface-raised peer-focus:outline-none peer-focus:ring-2 peer-focus:ring-danger rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-line after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-surface-inverse after:border-line after:border after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-danger"></div>
@@ -160,14 +153,16 @@ export default function AdminSettings() {
 
                         <div className="flex items-center justify-between">
                             <div>
-                                <h3 className="font-medium text-content-primary">Strict Mode</h3>
-                                <p className="text-sm text-content-secondary">Block registration if Tibia API is unavailable</p>
+                                <h3 className="font-medium text-content-primary">{t('adminSettings.validation.strict')}</h3>
+                                <p className="text-sm text-content-secondary">{t('adminSettings.validation.strictHelp')}</p>
                             </div>
                             <label className="relative inline-flex items-center cursor-pointer">
                                 <input
                                     type="checkbox"
+                                    aria-label={t('adminSettings.validation.strictAria')}
                                     checked={settings.tibia_validation_strict}
                                     onChange={(e) => updateSetting('tibia_validation_strict', e.target.checked)}
+                                    disabled={saving}
                                     className="sr-only peer"
                                 />
                                 <div className="w-11 h-6 bg-surface-raised peer-focus:outline-none peer-focus:ring-2 peer-focus:ring-danger rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-line after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-surface-inverse after:border-line after:border after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-danger"></div>
@@ -178,33 +173,31 @@ export default function AdminSettings() {
 
                 {/* Discord Integration Settings */}
                 <div className="bg-surface-base/50 border border-line rounded-lg p-6">
-                    <h2 className="text-xl font-semibold text-content-primary mb-4">Discord Integration</h2>
+                    <h2 className="text-xl font-semibold text-content-primary mb-4">{t('adminSettings.discord.title')}</h2>
 
                     <div className="space-y-4">
-                        <div>
-                            <label className="block font-medium text-content-primary mb-2">Webhook URL</label>
-                            <input
+                        <FormField label={t('adminSettings.discord.webhook')} helpText={t('adminSettings.discord.webhookHelp')}>
+                            <Input
                                 type="text"
                                 value={settings.discord_webhook_url}
                                 onChange={(e) => updateSetting('discord_webhook_url', e.target.value)}
                                 placeholder="https://discord.com/api/webhooks/..."
-                                className="w-full bg-surface-base border border-line rounded-md px-4 py-2.5 text-content-primary focus:border-danger focus:outline-none"
+                                disabled={saving}
                             />
-                            <p className="text-xs text-content-muted mt-1">
-                                Get your webhook URL from Discord Server Settings → Integrations → Webhooks
-                            </p>
-                        </div>
+                        </FormField>
 
                         <div className="flex items-center justify-between">
                             <div>
-                                <h3 className="font-medium text-content-primary">Auto-Post Announcements</h3>
-                                <p className="text-sm text-content-secondary">Automatically post new announcements to Discord</p>
+                                <h3 className="font-medium text-content-primary">{t('adminSettings.discord.autoPost')}</h3>
+                                <p className="text-sm text-content-secondary">{t('adminSettings.discord.autoPostHelp')}</p>
                             </div>
                             <label className="relative inline-flex items-center cursor-pointer">
                                 <input
                                     type="checkbox"
+                                    aria-label={t('adminSettings.discord.autoPostAria')}
                                     checked={settings.discord_auto_post}
                                     onChange={(e) => updateSetting('discord_auto_post', e.target.checked)}
+                                    disabled={saving}
                                     className="sr-only peer"
                                 />
                                 <div className="w-11 h-6 bg-surface-raised peer-focus:outline-none peer-focus:ring-2 peer-focus:ring-danger rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-line after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-surface-inverse after:border-line after:border after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-accent"></div>
@@ -215,26 +208,28 @@ export default function AdminSettings() {
 
                 {/* Cyclopedia Category Images */}
                 <div className="bg-surface-base/50 border border-line rounded-lg p-6">
-                    <h2 className="text-xl font-semibold text-content-primary mb-2">Cyclopedia Category Images</h2>
-                    <p className="text-sm text-content-secondary mb-4">Set URL or upload local file for each creature category card.</p>
+                    <h2 className="text-xl font-semibold text-content-primary mb-2">{t('adminSettings.images.title')}</h2>
+                    <p className="text-sm text-content-secondary mb-4">{t('adminSettings.images.help')}</p>
 
                     <div className="grid gap-4 sm:grid-cols-2">
                         {CREATURE_CATEGORY_KEYS.map(({ category, key }) => (
                             <div key={key} className="rounded-lg border border-line bg-surface-base/50 p-3">
-                                <div className="mb-2 text-sm font-medium text-content-primary">{category}</div>
-                                <input
+                                <FormField label={category}>
+                                <Input
                                     type="text"
                                     value={settings.cyclopedia_category_images?.[key] || ''}
                                     onChange={(e) => updateCategoryImage(key, e.target.value)}
                                     placeholder="https://... or /api/v1/creatures/category-images/file/..."
-                                    className="w-full bg-surface-base border border-line rounded-md px-3 py-2 text-content-primary focus:border-danger focus:outline-none"
+                                    disabled={saving}
                                 />
+                                </FormField>
                                 <label className="mt-2 inline-flex cursor-pointer items-center rounded-md border border-line px-3 py-1.5 text-xs text-content-secondary hover:border-danger/50">
-                                    Upload local image
+                                    {t('adminSettings.images.upload')}
                                     <input
                                         type="file"
                                         accept="image/*"
                                         className="hidden"
+                                        disabled={saving}
                                         onChange={(e) => handleCategoryFileUpload(key, e.target.files?.[0])}
                                     />
                                 </label>
@@ -245,19 +240,21 @@ export default function AdminSettings() {
 
                 {/* Guild Features */}
                 <div className="bg-surface-base/50 border border-line rounded-lg p-6">
-                    <h2 className="text-xl font-semibold text-content-primary mb-4">Guild Feature Toggles</h2>
+                    <h2 className="text-xl font-semibold text-content-primary mb-4">{t('adminSettings.features.title')}</h2>
 
                     <div className="space-y-4">
                         <div className="flex items-center justify-between">
                             <div>
-                                <h3 className="font-medium text-content-primary">Guild Raffles</h3>
-                                <p className="text-sm text-content-secondary">Enable or disable raffle views and registration flows</p>
+                                <h3 className="font-medium text-content-primary">{t('adminSettings.features.raffles')}</h3>
+                                <p className="text-sm text-content-secondary">{t('adminSettings.features.rafflesHelp')}</p>
                             </div>
                             <label className="relative inline-flex items-center cursor-pointer">
                                 <input
                                     type="checkbox"
+                                    aria-label={t('adminSettings.features.rafflesAria')}
                                     checked={settings.guild_raffles_enabled}
                                     onChange={(e) => updateSetting('guild_raffles_enabled', e.target.checked)}
+                                    disabled={saving}
                                     className="sr-only peer"
                                 />
                                 <div className="w-11 h-6 bg-surface-raised peer-focus:outline-none peer-focus:ring-2 peer-focus:ring-danger rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-line after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-surface-inverse after:border-line after:border after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-danger"></div>
@@ -266,14 +263,16 @@ export default function AdminSettings() {
 
                         <div className="flex items-center justify-between">
                             <div>
-                                <h3 className="font-medium text-content-primary">Guild Contests</h3>
-                                <p className="text-sm text-content-secondary">Enable or disable contest references in guild event flows</p>
+                                <h3 className="font-medium text-content-primary">{t('adminSettings.features.contests')}</h3>
+                                <p className="text-sm text-content-secondary">{t('adminSettings.features.contestsHelp')}</p>
                             </div>
                             <label className="relative inline-flex items-center cursor-pointer">
                                 <input
                                     type="checkbox"
+                                    aria-label={t('adminSettings.features.contestsAria')}
                                     checked={settings.guild_contests_enabled}
                                     onChange={(e) => updateSetting('guild_contests_enabled', e.target.checked)}
+                                    disabled={saving}
                                     className="sr-only peer"
                                 />
                                 <div className="w-11 h-6 bg-surface-raised peer-focus:outline-none peer-focus:ring-2 peer-focus:ring-danger rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-line after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-surface-inverse after:border-line after:border after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-danger"></div>

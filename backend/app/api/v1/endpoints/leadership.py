@@ -1,6 +1,6 @@
 from datetime import UTC, datetime
 
-from fastapi import APIRouter, Depends, HTTPException
+from fastapi import APIRouter, Depends, HTTPException, Query
 from sqlalchemy import func
 from sqlalchemy.orm import Session, selectinload
 
@@ -19,6 +19,8 @@ from app.schemas.leadership import (
     OpeningUpdate, PromotionUpdate, StatusUpdate, VoteCreate,
 )
 from app.services.leadership_service import ACTIVE_APPLICATION_STATUSES, LeadershipService
+from app.services.guild_authorization_service import GuildAuthorizationService
+from app.services.guild_roster_service import normalize_guild_identity
 from app.services.notification_service import NotificationService
 
 router = APIRouter()
@@ -37,6 +39,17 @@ def own_guild(user: User) -> str:
     guild = ((primary or fallback).guild_name if primary or fallback else "").strip()
     if not guild: raise HTTPException(409, "No guild membership is linked")
     return guild
+
+
+def workspace_guild(db: Session, user: User, guild_name: str | None) -> str:
+    """Resolve explicit Guild workspace scope, retaining legacy implicit scope."""
+    requested = normalize_guild_identity(guild_name or "")
+    if not requested:
+        return own_guild(user)
+    for context in GuildAuthorizationService.guild_contexts(db, user):
+        if normalize_guild_identity(context["guild_name"]) == requested:
+            return context["guild_name"]
+    raise HTTPException(403, "Guild workspace access denied")
 
 
 def opening_or_404(db: Session, opening_id: int, guild_name: str) -> GuildLeadershipOpening:
@@ -93,18 +106,18 @@ def summary(db: Session, guild: str, user: User) -> dict:
 
 
 @router.get("/me/leadership")
-def get_summary(db: Session = Depends(get_db), user: User = Depends(get_current_active_user)): return summary(db, own_guild(user), user)
+def get_summary(guild_name: str | None = Query(None), db: Session = Depends(get_db), user: User = Depends(get_current_active_user)): return summary(db, workspace_guild(db, user, guild_name), user)
 
 
 @router.get("/me/leadership/roles")
-def get_roles(db: Session = Depends(get_db), user: User = Depends(get_current_active_user)):
-    role = db.query(GuildLeadershipRole).filter(GuildLeadershipRole.guild_name.ilike(own_guild(user)), GuildLeadershipRole.role_code == "viceleader").first()
+def get_roles(guild_name: str | None = Query(None), db: Session = Depends(get_db), user: User = Depends(get_current_active_user)):
+    role = db.query(GuildLeadershipRole).filter(GuildLeadershipRole.guild_name.ilike(workspace_guild(db, user, guild_name)), GuildLeadershipRole.role_code == "viceleader").first()
     return [{"role_code": "viceleader", "display_name_key": "leadership.roles.viceleader", "description_key": "leadership.roles.viceleaderDescription", "target_count": role.target_count if role else 4, "recruitment_enabled": role.recruitment_enabled if role else True}]
 
 
 @router.get("/me/leadership/openings")
-def list_openings(db: Session = Depends(get_db), user: User = Depends(get_current_active_user)):
-    guild = own_guild(user); query = db.query(GuildLeadershipOpening).filter(GuildLeadershipOpening.guild_name.ilike(guild))
+def list_openings(guild_name: str | None = Query(None), db: Session = Depends(get_db), user: User = Depends(get_current_active_user)):
+    guild = workspace_guild(db, user, guild_name); query = db.query(GuildLeadershipOpening).filter(GuildLeadershipOpening.guild_name.ilike(guild))
     rows = query.order_by(GuildLeadershipOpening.created_at.desc()).all()
     return [opening_data(row) for row in rows if LeadershipService.can_view_opening(row, user)]
 
@@ -119,20 +132,20 @@ def create_opening_for(db: Session, guild: str, user: User, payload: OpeningCrea
 
 
 @router.post("/me/leadership/openings", status_code=201)
-def create_opening(payload: OpeningCreate, db: Session = Depends(get_db), user: User = Depends(get_current_active_user)): return create_opening_for(db, own_guild(user), user, payload)
+def create_opening(payload: OpeningCreate, guild_name: str | None = Query(None), db: Session = Depends(get_db), user: User = Depends(get_current_active_user)): return create_opening_for(db, workspace_guild(db, user, guild_name), user, payload)
 
 
 @router.get("/me/leadership/openings/{opening_id}")
-def get_opening(opening_id: int, db: Session = Depends(get_db), user: User = Depends(get_current_active_user)):
-    row = opening_or_404(db, opening_id, own_guild(user))
+def get_opening(opening_id: int, guild_name: str | None = Query(None), db: Session = Depends(get_db), user: User = Depends(get_current_active_user)):
+    row = opening_or_404(db, opening_id, workspace_guild(db, user, guild_name))
     if not LeadershipService.can_view_opening(row, user):
         raise HTTPException(404, "Leadership opening not found")
     return opening_data(row)
 
 
 @router.patch("/me/leadership/openings/{opening_id}")
-def update_opening(opening_id: int, payload: OpeningUpdate, db: Session = Depends(get_db), user: User = Depends(get_current_active_user)):
-    row = opening_or_404(db, opening_id, own_guild(user))
+def update_opening(opening_id: int, payload: OpeningUpdate, guild_name: str | None = Query(None), db: Session = Depends(get_db), user: User = Depends(get_current_active_user)):
+    row = opening_or_404(db, opening_id, workspace_guild(db, user, guild_name))
     if not LeadershipService.manager(user, row.guild_name) or row.status == "archived": raise HTTPException(403, "Opening is read-only")
     if payload.application_deadline and payload.application_deadline < datetime.now(UTC):
         raise HTTPException(400, "Deadline cannot be in the past")
@@ -160,41 +173,41 @@ def lifecycle(db: Session, row: GuildLeadershipOpening, user: User, target: str)
 
 
 for action in ("open", "pause", "close", "archive"):
-    def endpoint(opening_id: int, db: Session = Depends(get_db), user: User = Depends(get_current_active_user), _action=action): return lifecycle(db, opening_or_404(db, opening_id, own_guild(user)), user, "paused" if _action == "pause" else _action)
+    def endpoint(opening_id: int, guild_name: str | None = Query(None), db: Session = Depends(get_db), user: User = Depends(get_current_active_user), _action=action): return lifecycle(db, opening_or_404(db, opening_id, workspace_guild(db, user, guild_name)), user, "paused" if _action == "pause" else _action)
     router.add_api_route(f"/me/leadership/openings/{{opening_id}}/{action}", endpoint, methods=["POST"])
 
 
 @router.post("/me/leadership/openings/{opening_id}/applications", status_code=201)
-def apply(opening_id: int, payload: ApplicationCreate, db: Session = Depends(get_db), user: User = Depends(get_current_active_user)):
-    row = LeadershipService.apply(db, opening_or_404(db, opening_id, own_guild(user)), user, payload); db.commit(); return application_data(row, user)
+def apply(opening_id: int, payload: ApplicationCreate, guild_name: str | None = Query(None), db: Session = Depends(get_db), user: User = Depends(get_current_active_user)):
+    row = LeadershipService.apply(db, opening_or_404(db, opening_id, workspace_guild(db, user, guild_name)), user, payload); db.commit(); return application_data(row, user)
 
 
 @router.get("/me/leadership/applications/mine")
-def mine(db: Session = Depends(get_db), user: User = Depends(get_current_active_user)):
-    rows = db.query(GuildLeadershipApplication).join(GuildLeadershipOpening).filter(GuildLeadershipOpening.guild_name.ilike(own_guild(user)), GuildLeadershipApplication.applicant_user_id == user.id).all(); return [application_data(row, user) for row in rows]
+def mine(guild_name: str | None = Query(None), db: Session = Depends(get_db), user: User = Depends(get_current_active_user)):
+    rows = db.query(GuildLeadershipApplication).join(GuildLeadershipOpening).filter(GuildLeadershipOpening.guild_name.ilike(workspace_guild(db, user, guild_name)), GuildLeadershipApplication.applicant_user_id == user.id).all(); return [application_data(row, user) for row in rows]
 
 
 @router.get("/me/leadership/applications")
-def applications(db: Session = Depends(get_db), user: User = Depends(get_current_active_user)):
-    guild = own_guild(user); rows = db.query(GuildLeadershipApplication).join(GuildLeadershipOpening).filter(GuildLeadershipOpening.guild_name.ilike(guild)).all()
+def applications(guild_name: str | None = Query(None), db: Session = Depends(get_db), user: User = Depends(get_current_active_user)):
+    guild = workspace_guild(db, user, guild_name); rows = db.query(GuildLeadershipApplication).join(GuildLeadershipOpening).filter(GuildLeadershipOpening.guild_name.ilike(guild)).all()
     return [application_data(row, user) for row in rows if LeadershipService.reviewer(user, row.opening)]
 
 
 @router.get("/me/leadership/applications/{application_id}")
-def application_detail(application_id: int, db: Session = Depends(get_db), user: User = Depends(get_current_active_user)): return application_data(application_or_404(db, application_id, own_guild(user)), user)
+def application_detail(application_id: int, guild_name: str | None = Query(None), db: Session = Depends(get_db), user: User = Depends(get_current_active_user)): return application_data(application_or_404(db, application_id, workspace_guild(db, user, guild_name)), user)
 
 
 @router.patch("/me/leadership/applications/{application_id}/status")
-def status(application_id: int, payload: StatusUpdate, db: Session = Depends(get_db), user: User = Depends(get_current_active_user)):
-    row = application_or_404(db, application_id, own_guild(user))
+def status(application_id: int, payload: StatusUpdate, guild_name: str | None = Query(None), db: Session = Depends(get_db), user: User = Depends(get_current_active_user)):
+    row = application_or_404(db, application_id, workspace_guild(db, user, guild_name))
     if payload.status == "accepted": LeadershipService.accept(db, row, user, payload.reason)
     else: LeadershipService.transition(db, row, user, payload.status, payload.reason, override=payload.admin_override)
     db.commit(); return application_data(row, user)
 
 
 @router.post("/me/leadership/applications/{application_id}/withdraw")
-def withdraw(application_id: int, db: Session = Depends(get_db), user: User = Depends(get_current_active_user)):
-    row = application_or_404(db, application_id, own_guild(user))
+def withdraw(application_id: int, guild_name: str | None = Query(None), db: Session = Depends(get_db), user: User = Depends(get_current_active_user)):
+    row = application_or_404(db, application_id, workspace_guild(db, user, guild_name))
     if row.applicant_user_id != user.id or row.status not in ACTIVE_APPLICATION_STATUSES: raise HTTPException(403, "Application cannot be withdrawn")
     previous = row.status; row.status = "withdrawn"; row.withdrawn_at = datetime.now(UTC); row.version += 1
     from app.models.leadership import GuildLeadershipApplicationHistory
@@ -203,12 +216,12 @@ def withdraw(application_id: int, db: Session = Depends(get_db), user: User = De
 
 
 @router.get("/me/leadership/applications/{application_id}/messages")
-def messages(application_id: int, db: Session = Depends(get_db), user: User = Depends(get_current_active_user)): return application_data(application_or_404(db, application_id, own_guild(user)), user)["messages"]
+def messages(application_id: int, guild_name: str | None = Query(None), db: Session = Depends(get_db), user: User = Depends(get_current_active_user)): return application_data(application_or_404(db, application_id, workspace_guild(db, user, guild_name)), user)["messages"]
 
 
 @router.post("/me/leadership/applications/{application_id}/messages", status_code=201)
-def add_message(application_id: int, payload: MessageCreate, db: Session = Depends(get_db), user: User = Depends(get_current_active_user)):
-    row = application_or_404(db, application_id, own_guild(user)); reviewer = LeadershipService.reviewer(user, row.opening); applicant = row.applicant_user_id == user.id
+def add_message(application_id: int, payload: MessageCreate, guild_name: str | None = Query(None), db: Session = Depends(get_db), user: User = Depends(get_current_active_user)):
+    row = application_or_404(db, application_id, workspace_guild(db, user, guild_name)); reviewer = LeadershipService.reviewer(user, row.opening); applicant = row.applicant_user_id == user.id
     if applicant:
         if row.status != "more_information_requested" or payload.audience not in {"reviewers", "both"}: raise HTTPException(403, "Applicant replies are not currently allowed")
     elif not reviewer: raise HTTPException(403, "Application messages are private")
@@ -221,13 +234,13 @@ def add_message(application_id: int, payload: MessageCreate, db: Session = Depen
 
 
 @router.post("/me/leadership/applications/{application_id}/comments", status_code=201)
-def comment(application_id: int, payload: MessageCreate, db: Session = Depends(get_db), user: User = Depends(get_current_active_user)):
-    return add_message(application_id, MessageCreate(audience="reviewers", message_type="internal_comment", body=payload.body), db, user)
+def comment(application_id: int, payload: MessageCreate, guild_name: str | None = Query(None), db: Session = Depends(get_db), user: User = Depends(get_current_active_user)):
+    return add_message(application_id, MessageCreate(audience="reviewers", message_type="internal_comment", body=payload.body), guild_name, db, user)
 
 
 @router.post("/me/leadership/applications/{application_id}/interview")
-def interview(application_id: int, payload: InterviewCreate, db: Session = Depends(get_db), user: User = Depends(get_current_active_user)):
-    row = application_or_404(db, application_id, own_guild(user))
+def interview(application_id: int, payload: InterviewCreate, guild_name: str | None = Query(None), db: Session = Depends(get_db), user: User = Depends(get_current_active_user)):
+    row = application_or_404(db, application_id, workspace_guild(db, user, guild_name))
     if not LeadershipService.manager(user, row.opening.guild_name): raise HTTPException(403, "Only guild leaders schedule interviews")
     if row.status in {"under_review", "more_information_requested"}:
         LeadershipService.transition(db, row, user, "interview")
@@ -241,8 +254,8 @@ def interview(application_id: int, payload: InterviewCreate, db: Session = Depen
 
 
 @router.post("/me/leadership/applications/{application_id}/votes")
-def vote(application_id: int, payload: VoteCreate, db: Session = Depends(get_db), user: User = Depends(get_current_active_user)):
-    row = application_or_404(db, application_id, own_guild(user))
+def vote(application_id: int, payload: VoteCreate, guild_name: str | None = Query(None), db: Session = Depends(get_db), user: User = Depends(get_current_active_user)):
+    row = application_or_404(db, application_id, workspace_guild(db, user, guild_name))
     if row.status != "voting" or not row.opening.voting_enabled or not LeadershipService.reviewer(user, row.opening) or row.applicant_user_id == user.id: raise HTTPException(403, "Voting is not permitted")
     item = db.query(GuildLeadershipVote).filter_by(application_id=row.id, voter_user_id=user.id).first()
     if item: item.vote=payload.vote; item.comment=payload.comment
@@ -251,21 +264,21 @@ def vote(application_id: int, payload: VoteCreate, db: Session = Depends(get_db)
 
 
 @router.post("/me/leadership/applications/{application_id}/decision")
-def decision(application_id: int, payload: DecisionCreate, db: Session = Depends(get_db), user: User = Depends(get_current_active_user)):
-    row = application_or_404(db, application_id, own_guild(user))
+def decision(application_id: int, payload: DecisionCreate, guild_name: str | None = Query(None), db: Session = Depends(get_db), user: User = Depends(get_current_active_user)):
+    row = application_or_404(db, application_id, workspace_guild(db, user, guild_name))
     if payload.decision == "accepted": LeadershipService.accept(db, row, user, payload.reason)
     else: LeadershipService.transition(db, row, user, "rejected", payload.reason)
     db.commit(); return application_data(row, user)
 
 
 @router.get("/me/leadership/assignments")
-def assignments(db: Session = Depends(get_db), user: User = Depends(get_current_active_user)):
-    guild=own_guild(user); return [assignment_data(row) for row in db.query(GuildLeadershipAssignment).filter(GuildLeadershipAssignment.guild_name.ilike(guild)).order_by(GuildLeadershipAssignment.is_active.desc(), GuildLeadershipAssignment.started_at.desc()).all()]
+def assignments(guild_name: str | None = Query(None), db: Session = Depends(get_db), user: User = Depends(get_current_active_user)):
+    guild=workspace_guild(db, user, guild_name); return [assignment_data(row) for row in db.query(GuildLeadershipAssignment).filter(GuildLeadershipAssignment.guild_name.ilike(guild)).order_by(GuildLeadershipAssignment.is_active.desc(), GuildLeadershipAssignment.started_at.desc()).all()]
 
 
 @router.patch("/me/leadership/assignments/{assignment_id}/promotion")
-def promotion(assignment_id: int, payload: PromotionUpdate, db: Session = Depends(get_db), user: User = Depends(get_current_active_user)):
-    row=db.query(GuildLeadershipAssignment).filter(GuildLeadershipAssignment.id==assignment_id, GuildLeadershipAssignment.guild_name.ilike(own_guild(user))).first()
+def promotion(assignment_id: int, payload: PromotionUpdate, guild_name: str | None = Query(None), db: Session = Depends(get_db), user: User = Depends(get_current_active_user)):
+    row=db.query(GuildLeadershipAssignment).filter(GuildLeadershipAssignment.id==assignment_id, GuildLeadershipAssignment.guild_name.ilike(workspace_guild(db, user, guild_name))).first()
     if not row or not LeadershipService.manager(user, row.guild_name): raise HTTPException(403, "Promotion tracking is restricted")
     if payload.completed and row.in_game_promotion_status == "completed": raise HTTPException(409, "In-game promotion is already complete")
     row.in_game_promotion_status="completed" if payload.completed else "pending"; row.in_game_promoted_at=datetime.now(UTC) if payload.completed else None; row.in_game_promoted_by_id=user.id if payload.completed else None
@@ -274,8 +287,8 @@ def promotion(assignment_id: int, payload: PromotionUpdate, db: Session = Depend
 
 
 @router.post("/me/leadership/assignments/{assignment_id}/end")
-def end_assignment(assignment_id: int, payload: AssignmentEnd, db: Session = Depends(get_db), user: User = Depends(get_current_active_user)):
-    row = db.query(GuildLeadershipAssignment).filter(GuildLeadershipAssignment.id == assignment_id, GuildLeadershipAssignment.guild_name.ilike(own_guild(user))).first()
+def end_assignment(assignment_id: int, payload: AssignmentEnd, guild_name: str | None = Query(None), db: Session = Depends(get_db), user: User = Depends(get_current_active_user)):
+    row = db.query(GuildLeadershipAssignment).filter(GuildLeadershipAssignment.id == assignment_id, GuildLeadershipAssignment.guild_name.ilike(workspace_guild(db, user, guild_name))).first()
     if not row or not LeadershipService.manager(user, row.guild_name): raise HTTPException(403, "Assignment management is restricted")
     if not row.is_active: raise HTTPException(409, "Assignment is already ended")
     row.is_active = False; row.ended_at = datetime.now(UTC); row.notes = payload.reason

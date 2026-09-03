@@ -4,6 +4,7 @@ from pathlib import Path
 from PIL import Image
 
 from app.core.config import settings
+from app.knowledge.metadata import refresh_search_metadata
 from app.models.hunt_zone import HuntZone
 from app.knowledge.models import KnowledgeEntity, KnowledgeEntityType
 from app.models.world_map import WorldMapDataset, WorldMapMarker
@@ -55,6 +56,11 @@ def test_local_import_bootstrap_exact_hunt_and_no_runtime_provider_request(clien
     search = client.get("/api/v1/map/search", params={"q": "Iksupan", "layers": "hunt_zone"}).json()["items"][0]
     assert (search["x"], search["y"], search["z"]) == (34039, 31727, 10)
     assert search["marker_label"] == "Iksupan"
+    detail_map = client.get(f"/api/v1/spatial/entities/{iksupan.uuid}")
+    assert detail_map.status_code == 200
+    point = detail_map.json()["items"][0]["map_point"]
+    assert (point["x"], point["y"], point["z"]) == (34039, 31727, 10)
+    assert point["provider_metadata"]["representation_type"] == "world_map_marker"
 
 
 def test_tibiamaps_stored_dataset_renormalizes_and_only_exact_names_link(db, tmp_path):
@@ -80,3 +86,39 @@ def test_tibiamaps_stored_dataset_renormalizes_and_only_exact_names_link(db, tmp
     assert replayed["dataset_id"] == dataset_id
     assert db.query(WorldMapDataset).filter_by(is_current=True).one().upstream_commit == "e" * 40
     assert db.query(WorldMapMarker).count() == 4
+
+
+def test_marker_resolution_reconciles_late_entities_and_preserves_ambiguity(db, tmp_path):
+    db.add_all([
+        KnowledgeEntityType(entity_type="town", display_name="Town"),
+        KnowledgeEntityType(entity_type="hunt_zone", display_name="Hunt Zone"),
+    ])
+    db.flush()
+    service = WorldMapSyncService(db, tmp_path / "world-maps")
+    service.import_directory(_source(tmp_path), upstream_commit="f" * 40)
+    iksupan_marker = db.query(WorldMapMarker).filter_by(description="Iksupan").one()
+    assert iksupan_marker.resolution_state == "unresolved"
+
+    zone = KnowledgeEntity(
+        entity_type="hunt_zone", canonical_name="Iksupan", slug="iksupan",
+        language_neutral_id="hunt:test:late-iksupan",
+    )
+    db.add(zone)
+    refresh_search_metadata(zone)
+    db.flush()
+    first = service.reconcile_marker_resolutions({"iksupan"})
+    assert first["changed"] == 1
+    assert iksupan_marker.resolved_entity_id == zone.uuid
+    assert iksupan_marker.resolution_state == "resolved"
+
+    town = KnowledgeEntity(
+        entity_type="town", canonical_name="Iksupan", slug="iksupan-town",
+        language_neutral_id="town:test:late-iksupan",
+    )
+    db.add(town)
+    refresh_search_metadata(town)
+    db.flush()
+    second = service.reconcile_marker_resolutions({"iksupan"})
+    assert second["changed"] == 1
+    assert iksupan_marker.resolved_entity_id is None
+    assert iksupan_marker.resolution_state == "ambiguous"

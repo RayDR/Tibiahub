@@ -98,12 +98,14 @@ def test_point_region_route_persistence_graph_and_versioning(db, spatial_registr
 
     region = persist_map_region(db, MapRegionDTO(
         "thais-centre", "Thais Centre", polygon(), location_name="Thais Temple",
-        minimum_z=7, maximum_z=7, confidence="medium",
+        confidence="medium",
     ))
     assert persist_map_region(db, MapRegionDTO(
         "thais-centre", "Thais Centre", polygon(), location_name="Thais Temple",
-        minimum_z=7, maximum_z=7, confidence="medium",
+        confidence="medium",
     )).id == region.id
+    assert (region.min_x, region.min_y, region.max_x, region.max_y) == (32360, 32230, 32380, 32250)
+    assert (region.min_z, region.max_z) == (7, 7)
     route_dto = RouteDTO(
         "temple-depot", "Temple to Depot",
         (

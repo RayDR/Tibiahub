@@ -59,7 +59,7 @@ const PageHeader: React.FC<PageHeaderProps> = ({
           {subtitle ? <p className={cn('app-page-subtitle', align === 'left' && 'mx-0')}>{subtitle}</p> : null}
         </div>
         {(primaryAction || secondaryActions) ? (
-          <div className={cn('flex shrink-0 flex-wrap items-center gap-2', align === 'center' && 'mt-4 justify-center')}>
+          <div className={cn('flex min-w-0 max-w-full flex-wrap items-center gap-2 sm:flex-[0_1_auto]', align === 'center' && 'mt-4 justify-center')}>
             {secondaryActions}
             {primaryAction}
           </div>

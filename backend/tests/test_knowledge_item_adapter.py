@@ -22,6 +22,7 @@ from app.knowledge.adapters import (
     TibiaWikiItemAdapter,
 )
 from app.knowledge.dto import ItemKnowledgeDTO
+from app.knowledge.indexing import normalize_name
 from app.knowledge.models import (
     KnowledgeCreatureItemDrop,
     KnowledgeDocument,
@@ -42,8 +43,11 @@ from app.knowledge.services import (
     KnowledgeJobService,
 )
 from app.knowledge.services.normalization import KnowledgeNormalizationService
+from app.knowledge.services.npc_trade_repair import NpcTradeRelationshipRepairService
+from app.knowledge.schemas import KnowledgeDocumentCreate
+from app.knowledge.storage import KnowledgeDocumentStore
 from app.knowledge.workers.knowledge_worker import KnowledgeWorker
-from app.models import Creature, Item
+from app.models import Creature, Item, TibiaWikiNpc
 from app.models.workspace_audit import WorkspaceAudit
 from tests.conftest import make_user
 
@@ -171,6 +175,64 @@ def test_item_detail_maps_real_fields_categories_and_unknown_envelope():
     assert dto.vocation_requirements == ("Knight", "Elite Knight")
     assert [reference.name for reference in dto.dropped_by] == ["Demon", "Ferumbras"]
     assert dto.provider_metadata["provider_category"] == "Weapon"
+
+
+def test_item_trade_parser_preserves_explicit_price_currency_and_unknown_price():
+    raw = fixture("tibiawiki_item_detail.json")
+    raw["parse"]["wikitext"]["*"] = raw["parse"]["wikitext"]["*"].replace(
+        "| buyfrom = [[A Sweaty Cyclops]]",
+        "| buyfrom = Captain Bluebear: 1,000, Unknown Merchant",
+    ).replace(
+        "| sellto = [[Rashid]]",
+        "| sellto = Rashid:6400;sayname, Fiona",
+    )
+    dto = ItemKnowledgeDTO.from_canonical_data(
+        TibiaWikiItemAdapter(FixtureItemClient()).normalize(
+            _document(raw), normalization_context(),
+        ).canonical_data,
+    )
+    assert [(value.name, value.price, value.currency) for value in dto.buy_from] == [
+        ("Captain Bluebear", 1000, "gold_coin"),
+        ("Unknown Merchant", None, None),
+    ]
+    assert [(value.name, value.price, value.currency) for value in dto.sell_to] == [
+        ("Rashid", 6400, "gold_coin"),
+        ("Fiona", None, None),
+    ]
+
+
+def test_item_trade_parser_removes_provider_display_modifier_from_identity():
+    raw = fixture("tibiawiki_item_detail.json")
+    raw["parse"]["wikitext"]["*"] = raw["parse"]["wikitext"]["*"].replace(
+        "| sellto = [[Rashid]]",
+        "| sellto = Telas;sayname, Sandra: 20;oil",
+    )
+    dto = ItemKnowledgeDTO.from_canonical_data(
+        TibiaWikiItemAdapter(FixtureItemClient()).normalize(
+            _document(raw), normalization_context(),
+        ).canonical_data,
+    )
+    assert [(value.name, value.price, value.currency, value.qualifier) for value in dto.sell_to] == [
+        ("Telas", None, None, None),
+        ("Sandra", 20, "gold_coin", "oil"),
+    ]
+
+
+def test_item_trade_parser_preserves_special_currency_and_decimal_unknown_currency():
+    raw = fixture("tibiawiki_item_detail.json")
+    raw["parse"]["wikitext"]["*"] = raw["parse"]["wikitext"]["*"].replace(
+        "| buyfrom = [[A Sweaty Cyclops]]",
+        "| buyfrom = Yana: 50 Gold Tokens, Lily: 0.2",
+    )
+    dto = ItemKnowledgeDTO.from_canonical_data(
+        TibiaWikiItemAdapter(FixtureItemClient()).normalize(
+            _document(raw), normalization_context(),
+        ).canonical_data,
+    )
+    assert [(value.name, value.price, value.currency) for value in dto.buy_from] == [
+        ("Yana", 50, "gold_tokens"),
+        ("Lily", 0.2, None),
+    ]
 
 
 
@@ -399,6 +461,7 @@ def test_drop_relationship_resolves_deduplicates_and_retains_unresolved(db, item
     _apply_detail(db, fixture("tibiawiki_item_detail.json"))
     relationships = db.query(KnowledgeRelationship).filter(
         KnowledgeRelationship.is_current.is_(True),
+        KnowledgeRelationship.relationship_type_code.in_(("drops", "dropped_by")),
         (KnowledgeRelationship.source_entity_id == applied.entity_uuid)
         | (KnowledgeRelationship.target_entity_id == applied.entity_uuid),
     ).all()
@@ -409,6 +472,121 @@ def test_drop_relationship_resolves_deduplicates_and_retains_unresolved(db, item
     assert ferumbras.resolution_state == "unresolved" and ferumbras.target_entity_id is None
     assert demon.source_context["direction"] == "item_dropped_by"
     assert db.query(KnowledgeCreatureItemDrop).count() == 0
+
+
+def _npc_entity(db, name: str, *, suffix: str = "one") -> KnowledgeEntity:
+    entity = KnowledgeEntityService.create(
+        db,
+        KnowledgeEntityCreate(
+            entity_type="npc", canonical_name=name,
+            language_neutral_id=f"npc:test:{normalize_name(name)}:{suffix}",
+            allow_name_collision=suffix != "one", slug_suffix=suffix if suffix != "one" else None,
+        ),
+    )
+    db.add(TibiaWikiNpc(
+        name=name, normalized_name=normalize_name(name), slug=entity.slug,
+        external_id=f"npc-{normalize_name(name)}-{suffix}", source_name="tibiawiki",
+        knowledge_entity_id=entity.uuid, supplied_fields=[], protected_fields=[],
+    ))
+    db.flush()
+    return entity
+
+
+def test_item_trade_graph_direction_resolution_ambiguity_provenance_and_full_replay(db, item_registry):
+    seller = _npc_entity(db, "Captain Bluebear")
+    buyer = _npc_entity(db, "Rashid")
+    _npc_entity(db, "Shared Trader")
+    _npc_entity(db, "Shared Trader", suffix="two")
+    raw = fixture("tibiawiki_item_detail.json")
+    raw["parse"]["wikitext"]["*"] = raw["parse"]["wikitext"]["*"].replace(
+        "| buyfrom = [[A Sweaty Cyclops]]",
+        "| buyfrom = Captain Bluebear: 1000, Missing Seller",
+    ).replace(
+        "| sellto = [[Rashid]]",
+        "| sellto = Rashid: 6400, Shared Trader",
+    )
+    first = _apply_detail(db, raw)
+    second = _apply_detail(db, raw)
+    assert second.entity_uuid == first.entity_uuid
+    relationships = db.query(KnowledgeRelationship).filter(
+        KnowledgeRelationship.source_entity_id == first.entity_uuid,
+        KnowledgeRelationship.relationship_type_code.in_(("sold_by_npc", "bought_by_npc")),
+        KnowledgeRelationship.is_current.is_(True),
+    ).all()
+    assert len(relationships) == 4
+    by_name = {
+        row.target_entity.canonical_name if row.target_entity else row.unresolved_name: row
+        for row in relationships
+    }
+    assert by_name["Captain Bluebear"].relationship_type_code == "sold_by_npc"
+    assert by_name["Captain Bluebear"].target_entity_id == seller.uuid
+    assert by_name["Rashid"].relationship_type_code == "bought_by_npc"
+    assert by_name["Rashid"].target_entity_id == buyer.uuid
+    assert by_name["Rashid"].source_context["price"] == 6400
+    assert by_name["Rashid"].source_context["currency"] == "gold_coin"
+    assert by_name["Missing Seller"].resolution_state == "unresolved"
+    assert by_name["Shared Trader"].resolution_state == "ambiguous"
+    assert len(by_name["Shared Trader"].source_context["candidate_entity_ids"]) == 2
+    assert all(row.source_context["source_document_ref"] == "item:111" for row in relationships)
+
+
+def test_trade_graph_preserves_multiple_qualified_offers_without_arbitrary_price(db, item_registry):
+    _npc_entity(db, "Sandra")
+    raw = fixture("tibiawiki_item_detail.json")
+    raw["parse"]["wikitext"]["*"] = raw["parse"]["wikitext"]["*"].replace(
+        "| buyfrom = [[A Sweaty Cyclops]]",
+        "| buyfrom = Sandra: 10;urine, Sandra: 20;oil, Sandra;water",
+    ).replace("| sellto = [[Rashid]]", "| sellto = --")
+    applied = _apply_detail(db, raw)
+    relation = db.query(KnowledgeRelationship).filter_by(
+        source_entity_id=applied.entity_uuid,
+        relationship_type_code="sold_by_npc",
+        is_current=True,
+    ).one()
+    assert relation.source_context["price"] is None
+    assert relation.source_context["currency"] is None
+    assert relation.source_context["offers"] == [
+        {"price": 10, "currency": "gold_coin", "location": None, "qualifier": "urine"},
+        {"price": 20, "currency": "gold_coin", "location": None, "qualifier": "oil"},
+        {"price": None, "currency": None, "location": None, "qualifier": "water"},
+    ]
+
+
+def test_historical_npc_trade_repair_is_bounded_resumable_and_idempotent(db, item_registry):
+    _npc_entity(db, "Captain Bluebear")
+    _npc_entity(db, "Rashid")
+    raw = fixture("tibiawiki_item_detail.json")
+    raw["parse"]["wikitext"]["*"] = raw["parse"]["wikitext"]["*"].replace(
+        "| buyfrom = [[A Sweaty Cyclops]]",
+        "| buyfrom = Captain Bluebear: 1,000",
+    )
+    _apply_detail(db, raw)
+    KnowledgeDocumentStore.persist(db, KnowledgeDocumentCreate(
+        provider_id="tibiawiki",
+        provider_document_id="item:111",
+        raw_json=raw,
+        metadata={"document_kind": "item_detail", "knowledge_job_id": str(uuid4())},
+    ))
+    db.query(KnowledgeRelationship).filter(
+        KnowledgeRelationship.relationship_type_code.in_(("sold_by_npc", "bought_by_npc")),
+    ).delete(synchronize_session=False)
+    db.flush()
+
+    first = NpcTradeRelationshipRepairService.run_batch(db, limit=1)
+    assert first.processed_items == 1 and first.skipped_items == 0
+    rows = db.query(KnowledgeRelationship).filter(
+        KnowledgeRelationship.relationship_type_code.in_(("sold_by_npc", "bought_by_npc")),
+        KnowledgeRelationship.is_current.is_(True),
+    ).all()
+    assert len(rows) == 2
+    assert all(row.source_document_id is not None for row in rows)
+
+    second = NpcTradeRelationshipRepairService.run_batch(db, limit=1)
+    assert second.next_item_id == first.next_item_id
+    assert db.query(KnowledgeRelationship).filter(
+        KnowledgeRelationship.relationship_type_code.in_(("sold_by_npc", "bought_by_npc")),
+        KnowledgeRelationship.is_current.is_(True),
+    ).count() == 2
 
 
 def test_ambiguous_item_variant_relationship_is_not_guessed(db, item_registry):

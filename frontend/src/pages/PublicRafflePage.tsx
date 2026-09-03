@@ -92,7 +92,9 @@ export default function PublicRafflePage() {
             clearInterval(interval);
           }
         }
-      } catch (e) {}
+      } catch {
+        // Status polling is best-effort; the next interval retries automatically.
+      }
 
       // Countdown display - update every second
       const diff = targetTime.getTime() - now.getTime();

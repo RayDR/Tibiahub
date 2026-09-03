@@ -114,13 +114,14 @@ export interface Creature {
 
 export interface HuntZone {
   id: number;
+  canonical_id?: string | null;
   name: string;
   slug?: string;
   city?: string;
   region?: string;
   min_level?: number | null;
   max_level?: number;
-  recommended_level?: number;
+  recommended_level?: number | null;
   recommended_vocations?: string[];
   vocation_recommendations?: Record<string, { level: number | null; skill: number | null; defense: number | null }> | null;
   recommended_party_size?: string;
@@ -134,8 +135,8 @@ export interface HuntZone {
   monks_recommended?: boolean | null;  // Winter Update 2025
   size?: string;
   difficulty?: string;
-  avg_exp_hour?: number;
-  avg_profit_hour?: number;
+  avg_exp_hour?: number | null;
+  avg_profit_hour?: number | null;
   requires_quest?: boolean | null;
   quest_id?: number | null;
   quest_name?: string;
@@ -162,17 +163,50 @@ export interface HuntZone {
   data_sources?: string[] | null;
   data_version?: number | null;
   spatial?: HuntZoneSpatial | null;
+  identity_state?: 'canonical' | 'legacy_only';
+  spatial_state?: 'resolved_point' | 'resolved_bounds' | 'knowledge_only' | 'unresolved';
+  creature_state?: 'canonical' | 'canonical_and_legacy' | 'legacy_only' | 'unresolved' | 'missing';
+  creature_count?: number;
+  boss_count?: number;
+  raw_creature_experience?: number | null;
+  access_required?: boolean | null;
+  access_quest_count?: number;
+  representative_media?: {
+    status: 'available' | 'reference_only' | 'missing';
+    kind?: string | null;
+    url?: string | null;
+    source_provider?: string | null;
+    source_url?: string | null;
+  };
   access?: {
     status: 'unknown' | 'documented' | 'restricted';
     minimum_level?: number | null;
     maximum_level?: number | null;
     premium_required?: boolean | null;
     quest_required?: boolean | null;
-    quests: Array<{ id?: number | null; name: string; slug?: string | null }>;
+    quests: Array<{
+      id?: number | null;
+      canonical_id?: string | null;
+      name: string;
+      slug?: string | null;
+      requirement_type?: 'required_for_access' | 'unlocks_access';
+      resolution_state?: string;
+      confidence?: string | null;
+      source_provider?: string | null;
+      sources?: string[];
+    }>;
+    unresolved_quests?: Array<{
+      name: string;
+      relationship: string;
+      resolution_state: string;
+      confidence?: string | null;
+      source_provider?: string | null;
+    }>;
     notes?: string | null;
     source_provider?: string | null;
     source_url?: string | null;
   };
+  creature_preview?: Array<CreatureSimple & { canonical_id?: string | null; sources?: string[] }>;
   creatures?: CreatureSimple[];
   creature_spawns?: Array<{
     id: number;
@@ -435,15 +469,75 @@ export interface NamedKnowledgeSummary {
   last_synced_at?: string;
 }
 
+export interface NpcMedia {
+  status: 'available' | 'reference_only' | 'missing';
+  url?: string | null;
+  source_provider?: string | null;
+  source_url?: string | null;
+}
+
+export interface NpcDirectoryItem {
+  id: number;
+  canonical_id: string;
+  knowledge_entity_id: string;
+  name: string;
+  slug: string;
+  title?: string | null;
+  occupation?: string | null;
+  location_name?: string | null;
+  buys_count?: number | null;
+  sells_count?: number | null;
+  quest_count?: number | null;
+  destination_count?: number | null;
+  media: NpcMedia;
+  geometry_status: 'mapped' | 'knowledge_only';
+  spatial_state: string;
+  map_available: boolean;
+  last_synced_at?: string | null;
+}
+
+export interface NpcDirectoryPage {
+  items: NpcDirectoryItem[];
+  total: number;
+  skip: number;
+  limit: number;
+}
+
+export interface NpcNamedReference extends QuestNamedValue {
+  price?: number | string | null;
+  semantic: 'npc_buys_from_player' | 'npc_sells_to_player' | 'travel_destination' | 'related';
+  canonical_id?: string | null;
+  entity_type: string;
+  slug?: string | null;
+  resolution_state: 'resolved' | 'unresolved' | 'ambiguous';
+  navigation_url?: string | null;
+}
+
+export interface NpcSpatialSummary {
+  x?: number | null;
+  y?: number | null;
+  z?: number | null;
+  bounds?: { min_x: number; min_y: number; max_x: number; max_y: number } | null;
+  geometry_status: 'mapped' | 'knowledge_only';
+  spatial_state: string;
+  geometry_source?: string | null;
+  spatial_evidence: Array<Record<string, unknown>>;
+  location_labels: string[];
+}
+
 export interface NpcKnowledgeDetail extends NamedKnowledgeSummary {
   title?: string;
   occupation?: string;
   sex?: string;
   location_name?: string;
-  buys: QuestNamedValue[];
-  sells: QuestNamedValue[];
-  destinations: QuestNamedValue[];
-  related_quests: QuestNamedValue[];
+  aliases: string[];
+  field_coverage: Record<'buys' | 'sells' | 'destinations' | 'related_quests', 'available' | 'known_empty' | 'unknown'>;
+  buys: NpcNamedReference[];
+  sells: NpcNamedReference[];
+  destinations: NpcNamedReference[];
+  related_quests: NpcNamedReference[];
+  media: NpcMedia;
+  spatial: NpcSpatialSummary;
   relationships: NamedKnowledgeRelationship[];
 }
 

@@ -4,7 +4,7 @@ import { Link } from 'react-router-dom';
 import { useTranslation } from 'react-i18next';
 
 import { spatialApi } from '../../services/api';
-import { tibiaMapApi, type WorldMapFloor } from '../../services/tibiaMap';
+import { buildMapEntityUrl, tibiaMapApi, type WorldMapFloor } from '../../services/tibiaMap';
 import type { HuntZoneSpatial, SpatialPointMetadata, SpatialRegionMetadata } from '../../types';
 import LocalizedMapPreview from '../map/LocalizedMapPreview';
 import { KnowledgeEmpty } from '../knowledge/KnowledgeDetail';
@@ -28,8 +28,8 @@ export default function QuestMapInsets({ entityId, questName, questSlug }: { ent
     setEvidence([]); setFloors({}); setLoading(Boolean(entityId));
     if (!entityId) return () => controller.abort();
     void spatialApi.forEntity(entityId, controller.signal).then(async (payload) => {
-      const points = (payload.items || []).flatMap((item: { map_point?: SpatialPointMetadata }) => item.map_point ? [item.map_point] : []).filter(trusted);
-      const regions = (payload.items || []).flatMap((item: { map_region?: SpatialRegionMetadata }) => item.map_region ? [item.map_region] : []).filter(trusted);
+      const points: SpatialPointMetadata[] = (payload.items || []).flatMap((item: { map_point?: SpatialPointMetadata }) => item.map_point ? [item.map_point] : []).filter(trusted);
+      const regions: SpatialRegionMetadata[] = (payload.items || []).flatMap((item: { map_region?: SpatialRegionMetadata }) => item.map_region ? [item.map_region] : []).filter(trusted);
       const next: MapEvidence[] = [
         ...points.flatMap((point) => point.x != null && point.y != null && point.z != null ? [{ id: point.id, label: point.name, x: point.x, y: point.y, z: point.z }] : []),
         ...regions.flatMap((region) => {
@@ -47,7 +47,7 @@ export default function QuestMapInsets({ entityId, questName, questSlug }: { ent
     return () => { current = false; controller.abort(); };
   }, [entityId]);
 
-  const mapBase = useMemo(() => `/map?q=${encodeURIComponent(questName)}&entityType=quest&slug=${encodeURIComponent(questSlug)}`, [questName, questSlug]);
+  const mapBase = useMemo(() => buildMapEntityUrl({ canonicalEntityId: entityId, entityType: 'quest', name: questName, slug: questSlug }), [entityId, questName, questSlug]);
   if (loading) return <div className="flex min-h-32 items-center justify-center"><Loader2 className="size-5 animate-spin" /></div>;
   if (!evidence.length) return <KnowledgeEmpty>{t('questDetail.noMappedLocations')}</KnowledgeEmpty>;
 

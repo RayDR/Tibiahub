@@ -146,8 +146,70 @@ class HuntZoneSimple(BaseModel):
 
 class HuntZoneAccessQuest(BaseModel):
     id: Optional[int] = None
+    canonical_id: Optional[UUID] = None
     name: str
     slug: Optional[str] = None
+    requirement_type: str = "required_for_access"
+    resolution_state: str = "unresolved"
+    confidence: Optional[str] = None
+    source_provider: Optional[str] = None
+    sources: List[str] = Field(default_factory=list)
+
+
+class HuntZoneUnresolvedReference(BaseModel):
+    name: str
+    relationship: str
+    resolution_state: str
+    confidence: Optional[str] = None
+    source_provider: Optional[str] = None
+
+
+class HuntZoneCreatureReference(BaseModel):
+    id: Optional[int] = None
+    canonical_id: Optional[UUID] = None
+    name: str
+    slug: Optional[str] = None
+    is_boss: Optional[bool] = None
+    hitpoints: Optional[int] = None
+    experience: Optional[int] = None
+    difficulty: Optional[str] = None
+    image_url: Optional[str] = None
+    quantity: Optional[str] = None
+    notes: Optional[str] = None
+    relationship_types: List[str] = Field(default_factory=list)
+    sources: List[str] = Field(default_factory=list)
+    confidence: Optional[str] = None
+    source_provider: Optional[str] = None
+
+
+class HuntZoneLocationReference(BaseModel):
+    canonical_id: Optional[UUID] = None
+    name: str
+    entity_type: str
+    relationship: str = "located_at"
+    resolution_state: str = "resolved"
+    confidence: Optional[str] = None
+    source_provider: Optional[str] = None
+
+
+class HuntZoneProviderMapping(BaseModel):
+    provider: str
+    external_id: str
+
+
+class HuntZoneCanonicalIdentity(BaseModel):
+    canonical_id: UUID
+    domain_id: int
+    aliases: List[str] = Field(default_factory=list)
+    provider_mappings: List[HuntZoneProviderMapping] = Field(default_factory=list)
+
+
+class HuntZoneMedia(BaseModel):
+    status: str = "missing"
+    kind: Optional[str] = None
+    url: Optional[str] = None
+    source_provider: Optional[str] = None
+    source_url: Optional[str] = None
 
 
 class HuntZoneAccess(BaseModel):
@@ -157,19 +219,39 @@ class HuntZoneAccess(BaseModel):
     premium_required: Optional[bool] = None
     quest_required: Optional[bool] = None
     quests: List[HuntZoneAccessQuest] = Field(default_factory=list)
+    unresolved_quests: List[HuntZoneUnresolvedReference] = Field(default_factory=list)
     notes: Optional[str] = None
     source_provider: Optional[str] = None
     source_url: Optional[str] = None
 
 
-class HuntZone(HuntZoneBase):
+class HuntZoneList(HuntZoneBase):
     id: int
-    creatures: List[CreatureSimple] = []
-    creature_spawns: List[SpawnLocation] = []
-    access: HuntZoneAccess = Field(default_factory=HuntZoneAccess)
+    identity_state: str = "legacy_only"
+    spatial_state: str = "knowledge_only"
+    creature_state: str = "missing"
+    creature_count: int = 0
+    boss_count: int = 0
+    creature_preview: List[HuntZoneCreatureReference] = Field(default_factory=list)
+    raw_creature_experience: Optional[int] = None
+    access_required: Optional[bool] = None
+    access_quest_count: int = 0
+    representative_media: HuntZoneMedia = Field(default_factory=HuntZoneMedia)
     last_synced_at: Optional[datetime] = None
-    
+
     model_config = ConfigDict(from_attributes=True)
+
+
+class HuntZone(HuntZoneList):
+    canonical_identity: Optional[HuntZoneCanonicalIdentity] = None
+    access: HuntZoneAccess = Field(default_factory=HuntZoneAccess)
+    creatures: List[HuntZoneCreatureReference] = Field(default_factory=list)
+    unresolved_creatures: List[HuntZoneUnresolvedReference] = Field(default_factory=list)
+    locations: List[HuntZoneLocationReference] = Field(default_factory=list)
+    unresolved_locations: List[HuntZoneUnresolvedReference] = Field(default_factory=list)
+    # Compatibility bridge for the current detail UI. New consumers should use
+    # the deduplicated ``creatures`` projection above.
+    creature_spawns: List[SpawnLocation] = Field(default_factory=list)
 
 
 # Spawn Location Schemas
@@ -311,6 +393,11 @@ class ItemRelatedEntity(BaseModel):
     kind: str
     name: str
     slug: str
+    canonical_id: Optional[UUID] = None
+    semantic: Optional[str] = None
+    price: Optional[int | float] = None
+    currency: Optional[str] = None
+    qualifier: Optional[str] = None
 
 
 class ItemSearchResult(BaseModel):

@@ -71,6 +71,7 @@ def test_quest_shelves_are_local_and_activity_ranked(client, db):
 def test_public_map_returns_real_zone_geometry_and_honest_related_context(client, db):
     asset = MediaAsset(asset_key="zone:mapped-grounds", status="cached", local_path="/tmp/not-read-by-bootstrap.png")
     zone_entity = _entity(db, "hunt_zone", "Mapped Grounds")
+    creature_entity = _entity(db, "creature", "Ground Walker")
     zone = HuntZone(
         name="Mapped Grounds", slug="mapped-grounds", normalized_name="mapped grounds", min_level=80,
         location_x=120, location_y=220, location_z=7,
@@ -78,7 +79,11 @@ def test_public_map_returns_real_zone_geometry_and_honest_related_context(client
         map_asset_id=None,
         knowledge_entity_id=zone_entity.uuid,
     )
-    creature = Creature(name="Ground Walker", slug="ground-walker", normalized_name="ground walker", hitpoints=100, experience=100, is_hidden=False)
+    creature = Creature(
+        name="Ground Walker", slug="ground-walker", normalized_name="ground walker",
+        hitpoints=100, experience=100, is_hidden=False,
+        knowledge_entity_id=creature_entity.uuid,
+    )
     floor = WorldMapFloor(
         provider="tibiamaps/tibia-map-data", upstream_commit="a" * 40,
         upstream_url="https://github.com/tibiamaps/tibia-map-data", license_name="MIT", attribution="fixture",
@@ -106,7 +111,10 @@ def test_public_map_returns_real_zone_geometry_and_honest_related_context(client
     assert search.status_code == 200
     result = search.json()["items"][0]
     assert result["name"] == "Ground Walker"
-    assert result["geometry_status"] == "knowledge_only"
+    assert result["geometry_status"] == "mapped"
+    assert result["spatial_state"] == "resolved_area"
+    assert result["canonical_entity_id"] == str(creature_entity.uuid)
+    assert result["spatial_evidence"][0]["role"] == "appearance"
     context = client.get("/api/v1/map/hunt-zones/mapped-grounds/context").json()
     assert context["hunt_zone"]["geometry_source"] == "tibiamaps_marker"
     assert (context["hunt_zone"]["x"], context["hunt_zone"]["y"]) == (32120, 32220)

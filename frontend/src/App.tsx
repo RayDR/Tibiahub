@@ -10,18 +10,17 @@ import CreaturesPage from "./pages/CreaturesPage";
 import CreatureDetailPage from "./pages/CreatureDetailPage";
 import QuestDetailPage from "./pages/QuestDetailPage";
 import NpcDetailPage from "./pages/NpcDetailPage";
+import NpcDirectoryPage from "./pages/NpcDirectoryPage";
 import LocationDetailPage from "./pages/LocationDetailPage";
 import ItemDetailPage from "./pages/ItemDetailPage";
 import HuntZoneDetailPage from "./pages/HuntZoneDetailPage";
 import HuntRecommendationsPage from "./pages/HuntRecommendationsPage";
 import QuestViewerPage from "./pages/QuestViewerPage";
-import GuildManagementDashboard from "./pages/Admin/GuildManagementDashboard";
 import BestiaryManagement from "./pages/Admin/BestiaryManagement";
 import AdminRedirect from "./pages/Admin/AdminRedirect";
 import AdminSettings from "./pages/Admin/Settings";
 import DataTools from "./pages/Admin/DataTools";
 import Overview from "./pages/Admin/Overview";
-import GuildView from "./pages/Admin/GuildView";
 import Profile from "./pages/Profile";
 import MemberProfile from "./pages/MemberProfile";
 import PasswordReset from "./pages/PasswordReset";
@@ -152,6 +151,7 @@ function App() {
                 <Route path="/quests/:questId" element={<QuestDetailPage />} />
                 <Route path="/items/:identifier" element={<ItemDetailPage />} />
                 <Route path="/hunt-zones/:identifier" element={<HuntZoneDetailPage />} />
+                <Route path="/npcs" element={<NpcDirectoryPage />} />
                 <Route path="/npcs/:identifier" element={<NpcDetailPage />} />
                 <Route
                   path="/locations/:identifier"
@@ -293,9 +293,12 @@ function App() {
                   <Route path="activities" element={<GlobalActivities />} />
                   <Route
                     path="management"
-                    element={<GuildManagementDashboard />}
+                    element={<Navigate to="/admin/guilds" replace />}
                   />
-                  <Route path="guild-view" element={<GuildView />} />
+                  <Route
+                    path="guild-view"
+                    element={<Navigate to="/admin/guilds" replace />}
+                  />
                   <Route path="bestiary" element={<BestiaryManagement />} />
                   <Route path="data-tools" element={<DataTools />} />
                   <Route
@@ -317,11 +320,11 @@ function App() {
                   />
                   <Route
                     path="database-sync"
-                    element={<Navigate to="/admin/data-tools" replace />}
+                    element={<Navigate to="/admin/sync" replace />}
                   />
                   <Route
                     path="sync"
-                    element={<DataTools initialTab="db-sync" />}
+                    element={<DataTools initialTab="admin-sync" />}
                   />
                 </Route>
 

@@ -39,6 +39,7 @@ class CreatureNormalizationApplied:
     entity_uuid: UUID
     aliases_created: int
     warnings: int
+    metrics: dict[str, int]
 
 
 def _mapped_entity(
@@ -364,6 +365,21 @@ class CreatureKnowledgeNormalizationService:
             source_document_id=f"creature:{dto.external_id}",
         )
         warnings += unresolved
+        hunt_zone_metrics = None
+        if "locations" in dto.provided_fields:
+            from app.knowledge.services.hunt_zone_relationships import (
+                normalize_creature_hunt_zone_relationships,
+            )
+
+            hunt_zone_metrics = normalize_creature_hunt_zone_relationships(
+                db,
+                creature_entity_uuid=entity.uuid,
+                creature_name=dto.canonical_name,
+                locations=dto.locations,
+                provider_id=result.provider_code or "tibiawiki",
+                source_document_id=f"creature:{dto.external_id}",
+            )
+            warnings += hunt_zone_metrics.unresolved + hunt_zone_metrics.ambiguous
         changed = entity_changed or creature_changed
         if changed and not created:
             emit_event(
@@ -377,4 +393,13 @@ class CreatureKnowledgeNormalizationService:
             entity.uuid,
             aliases_created,
             warnings,
+            {
+                "hunt_zone_source_references": hunt_zone_metrics.source_references if hunt_zone_metrics else 0,
+                "hunt_zone_relationships_created": hunt_zone_metrics.relationships_created if hunt_zone_metrics else 0,
+                "hunt_zone_relationships_resolved": hunt_zone_metrics.resolved if hunt_zone_metrics else 0,
+                "hunt_zone_relationships_unresolved": hunt_zone_metrics.unresolved if hunt_zone_metrics else 0,
+                "hunt_zone_relationships_ambiguous": hunt_zone_metrics.ambiguous if hunt_zone_metrics else 0,
+                "hunt_zone_relationships_retired": hunt_zone_metrics.relationships_retired if hunt_zone_metrics else 0,
+                "hunt_zone_bridges_recovered": hunt_zone_metrics.bridges_recovered if hunt_zone_metrics else 0,
+            },
         )

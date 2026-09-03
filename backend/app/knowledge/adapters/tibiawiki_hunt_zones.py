@@ -6,6 +6,7 @@ import json
 import re
 from dataclasses import replace
 from typing import Any
+from urllib.parse import quote
 
 from app.knowledge.adapters.protocol import (
     CanonicalEntityCandidate,
@@ -34,7 +35,6 @@ from app.knowledge.services.failures import (
     ProviderResponseEnvelopeError,
 )
 from app.services.bestiary_source import (
-    _build_sprite_url,
     _build_wiki_page_url,
     _extract_links,
     _strip_markup,
@@ -53,6 +53,12 @@ _MAPPER_COORDS_REFERENCE = re.compile(
     r"\s*,?\s*\{\{\s*Mapper Coords\b[^{}]*\}\}",
     re.I,
 )
+_MAPPER_EXTERNAL_REFERENCE = re.compile(
+    r"\s*,?\s*\[https?://[^\]\s]+/wiki/Mapper\?coords=[^\]]+\]",
+    re.I,
+)
+_HUNT_INFOBOX = re.compile(r"\{\{\s*Infobox[ _]Hunt\b", re.I)
+_FILE_REFERENCE = re.compile(r"^(?:file|image)\s*:\s*", re.I)
 
 
 def _serialized_size(value: dict[str, Any]) -> int:
@@ -86,6 +92,28 @@ def _creature_names(wikitext: str) -> tuple[str, ...]:
     return tuple(names)
 
 
+def _is_structured_hunt_entity(wikitext: str) -> bool:
+    """Require the provider's explicit Hunting Place entity template."""
+
+    return bool(_HUNT_INFOBOX.search(wikitext))
+
+
+def _provider_image_reference(value: str | None) -> str | None:
+    """Build a provider file URL only from an explicitly supplied image field."""
+
+    if not value:
+        return None
+    links = _extract_links(value)
+    asset_name = (links[0] if links else _strip_markup(value)).strip()
+    asset_name = _FILE_REFERENCE.sub("", asset_name).strip()
+    if not asset_name:
+        return None
+    if not re.search(r"\.(?:gif|png|jpe?g|webp)$", asset_name, re.I):
+        asset_name = f"{asset_name}.gif"
+    encoded = quote(asset_name.replace(" ", "_"), safe="_.-()")
+    return f"{_build_wiki_page_url('Special:FilePath').rstrip('/')}/{encoded}"
+
+
 def _recommendations(params: dict[str, str]) -> tuple[dict[str, HuntVocationRecommendation], tuple[str, ...]]:
     grouped: dict[str, dict[str, int | None]] = {}
     supplied: list[str] = []
@@ -110,7 +138,11 @@ def _hunt_zone_parts(raw: dict[str, Any]) -> tuple[str, str, str, HuntZoneKnowle
     canonical_name = name or page_title
     city, city_supplied = _text(params, "city")
     location_raw, location_supplied = _first(params, "location")
-    location = _strip_markup(_MAPPER_COORDS_REFERENCE.sub("", location_raw or "")) or None
+    location_without_coordinates = _MAPPER_EXTERNAL_REFERENCE.sub(
+        "",
+        _MAPPER_COORDS_REFERENCE.sub("", location_raw or ""),
+    )
+    location = _strip_markup(location_without_coordinates) or None
     implemented, implemented_supplied = _text(params, "implemented")
     vocation_text, vocation_supplied = _text(params, "vocation", "vocations")
     experience, experience_supplied = _text(params, "exp", "experience")
@@ -131,6 +163,8 @@ def _hunt_zone_parts(raw: dict[str, Any]) -> tuple[str, str, str, HuntZoneKnowle
     best_loot = tuple(dict.fromkeys(name for value in best_loot_values for name in _linked_names(value)))
     maps_raw, maps_supplied = _first(params, "maps", "map")
     map_references = _linked_names(maps_raw)
+    image_raw, image_supplied = _first(params, "image")
+    image_reference = _provider_image_reference(image_raw)
 
     supplied = frozenset(key for key, flag in {
         "canonical_name": name_supplied,
@@ -149,7 +183,7 @@ def _hunt_zone_parts(raw: dict[str, Any]) -> tuple[str, str, str, HuntZoneKnowle
         "loot_rating": loot_rating_supplied,
         "best_loot": bool(best_loot_values),
         "map_references": maps_supplied,
-        "image_reference": True,
+        "image_reference": image_supplied and image_reference is not None,
         "source_reference": True,
         "slug": True,
     }.items() if flag)
@@ -174,13 +208,19 @@ def _hunt_zone_parts(raw: dict[str, Any]) -> tuple[str, str, str, HuntZoneKnowle
         loot_rating=_to_int(loot_rating_raw),
         best_loot=best_loot,
         map_references=map_references,
-        image_reference=_build_sprite_url(canonical_name),
+        image_reference=image_reference,
         source_reference=_build_wiki_page_url(page_title),
         provider_metadata={
             "page_title": page_title,
             "template_parameters": sorted(params),
             "recommendation_parameters": list(recommendation_keys),
             "access_evidence": "body" if body_access else "infobox" if access_supplied else None,
+            "image_asset_name": _strip_markup(image_raw or "") or None,
+            "source_entity_evidence": (
+                "category:hunting_places+template:infobox_hunt"
+                if _is_structured_hunt_entity(wikitext)
+                else "category_membership_only"
+            ),
         },
         supplied_fields=supplied,
     )
@@ -262,7 +302,13 @@ class TibiaWikiHuntZoneAdapter:
         for member in members:
             external_id = str(member.get("pageid") or "").strip() if isinstance(member, dict) else ""
             title = str(member.get("title") or "").strip() if isinstance(member, dict) else ""
-            if not external_id.isdigit() or not title or ":" in title or len(title) > 255:
+            if (
+                not external_id.isdigit()
+                or not title
+                or ":" in title
+                or len(title) > 255
+                or normalize_name(title) == "hunting places"
+            ):
                 invalid += 1
                 continue
             children.append(KnowledgeChildJobRequest(
@@ -322,7 +368,14 @@ class TibiaWikiHuntZoneAdapter:
     def normalize(self, document: KnowledgeDocumentDTO, context: KnowledgeNormalizationContext) -> KnowledgeNormalizationResult:
         if document.metadata.get("document_kind") != "hunt_zone_detail":
             return KnowledgeNormalizationResult(action="noop")
-        _external_id, _title, _wikitext, dto = _hunt_zone_parts(document.raw_json)
+        _external_id, _title, wikitext, dto = _hunt_zone_parts(document.raw_json)
+        if not _is_structured_hunt_entity(wikitext):
+            return KnowledgeNormalizationResult(
+                action="noop",
+                warnings=("unstructured_hunt_zone_page",),
+                provider_code=self.provider_code,
+                external_id=dto.external_id,
+            )
         return KnowledgeNormalizationResult(
             action="upsert",
             candidate=CanonicalEntityCandidate(

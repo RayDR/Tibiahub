@@ -22,14 +22,6 @@ export interface Event {
     guild_name?: string;
 }
 
-export interface Recruitment {
-    id: number;
-    recruit_name: string;
-    status: 'pending' | 'accepted' | 'rejected';
-    created_at: string;
-    recruiter?: User;
-}
-
 export interface GuildMember {
     character_name: string;
     level?: number;
@@ -50,6 +42,16 @@ export interface GuildMembersPayload {
     guild_name: string;
     source: 'live' | 'snapshot';
     members: GuildMember[];
+    total: number;
+    skip: number;
+    limit: number;
+}
+
+export interface GuildMemberPageParams {
+    skip?: number;
+    limit?: number;
+    search?: string;
+    sort?: 'level' | 'name';
 }
 
 export interface GuildFeatureFlags {
@@ -68,28 +70,13 @@ export const guildApi = {
         return response.data;
     },
 
+    deleteAnnouncement: async (announcementId: number): Promise<Announcement> => {
+        const response = await api.delete(`/guild/announcements/${announcementId}`);
+        return response.data;
+    },
+
     getEvents: async (skip: number = 0, limit: number = 20, guildName?: string): Promise<Event[]> => {
         const response = await api.get('/guild/events', { params: { skip, limit, guild_name: guildName || undefined } });
-        return response.data;
-    },
-
-    createEvent: async (data: any, guildName?: string): Promise<Event> => {
-        const response = await api.post('/guild/events', data, { params: { guild_name: guildName || undefined } });
-        return response.data;
-    },
-
-    attendEvent: async (eventId: number, status: string): Promise<any> => {
-        const response = await api.post(`/guild/events/${eventId}/attend`, { status });
-        return response.data;
-    },
-
-    getRecruitments: async (): Promise<Recruitment[]> => {
-        const response = await api.get('/guild/recruitments');
-        return response.data;
-    },
-
-    reportRecruitment: async (data: { recruit_name: string; notes?: string }): Promise<Recruitment> => {
-        const response = await api.post('/guild/recruitments', data);
         return response.data;
     },
 
@@ -98,13 +85,13 @@ export const guildApi = {
         return response.data;
     },
 
-    getGuildMembers: async (guildName: string, refresh: boolean = false): Promise<GuildMembersPayload> => {
-        const response = await api.get(`/guild/${encodeURIComponent(guildName)}/members`, { params: { refresh } });
+    getGuildMembers: async (guildName: string, params: GuildMemberPageParams = {}, signal?: AbortSignal): Promise<GuildMembersPayload> => {
+        const response = await api.get(`/guild/${encodeURIComponent(guildName)}/members`, { params, signal });
         return response.data;
     },
 
-    syncGuildMembers: async (guildName: string): Promise<GuildMembersPayload> => {
-        const response = await api.post(`/guild/${encodeURIComponent(guildName)}/members/sync`);
+    syncGuildMembers: async (guildName: string, params: GuildMemberPageParams = {}): Promise<GuildMembersPayload> => {
+        const response = await api.post(`/guild/${encodeURIComponent(guildName)}/members/sync`, undefined, { params });
         return response.data;
     },
 

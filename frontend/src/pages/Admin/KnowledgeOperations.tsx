@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useTranslation } from "react-i18next";
 import {
   AlertCircle,
@@ -21,6 +21,10 @@ import {
   type KnowledgeWorkerHeartbeat,
 } from "../../services/knowledge";
 import KnowledgeRelationshipReviewPanel from "./KnowledgeRelationshipReview";
+import { DegradedState, LoadingState, PaginationControls } from "../../components/ui";
+import { formatDateTime } from "../../utils/locale";
+
+const JOB_PAGE_SIZE = 12;
 
 const jobStates = [
   "",
@@ -99,13 +103,15 @@ function StatusBadge({ value }: { value: string }) {
 }
 
 export default function KnowledgeOperations() {
-  const { t } = useTranslation();
+  const { t, i18n } = useTranslation();
   const toast = useToast();
   const confirmation = useConfirmation();
   const [providers, setProviders] = useState<KnowledgeProvider[]>([]);
   const [workers, setWorkers] = useState<KnowledgeWorkerHeartbeat[]>([]);
   const [jobs, setJobs] = useState<KnowledgeJob[]>([]);
   const [totalJobs, setTotalJobs] = useState(0);
+  const [jobSkip, setJobSkip] = useState(0);
+  const [jobLoading, setJobLoading] = useState(false);
   const [providerError, setProviderError] = useState(false);
   const [workerError, setWorkerError] = useState(false);
   const [jobError, setJobError] = useState(false);
@@ -124,6 +130,8 @@ export default function KnowledgeOperations() {
   const [pageTitle, setPageTitle] = useState("");
   const [batchLimit, setBatchLimit] = useState(10);
   const [bootstrapConfirmation, setBootstrapConfirmation] = useState("");
+  const jobRequestRef = useRef<AbortController | null>(null);
+  const jobRetrySkipRef = useRef(0);
 
   const loadProviders = useCallback(async () => {
     setProviderError(false);
@@ -141,19 +149,32 @@ export default function KnowledgeOperations() {
       setWorkerError(true);
     }
   }, []);
-  const loadJobs = useCallback(async () => {
+  const loadJobs = useCallback(async (nextSkip = 0) => {
+    jobRequestRef.current?.abort();
+    jobRetrySkipRef.current = nextSkip;
+    const controller = new AbortController();
+    jobRequestRef.current = controller;
     setJobError(false);
+    setJobLoading(true);
     try {
       const page = await knowledgeOperationsApi.jobs({
         provider_id: providerFilter || undefined,
         entity_type: entityFilter || undefined,
         state: stateFilter || undefined,
-        limit: 50,
-      });
+        skip: nextSkip,
+        limit: JOB_PAGE_SIZE,
+      }, controller.signal);
+      if (controller.signal.aborted) return;
       setJobs(page.items);
       setTotalJobs(page.total);
-    } catch {
-      setJobError(true);
+      setJobSkip(page.skip);
+    } catch (loadError: any) {
+      if (loadError?.name !== "CanceledError" && loadError?.code !== "ERR_CANCELED") setJobError(true);
+    } finally {
+      if (jobRequestRef.current === controller) {
+        jobRequestRef.current = null;
+        setJobLoading(false);
+      }
     }
   }, [entityFilter, providerFilter, stateFilter]);
   const loadAll = useCallback(async () => {
@@ -163,7 +184,11 @@ export default function KnowledgeOperations() {
   }, [loadJobs, loadProviders, loadWorkers]);
 
   useEffect(() => {
+    setJobs([]);
+    setTotalJobs(0);
+    setJobSkip(0);
     void loadAll();
+    return () => jobRequestRef.current?.abort();
   }, [loadAll]);
 
   const selectedProvider = providers.find(
@@ -246,7 +271,7 @@ export default function KnowledgeOperations() {
       setLanguageNeutralId("");
       setExternalId("");
       setPageTitle("");
-      await loadJobs();
+      await loadJobs(jobSkip);
     } catch {
       toast.error(t("knowledgeOps.errors.enqueue"));
     } finally {
@@ -261,7 +286,7 @@ export default function KnowledgeOperations() {
       if (action === "retry") await knowledgeOperationsApi.retry(job.id);
       else await knowledgeOperationsApi.cancel(job.id);
       toast.success(t(`knowledgeOps.messages.${action}`));
-      await loadJobs();
+      await loadJobs(jobSkip);
       if (details?.id === job.id)
         setDetails(await knowledgeOperationsApi.job(job.id));
     } catch {
@@ -281,7 +306,7 @@ export default function KnowledgeOperations() {
         t("knowledgeOps.messages.bootstrap", { count: result.jobs_created }),
       );
       setBootstrapConfirmation("");
-      await Promise.all([loadProviders(), loadJobs()]);
+      await Promise.all([loadProviders(), loadJobs(0)]);
     } catch {
       toast.error(t("knowledgeOps.errors.bootstrap"));
     } finally {
@@ -358,9 +383,10 @@ export default function KnowledgeOperations() {
                 <p className="mt-1 text-xs text-content-muted">
                   {provider.last_success_at
                     ? t("knowledgeOps.providers.freshness", {
-                        value: new Date(
+                        value: formatDateTime(
                           provider.last_success_at,
-                        ).toLocaleString(),
+                          i18n.resolvedLanguage || i18n.language,
+                        ),
                       })
                     : t("knowledgeOps.providers.neverSynced")}
                 </p>
@@ -432,7 +458,7 @@ export default function KnowledgeOperations() {
                 </div>
                 <p className="mt-2 text-xs text-content-secondary">
                   {t("knowledgeOps.workers.lastSeen", {
-                    value: new Date(worker.last_seen_at).toLocaleString(),
+                    value: formatDateTime(worker.last_seen_at, i18n.resolvedLanguage || i18n.language),
                   })}
                 </p>
               </article>
@@ -621,17 +647,21 @@ export default function KnowledgeOperations() {
             </select>
           </div>
         </div>
-        {jobError ? (
+        {jobLoading && jobs.length === 0 ? (
+          <LoadingState title={t("common.loading")} />
+        ) : jobError && jobs.length === 0 ? (
           <SectionError
             message={t("knowledgeOps.errors.jobs")}
-            retry={() => void loadJobs()}
+            retry={() => void loadJobs(jobRetrySkipRef.current)}
           />
-        ) : jobs.length === 0 ? (
+        ) : !jobLoading && jobs.length === 0 ? (
           <p className="rounded-lg border border-line bg-surface-base/50 p-5 text-center text-sm text-content-secondary">
             {t("knowledgeOps.jobs.empty")}
           </p>
         ) : (
-          <div className="grid gap-3 md:grid-cols-2">
+          <>
+          {jobError ? <DegradedState title={t("knowledgeOps.errors.jobs")} action={<button type="button" className="app-button-secondary app-button-sm" onClick={() => void loadJobs(jobRetrySkipRef.current)}>{t("knowledgeOps.actions.retryLoad")}</button>} /> : null}
+          <div className="grid gap-3 md:grid-cols-2" aria-busy={jobLoading}>
             {jobs.map((job) => (
               <article
                 key={job.id}
@@ -665,7 +695,7 @@ export default function KnowledgeOperations() {
                   </span>
                   <span>
                     <Clock3 className="mr-1 inline h-3 w-3" />
-                    {new Date(job.scheduled_at).toLocaleString()}
+                    {formatDateTime(job.scheduled_at, i18n.resolvedLanguage || i18n.language)}
                   </span>
                 </div>
                 {job.safe_last_error && (
@@ -711,6 +741,8 @@ export default function KnowledgeOperations() {
               </article>
             ))}
           </div>
+          <PaginationControls skip={jobSkip} limit={JOB_PAGE_SIZE} total={totalJobs} loading={jobLoading} onPrevious={() => void loadJobs(Math.max(0, jobSkip - JOB_PAGE_SIZE))} onNext={() => void loadJobs(jobSkip + JOB_PAGE_SIZE)} />
+          </>
         )}
       </section>
 

@@ -15,10 +15,11 @@ import { useAuth } from "../../context/AuthContext";
 import {
   EmptyState,
   MobileSectionTabs,
-  WorkspaceHeader,
+  WorkspaceContentHeader,
 } from "../../components/workspace/WorkspacePrimitives";
 import RaffleCreationWizard from "../../components/raffle/RaffleCreationWizard";
 import { raffleApi, RaffleWorkspaceItem } from "../../services/raffle";
+import { formatDate, formatDateTime } from "../../utils/locale";
 import AutomaticRaffleOperations from "./AutomaticRaffleOperations";
 import { useToast } from "../../context/ToastContext";
 import { useConfirmation } from "../../context/ConfirmationContext";
@@ -92,7 +93,7 @@ export default function RafflesWorkspace({
   worldName?: string;
   assistance?: boolean;
 }) {
-  const { t } = useTranslation();
+  const { t, i18n } = useTranslation();
   const { user } = useAuth();
   const toast = useToast();
   const confirmation = useConfirmation();
@@ -190,11 +191,11 @@ export default function RafflesWorkspace({
     return item.actions[key]?.enabled ? undefined : item.actions[key]?.reason || t("raffle.workspace.actionUnavailable", "Action unavailable");
   }
   return (
-    <div className="space-y-4">
-      <WorkspaceHeader
+    <div className="workspace-page">
+      <WorkspaceContentHeader
         title={t("workspace.raffles.title")}
-        subtitle={t("workspace.raffles.subtitle")}
-        badge={assistance ? t("workspace.assistance.badge") : undefined}
+        description={t("workspace.raffles.subtitle")}
+        icon={<Trophy />}
         action={
           <div className="flex items-center gap-2">
             {!fixedGuild && authorizedGuilds.length > 1 ? <label className="sr-only" htmlFor="raffle-guild-selector">{t("raffle.workspace.fields.guild")}</label> : null}
@@ -203,7 +204,7 @@ export default function RafflesWorkspace({
               <button
                 type="button"
                 onClick={() => setShowCreate((value) => !value)}
-                className="min-h-11 rounded-lg bg-primary px-4 font-semibold text-content-inverse"
+                className="app-button-primary min-h-11 rounded-lg px-4 font-semibold"
               >
                 {t("raffle.workspace.create")}
               </button>
@@ -268,7 +269,7 @@ export default function RafflesWorkspace({
                 <h2 className="mt-1 font-semibold">{item.title}</h2>
                 <p className="mt-2 text-sm text-content-secondary">
                   {item.scheduled_run_at
-                    ? new Date(item.scheduled_run_at).toLocaleDateString()
+                    ? formatDate(item.scheduled_run_at, i18n.resolvedLanguage || i18n.language)
                     : t("raffle.workspace.unscheduled")}
                 </p>
                 {item.publication_status === "published" && (
@@ -449,9 +450,7 @@ export default function RafflesWorkspace({
                       <p className="col-span-3 mt-2 flex items-center justify-center gap-2 text-xs text-content-secondary">
                         <LockKeyhole className="h-4 w-4" />
                         {t("raffle.workspace.frozenAt", {
-                          value: new Date(
-                            item.eligibility.cutoff_at,
-                          ).toLocaleString(),
+                          value: formatDateTime(item.eligibility.cutoff_at, i18n.resolvedLanguage || i18n.language),
                         })}
                       </p>
                     </div>

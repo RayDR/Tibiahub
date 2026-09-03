@@ -1,19 +1,21 @@
 import L, { type LatLngBoundsExpression } from 'leaflet';
 import 'leaflet/dist/leaflet.css';
 import { Minus, Plus, RotateCcw } from 'lucide-react';
-import { type ReactNode, useEffect, useMemo, useState } from 'react';
+import { type ReactNode, useCallback, useEffect, useMemo, useState } from 'react';
 import { ImageOverlay, MapContainer, Marker, Polyline, Popup, Rectangle, useMap } from 'react-leaflet';
 
-export interface MapMarker { x: number; y: number; label: string; imageUrl?: string; subtitle?: string; kind?: 'entity' | 'town' }
+export type MapMarkerKind = 'location' | 'npc' | 'creature' | 'boss' | 'quest' | 'hunt_zone' | 'item' | 'group' | 'town';
+export interface MapMarker { x: number; y: number; label: string; imageUrl?: string; subtitle?: string; kind?: MapMarkerKind; resultId?: string }
 export interface MapPath { id: string; label: string; points: Array<{ x: number; y: number; z?: number | null }> }
 export interface TibiaMapViewerProps {
   imageUrl?: string; pathfindingUrl?: string | null; showPathfinding?: boolean;
   label?: string; floor?: number | null; mapBounds?: Record<string, unknown> | null;
   center?: { x: number; y: number }; markers?: MapMarker[]; paths?: MapPath[];
+  focusBounds?: { minX: number; minY: number; maxX: number; maxY: number };
   regions?: Array<{ minX: number; minY: number; maxX: number; maxY: number; label: string }>;
   coordinateMode?: 'legacy-image' | 'world'; emptyMessage?: string; resetLabel?: string;
   zoomInLabel?: string; zoomOutLabel?: string; floorLabel?: string; fill?: boolean;
-  controlFooter?: ReactNode; showFloorBadge?: boolean;
+  controlFooter?: ReactNode; showFloorBadge?: boolean; onMarkerSelect?: (marker: MapMarker) => void;
 }
 
 interface LoadedMap { objectUrl: string; width: number; height: number }
@@ -56,9 +58,15 @@ function InitialViewport({ bounds, enabled }: { bounds: LatLngBoundsExpression; 
   return null;
 }
 
-function Recenter({ position, zoom }: { position?: [number, number]; zoom: number }) {
+function FocusViewport({ position, bounds, zoom }: { position?: [number, number]; bounds?: LatLngBoundsExpression; zoom: number }) {
   const map = useMap();
-  useEffect(() => { if (position) map.flyTo(position, Math.max(map.getZoom(), zoom), { duration: 0.45 }); }, [map, position, zoom]);
+  useEffect(() => {
+    if (bounds) {
+      map.fitBounds(bounds, { animate: true, duration: 0.45, padding: [48, 48], maxZoom: 3 });
+    } else if (position) {
+      map.flyTo(position, Math.max(map.getZoom(), zoom), { duration: 0.45 });
+    }
+  }, [bounds, map, position, zoom]);
   return null;
 }
 
@@ -76,18 +84,19 @@ function MapLifecycle() {
 }
 
 function markerIcon(marker: MapMarker): L.DivIcon {
+  const markerKind = marker.kind || 'location';
   const content = marker.imageUrl && marker.imageUrl.startsWith('/')
     ? `<img src="${marker.imageUrl.replace(/"/g, '&quot;')}" alt="" />`
-    : '<span></span>';
-  return L.divIcon({ className: 'tibia-map-sprite-marker', html: content, iconSize: [38, 38], iconAnchor: [19, 34], popupAnchor: [0, -32] });
+    : `<span aria-hidden="true">${markerKind === 'group' ? '+' : markerKind.slice(0, 1).toUpperCase()}</span>`;
+  return L.divIcon({ className: `tibia-map-entity-marker tibia-map-entity-marker--${markerKind}`, html: content, iconSize: [40, 40], iconAnchor: [20, 36], popupAnchor: [0, -34] });
 }
 
 function townLabelIcon(label: string): L.DivIcon {
-  const safeLabel = label.replaceAll('&', '&amp;').replaceAll('<', '&lt;').replaceAll('>', '&gt;').replaceAll('"', '&quot;');
+  const safeLabel = label.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;');
   return L.divIcon({ className: 'tibia-map-town-label', html: `<span>${safeLabel}</span>`, iconSize: [0, 0], iconAnchor: [0, 0] });
 }
 
-export default function TibiaMapViewer({ imageUrl, pathfindingUrl, showPathfinding = false, label = '', floor, mapBounds, center, markers = [], paths = [], regions = [], coordinateMode = 'legacy-image', emptyMessage = '', resetLabel = '', zoomInLabel = '', zoomOutLabel = '', floorLabel, fill = false, controlFooter, showFloorBadge = true }: TibiaMapViewerProps) {
+export default function TibiaMapViewer({ imageUrl, pathfindingUrl, showPathfinding = false, label = '', floor, mapBounds, center, focusBounds, markers = [], paths = [], regions = [], coordinateMode = 'legacy-image', emptyMessage = '', resetLabel = '', zoomInLabel = '', zoomOutLabel = '', floorLabel, fill = false, controlFooter, showFloorBadge = true, onMarkerSelect }: TibiaMapViewerProps) {
   const [loaded, setLoaded] = useState<LoadedMap | null>(null); const [loading, setLoading] = useState(Boolean(imageUrl)); const [map, setMap] = useState<L.Map | null>(null);
   useEffect(() => {
     const controller = new AbortController(); let objectUrl: string | null = null; setLoaded(null);
@@ -108,19 +117,23 @@ export default function TibiaMapViewer({ imageUrl, pathfindingUrl, showPathfindi
     const px = ((x - tibiaBounds.minX) / (tibiaBounds.maxX - tibiaBounds.minX)) * loaded.width;
     return [coordinateMode === 'world' ? py : loaded.height - py, px];
   }, [coordinateMode, loaded, tibiaBounds]);
-  const valid = (x: number, y: number) => Boolean(tibiaBounds && x >= tibiaBounds.minX && x < tibiaBounds.maxX && y >= tibiaBounds.minY && y < tibiaBounds.maxY);
+  const valid = useCallback((x: number, y: number) => Boolean(tibiaBounds && x >= tibiaBounds.minX && x < tibiaBounds.maxX && y >= tibiaBounds.minY && y < tibiaBounds.maxY), [tibiaBounds]);
   const renderedCenter = useMemo(() => {
     if (!center || !convert || !tibiaBounds || center.x < tibiaBounds.minX || center.x >= tibiaBounds.maxX || center.y < tibiaBounds.minY || center.y >= tibiaBounds.maxY) return undefined;
     return convert(center.x, center.y);
-  }, [center?.x, center?.y, convert, tibiaBounds]);
+  }, [center, convert, tibiaBounds]);
+  const renderedFocusBounds = useMemo<LatLngBoundsExpression | undefined>(() => {
+    if (!focusBounds || !convert || !valid(focusBounds.minX, focusBounds.minY) || !valid(focusBounds.maxX - 1, focusBounds.maxY - 1)) return undefined;
+    return [convert(focusBounds.minX, focusBounds.minY), convert(focusBounds.maxX, focusBounds.maxY)];
+  }, [convert, focusBounds, valid]);
   const renderedMarkers = useMemo(() => {
     if (!convert) return [];
     const values = [...markers];
     if (center && !values.some((item) => item.x === center.x && item.y === center.y)) values.unshift({ ...center, label });
     return values.filter((item) => valid(item.x, item.y)).map((item) => ({ ...item, position: convert(item.x, item.y) }));
-  }, [center, convert, label, markers, tibiaBounds]);
-  const renderedRegions = useMemo(() => !convert ? [] : regions.filter((item) => valid(item.minX, item.minY) && valid(item.maxX - 1, item.maxY - 1)).map((item) => ({ ...item, position: [convert(item.minX, item.minY), convert(item.maxX, item.maxY)] as LatLngBoundsExpression })), [convert, regions, tibiaBounds]);
-  const renderedPaths = useMemo(() => !convert ? [] : paths.map((path) => ({ ...path, positions: path.points.filter((point) => valid(point.x, point.y) && (point.z == null || point.z === floor)).map((point) => convert(point.x, point.y)) })).filter((path) => path.positions.length >= 2), [convert, floor, paths, tibiaBounds]);
+  }, [center, convert, label, markers, valid]);
+  const renderedRegions = useMemo(() => !convert ? [] : regions.filter((item) => valid(item.minX, item.minY) && valid(item.maxX - 1, item.maxY - 1)).map((item) => ({ ...item, position: [convert(item.minX, item.minY), convert(item.maxX, item.maxY)] as LatLngBoundsExpression })), [convert, regions, valid]);
+  const renderedPaths = useMemo(() => !convert ? [] : paths.map((path) => ({ ...path, positions: path.points.filter((point) => valid(point.x, point.y) && (point.z == null || point.z === floor)).map((point) => convert(point.x, point.y)) })).filter((path) => path.positions.length >= 2), [convert, floor, paths, valid]);
 
   if (loading) return <div className={`grid place-items-center bg-surface-base/60 text-sm text-content-muted ${fill ? 'h-full min-h-0' : 'min-h-56 rounded-xl border border-line'}`} role="status">{label}</div>;
   if (!loaded || !imageBounds) return <div className="rounded-xl border border-line bg-surface-base/60 px-4 py-5 text-sm text-content-muted">{emptyMessage}</div>;
@@ -130,9 +143,9 @@ export default function TibiaMapViewer({ imageUrl, pathfindingUrl, showPathfindi
       {showPathfinding && pathfindingUrl && isLocalMapEndpoint(pathfindingUrl) ? <ImageOverlay url={pathfindingUrl} bounds={imageBounds} opacity={0.22} /> : null}
       {renderedRegions.map((region) => <Rectangle key={`${region.label}:${region.minX}:${region.minY}`} bounds={region.position} pathOptions={{ color: 'var(--primary)', fillColor: 'var(--primary)', fillOpacity: 0.18, weight: 2 }}><Popup>{region.label}</Popup></Rectangle>)}
       {renderedPaths.map((path) => <Polyline key={path.id} positions={path.positions} pathOptions={{ color: 'var(--primary)', weight: 4, opacity: 0.9 }}><Popup>{path.label}</Popup></Polyline>)}
-      {renderedMarkers.map((marker) => <Marker key={`${marker.kind || 'entity'}:${marker.x}:${marker.y}:${marker.label}`} position={marker.position} icon={marker.kind === 'town' ? townLabelIcon(marker.label) : markerIcon(marker)} interactive={marker.kind !== 'town'}>{marker.kind !== 'town' ? <Popup><strong>{marker.label}</strong>{marker.subtitle ? <small className="block">{marker.subtitle}</small> : null}</Popup> : null}</Marker>)}
+      {renderedMarkers.map((marker) => <Marker key={`${marker.kind || 'entity'}:${marker.x}:${marker.y}:${marker.label}`} position={marker.position} icon={marker.kind === 'town' ? townLabelIcon(marker.label) : markerIcon(marker)} interactive={marker.kind !== 'town'} eventHandlers={marker.resultId && onMarkerSelect ? { click: () => onMarkerSelect(marker) } : undefined}>{marker.kind !== 'town' ? <Popup><strong>{marker.label}</strong>{marker.subtitle ? <small className="block">{marker.subtitle}</small> : null}</Popup> : null}</Marker>)}
       <InitialViewport bounds={imageBounds} enabled={!center} />
-      <Recenter position={renderedCenter} zoom={coordinateMode === 'world' ? 2 : 0} />
+      <FocusViewport position={renderedCenter} bounds={renderedFocusBounds} zoom={coordinateMode === 'world' ? 2 : 0} />
       <MapLifecycle />
     </MapContainer>
     <Controls map={map} bounds={imageBounds} labels={[zoomInLabel, zoomOutLabel, resetLabel]}>{controlFooter}</Controls>

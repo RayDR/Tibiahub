@@ -57,6 +57,17 @@ def normalized_bounds(value) -> dict | None:
     return result
 
 
+def _zone_bounds(zone: HuntZone) -> dict | None:
+    raw = zone.raw_data if isinstance(zone.raw_data, dict) else {}
+    is_recovery_placeholder = bool(
+        zone.source_provider == "tibiamaps"
+        and zone.external_id is None
+        and not zone.supplied_fields
+        and raw.get("source_provider") == "tibiamaps"
+    )
+    return None if is_recovery_placeholder else normalized_bounds(zone.map_bounds)
+
+
 def zone_spatial_presentations(
     db: Session,
     zones: Iterable[HuntZone],
@@ -97,7 +108,7 @@ def zone_spatial_presentations(
     result: dict[int, dict] = {}
     for zone in rows:
         marker = marker_by_entity.get(zone.knowledge_entity_id)
-        bounds = normalized_bounds(zone.map_bounds)
+        bounds = _zone_bounds(zone)
         x = marker.x if marker else (
             zone.location_x if zone.location_x is not None else zone.map_x
         )

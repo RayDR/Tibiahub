@@ -16,7 +16,7 @@ from pathlib import Path
 from PIL import Image
 from sqlalchemy.orm import Session
 
-from app.knowledge.models import KnowledgeEntity, KnowledgeEntityAlias
+from app.knowledge.models import KnowledgeEntity, KnowledgeEntityAlias, KnowledgeSearchMetadata
 from app.models.world_map import WorldMapDataset, WorldMapFloor, WorldMapMarker
 from app.services.text_utils import normalize_search_text
 
@@ -133,6 +133,47 @@ class WorldMapSyncService:
             self.db.rollback()
             raise
 
+    def reconcile_marker_resolutions(self, normalized_names: set[str] | None = None) -> dict[str, int]:
+        """Re-resolve current stored markers after canonical identities change.
+
+        Resolution remains exact-only. A newly introduced collision deliberately
+        moves an earlier match to ``ambiguous`` instead of retaining a guess.
+        The caller owns the surrounding transaction.
+        """
+        names = {normalize_search_text(value) for value in normalized_names or set() if value}
+        exact_entities = self._exact_entity_index(names or None)
+        query = self.db.query(WorldMapMarker).join(
+            WorldMapFloor, WorldMapMarker.floor_id == WorldMapFloor.id,
+        ).filter(WorldMapFloor.is_current.is_(True))
+        if names:
+            query = query.filter(WorldMapMarker.normalized_description.in_(names))
+
+        changed = resolved = ambiguous = unresolved = 0
+        for marker in query.all():
+            matches = exact_entities.get(marker.normalized_description, set())
+            entity_id = next(iter(matches)) if len(matches) == 1 else None
+            state = "resolved" if entity_id else "ambiguous" if len(matches) > 1 else "unresolved"
+            method = "exact_canonical_name_or_alias" if entity_id else None
+            if (
+                marker.resolved_entity_id != entity_id
+                or marker.resolution_state != state
+                or marker.resolution_method != method
+            ):
+                marker.resolved_entity_id = entity_id
+                marker.resolution_state = state
+                marker.resolution_method = method
+                changed += 1
+            resolved += int(state == "resolved")
+            ambiguous += int(state == "ambiguous")
+            unresolved += int(state == "unresolved")
+        self.db.flush()
+        return {
+            "changed": changed,
+            "resolved": resolved,
+            "ambiguous": ambiguous,
+            "unresolved": unresolved,
+        }
+
     def _renormalize_destination(self, destination: Path) -> dict:
         manifest = self._read_json(destination / "manifest.json")
         bounds = manifest.get("bounds") or {}
@@ -237,17 +278,35 @@ class WorldMapSyncService:
             "normalization_source": "stored_immutable_dataset",
         }
 
-    def _exact_entity_index(self) -> dict[str, set]:
+    def _exact_entity_index(self, normalized_names: set[str] | None = None) -> dict[str, set]:
         index: dict[str, set] = {}
-        for entity_uuid, canonical_name in self.db.query(
-            KnowledgeEntity.uuid, KnowledgeEntity.canonical_name,
-        ).filter(KnowledgeEntity.status == "active").all():
-            normalized = normalize_search_text(canonical_name)
+        if normalized_names is None:
+            canonical_rows = self.db.query(
+                KnowledgeEntity.uuid, KnowledgeEntity.canonical_name,
+            ).filter(KnowledgeEntity.status == "active").all()
+            canonical_values = (
+                (entity_uuid, normalize_search_text(canonical_name))
+                for entity_uuid, canonical_name in canonical_rows
+            )
+        else:
+            canonical_values = self.db.query(
+                KnowledgeSearchMetadata.entity_uuid, KnowledgeSearchMetadata.normalized_name,
+            ).join(KnowledgeEntity, KnowledgeEntity.uuid == KnowledgeSearchMetadata.entity_uuid).filter(
+                KnowledgeEntity.status == "active",
+                KnowledgeSearchMetadata.normalized_name.in_(normalized_names),
+            ).all()
+        for entity_uuid, normalized in canonical_values:
             if normalized:
                 index.setdefault(normalized, set()).add(entity_uuid)
-        for entity_uuid, normalized_alias in self.db.query(
+
+        alias_query = self.db.query(
             KnowledgeEntityAlias.entity_uuid, KnowledgeEntityAlias.normalized_alias,
-        ).all():
+        ).join(KnowledgeEntity, KnowledgeEntity.uuid == KnowledgeEntityAlias.entity_uuid).filter(
+            KnowledgeEntity.status == "active",
+        )
+        if normalized_names is not None:
+            alias_query = alias_query.filter(KnowledgeEntityAlias.normalized_alias.in_(normalized_names))
+        for entity_uuid, normalized_alias in alias_query.all():
             normalized = normalize_search_text(normalized_alias)
             if normalized:
                 index.setdefault(normalized, set()).add(entity_uuid)

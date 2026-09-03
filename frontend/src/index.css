@@ -15,4 +15,15 @@
   }
   .tibia-map-sprite-marker img { width: 32px; height: 32px; object-fit: contain; image-rendering: pixelated; }
   .tibia-map-sprite-marker span { @apply block size-3 rounded-full bg-primary; }
+  .tibia-map-entity-marker {
+    @apply grid place-items-center rounded-xl border-2 border-primary bg-surface-overlay text-primary shadow-lg;
+  }
+  .tibia-map-entity-marker img { width: 34px; height: 34px; object-fit: contain; image-rendering: pixelated; }
+  .tibia-map-entity-marker span { @apply grid size-7 place-items-center rounded-lg bg-primary-subtle text-xs font-black text-primary; }
+  .tibia-map-entity-marker--location { border-radius: var(--radius-sm); }
+  .tibia-map-entity-marker--npc { border-style: double; border-width: 4px; }
+  .tibia-map-entity-marker--quest { border-style: dashed; }
+  .tibia-map-entity-marker--boss { border-width: 4px; }
+  .tibia-map-entity-marker--hunt_zone { border-radius: var(--radius-xl); }
+  .tibia-map-entity-marker--group span { @apply bg-accent-subtle text-content-primary; }
 }

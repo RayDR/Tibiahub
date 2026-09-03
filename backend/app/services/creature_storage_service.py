@@ -8,6 +8,7 @@ from sqlalchemy.orm import Session, selectinload
 from sqlalchemy import case, func, or_
 
 from app.models import Creature, HuntZone, Loot, SpawnLocation
+from app.knowledge.services.hunt_zone_relationships import ExactHuntZoneIndex
 from app.services.creature_category_service import (
     canonicalize_creature_category,
     creature_category_expression,
@@ -35,17 +36,33 @@ def _copy_if_present(target: Creature, payload: dict[str, Any], field: str) -> N
         setattr(target, field, value)
 
 
-def _ensure_hunt_zone(db: Session, location_name: str) -> HuntZone:
+def _ensure_hunt_zone(
+    db: Session,
+    location_name: str,
+    exact_index: ExactHuntZoneIndex,
+) -> HuntZone | None:
     normalized_name = normalize_search_text(location_name)
     zone = db.query(HuntZone).filter(HuntZone.normalized_name == normalized_name).first()
     if not zone:
+        candidates = exact_index.candidates(location_name)
+        if len(candidates) != 1:
+            # Creature location strings range from canonical place names to
+            # prose and category pages. Preserve them on Creature for Knowledge
+            # normalization; never create a domain identity from text alone.
+            return None
+        entity = candidates[0]
+        zone = db.query(HuntZone).filter(HuntZone.knowledge_entity_id == entity.uuid).first()
+        if zone is not None:
+            return zone
         zone = HuntZone(
             name=location_name,
             normalized_name=normalized_name,
+            slug=entity.slug,
             min_level=None,
             source_name="tibiawiki",
             source_url=None,
             description=None,
+            knowledge_entity_id=entity.uuid,
             last_synced_at=datetime.now(UTC),
         )
         db.add(zone)
@@ -153,8 +170,11 @@ def upsert_creature_payload(db: Session, payload: dict[str, Any]) -> Creature:
         loot.raw_data = loot_payload
 
     existing_spawn_links = {spawn.hunt_zone.normalized_name: spawn for spawn in creature.spawn_locations if spawn.hunt_zone}
+    hunt_zone_index = ExactHuntZoneIndex.build(db)
     for location in creature.locations or []:
-        zone = _ensure_hunt_zone(db, location)
+        zone = _ensure_hunt_zone(db, location, hunt_zone_index)
+        if zone is None:
+            continue
         if zone.normalized_name in existing_spawn_links:
             continue
         db.add(SpawnLocation(creature_id=creature.id, hunt_zone_id=zone.id, quantity="Unknown"))

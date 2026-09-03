@@ -2,6 +2,7 @@ from __future__ import annotations
 
 from app.core.security import create_access_token
 from app.models.leadership import GuildLeadershipApplication, GuildLeadershipAssignment
+from app.models.guild_management import GuildManagementGrant
 from app.models.raffle import InternalNotification
 from app.models.workspace_audit import WorkspaceAudit
 from app.models.user_character import UserCharacter
@@ -149,3 +150,99 @@ def test_notifications_are_private_and_legacy_table_is_untouched(client, db):
     recipients = {item.recipient_user_id for item in db.query(InternalNotification).filter(InternalNotification.notification_type == "leadership_application_received").all()}
     assert recipients == {leader.id} and member.id not in recipients
     assert db.bind.dialect.has_table(db.connection(), "recruitments")
+
+
+def test_explicit_workspace_scope_supports_one_verified_guild(client, db):
+    member = setup_applicant(db, username="scope-one-member", guild="Scope One", character="Scope One Knight")
+    response = client.get(
+        "/api/v1/guild/me/leadership",
+        params={"guild_name": "Scope One"},
+        headers=auth(member),
+    )
+    assert response.status_code == 200
+    assert response.json()["guild_name"] == "Scope One"
+
+
+def test_explicit_workspace_scope_selects_guild_b_for_queries_and_mutations(client, db):
+    leader = make_user(db, username="scope-multi-leader", guild_name="Scope A", guild_rank="Leader")
+    link_verified(db, leader, "Scope A", "Leader", "Scope A Identity")
+    link_verified(db, leader, "Scope B", "Leader", "Scope B Identity")
+    db.commit()
+
+    summary_response = client.get(
+        "/api/v1/guild/me/leadership",
+        params={"guild_name": "Scope B"},
+        headers=auth(leader),
+    )
+    assert summary_response.status_code == 200
+    assert summary_response.json()["guild_name"] == "Scope B"
+
+    created = client.post(
+        "/api/v1/guild/me/leadership/openings",
+        params={"guild_name": "Scope B"},
+        json=opening_payload(),
+        headers=auth(leader),
+    )
+    assert created.status_code == 201
+    assert client.get(
+        "/api/v1/guild/me/leadership/openings",
+        params={"guild_name": "Scope A"},
+        headers=auth(leader),
+    ).json() == []
+    assert [row["id"] for row in client.get(
+        "/api/v1/guild/me/leadership/openings",
+        params={"guild_name": "Scope B"},
+        headers=auth(leader),
+    ).json()] == [created.json()["id"]]
+
+
+def test_explicit_workspace_scope_supports_delegated_only_manager(client, db):
+    admin = make_user(db, username="scope-delegated-grantor", is_superuser=True)
+    delegated = make_user(db, username="scope-delegated", guild_name="Legacy Profile Guild")
+    db.add(GuildManagementGrant(
+        user_id=delegated.id,
+        guild_name="Delegated Guild",
+        normalized_guild_name="delegated guild",
+        capability="events.manage",
+        granted_by_id=admin.id,
+    ))
+    db.commit()
+
+    response = client.get(
+        "/api/v1/guild/me/leadership",
+        params={"guild_name": "Delegated Guild"},
+        headers=auth(delegated),
+    )
+    assert response.status_code == 200
+    assert response.json()["guild_name"] == "Delegated Guild"
+    assert response.json()["capabilities"] == {"manage": False, "review": False}
+
+
+def test_explicit_workspace_scope_rejects_unrelated_guild(client, db):
+    member = setup_applicant(db, username="scope-denied-member", guild="Scope Allowed", character="Scope Allowed Knight")
+    response = client.get(
+        "/api/v1/guild/me/leadership",
+        params={"guild_name": "Scope Denied"},
+        headers=auth(member),
+    )
+    assert response.status_code == 403
+
+
+def test_admin_specific_leadership_path_remains_functional_with_explicit_scope(client, db):
+    leader = make_user(db, username="scope-assisted-leader", guild_name="Scope Assisted", guild_rank="Leader")
+    link_verified(db, leader, "Scope Assisted", "Leader")
+    admin = make_user(db, username="scope-admin", is_superuser=True)
+    db.commit()
+
+    created = client.post(
+        "/api/v1/admin/guilds/scope-assisted/leadership/openings",
+        json=opening_payload(),
+        headers=auth(admin),
+    )
+    assert created.status_code == 201
+    summary_response = client.get(
+        "/api/v1/admin/guilds/scope-assisted/leadership",
+        headers=auth(admin),
+    )
+    assert summary_response.status_code == 200
+    assert summary_response.json()["guild_name"] == "Scope Assisted"

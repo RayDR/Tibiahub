@@ -114,8 +114,8 @@ export const knowledgeOperationsApi = {
   }) => (await api.post<{ item: KnowledgeJob; created: boolean }>('/admin/knowledge/jobs', payload)).data,
   retry: async (jobId: string) => (await api.post<KnowledgeJob>(`/admin/knowledge/jobs/${encodeURIComponent(jobId)}/retry`)).data,
   cancel: async (jobId: string) => (await api.post<KnowledgeJob>(`/admin/knowledge/jobs/${encodeURIComponent(jobId)}/cancel`)).data,
-  relationshipReview: async (resolutionState: 'resolved' | 'unresolved' | 'ambiguous', signal?: AbortSignal) => (
-    await api.get<{ items: KnowledgeRelationshipReview[]; total: number }>('/admin/knowledge/relationships/review', { params: { resolution_state: resolutionState, limit: 50 }, signal })
+  relationshipReview: async (params: { resolution_state: 'resolved' | 'unresolved' | 'ambiguous'; skip?: number; limit?: number }, signal?: AbortSignal) => (
+    await api.get<{ items: KnowledgeRelationshipReview[]; total: number; skip: number; limit: number }>('/admin/knowledge/relationships/review', { params, signal })
   ).data,
   relationshipProvenance: async (id: string) => (await api.get<KnowledgeRelationshipProvenance>(`/admin/knowledge/relationships/${encodeURIComponent(id)}/provenance`)).data,
   resolveRelationship: async (id: string, target_entity_id: string, reason: string) => (await api.post<KnowledgeRelationshipReview>(`/admin/knowledge/relationships/${encodeURIComponent(id)}/resolve`, { target_entity_id, reason })).data,

@@ -6,15 +6,22 @@ from datetime import datetime
 from typing import Any
 from uuid import UUID
 
-from fastapi import APIRouter, Depends, HTTPException, Query
-from pydantic import BaseModel, ConfigDict
-from sqlalchemy import or_
-from sqlalchemy.orm import Session
+from fastapi import APIRouter, Depends, HTTPException, Query, Request
+from pydantic import BaseModel, ConfigDict, Field
+from sqlalchemy import exists, or_
+from sqlalchemy.orm import Session, joinedload
 
+from app.core.config import settings
 from app.db.database import get_db
 from app.knowledge.services import KnowledgeGraphService
+from app.knowledge.models import KnowledgeEntityAlias
 from app.models.external_data import TibiaWikiLocation, TibiaWikiNpc
 from app.services.entity_metadata_service import EntityMetadataService
+from app.services.npc_projection_service import detail_references, directory_rows
+from app.services import media_asset_service as media_svc
+from app.api.v1.local_media import (
+    LocalMediaDescriptor, build_local_media_file_response,
+)
 from app.services.text_utils import normalize_search_text
 
 
@@ -54,15 +61,79 @@ class NamedRelationship(BaseModel):
     last_synced_at: datetime
 
 
+class NpcMedia(BaseModel):
+    status: str
+    url: str | None = None
+    source_provider: str | None = None
+    source_url: str | None = None
+
+
+class NpcDirectoryItem(BaseModel):
+    id: int
+    canonical_id: UUID
+    knowledge_entity_id: UUID
+    name: str
+    slug: str
+    title: str | None = None
+    occupation: str | None = None
+    location_name: str | None = None
+    buys_count: int | None = None
+    sells_count: int | None = None
+    quest_count: int | None = None
+    destination_count: int | None = None
+    media: NpcMedia
+    geometry_status: str
+    spatial_state: str
+    map_available: bool
+    last_synced_at: datetime | None = None
+
+
+class NpcDirectoryPage(BaseModel):
+    items: list[NpcDirectoryItem]
+    total: int
+    skip: int
+    limit: int
+
+
+class NpcNamedReference(BaseModel):
+    name: str
+    price: int | float | str | None = None
+    currency: str | None = None
+    qualifier: str | None = None
+    offers: list[dict[str, Any]] = Field(default_factory=list)
+    semantic: str
+    canonical_id: UUID | None = None
+    entity_type: str
+    slug: str | None = None
+    resolution_state: str
+    navigation_url: str | None = None
+
+
+class NpcSpatial(BaseModel):
+    x: int | None = None
+    y: int | None = None
+    z: int | None = None
+    bounds: dict[str, int] | None = None
+    geometry_status: str
+    spatial_state: str
+    geometry_source: str | None = None
+    spatial_evidence: list[dict[str, Any]] = Field(default_factory=list)
+    location_labels: list[str] = Field(default_factory=list)
+
+
 class NpcDetail(NamedReferenceSummary):
     title: str | None = None
     occupation: str | None = None
     sex: str | None = None
     location_name: str | None = None
-    buys: list[dict[str, Any]]
-    sells: list[dict[str, Any]]
-    destinations: list[dict[str, Any]]
-    related_quests: list[dict[str, Any]]
+    aliases: list[str]
+    field_coverage: dict[str, str]
+    buys: list[NpcNamedReference]
+    sells: list[NpcNamedReference]
+    destinations: list[NpcNamedReference]
+    related_quests: list[NpcNamedReference]
+    media: NpcMedia
+    spatial: NpcSpatial
     relationships: list[NamedRelationship]
 
 
@@ -97,7 +168,9 @@ def _summary(row) -> NamedReferenceSummary:
         external_id=row.external_id,
         entity_type=row.knowledge_entity.entity_type,
         description=row.description,
-        image_url=row.image_url,
+        # NPC provider images are reference-only until a local cache contract
+        # exists. Locations retain their existing legacy behavior.
+        image_url=None if isinstance(row, TibiaWikiNpc) else row.image_url,
         source_url=row.source_url,
         source_provider=row.source_name,
         supplied_fields=supplied,
@@ -121,7 +194,51 @@ def _relationships(db: Session, entity_id: UUID) -> list[NamedRelationship]:
 def _find(query, model, identifier: str):
     if identifier.isdigit():
         return query.filter(or_(model.id == int(identifier), model.external_id == identifier)).first()
+    try:
+        canonical_id = UUID(identifier)
+    except ValueError:
+        canonical_id = None
+    if canonical_id is not None:
+        return query.filter(model.knowledge_entity_id == canonical_id).first()
     return query.filter(or_(model.slug == identifier, model.normalized_name == normalize_search_text(identifier))).first()
+
+
+def _npc_media_descriptor(db: Session, npc_id: int) -> LocalMediaDescriptor:
+    row = db.query(TibiaWikiNpc).filter_by(id=npc_id).first()
+    if row is None:
+        raise HTTPException(status_code=404, detail="NPC not found")
+    key = media_svc.build_npc_asset_key(row)
+    asset = media_svc.get_asset(db, key)
+    cached = bool(asset and asset.status == "cached" and asset.file_exists())
+    return LocalMediaDescriptor(
+        local_path=str(asset.local_path) if cached and asset.local_path else None,
+        content_type=asset.content_type if cached else None,
+        size_bytes=asset.size_bytes if cached else None,
+        asset_hash=asset.sha256_hash if cached else None,
+        asset_key=key,
+        status=asset.status if asset else "missing",
+        fallback_label=row.name,
+    )
+
+
+def _npc_search_query(db: Session, search: str | None, location: str | None):
+    query = db.query(TibiaWikiNpc).options(joinedload(TibiaWikiNpc.knowledge_entity))
+    if search:
+        normalized = normalize_search_text(search)
+        alias_match = exists().where(
+            KnowledgeEntityAlias.entity_uuid == TibiaWikiNpc.knowledge_entity_id,
+            KnowledgeEntityAlias.entity_type == "npc",
+            KnowledgeEntityAlias.normalized_alias.contains(normalized),
+        )
+        query = query.filter(or_(
+            TibiaWikiNpc.normalized_name.contains(normalized),
+            TibiaWikiNpc.location_name.ilike(f"%{search.strip()}%"),
+            TibiaWikiNpc.occupation.ilike(f"%{search.strip()}%"),
+            alias_match,
+        ))
+    if location:
+        query = query.filter(TibiaWikiNpc.location_name.ilike(f"%{location.strip()}%"))
+    return query
 
 
 @router.get("/npcs/", response_model=list[NamedReferenceSummary])
@@ -131,12 +248,8 @@ def search_npcs(
     skip: int = Query(0, ge=0), limit: int = Query(50, ge=1, le=100),
     db: Session = Depends(get_db),
 ):
-    query = db.query(TibiaWikiNpc)
-    if search:
-        query = query.filter(TibiaWikiNpc.normalized_name.contains(normalize_search_text(search)))
-    if location:
-        query = query.filter(TibiaWikiNpc.location_name.ilike(location))
-    rows = query.order_by(TibiaWikiNpc.name.asc()).offset(skip).limit(limit).all()
+    query = _npc_search_query(db, search, location)
+    rows = query.order_by(TibiaWikiNpc.normalized_name.asc(), TibiaWikiNpc.id.asc()).offset(skip).limit(limit).all()
     if rows and search:
         EntityMetadataService.record_searches(db, entity_type="npc", matches=[
             (row.normalized_name, row.name, row.id) for row in rows[:5]
@@ -145,15 +258,84 @@ def search_npcs(
     return [_summary(row) for row in rows]
 
 
+@router.get("/npcs/directory", response_model=NpcDirectoryPage)
+def npc_directory(
+    search: str | None = Query(None, min_length=2, max_length=255),
+    location: str | None = Query(None, min_length=1, max_length=255),
+    skip: int = Query(0, ge=0),
+    limit: int = Query(24, ge=1, le=100),
+    db: Session = Depends(get_db),
+):
+    """Return an authoritative total and a lightweight canonical NPC page."""
+    query = _npc_search_query(db, search, location)
+    total = query.order_by(None).count()
+    rows = (
+        query.order_by(TibiaWikiNpc.normalized_name.asc(), TibiaWikiNpc.id.asc())
+        .offset(skip)
+        .limit(limit)
+        .all()
+    )
+    projected = directory_rows(db, rows)
+    if rows and search:
+        EntityMetadataService.record_searches(db, entity_type="npc", matches=[
+            (row.normalized_name, row.name, row.id) for row in rows[:5]
+        ])
+        db.commit()
+    return NpcDirectoryPage(
+        items=[NpcDirectoryItem(**projected[row.knowledge_entity_id]) for row in rows],
+        total=total,
+        skip=skip,
+        limit=limit,
+    )
+
+
+@router.get("/npcs/{npc_id}/image")
+def get_npc_image(npc_id: int, request: Request, db: Session = Depends(get_db)):
+    """Serve only validated, worker-cached NPC media; never proxy providers."""
+    descriptor = _npc_media_descriptor(db, npc_id)
+    if descriptor.status != "cached":
+        raise HTTPException(
+            status_code=404,
+            detail="NPC image unavailable",
+            headers={
+                "X-Image-Source": "unavailable",
+                "X-Image-Status": descriptor.status,
+                "X-Asset-Key": descriptor.asset_key,
+            },
+        )
+    response = build_local_media_file_response(
+        request,
+        descriptor,
+        default_media_type="image/gif",
+        cache_max_age_seconds=settings.IMAGE_CACHE_MAX_AGE_SECONDS,
+        extra_headers={
+            "X-Image-Source": "local-media-asset",
+            "X-Image-Status": "cached",
+            "X-Asset-Key": descriptor.asset_key,
+        },
+    )
+    if response is None:
+        raise HTTPException(status_code=404, detail="NPC image unavailable")
+    return response
+
+
 @router.get("/npcs/{identifier}", response_model=NpcDetail)
 def get_npc(identifier: str, db: Session = Depends(get_db)):
-    row = _find(db.query(TibiaWikiNpc), TibiaWikiNpc, identifier)
+    row = _find(
+        db.query(TibiaWikiNpc).options(joinedload(TibiaWikiNpc.knowledge_entity)),
+        TibiaWikiNpc,
+        identifier,
+    )
     if row is None:
         raise HTTPException(status_code=404, detail="NPC not found")
+    references = detail_references(db, row)
     return NpcDetail(
         **_summary(row).model_dump(), title=row.title, occupation=row.occupation, sex=row.sex,
-        location_name=row.location_name, buys=list(row.buys or []), sells=list(row.sells or []),
-        destinations=list(row.destinations or []), related_quests=list(row.related_quests or []),
+        location_name=row.location_name or (row.provider_metadata or {}).get("location_text"),
+        aliases=references["aliases"], field_coverage=references["field_coverage"],
+        buys=references["buys"], sells=references["sells"],
+        destinations=references["destinations"], related_quests=references["related_quests"],
+        media=references["media"], spatial=references["spatial"],
         relationships=_relationships(db, row.knowledge_entity_id),
     )
 

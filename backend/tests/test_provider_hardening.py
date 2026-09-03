@@ -105,9 +105,9 @@ def test_missing_legacy_creature_stats_and_hunt_levels_remain_unknown(db):
         "id": 991001, "name": "Unknown Beast", "locations": ["Unknown Cave"],
         "hitpoints": None, "experience": None,
     })
-    zone = db.query(HuntZone).filter_by(name="Unknown Cave").one()
     assert creature.hitpoints is None and creature.experience is None
-    assert zone.min_level is None
+    assert creature.locations == ["Unknown Cave"]
+    assert db.query(HuntZone).filter_by(name="Unknown Cave").count() == 0
 
 
 def test_recommendation_profile_does_not_turn_unknown_creature_stats_into_zero():

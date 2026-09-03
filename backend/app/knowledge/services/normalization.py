@@ -28,6 +28,28 @@ class AppliedNormalization:
     metrics: dict[str, int] = field(default_factory=dict)
 
 
+def _reconcile_world_map_markers(db: Session, applied: AppliedNormalization) -> AppliedNormalization:
+    if applied.entity_uuid is None:
+        return applied
+    entity = db.get(KnowledgeEntity, applied.entity_uuid)
+    if entity is None:
+        return applied
+    db.flush()
+    from app.services.world_map_sync_service import WorldMapSyncService
+
+    names = {entity.canonical_name, *(alias.alias for alias in entity.aliases)}
+    reconciliation = WorldMapSyncService(db, ".").reconcile_marker_resolutions(names)
+    if not reconciliation["changed"]:
+        return applied
+    return AppliedNormalization(
+        applied.status,
+        applied.entity_uuid,
+        applied.aliases_created,
+        applied.warnings,
+        {**applied.metrics, "world_map_markers_reconciled": reconciliation["changed"]},
+    )
+
+
 class KnowledgeNormalizationService:
     @staticmethod
     def apply(db: Session, result: KnowledgeNormalizationResult) -> AppliedNormalization:
@@ -69,7 +91,10 @@ class KnowledgeNormalizationService:
                 )
             )
             status = "created" if existing is None else "unchanged" if existing.id == row.id else "updated"
-            return AppliedNormalization(status, row.knowledge_entity_id, int(existing is None), len(result.warnings))
+            return _reconcile_world_map_markers(
+                db,
+                AppliedNormalization(status, row.knowledge_entity_id, int(existing is None), len(result.warnings)),
+            )
         if result.canonical_data is not None and result.provider_code == "tibiawiki":
             if result.candidate is not None and result.candidate.entity_type == "creature":
                 from app.knowledge.services.creature_normalization import CreatureKnowledgeNormalizationService
@@ -106,19 +131,25 @@ class KnowledgeNormalizationService:
                     source_document_ref=f"route:{result.external_id}",
                 )
                 status = "created" if existing is None else "unchanged" if existing.id == route.id else "updated"
-                return AppliedNormalization(status, route.knowledge_entity_id, 0, len(result.warnings), {"route_steps": route.step_count})
+                return _reconcile_world_map_markers(
+                    db,
+                    AppliedNormalization(status, route.knowledge_entity_id, 0, len(result.warnings), {"route_steps": route.step_count}),
+                )
             elif result.candidate is not None and result.candidate.entity_type == "hunt_zone":
                 from app.knowledge.services.hunt_zone_normalization import HuntZoneKnowledgeNormalizationService
 
                 applied = HuntZoneKnowledgeNormalizationService.apply(db, result)
             else:
                 raise ValueError("TibiaWiki normalization requires a supported canonical entity type")
-            return AppliedNormalization(
-                applied.status,
-                applied.entity_uuid,
-                applied.aliases_created,
-                applied.warnings,
-                getattr(applied, "metrics", {}),
+            return _reconcile_world_map_markers(
+                db,
+                AppliedNormalization(
+                    applied.status,
+                    applied.entity_uuid,
+                    applied.aliases_created,
+                    applied.warnings,
+                    getattr(applied, "metrics", {}),
+                ),
             )
         candidate = result.candidate
         if candidate is None:
@@ -218,9 +249,12 @@ class KnowledgeNormalizationService:
                 entity_uuid=entity.uuid,
                 payload={"source": "knowledge_normalization"},
             )
-        return AppliedNormalization(
-            "created" if created else "updated" if changed else "unchanged",
-            entity.uuid,
-            len(candidate.aliases) + 1 if created else aliases_created,
-            len(result.warnings),
+        return _reconcile_world_map_markers(
+            db,
+            AppliedNormalization(
+                "created" if created else "updated" if changed else "unchanged",
+                entity.uuid,
+                len(candidate.aliases) + 1 if created else aliases_created,
+                len(result.warnings),
+            ),
         )

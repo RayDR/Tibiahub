@@ -2,7 +2,7 @@ from __future__ import annotations
 
 import re
 
-from fastapi import APIRouter, Depends, HTTPException
+from fastapi import APIRouter, Depends, HTTPException, Query
 from sqlalchemy import func
 from sqlalchemy.orm import Session
 
@@ -157,10 +157,18 @@ def open_guild_assistance_workspace(
 @router.get("/guilds/{key}/audits")
 def list_guild_assistance_audits(
     key: str,
+    skip: int = Query(0, ge=0),
+    limit: int = Query(100, ge=1, le=100),
+    paged: bool = False,
     db: Session = Depends(get_db),
     _admin: User = Depends(get_current_admin_user),
 ):
     name = _resolve_registered_guild(db, key)
-    return db.query(WorkspaceAudit).filter(
+    query = db.query(WorkspaceAudit).filter(
         WorkspaceAudit.guild_name.ilike(name), WorkspaceAudit.assisted.is_(True)
-    ).order_by(WorkspaceAudit.created_at.desc()).limit(100).all()
+    )
+    total = query.count()
+    rows = query.order_by(WorkspaceAudit.created_at.desc(), WorkspaceAudit.id.desc()).offset(skip).limit(limit).all()
+    if paged:
+        return {"items": rows, "total": total, "skip": skip, "limit": limit}
+    return rows

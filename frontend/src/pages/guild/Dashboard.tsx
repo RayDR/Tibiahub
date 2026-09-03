@@ -13,8 +13,10 @@ import {
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { Link } from "react-router-dom";
 import { useTranslation } from "react-i18next";
+import { appLocale } from "../../utils/locale";
 
-import { Badge, Card, LoadingState, PageHeader } from "../../components/ui";
+import { Badge, Card, DegradedState, ErrorState, LoadingState } from "../../components/ui";
+import { WorkspaceContentHeader } from "../../components/workspace/WorkspacePrimitives";
 import { useAuth } from "../../context/AuthContext";
 import { UserActivityEntry, activityApi } from "../../services/activity";
 import {
@@ -42,6 +44,7 @@ export default function Dashboard() {
   const guildName = useGuildContext(user);
   const [loading, setLoading] = useState(true);
   const [partial, setPartial] = useState(false);
+  const [failed, setFailed] = useState(false);
   const [announcements, setAnnouncements] = useState<Announcement[]>([]);
   const [events, setEvents] = useState<Event[]>([]);
   const [hunts, setHunts] = useState<GuildHunt[]>([]);
@@ -60,13 +63,14 @@ export default function Dashboard() {
       guildApi.getAnnouncements(0, 4, guildName),
       guildApi.getEvents(0, 4, guildName),
       huntPlannerApi.list({ guild_name: guildName }),
-      leadershipApi.summary(),
-      leadershipApi.openings(),
+      leadershipApi.summary({ guildName }),
+      leadershipApi.openings({ guildName }),
       raffleApi.workspace(),
       notificationApi.list(),
       guildApi.getGuildMembers(guildName),
       activityApi.getMine(6),
     ]);
+    setFailed(results.every((item) => item.status === "rejected"));
     setPartial(results.some((item) => item.status === "rejected"));
     if (results[0].status === "fulfilled") setAnnouncements(results[0].value);
     if (results[1].status === "fulfilled") setEvents(results[1].value);
@@ -120,30 +124,29 @@ export default function Dashboard() {
     (leadership?.interviews_pending || 0) +
     (leadership?.applications_voting || 0);
   if (loading) return <LoadingState title={t("guildDashboard.loading")} />;
+  if (failed) return <ErrorState title={t("guildDashboard.partialError")} action={<button type="button" onClick={() => void load()} className="app-button-secondary">{t("common.retry")}</button>} />;
   return (
-    <div className="space-y-6">
-      <PageHeader
-        size="lg"
+    <div className="workspace-page">
+      <WorkspaceContentHeader
         eyebrow={t("guildDashboard.eyebrow")}
         title={t("guildDashboard.title")}
-        subtitle={t("guildDashboard.commandSubtitle", { guild: guildName })}
-        primaryAction={
-          <Link to="/guild/hunts" className="app-button-primary">
-            <Swords className="size-4" />
-            {t("guildDashboard.actions.planHunt")}
-          </Link>
-        }
-        secondaryActions={
-          <Link to="/guild/members" className="app-button-secondary">
-            <Users className="size-4" />
-            {t("guildDashboard.actions.members")}
-          </Link>
+        description={t("guildDashboard.commandSubtitle", { guild: guildName })}
+        icon={<Swords />}
+        action={
+          <>
+            <Link to="/guild/members" className="app-button-secondary">
+              <Users className="size-4" />
+              {t("guildDashboard.actions.members")}
+            </Link>
+            <Link to="/guild/hunts" className="app-button-primary">
+              <Swords className="size-4" />
+              {t("guildDashboard.actions.planHunt")}
+            </Link>
+          </>
         }
       />
       {partial && (
-        <p className="rounded-xl bg-warning-subtle p-3 text-sm text-warning">
-          {t("guildDashboard.partialError")}
-        </p>
+        <DegradedState title={t("guildDashboard.partialError")} action={<button type="button" onClick={() => void load()} className="app-button-secondary app-button-sm">{t("common.retry")}</button>} />
       )}
       <section
         className="grid gap-3 sm:grid-cols-2 xl:grid-cols-4"
@@ -248,7 +251,7 @@ export default function Dashboard() {
             <Row
               key={item.id}
               title={item.title}
-              meta={new Date(item.created_at).toLocaleDateString(i18n.language)}
+              meta={new Date(item.created_at).toLocaleDateString(appLocale(i18n.resolvedLanguage || i18n.language))}
             />
           ))}
           empty={t("guildDashboard.empty.news")}
@@ -261,7 +264,7 @@ export default function Dashboard() {
             <Row
               key={item.id}
               title={item.title}
-              meta={new Date(item.start_time).toLocaleString(i18n.language)}
+              meta={new Date(item.start_time).toLocaleString(appLocale(i18n.resolvedLanguage || i18n.language))}
             />
           ))}
           empty={t("guildDashboard.empty.events")}
@@ -287,7 +290,7 @@ export default function Dashboard() {
             <Row
               key={item.id}
               title={t(item.title_key, item.interpolation)}
-              meta={new Date(item.created_at).toLocaleString(i18n.language)}
+              meta={new Date(item.created_at).toLocaleString(appLocale(i18n.resolvedLanguage || i18n.language))}
             />
           ))}
           empty={t("guildDashboard.empty.notifications")}
@@ -320,7 +323,7 @@ export default function Dashboard() {
                   item.activity_type,
                 )
               }
-              meta={new Date(item.created_at).toLocaleString(i18n.language)}
+              meta={new Date(item.created_at).toLocaleString(appLocale(i18n.resolvedLanguage || i18n.language))}
             />
           ))}
           empty={t("guildDashboard.empty.activity")}
@@ -400,7 +403,7 @@ function HuntRow({ item }: { item: GuildHunt }) {
   return (
     <Row
       title={`${item.target} · ${item.location}`}
-      meta={new Date(item.scheduled_at).toLocaleString(i18n.language, {
+      meta={new Date(item.scheduled_at).toLocaleString(appLocale(i18n.resolvedLanguage || i18n.language), {
         month: "short",
         day: "numeric",
         hour: "2-digit",

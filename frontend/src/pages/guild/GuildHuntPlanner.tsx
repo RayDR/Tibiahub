@@ -1,11 +1,13 @@
 import { FormEvent, useCallback, useEffect, useMemo, useState } from "react";
 import {
+  BookOpen,
   CalendarDays,
   Check,
   ChevronLeft,
   ChevronRight,
   Clock3,
   MapPin,
+  Map as MapIcon,
   MessageCircle,
   Plus,
   ShieldCheck,
@@ -16,14 +18,26 @@ import {
   X,
 } from "lucide-react";
 import { useTranslation } from "react-i18next";
+import { Link } from "react-router-dom";
+import { appLocale } from "../../utils/locale";
 
 import {
+  Alert,
   Badge,
   Dialog,
+  DialogBody,
+  DialogFooter,
+  DialogHeader,
+  DegradedState,
   EmptyState,
+  ErrorState,
+  FormField,
+  Input,
   LoadingState,
-  PageHeader,
+  Textarea,
 } from "../../components/ui";
+import { WorkspaceContentHeader } from "../../components/workspace/WorkspacePrimitives";
+import CanonicalHuntZonePicker, { type CanonicalHuntZoneValue } from "../../components/guild/CanonicalHuntZonePicker";
 import { useAuth } from "../../context/AuthContext";
 import { useToast } from "../../context/ToastContext";
 import {
@@ -35,6 +49,7 @@ import {
 } from "../../services/huntPlanner";
 import { useGuildContext } from "../../utils/guildContext";
 import { useGuildCapability } from "../../hooks/useGuildCapability";
+import { buildMapEntityUrl } from "../../services/tibiaMap";
 
 const vocations: VocationCode[] = ["EK", "ED", "RP", "MS"];
 
@@ -53,6 +68,7 @@ export default function GuildHuntPlanner() {
   const [editing, setEditing] = useState<GuildHunt | "new" | null>(null);
   const [cancelling, setCancelling] = useState<GuildHunt | null>(null);
   const [cancelReason, setCancelReason] = useState("");
+  const [cancelBusy, setCancelBusy] = useState(false);
   const [busy, setBusy] = useState<number | null>(null);
 
   const load = useCallback(async () => {
@@ -88,13 +104,13 @@ export default function GuildHuntPlanner() {
     () =>
       visible.reduce((result, item) => {
         const key = new Date(item.scheduled_at).toLocaleDateString(
-          i18n.language,
+          appLocale(i18n.resolvedLanguage || i18n.language),
           { weekday: "long", month: "long", day: "numeric" },
         );
         result.set(key, [...(result.get(key) || []), item]);
         return result;
       }, new Map<string, GuildHunt[]>()),
-    [i18n.language, visible],
+    [i18n.language, i18n.resolvedLanguage, visible],
   );
 
   const action = async (
@@ -120,13 +136,13 @@ export default function GuildHuntPlanner() {
 
   if (loading) return <LoadingState title={t("huntPlanner.loading")} />;
   return (
-    <div className="space-y-6">
-      <PageHeader
-        size="lg"
+    <div className="workspace-page">
+      <WorkspaceContentHeader
         eyebrow={t("huntPlanner.eyebrow")}
         title={t("huntPlanner.title")}
-        subtitle={t("huntPlanner.subtitle")}
-        primaryAction={
+        description={t("huntPlanner.subtitle")}
+        icon={<Swords />}
+        action={
           canCreate ? (
             <button
               type="button"
@@ -139,21 +155,17 @@ export default function GuildHuntPlanner() {
           ) : undefined
         }
       />
-      {error && (
-        <div
-          role="alert"
-          className="rounded-xl bg-danger-subtle p-4 text-danger"
-        >
-          <p className="font-semibold">{t("huntPlanner.error.title")}</p>
-          <button
-            type="button"
-            onClick={() => void load()}
-            className="mt-2 underline"
-          >
-            {t("common.retry")}
-          </button>
-        </div>
-      )}
+      {error && hunts.length === 0 ? (
+        <ErrorState
+          title={t("huntPlanner.error.title")}
+          action={<button type="button" onClick={() => void load()} className="app-button-secondary">{t("common.retry")}</button>}
+        />
+      ) : error ? (
+        <DegradedState
+          title={t("huntPlanner.error.title")}
+          action={<button type="button" onClick={() => void load()} className="app-button-secondary app-button-sm">{t("common.retry")}</button>}
+        />
+      ) : null}
       <section
         className="flex flex-col gap-3 rounded-2xl bg-surface-raised p-3 shadow-sm sm:flex-row sm:items-center sm:justify-between"
         aria-label={t("huntPlanner.calendar.label")}
@@ -181,7 +193,7 @@ export default function GuildHuntPlanner() {
               <ChevronLeft className="size-4" />
             </button>
             <p className="min-w-40 text-center text-sm font-semibold">
-              {range.label.toLocaleDateString(i18n.language, {
+              {range.label.toLocaleDateString(appLocale(i18n.resolvedLanguage || i18n.language), {
                 month: "long",
                 day: "numeric",
                 year: "numeric",
@@ -198,7 +210,7 @@ export default function GuildHuntPlanner() {
           </div>
         )}
       </section>
-      {visible.length === 0 ? (
+      {visible.length === 0 ? (error ? null : (
         <EmptyState
           title={t("huntPlanner.empty.title")}
           description={t("huntPlanner.empty.help")}
@@ -215,7 +227,7 @@ export default function GuildHuntPlanner() {
             ) : undefined
           }
         />
-      ) : (
+      )) : (
         <div className="space-y-6">
           {Array.from(grouped.entries()).map(([date, items]) => (
             <section key={date} className="space-y-3">
@@ -259,9 +271,10 @@ export default function GuildHuntPlanner() {
             ? "huntPlanner.form.createTitle"
             : "huntPlanner.form.editTitle",
         )}
-        className="max-h-[92dvh] overflow-y-auto p-5 sm:max-w-3xl"
+        className="ds-dialog-lg"
       >
         <HuntForm
+          key={editing === "new" ? "new" : editing?.id || "closed"}
           hunt={editing === "new" ? undefined : editing || undefined}
           guildName={guildName || ""}
           onCancel={() => setEditing(null)}
@@ -273,63 +286,67 @@ export default function GuildHuntPlanner() {
       </Dialog>
       <Dialog
         open={cancelling !== null}
-        onClose={() => setCancelling(null)}
+        onClose={() => { if (!cancelBusy) setCancelling(null); }}
         label={t("huntPlanner.confirm.cancelTitle")}
-        className="p-5 sm:max-w-lg"
+        descriptionId="hunt-cancel-description"
       >
         <form
-          onSubmit={(event) => {
+          onSubmit={async (event) => {
             event.preventDefault();
-            if (!cancelling || !cancelReason.trim()) return;
+            if (!cancelling || cancelReason.trim().length < 3 || cancelBusy) return;
             const hunt = cancelling;
-            setCancelling(null);
+            setCancelBusy(true);
             setBusy(hunt.id);
-            void huntPlannerApi
-              .cancel(hunt.id, cancelReason.trim())
-              .then(() => {
-                toast.success(t("huntPlanner.feedback.cancel"));
-                return load();
-              })
-              .catch(() => toast.error(t("huntPlanner.feedback.error")))
-              .finally(() => setBusy(null));
+            try {
+              await huntPlannerApi.cancel(hunt.id, cancelReason.trim());
+              toast.success(t("huntPlanner.feedback.cancel"));
+              setCancelling(null);
+              await load();
+            } catch {
+              toast.error(t("huntPlanner.feedback.error"));
+            } finally {
+              setCancelBusy(false);
+              setBusy(null);
+            }
           }}
-          className="space-y-4"
+          className="flex min-h-0 flex-1 flex-col"
         >
-          <h2 className="text-xl font-semibold">
-            {t("huntPlanner.confirm.cancelTitle")}
-          </h2>
-          <p className="text-sm text-content-secondary">
-            {t("huntPlanner.confirm.cancelHelp", {
-              target: cancelling?.target,
-            })}
-          </p>
-          <label className="grid gap-1 text-sm">
-            <span>{t("huntPlanner.confirm.cancelReason")}</span>
-            <textarea
-              autoFocus
+          <DialogHeader>
+            <div>
+              <h2 className="text-xl font-semibold">{t("huntPlanner.confirm.cancelTitle")}</h2>
+              <p id="hunt-cancel-description" className="mt-1 text-sm text-content-secondary">
+                {t("huntPlanner.confirm.cancelHelp", { target: cancelling?.target })}
+              </p>
+            </div>
+          </DialogHeader>
+          <DialogBody>
+            <FormField label={t("huntPlanner.confirm.cancelReason")} required>
+              <Textarea
               value={cancelReason}
               onChange={(event) => setCancelReason(event.target.value)}
               required
               minLength={3}
               maxLength={2000}
-              className="min-h-28 rounded-xl bg-surface p-3"
-            />
-          </label>
-          <div className="flex gap-2">
+              disabled={cancelBusy}
+              />
+            </FormField>
+          </DialogBody>
+          <DialogFooter>
             <button
               type="button"
               onClick={() => setCancelling(null)}
-              className="app-button-secondary flex-1"
+              disabled={cancelBusy}
+              className="app-button-secondary"
             >
               {t("common.cancel")}
             </button>
             <button
-              disabled={cancelReason.trim().length < 3}
-              className="app-button-danger flex-1"
+              disabled={cancelReason.trim().length < 3 || cancelBusy}
+              className="app-button-danger"
             >
               {t("huntPlanner.actions.cancel")}
             </button>
-          </div>
+          </DialogFooter>
         </form>
       </Dialog>
     </div>
@@ -395,7 +412,7 @@ function HuntCard({
           </div>
           <div className="text-right">
             <p className="font-semibold">
-              {new Date(hunt.scheduled_at).toLocaleTimeString(i18n.language, {
+              {new Date(hunt.scheduled_at).toLocaleTimeString(appLocale(i18n.resolvedLanguage || i18n.language), {
                 hour: "2-digit",
                 minute: "2-digit",
               })}
@@ -405,6 +422,7 @@ function HuntCard({
         </div>
       </div>
       <div className="space-y-4 p-5">
+        {hunt.hunting_zone_summary ? <CanonicalZoneStrip hunt={hunt} /> : null}
         <div className="grid grid-cols-2 gap-3 sm:grid-cols-4">
           <Metric
             icon={<ShieldCheck />}
@@ -580,6 +598,43 @@ function HuntCard({
   );
 }
 
+function CanonicalZoneStrip({ hunt }: { hunt: GuildHunt }) {
+  const { t } = useTranslation();
+  const zone = hunt.hunting_zone_summary;
+  if (!zone) return null;
+  const identifier = zone.slug || zone.domain_id;
+  const mapUrl = buildMapEntityUrl({
+    canonicalEntityId: zone.canonical_id,
+    entityType: 'hunt_zone',
+    name: zone.name,
+    slug: zone.slug,
+    floor: zone.map_floor,
+  });
+  return <div className="rounded-xl border border-primary/30 bg-primary-subtle p-3">
+    <div className="flex flex-wrap items-start justify-between gap-3">
+      <div className="min-w-0">
+        <div className="flex flex-wrap items-center gap-2">
+          <Badge tone="info">{t('huntPlanner.zone.canonicalBadge')}</Badge>
+          {!zone.is_current ? <Badge tone="warning">{t('huntPlanner.zone.notCurrentShort')}</Badge> : null}
+        </div>
+        {identifier ? <Link to={`/hunt-zones/${identifier}`} className="mt-1 block truncate font-semibold text-content-primary hover:text-primary">{zone.name}</Link> : <p className="mt-1 font-semibold">{zone.name}</p>}
+        <p className="mt-1 text-xs text-content-secondary">{zone.region || zone.city || t('huntPlanner.zone.locationUnknown')}</p>
+      </div>
+      <div className="flex flex-wrap gap-2">
+        {zone.access_required === true ? <Badge tone="warning"><BookOpen className="mr-1 inline size-3" />{t('huntPlanner.zone.accessRequired')}</Badge> : null}
+        {zone.map_available ? <Link to={mapUrl} className="app-button-secondary app-button-sm"><MapIcon className="size-4" />{t('huntPlanner.zone.viewMap')}</Link> : <span className="inline-flex items-center gap-1 text-xs text-content-muted"><MapIcon className="size-3" />{t('huntPlanner.zone.noGeometryShort')}</span>}
+      </div>
+    </div>
+    {zone.creature_preview.length ? <div className="mt-3 flex flex-wrap gap-2" aria-label={t('huntPlanner.zone.creatures')}>
+      {zone.creature_preview.slice(0, 4).map((creature) => <span key={creature.canonical_id || creature.id || creature.name} className="inline-flex items-center gap-1.5 rounded-lg bg-surface-raised px-2 py-1 text-xs text-content-secondary">
+        {creature.image_url ? <img src={creature.image_url} alt="" className="size-6 object-contain [image-rendering:pixelated]" /> : null}
+        {creature.name}{creature.is_boss ? <span className="font-semibold text-warning">· {t('huntPlanner.zone.boss')}</span> : null}
+      </span>)}
+      {zone.creature_count > 4 ? <span className="self-center text-xs text-content-muted">+{zone.creature_count - 4}</span> : null}
+    </div> : null}
+  </div>;
+}
+
 function Metric({
   icon,
   label,
@@ -612,10 +667,15 @@ function HuntForm({
   const { t } = useTranslation();
   const toast = useToast();
   const [busy, setBusy] = useState(false);
+  const [submitError, setSubmitError] = useState(false);
+  const [zoneMode, setZoneMode] = useState<'canonical' | 'custom'>(hunt?.hunting_zone_id ? 'canonical' : 'custom');
+  const [selectedZone, setSelectedZone] = useState<CanonicalHuntZoneValue | null>(hunt?.hunting_zone_summary || null);
   const local = hunt ? toLocalInput(new Date(hunt.scheduled_at)) : "";
   const submit = async (event: FormEvent<HTMLFormElement>) => {
     event.preventDefault();
+    if (busy) return;
     setBusy(true);
+    setSubmitError(false);
     const data = new FormData(event.currentTarget);
     const required = (code: VocationCode) =>
       Number(data.get(`required_${code.toLocaleLowerCase()}`) || 0);
@@ -626,6 +686,7 @@ function HuntForm({
       server_name: String(data.get("server_name")),
       location: String(data.get("location")),
       target: String(data.get("target")),
+      hunting_zone_id: zoneMode === 'canonical' ? selectedZone?.canonical_id || null : null,
       recommended_level: Number(data.get("recommended_level")),
       recommended_vocations: vocations.filter(
         (code) => data.get(`vocation_${code}`) === "on",
@@ -653,17 +714,30 @@ function HuntForm({
       onSaved();
     } catch {
       toast.error(t("huntPlanner.feedback.error"));
+      setSubmitError(true);
       setBusy(false);
     }
   };
   return (
-    <form onSubmit={submit} className="space-y-5">
-      <h2 className="text-xl font-semibold">
-        {t(
-          hunt ? "huntPlanner.form.editTitle" : "huntPlanner.form.createTitle",
-        )}
-      </h2>
-      <div className="grid gap-4 sm:grid-cols-2">
+    <form onSubmit={submit} className="flex min-h-0 flex-1 flex-col">
+      <DialogHeader>
+        <div>
+          <h2 className="text-xl font-semibold">
+            {t(hunt ? "huntPlanner.form.editTitle" : "huntPlanner.form.createTitle")}
+          </h2>
+          <p className="mt-1 text-sm text-content-secondary">{t("huntPlanner.subtitle")}</p>
+        </div>
+      </DialogHeader>
+      <DialogBody className="space-y-5">
+        {submitError ? <Alert tone="danger">{t("huntPlanner.feedback.error")}</Alert> : null}
+        <CanonicalHuntZonePicker
+          mode={zoneMode}
+          value={selectedZone}
+          disabled={busy}
+          onModeChange={setZoneMode}
+          onChange={setSelectedZone}
+        />
+        <div className="grid gap-4 sm:grid-cols-2">
         {(
           [
             ["scheduled_at", "datetime-local", local],
@@ -674,20 +748,19 @@ function HuntForm({
             ["maximum_participants", "number", hunt?.maximum_participants || 8],
           ] as const
         ).map(([name, type, value]) => (
-          <label key={name} className="grid gap-1 text-sm">
-            <span>{t(`huntPlanner.fields.${name}`)}</span>
-            <input
+          <FormField key={name} label={t(`huntPlanner.fields.${name}`)} required>
+            <Input
               name={name}
               type={type}
               defaultValue={value}
               min={type === "number" ? 1 : undefined}
               required
-              className="min-h-11 rounded-xl bg-surface px-3"
+              disabled={busy}
             />
-          </label>
+          </FormField>
         ))}
-      </div>
-      <fieldset>
+        </div>
+        <fieldset disabled={busy}>
         <legend className="text-sm font-semibold">
           {t("huntPlanner.fields.recommended_vocations")}
         </legend>
@@ -706,16 +779,15 @@ function HuntForm({
             </label>
           ))}
         </div>
-      </fieldset>
-      <fieldset>
+        </fieldset>
+        <fieldset disabled={busy}>
         <legend className="text-sm font-semibold">
           {t("huntPlanner.fields.required_roles")}
         </legend>
         <div className="mt-2 grid grid-cols-2 gap-3 sm:grid-cols-4">
           {vocations.map((code) => (
-            <label key={code} className="grid gap-1 text-sm">
-              <span>{code}</span>
-              <input
+            <FormField key={code} label={code}>
+              <Input
                 name={`required_${code.toLocaleLowerCase()}`}
                 type="number"
                 min={0}
@@ -725,54 +797,50 @@ function HuntForm({
                     `required_${code.toLocaleLowerCase()}` as keyof GuildHunt
                   ] as number) || 0
                 }
-                className="min-h-11 rounded-xl bg-surface px-3"
               />
-            </label>
+            </FormField>
           ))}
         </div>
-      </fieldset>
-      <label className="grid gap-1 text-sm">
-        <span>{t("huntPlanner.fields.description")}</span>
-        <textarea
+        </fieldset>
+        <FormField label={t("huntPlanner.fields.description")}>
+          <Textarea
           name="description"
           defaultValue={hunt?.description || ""}
           maxLength={4000}
-          className="min-h-28 rounded-xl bg-surface p-3"
+          disabled={busy}
         />
-      </label>
-      <div className="grid gap-4 sm:grid-cols-2">
-        <label className="grid gap-1 text-sm">
-          <span>{t("huntPlanner.fields.discord_channel")}</span>
-          <input
+        </FormField>
+        <div className="grid gap-4 sm:grid-cols-2">
+          <FormField label={t("huntPlanner.fields.discord_channel")}>
+            <Input
             name="discord_channel"
             defaultValue={hunt?.discord_channel || ""}
-            className="min-h-11 rounded-xl bg-surface px-3"
+            disabled={busy}
           />
-        </label>
-        <label className="grid gap-1 text-sm">
-          <span>{t("huntPlanner.fields.voice_channel")}</span>
-          <input
+          </FormField>
+          <FormField label={t("huntPlanner.fields.voice_channel")}>
+            <Input
             name="voice_channel"
             defaultValue={hunt?.voice_channel || ""}
-            className="min-h-11 rounded-xl bg-surface px-3"
+            disabled={busy}
           />
-        </label>
-      </div>
-      <p className="text-xs text-content-muted">
-        {t("huntPlanner.form.discordFuture")}
-      </p>
-      <div className="sticky bottom-0 flex gap-2 bg-surface-base py-3">
+          </FormField>
+        </div>
+        <p className="text-xs text-content-muted">{t("huntPlanner.form.discordFuture")}</p>
+      </DialogBody>
+      <DialogFooter>
         <button
           type="button"
           onClick={onCancel}
-          className="app-button-secondary flex-1"
+          disabled={busy}
+          className="app-button-secondary"
         >
           {t("common.cancel")}
         </button>
-        <button disabled={busy} className="app-button-primary flex-1">
-          {t("common.save")}
+        <button disabled={busy} className="app-button-primary">
+          {busy ? t("leadership.actions.saving") : t("common.save")}
         </button>
-      </div>
+      </DialogFooter>
     </form>
   );
 }

@@ -194,7 +194,7 @@ def review_relationships(
     if provider_id:
         query = query.filter_by(source_provider_id=provider_id)
     total = query.count()
-    rows = query.order_by(KnowledgeRelationship.created_at.desc()).offset(skip).limit(limit).all()
+    rows = query.order_by(KnowledgeRelationship.created_at.desc(), KnowledgeRelationship.id.desc()).offset(skip).limit(limit).all()
     return KnowledgeGraphReviewPage(items=[_review_item(db, row) for row in rows], total=total, skip=skip, limit=limit)
 
 
@@ -378,7 +378,7 @@ def list_jobs(
     if trigger:
         query = query.filter(KnowledgeJob.trigger == trigger)
     total = query.count()
-    jobs = query.order_by(KnowledgeJob.created_at.desc()).offset(skip).limit(limit).all()
+    jobs = query.order_by(KnowledgeJob.created_at.desc(), KnowledgeJob.id.desc()).offset(skip).limit(limit).all()
     return KnowledgeJobPage(items=[_job_response(job) for job in jobs], total=total, skip=skip, limit=limit)
 
 
@@ -416,7 +416,15 @@ def enqueue_job(
         raise HTTPException(status_code=400, detail={"code": "knowledge_adapter_unsupported"}) from exc
     except ValueError as exc:
         raise HTTPException(status_code=400, detail={"code": "knowledge_job_input_invalid"}) from exc
-    if payload.job_type in {"creature_catalog", "item_catalog", "quest_catalog", "npc_catalog", "location_catalog", "route_catalog"} and not payload.confirm_catalog_sync:
+    if payload.job_type in {
+        "creature_catalog",
+        "item_catalog",
+        "quest_catalog",
+        "npc_catalog",
+        "location_catalog",
+        "route_catalog",
+        "hunt_zone_catalog",
+    } and not payload.confirm_catalog_sync:
         raise HTTPException(status_code=400, detail={"code": "knowledge_catalog_confirmation_required"})
     try:
         result = KnowledgeJobService.enqueue(

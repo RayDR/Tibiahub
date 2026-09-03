@@ -41,19 +41,42 @@ def _hunt_or_404(db: Session, hunt_id: int, user: User, *, lock: bool = False) -
     return hunt
 
 
-def _planner_response(db: Session, hunt: GuildHunt, user: User) -> dict:
+def _planner_response(
+    db: Session,
+    hunt: GuildHunt,
+    user: User,
+    zone_summaries: dict | None = None,
+    permissions: dict[str, bool] | None = None,
+) -> dict:
     participants = list(hunt.participants)
+    summaries = zone_summaries if zone_summaries is not None else GuildHuntPlannerService.zone_summaries(db, [hunt])
+    access = permissions or {
+        "manage": can_manage_guild(user, hunt.guild_name, db=db, capability="hunts.manage"),
+        "member": GuildAuthorizationService.is_verified_member(db, user, hunt.guild_name),
+    }
     return {
         **{column.name: getattr(hunt, column.name) for column in GuildHunt.__table__.columns},
+        "hunting_zone_summary": summaries.get(hunt.hunting_zone_id) if hunt.hunting_zone_id else None,
         "participants": participants,
         "registered_count": sum(1 for item in participants if item.attendance_status in GuildHuntPlannerService.ACTIVE_ATTENDANCE),
         "current_user_joined": any(item.user_id == user.id and item.attendance_status == "registered" for item in participants),
         "capabilities": {
-            "manage": can_manage_guild(user, hunt.guild_name, db=db, capability="hunts.manage"),
-            "join": hunt.status == "scheduled" and GuildAuthorizationService.is_verified_member(db, user, hunt.guild_name),
-            "attendance": hunt.status in {"in_progress", "finished"} and can_manage_guild(user, hunt.guild_name, db=db, capability="hunts.manage"),
+            "manage": access["manage"],
+            "join": hunt.status == "scheduled" and access["member"],
+            "attendance": hunt.status in {"in_progress", "finished"} and access["manage"],
         },
     }
+
+
+def _planner_responses(db: Session, hunts: list[GuildHunt], user: User) -> list[dict]:
+    if not hunts:
+        return []
+    zone_summaries = GuildHuntPlannerService.zone_summaries(db, hunts)
+    permissions = {
+        "manage": can_manage_guild(user, hunts[0].guild_name, db=db, capability="hunts.manage"),
+        "member": GuildAuthorizationService.is_verified_member(db, user, hunts[0].guild_name),
+    }
+    return [_planner_response(db, hunt, user, zone_summaries, permissions) for hunt in hunts]
 
 
 def _domain_error(exc: Exception) -> HTTPException:
@@ -71,7 +94,7 @@ def list_guild_hunts(
 ):
     guild = _guild_for(db, current_user, guild_name)
     rows = GuildHuntPlannerService.list_for_guild(db, guild, start=start, end=end, statuses=set(status_filter or []))
-    return [_planner_response(db, row, current_user) for row in rows]
+    return _planner_responses(db, rows, current_user)
 
 
 @router.post("/planner", response_model=GuildHuntResponse, status_code=201)

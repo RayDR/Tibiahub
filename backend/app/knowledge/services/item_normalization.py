@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from dataclasses import asdict, dataclass
+from dataclasses import dataclass
 from datetime import UTC, datetime
 from uuid import UUID
 
@@ -23,6 +23,7 @@ from app.knowledge.services.entities import (
 )
 from app.knowledge.services.failures import InvalidNormalizationContractError
 from app.knowledge.services.item_relationships import exact_entity_candidates, link_item_drops
+from app.knowledge.services.npc_trade_relationships import link_item_npc_trade
 from app.models.external_data import Item
 from app.services.entity_metadata_service import EntityMetadataService
 from app.services.text_utils import normalize_search_text
@@ -301,13 +302,31 @@ def _bridge_item(db: Session, entity: KnowledgeEntity, dto: ItemKnowledgeDTO) ->
     assign("bonuses", dict(dto.bonuses), supplied="bonuses", clear_if_supplied=True)
     assign(
         "buy_from",
-        [asdict(reference) for reference in dto.buy_from],
+        [
+            {
+                "name": reference.name,
+                "price": reference.price,
+                "location": reference.location,
+                **({"currency": reference.currency} if reference.currency else {}),
+                **({"qualifier": reference.qualifier} if reference.qualifier else {}),
+            }
+            for reference in dto.buy_from
+        ],
         supplied="buy_from",
         clear_if_supplied=True,
     )
     assign(
         "sell_to",
-        [asdict(reference) for reference in dto.sell_to],
+        [
+            {
+                "name": reference.name,
+                "price": reference.price,
+                "location": reference.location,
+                **({"currency": reference.currency} if reference.currency else {}),
+                **({"qualifier": reference.qualifier} if reference.qualifier else {}),
+            }
+            for reference in dto.sell_to
+        ],
         supplied="sell_to",
         clear_if_supplied=True,
     )
@@ -365,6 +384,15 @@ class ItemKnowledgeNormalizationService:
             source_document_id=f"item:{dto.external_id}",
         )
         warnings += unresolved
+        trade_metrics = link_item_npc_trade(
+            db,
+            item_entity_uuid=entity.uuid,
+            buy_from=dto.buy_from,
+            sell_to=dto.sell_to,
+            provider_id=result.provider_code or "tibiawiki",
+            source_document_id=f"item:{dto.external_id}",
+        )
+        warnings += trade_metrics["unresolved"] + trade_metrics["ambiguous"]
         changed = entity_changed or item_changed
         if changed and not created:
             emit_event(

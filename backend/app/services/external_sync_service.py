@@ -9,12 +9,12 @@ from sqlalchemy import desc
 from sqlalchemy.orm import Session
 
 from app.models.creature import Creature
-from app.models.external_data import APISync, HuntingPlace, Item, TibiaWikiQuest
+from app.models.external_data import APISync, Item, TibiaWikiQuest
 from app.models.hunt_zone import HuntZone
 from app.services.bestiary_source import BestiarySourceError
 from app.services.creature_storage_service import upsert_creature_payload
 from app.services.entity_metadata_service import EntityMetadataService
-from app.services.external_apis import get_creatures, get_hunting_places, get_items, get_quests
+from app.services.external_apis import get_creatures, get_items, get_quests
 from app.services.text_utils import normalize_search_text
 
 logger = logging.getLogger(__name__)
@@ -145,69 +145,19 @@ class ExternalSyncService:
 
     @staticmethod
     async def sync_hunting_places(db: Session) -> Dict[str, Any]:
-        sync_log = ExternalSyncService._start_sync_log(db, api_name="hunting_places", endpoint="/external/hunting-places")
-        try:
-            response = await get_hunting_places(expand=True)
-            sync_log.source = response.source.value
-            if not response.success():
-                ExternalSyncService._finish_sync_log(sync_log, status="error", message="Hunt zone sync failed", error=response.error)
-                db.commit()
-                return {"api": "hunting_places", "status": "error", "error": response.error, "sync_id": sync_log.id}
+        """Retain the legacy callable without bypassing canonical Knowledge ingestion."""
 
-            items_data = response.data or []
-            sync_log.total_items = len(items_data)
-            created = 0
-            updated = 0
-            for index, place in enumerate(items_data, start=1):
-                name = place.get("name")
-                if not name:
-                    continue
-                normalized_name = normalize_search_text(name)
-                zone = db.query(HuntZone).filter(HuntZone.normalized_name == normalized_name).first()
-                if not zone:
-                    zone = HuntZone(name=name, normalized_name=normalized_name, min_level=0)
-                    db.add(zone)
-                    created += 1
-                else:
-                    updated += 1
-                zone.name = name
-                zone.normalized_name = normalized_name
-                zone.city = place.get("location") or zone.city
-                zone.description = place.get("description") or zone.description
-                zone.source_name = response.source.value
-                zone.source_url = place.get("source_url") or zone.source_url
-                zone.raw_data = place
-                zone.last_synced_at = datetime.now(UTC)
-                EntityMetadataService.update_sync_timestamp(db, entity_type="hunt_zone", entity_key=name, display_name=name, entity_id=zone.id)
-                sync_log.processed_items = index
-
-                hp = db.query(HuntingPlace).filter(HuntingPlace.name == name).first()
-                if not hp:
-                    hp = HuntingPlace(name=name)
-                    db.add(hp)
-                hp.description = place.get("description")
-                hp.location = place.get("location")
-                hp.creatures = place.get("creatures") or []
-                hp.raw_data = place
-            db.commit()
-            ExternalSyncService._finish_sync_log(sync_log, status="success", message=f"Created: {created}, Updated: {updated}, Errors: 0")
-            db.commit()
-            return {
-                "api": "hunting_places",
-                "status": "success",
-                "source": response.source.value,
-                "created": created,
-                "updated": updated,
-                "errors": 0,
-                "total": len(items_data),
-                "sync_id": sync_log.id,
-                "message": sync_log.message,
-            }
-        except Exception as exc:
-            logger.exception("hunt_zone_sync_failed error=%s", exc)
-            ExternalSyncService._finish_sync_log(sync_log, status="error", message="Hunt zone sync failed", error=str(exc))
-            db.commit()
-            return {"api": "hunting_places", "status": "error", "error": str(exc), "sync_id": sync_log.id, "message": sync_log.message}
+        _ = db
+        return {
+            "api": "hunting_places",
+            "status": "deprecated",
+            "created": 0,
+            "updated": 0,
+            "errors": 0,
+            "total": 0,
+            "source": "tibiawiki",
+            "reason": "Use the durable tibiawiki hunt_zone_catalog Knowledge job",
+        }
 
     @staticmethod
     async def sync_quests(db: Session) -> Dict[str, Any]:

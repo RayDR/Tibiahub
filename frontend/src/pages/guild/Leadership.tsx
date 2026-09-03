@@ -14,7 +14,7 @@ import type { LucideIcon } from "lucide-react";
 import { useTranslation } from "react-i18next";
 import {
   EmptyState,
-  WorkspaceHeader,
+  WorkspaceContentHeader,
 } from "../../components/workspace/WorkspacePrimitives";
 import {
   InlineError,
@@ -28,6 +28,8 @@ import {
   leadershipApi,
 } from "../../services/leadership";
 import { useConfirmation } from "../../context/ConfirmationContext";
+import { useGuildContext } from "../../utils/guildContext";
+import { formatDate } from "../../utils/locale";
 
 export default function Leadership({
   guildKey,
@@ -36,8 +38,9 @@ export default function Leadership({
   guildKey?: string;
   guildName?: string;
 }) {
-  const { t } = useTranslation();
+  const { t, i18n } = useTranslation();
   const confirmation = useConfirmation();
+  const selectedGuild = useGuildContext();
   const [data, setData] = useState<LeadershipSummary | null>(null);
   const [assignments, setAssignments] = useState<LeadershipAssignment[]>([]);
   const [summaryError, setSummaryError] = useState(false);
@@ -49,8 +52,8 @@ export default function Leadership({
   const load = useCallback(async () => {
     setLoading(true);
     const [summaryResult, assignmentResult] = await Promise.allSettled([
-      leadershipApi.summary(guildKey),
-      leadershipApi.assignments(guildKey),
+      leadershipApi.summary({ guildKey, guildName: selectedGuild }),
+      leadershipApi.assignments({ guildKey, guildName: selectedGuild }),
     ]);
     if (summaryResult.status === "fulfilled") {
       setData(summaryResult.value);
@@ -61,7 +64,7 @@ export default function Leadership({
       setAssignmentError(false);
     } else setAssignmentError(true);
     setLoading(false);
-  }, [guildKey]);
+  }, [guildKey, selectedGuild]);
   useEffect(() => {
     void load();
   }, [load]);
@@ -120,7 +123,7 @@ export default function Leadership({
       : `${root}/recruitment`;
   const completePromotion = async (item: LeadershipAssignment) => {
     if (!(await confirmation.confirm(t("leadership.confirmations.promotion")))) return;
-    await leadershipApi.promotion(item.id, true, undefined, guildKey);
+    await leadershipApi.promotion(item.id, true, undefined, { guildKey, guildName: selectedGuild });
     await load();
   };
   const endAssignment = async (item: LeadershipAssignment) => {
@@ -129,24 +132,24 @@ export default function Leadership({
       { inputLabel: t("leadership.confirmations.endAssignmentReason"), minimumLength: 3, danger: true },
     );
     if (!reason) return;
-    await leadershipApi.endAssignment(item.id, reason, guildKey);
+    await leadershipApi.endAssignment(item.id, reason, { guildKey, guildName: selectedGuild });
     await load();
   };
   return (
-    <div className="space-y-5">
+    <div className="workspace-page">
       <LeadershipBreadcrumbs
         adminBase={
           guildKey ? `/admin/guilds/${encodeURIComponent(guildKey)}` : undefined
         }
       />
-      <WorkspaceHeader
+      <WorkspaceContentHeader
         title={t("leadership.title")}
-        subtitle={guildName || data.guild_name}
-        badge={t("leadership.roles.viceleader")}
+        description={guildName || selectedGuild || data.guild_name}
+        icon={<ShieldCheck />}
         action={
           <Link
             to={primaryTo}
-            className="inline-flex min-h-11 items-center justify-center rounded-lg bg-primary px-4 font-semibold text-content-inverse"
+            className="app-button-primary inline-flex min-h-11 items-center justify-center rounded-lg px-4 font-semibold"
           >
             {primaryLabel}
           </Link>
@@ -154,9 +157,9 @@ export default function Leadership({
       />
       {summaryError && <InlineError retry={() => void load()} />}
       <section aria-labelledby="leadership-health">
-        <h2 id="leadership-health" className="mb-3 text-lg font-semibold">
+        <h3 id="leadership-health" className="mb-3 text-lg font-semibold">
           {t("leadership.dashboard.health")}
-        </h2>
+        </h3>
         <div className="grid grid-cols-2 gap-3 lg:grid-cols-4">
           {cards.map(([key, value, Icon]) => (
             <article key={key} className="rounded-xl border border-line p-4">
@@ -258,7 +261,7 @@ export default function Leadership({
                 </div>
                 <p className="mt-3 text-xs text-content-muted">
                   {t("leadership.assignment.started", {
-                    date: new Date(item.started_at).toLocaleDateString(),
+                    date: formatDate(item.started_at, i18n.resolvedLanguage || i18n.language),
                   })}
                 </p>
                 <p className="mt-1 text-sm">
