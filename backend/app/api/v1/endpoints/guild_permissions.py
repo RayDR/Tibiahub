@@ -57,7 +57,6 @@ def guild_directory(
     if not current_user.is_superuser:
         raise HTTPException(status_code=403, detail="Global administrator access required")
     rows = db.query(GuildDirectory).order_by(GuildDirectory.guild_name, GuildDirectory.world_name).all()
-    rows = query.options(selectinload(GuildRosterCharacter.linked_user)).order_by(GuildRosterCharacter.character_name).limit(500).all()
     return [{
         "id": row.id, "guild_name": row.guild_name, "world_name": row.world_name,
         "source": row.source, "is_active": row.is_active,
@@ -110,6 +109,7 @@ def guild_roster(
     query = db.query(GuildRosterCharacter).filter(GuildRosterCharacter.normalized_guild_name == normalize_guild_identity(guild_name))
     if current_only:
         query = query.filter(GuildRosterCharacter.is_current.is_(True))
+    rows = query.options(selectinload(GuildRosterCharacter.linked_user)).order_by(GuildRosterCharacter.character_name).all()
     return [{
         "id": row.id, "guild_name": row.guild_name, "world_name": row.world_name,
         "character_name": row.character_name, "rank": row.guild_rank, "level": row.level,

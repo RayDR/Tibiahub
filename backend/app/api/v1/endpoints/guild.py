@@ -1,10 +1,10 @@
 from typing import List, Any, Optional
-from fastapi import APIRouter, Depends, HTTPException, status
+from fastapi import APIRouter, Depends, HTTPException, Query, status
 from pydantic import BaseModel
 from sqlalchemy.orm import Session, selectinload
 from sqlalchemy.exc import SQLAlchemyError
 from datetime import UTC, datetime, timedelta
-from collections import OrderedDict
+from sqlalchemy import func, or_
 
 from app.db.database import get_db
 from app.models.guild import Announcement, GuildEvent, EventAttendance, Recruitment, AnnouncementType, EventType
@@ -124,22 +124,45 @@ def _resolve_guild_scope(current_user: User, requested_guild: str | None, db: Se
     return guild_name
 
 
-def _latest_snapshot_rows(db: Session, guild_name: str, limit: int = 400) -> list[GuildMemberSnapshot]:
-    rows = (
-        db.query(GuildMemberSnapshot)
-        .filter(GuildMemberSnapshot.guild_name.ilike(guild_name))
-        .order_by(GuildMemberSnapshot.snapshot_at.desc(), GuildMemberSnapshot.level.desc())
-        .limit(limit)
-        .all()
-    )
-
-    deduped: OrderedDict[str, GuildMemberSnapshot] = OrderedDict()
-    for row in rows:
-        key = row.character_name.strip().lower()
-        if key in deduped:
-            continue
-        deduped[key] = row
-    return list(deduped.values())
+def _latest_snapshot_page(
+    db: Session,
+    guild_name: str,
+    *,
+    skip: int = 0,
+    limit: int = 400,
+    search: str | None = None,
+    sort: str = "level",
+) -> tuple[list[GuildMemberSnapshot], int]:
+    normalized_name = func.lower(func.trim(GuildMemberSnapshot.character_name))
+    latest_rows = db.query(
+        GuildMemberSnapshot.id.label("snapshot_id"),
+        func.row_number().over(
+            partition_by=normalized_name,
+            order_by=(GuildMemberSnapshot.snapshot_at.desc(), GuildMemberSnapshot.id.desc()),
+        ).label("row_number"),
+    ).filter(GuildMemberSnapshot.guild_name.ilike(guild_name)).subquery()
+    query = db.query(GuildMemberSnapshot).join(
+        latest_rows, GuildMemberSnapshot.id == latest_rows.c.snapshot_id
+    ).filter(latest_rows.c.row_number == 1)
+    term = (search or "").strip()
+    if term:
+        pattern = f"%{term}%"
+        query = query.filter(or_(
+            GuildMemberSnapshot.character_name.ilike(pattern),
+            GuildMemberSnapshot.vocation.ilike(pattern),
+            GuildMemberSnapshot.rank.ilike(pattern),
+            GuildMemberSnapshot.role.ilike(pattern),
+        ))
+    total = query.count()
+    if sort == "name":
+        ordering = (func.lower(GuildMemberSnapshot.character_name).asc(), GuildMemberSnapshot.id.asc())
+    else:
+        ordering = (
+            GuildMemberSnapshot.level.desc(),
+            func.lower(GuildMemberSnapshot.character_name).asc(),
+            GuildMemberSnapshot.id.asc(),
+        )
+    return query.order_by(*ordering).offset(skip).limit(limit).all(), total
 
 
 def _member_identity_map(db: Session, guild_name: str) -> dict[str, GuildRosterCharacter]:
@@ -466,6 +489,10 @@ async def get_guild_feature_flags(
 async def get_guild_members_snapshot(
     guild_name: str,
     refresh: bool = False,
+    skip: int = Query(0, ge=0),
+    limit: int = Query(400, ge=1, le=400),
+    search: str | None = Query(None, max_length=100),
+    sort: str = Query("level", pattern="^(level|name)$"),
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_active_user),
 ) -> Any:
@@ -491,24 +518,31 @@ async def get_guild_members_snapshot(
         except Exception:
             source = "snapshot"
 
-    rows = _latest_snapshot_rows(db, guild_name)
-    if not rows:
+    rows, total = _latest_snapshot_page(db, guild_name, skip=skip, limit=limit, search=search, sort=sort)
+    has_snapshot = db.query(GuildMemberSnapshot.id).filter(
+        GuildMemberSnapshot.guild_name.ilike(guild_name)
+    ).first() is not None
+    if not has_snapshot:
         try:
             await _sync_guild_snapshot(db, guild_name)
             source = "live"
-            rows = _latest_snapshot_rows(db, guild_name)
+            rows, total = _latest_snapshot_page(db, guild_name, skip=skip, limit=limit, search=search, sort=sort)
         except Exception as exc:
             raise HTTPException(status_code=503, detail=f"Guild members unavailable: {str(exc)}") from exc
 
     identities = _member_identity_map(db, guild_name)
     can_view_private_identity = is_global_admin(current_user) or can_manage_guild_members(current_user, guild_name, db)
     members = [_snapshot_response(row, identities, current_user=current_user, can_view_private_identity=can_view_private_identity) for row in rows]
-    return GuildMemberSnapshotPayload(guild_name=guild_name, source=source, members=members)
+    return GuildMemberSnapshotPayload(guild_name=guild_name, source=source, members=members, total=total, skip=skip, limit=limit)
 
 
 @router.post("/{guild_name}/members/sync", response_model=GuildMemberSnapshotPayload)
 async def sync_guild_members_snapshot(
     guild_name: str,
+    skip: int = Query(0, ge=0),
+    limit: int = Query(400, ge=1, le=400),
+    search: str | None = Query(None, max_length=100),
+    sort: str = Query("level", pattern="^(level|name)$"),
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_manager_user),
 ) -> Any:
@@ -528,8 +562,8 @@ async def sync_guild_members_snapshot(
     except Exception as exc:
         raise HTTPException(status_code=503, detail=f"Guild sync failed: {str(exc)}") from exc
 
-    rows = _latest_snapshot_rows(db, guild_name)
+    rows, total = _latest_snapshot_page(db, guild_name, skip=skip, limit=limit, search=search, sort=sort)
     identities = _member_identity_map(db, guild_name)
     can_view_private_identity = is_global_admin(current_user) or can_manage_guild_members(current_user, guild_name, db)
     members = [_snapshot_response(row, identities, current_user=current_user, can_view_private_identity=can_view_private_identity) for row in rows]
-    return GuildMemberSnapshotPayload(guild_name=guild_name, source="live", members=members)
+    return GuildMemberSnapshotPayload(guild_name=guild_name, source="live", members=members, total=total, skip=skip, limit=limit)

@@ -69,6 +69,6 @@ export default function LocalizedMapPreview({ spatial, label, className = '', ma
         top: `calc(50% - ${projection.y}px)`,
       }}
     />
-    {marker ? <span className="pointer-events-none absolute left-1/2 top-1/2 grid size-8 -translate-x-1/2 -translate-y-full place-items-center rounded-full border border-white/50 bg-primary text-content-on-primary shadow-lg"><MapPin size={17} fill="currentColor" /></span> : null}
+    {marker ? <span className="pointer-events-none absolute left-1/2 top-1/2 grid size-8 -translate-x-1/2 -translate-y-full place-items-center rounded-full border border-line-strong bg-primary text-content-on-primary shadow-lg"><MapPin size={17} fill="currentColor" /></span> : null}
   </div>;
 }

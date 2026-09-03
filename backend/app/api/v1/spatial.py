@@ -14,6 +14,7 @@ from app.knowledge.models import (
 )
 from app.knowledge.services.spatial import PostGISUnavailableError, entities_inside_region, nearby_entities
 from app.models.external_data import TibiaWikiLocation
+from app.models.world_map import WorldMapFloor, WorldMapMarker
 from app.services.text_utils import normalize_search_text
 
 
@@ -44,6 +45,46 @@ def _point(row: SpatialMapPoint) -> dict:
             {"canonical_id": None, "name": row.unresolved_location_name}
             if row.unresolved_location_name else None
         ),
+    }
+
+
+def _world_marker_point(row: WorldMapMarker) -> dict:
+    """Present an authoritative resolved TibiaMaps marker as a spatial point."""
+    floor = row.world_floor
+    return {
+        "id": f"world-map-marker:{row.id}",
+        "name": row.description,
+        "x": row.x,
+        "y": row.y,
+        "z": row.floor,
+        "canonical_id": row.resolved_entity_id,
+        "knowledge_entity_id": row.resolved_entity_id,
+        "external_id": str(row.source_index),
+        "source_provider": floor.provider,
+        "source_url": floor.upstream_url,
+        "supplied_fields": ["name", "x", "y", "z"],
+        "missing_fields": ["location"],
+        "data_version": 1,
+        "last_synced_at": floor.imported_at,
+        "provider_metadata": {
+            "representation_type": "world_map_marker",
+            "upstream_commit": floor.upstream_commit,
+            "icon": row.icon,
+            "resolution_method": row.resolution_method,
+            "raw_data": dict(row.raw_data or {}),
+        },
+        "bounds": {
+            "min_x": row.x,
+            "min_y": row.y,
+            "max_x": row.x,
+            "max_y": row.y,
+            "min_z": row.floor,
+            "max_z": row.floor,
+        },
+        "confidence": "high",
+        "verification_state": "pending",
+        "unresolved_location_name": None,
+        "location": None,
     }
 
 
@@ -182,6 +223,34 @@ def entity_map_references(entity_id: UUID, skip: int = Query(0, ge=0, le=10000),
             )
     seen = {(str(item["map_point"]["id"]) if item["map_point"] else None,
              str(item["map_region"]["id"]) if item["map_region"] else None) for item in items}
+
+    # Universal search already consumes these exact-resolved coordinates. Detail
+    # pages should receive the same provider-backed facts instead of appearing empty.
+    marker_entity_ids = {entity_id, *location_ids}
+    markers = db.query(WorldMapMarker).join(
+        WorldMapFloor, WorldMapMarker.floor_id == WorldMapFloor.id,
+    ).filter(
+        WorldMapFloor.is_current.is_(True),
+        WorldMapMarker.resolution_state == "resolved",
+        WorldMapMarker.resolved_entity_id.in_(marker_entity_ids),
+    ).order_by(WorldMapMarker.floor, WorldMapMarker.description, WorldMapMarker.id).limit(1000).all()
+    relationship_by_target = {row.target_entity_id: row for row in relationships}
+    for marker in markers:
+        key = (f"world-map-marker:{marker.id}", None)
+        if key in seen:
+            continue
+        seen.add(key)
+        relationship = relationship_by_target.get(marker.resolved_entity_id)
+        location = relationship.target_entity if relationship else None
+        items.append({
+            "id": f"world-map-marker-link:{marker.id}",
+            "location_entity_id": location.uuid if location else None,
+            "location_name": location.canonical_name if location else None,
+            "map_point": _world_marker_point(marker),
+            "map_region": None,
+            "confidence": relationship.confidence if relationship else "high",
+            "verification_state": "verified" if relationship and relationship.manual_override else "pending",
+        })
     for relationship in relationships:
         point_rows, region_rows = represented.get(relationship.target_entity_id, ([], []))
         location = relationship.target_entity

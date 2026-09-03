@@ -53,6 +53,19 @@ class KnowledgeRelationship(Base):
         Index("ix_knowledge_relationships_document", "source_document_id"),
         Index("ix_knowledge_relationships_job", "source_job_id"),
         Index(
+            "ix_knowledge_relationships_pending_target_lookup",
+            "target_entity_type_id",
+            "normalized_unresolved_name",
+            postgresql_where=text(
+                "is_current AND manual_override = false "
+                "AND resolution_state IN ('unresolved','ambiguous')"
+            ),
+            sqlite_where=text(
+                "is_current = 1 AND manual_override = 0 "
+                "AND resolution_state IN ('unresolved','ambiguous')"
+            ),
+        ),
+        Index(
             "uq_knowledge_relationship_current_provenance",
             "source_entity_id", "source_scope", "relationship_type_code", "target_identity", "provenance_key",
             unique=True, postgresql_where=text("is_current"), sqlite_where=text("is_current = 1"),

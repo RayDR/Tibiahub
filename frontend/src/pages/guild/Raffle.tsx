@@ -24,6 +24,8 @@ import { useSearchParams } from "react-router-dom";
 import { useAuth } from "../../context/AuthContext";
 import { useToast } from "../../context/ToastContext";
 import { useConfirmation } from "../../context/ConfirmationContext";
+import { WorkspaceContentHeader } from "../../components/workspace/WorkspacePrimitives";
+import { formatDate } from "../../utils/locale";
 import { guildApi } from "../../services/guild";
 import {
   Raffle,
@@ -145,7 +147,7 @@ export default function RafflePage() {
   const { user } = useAuth();
   const toast = useToast();
   const confirmation = useConfirmation();
-  const { t } = useTranslation();
+  const { t, i18n } = useTranslation();
   const [searchParams] = useSearchParams();
 
   const [raffles, setRaffles] = useState<Raffle[]>([]);
@@ -239,7 +241,7 @@ export default function RafflePage() {
         setSelectedRaffleId(null);
       }
     } catch (err: unknown) {
-      toast.error(getErrorMessage(err) || "Failed to load raffles");
+      toast.error(getErrorMessage(err) || t("raffle.publicPage.loadError"));
     } finally {
       setLoading(false);
     }
@@ -594,21 +596,13 @@ export default function RafflePage() {
   ];
 
   return (
-    <div className="space-y-6">
-      <div className="rounded-2xl border border-line bg-gradient-to-br from-surface-base/80 to-surface-base p-6">
-        <div className="mb-3 inline-flex rounded-full border border-line px-3 py-1 text-xs text-content-secondary">
-          {t("raffle.legacyLabel")}
-        </div>
-        <div className="flex items-center gap-3">
-          <FontAwesomeIcon icon={faTrophy} className="h-6 w-6 text-primary" />
-          <h1 className="text-2xl font-bold text-content-primary">
-            {t("raffle.console.title")}
-          </h1>
-        </div>
-        <p className="mt-2 max-w-3xl text-sm text-content-secondary">
-          {t("raffle.console.subtitle")}
-        </p>
-      </div>
+    <div className="workspace-page">
+      <WorkspaceContentHeader
+        eyebrow={t("raffle.legacyLabel")}
+        title={t("raffle.console.title")}
+        description={t("raffle.console.subtitle")}
+        icon={<FontAwesomeIcon icon={faTrophy} />}
+      />
 
       <div className="grid gap-6 xl:grid-cols-[380px_minmax(0,1fr)]">
         <form
@@ -1160,7 +1154,7 @@ export default function RafflePage() {
                     <div className="max-h-72 space-y-2 overflow-y-auto rounded-xl border border-line p-2">
                       {candidates.length === 0 ? <p className="p-4 text-center text-sm text-content-muted">{t("raffle.participants.noCandidates")}</p> : candidates.map(candidate => <label key={candidate.roster_character_id} className={`flex min-w-0 items-start gap-3 rounded-lg border p-3 ${candidate.selectable ? "border-line" : "border-line bg-disabled text-content-muted"}`}>
                         <input type="checkbox" className="mt-1" disabled={!candidate.selectable} checked={selectedCandidates.includes(candidate.roster_character_id)} onChange={event => setSelectedCandidates(current => event.target.checked ? [...current, candidate.roster_character_id] : current.filter(id => id !== candidate.roster_character_id))} />
-                        <span className="min-w-0 flex-1"><strong className="block truncate">{candidate.character_name}</strong><span className="block text-xs text-content-muted">{candidate.rank || t("guild.member")} · {candidate.level ?? "—"} {candidate.vocation || ""} · {new Date(candidate.last_activity_at).toLocaleDateString()}</span><span className="mt-1 inline-flex rounded-full border border-line px-2 py-0.5 text-xs">{t(candidate.account_identity_known ? "raffle.participants.registered" : "raffle.participants.unregistered")}</span>{candidate.reason ? <span className="ml-2 text-xs">{t(`raffle.participants.reasons.${candidate.reason}`, candidate.reason)}</span> : null}</span>
+                        <span className="min-w-0 flex-1"><strong className="block truncate">{candidate.character_name}</strong><span className="block text-xs text-content-muted">{candidate.rank || t("guild.member")} · {candidate.level ?? "—"} {candidate.vocation || ""} · {formatDate(candidate.last_activity_at, i18n.resolvedLanguage || i18n.language)}</span><span className="mt-1 inline-flex rounded-full border border-line px-2 py-0.5 text-xs">{t(candidate.account_identity_known ? "raffle.participants.registered" : "raffle.participants.unregistered")}</span>{candidate.reason ? <span className="ml-2 text-xs">{t(`raffle.participants.reasons.${candidate.reason}`, candidate.reason)}</span> : null}</span>
                       </label>)}
                     </div>
                     <div className="flex flex-wrap gap-2"><button type="button" disabled={!selectedCandidates.length || busyAction === "add-selected"} onClick={() => void handleAddCandidates(false)} className="app-button-primary">{t("raffle.participants.addSelected", { count: selectedCandidates.length })}</button><button type="button" disabled={!candidates.some(item => item.selectable || (replaceParticipants && item.already_participating)) || busyAction === "add-all"} onClick={() => void handleAddCandidates(true)} className="app-button-secondary">{t("raffle.participants.addAll")}</button></div>

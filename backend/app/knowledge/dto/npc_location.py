@@ -29,6 +29,14 @@ class NamedKnowledgeReference:
 class NpcTradeReference:
     name: str
     price: int | None = None
+    currency: str | None = None
+
+
+@dataclass(frozen=True, slots=True)
+class NpcDestinationReference:
+    name: str
+    price: int | None = None
+    currency: str | None = None
 
 
 @dataclass(frozen=True, slots=True)
@@ -41,10 +49,13 @@ class NpcKnowledgeDTO:
     occupation: str | None = None
     sex: str | None = None
     location_name: str | None = None
+    location_text: str | None = None
+    location_names: tuple[NamedKnowledgeReference, ...] = ()
+    location_mode: str | None = None
     description: str | None = None
     buys: tuple[NpcTradeReference, ...] = ()
     sells: tuple[NpcTradeReference, ...] = ()
-    destinations: tuple[NamedKnowledgeReference, ...] = ()
+    destinations: tuple[NpcDestinationReference, ...] = ()
     related_quests: tuple[NamedKnowledgeReference, ...] = ()
     image_reference: str | None = None
     source_reference: str | None = None
@@ -71,8 +82,15 @@ class NpcKnowledgeDTO:
         data["aliases"] = tuple(data.get("aliases") or [])
         data["buys"] = tuple(NpcTradeReference(**entry) for entry in data.get("buys") or [])
         data["sells"] = tuple(NpcTradeReference(**entry) for entry in data.get("sells") or [])
-        for key in ("destinations", "related_quests"):
-            data[key] = tuple(NamedKnowledgeReference(**entry) for entry in data.get(key) or [])
+        data["destinations"] = tuple(
+            NpcDestinationReference(**entry) for entry in data.get("destinations") or []
+        )
+        data["location_names"] = tuple(
+            NamedKnowledgeReference(**entry) for entry in data.get("location_names") or []
+        )
+        data["related_quests"] = tuple(
+            NamedKnowledgeReference(**entry) for entry in data.get("related_quests") or []
+        )
         data["supplied_fields"] = frozenset(data.get("supplied_fields") or [])
         return cls(**data)
 

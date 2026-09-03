@@ -6,10 +6,15 @@ from dataclasses import dataclass, field
 from datetime import UTC, datetime
 from uuid import UUID
 
-from sqlalchemy.orm import Session
+from sqlalchemy.orm import Session, joinedload
 
 from app.knowledge.indexing import normalize_name
-from app.knowledge.models import KnowledgeDocument, KnowledgeEntity, KnowledgeRelationship
+from app.knowledge.models import (
+    KnowledgeDocument,
+    KnowledgeEntity,
+    KnowledgeRelationship,
+    KnowledgeRelationshipType,
+)
 from app.knowledge.models.graph import RELATIONSHIP_CONFIDENCES, RELATIONSHIP_STATES
 from app.knowledge.registry.relationship_types import RelationshipTypeRegistry
 
@@ -311,7 +316,14 @@ class KnowledgeGraphService:
 
     @classmethod
     def outgoing(cls, db: Session, entity_id: UUID, *, relationship_type: str | None = None) -> list[ConsolidatedRelationship]:
-        query = db.query(KnowledgeRelationship).filter_by(source_entity_id=entity_id, is_current=True)
+        query = (
+            db.query(KnowledgeRelationship)
+            .options(
+                joinedload(KnowledgeRelationship.source_entity),
+                joinedload(KnowledgeRelationship.target_entity),
+            )
+            .filter_by(source_entity_id=entity_id, is_current=True)
+        )
         if relationship_type:
             query = query.filter_by(relationship_type_code=relationship_type)
         return cls._consolidate([(row, row.relationship_type_code) for row in query.all()])
@@ -321,9 +333,28 @@ class KnowledgeGraphService:
         perspective = db.get(KnowledgeEntity, entity_id)
         if perspective is None:
             return []
+        rows = (
+            db.query(KnowledgeRelationship)
+            .options(
+                joinedload(KnowledgeRelationship.source_entity),
+                joinedload(KnowledgeRelationship.target_entity),
+            )
+            .filter_by(target_entity_id=entity_id, is_current=True)
+            .all()
+        )
+        codes = {row.relationship_type_code for row in rows}
+        inverse_by_code = {
+            code: inverse
+            for code, inverse in db.query(
+                KnowledgeRelationshipType.code,
+                KnowledgeRelationshipType.inverse_code,
+            ).filter(KnowledgeRelationshipType.code.in_(codes)).all()
+        } if codes else {}
         groups: dict[tuple[str, str, UUID], list[tuple[KnowledgeRelationship, str]]] = {}
-        for row in db.query(KnowledgeRelationship).filter_by(target_entity_id=entity_id, is_current=True).all():
-            inverse = cls._type(db, row.relationship_type_code).inverse_code
+        for row in rows:
+            inverse = inverse_by_code.get(row.relationship_type_code)
+            if inverse is None:
+                inverse = cls._type(db, row.relationship_type_code).inverse_code
             if relationship_type is None or inverse == relationship_type:
                 groups.setdefault((row.source_scope, inverse, row.source_entity_id), []).append((row, inverse))
         output: list[ConsolidatedRelationship] = []

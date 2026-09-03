@@ -33,6 +33,7 @@ from app.knowledge.workers.knowledge_worker import KnowledgeWorker
 from app.models import TibiaWikiLocation, TibiaWikiNpc
 from app.models.workspace_audit import WorkspaceAudit
 from app.knowledge.adapters.tibiawiki_npcs_locations import HttpTibiaWikiNamedEntityClient
+from app.knowledge.adapters.tibiawiki_npcs_locations import NPC_CATALOG_CONTINUATION_PRIORITY
 from tests.conftest import make_user
 
 
@@ -121,11 +122,90 @@ def test_catalogs_are_bounded_paginated_and_preserve_raw_fields(entity_type, ada
     result = adapter.fetch(request(entity_type, "catalog", scope={"batch_limit": 2}))
     assert adapter.validate(result).classification == "valid"
     assert result.documents[0].raw_json["future_catalog_field"] == {"preserved": True}
-    assert [child.payload.get("external_id") for child in result.child_jobs[:-1]] == external_ids
+    if entity_type == "npc":
+        assert [member["external_id"] for member in result.child_jobs[0].payload["members"]] == external_ids
+    else:
+        assert [child.payload.get("external_id") for child in result.child_jobs[:-1]] == external_ids
     assert result.child_jobs[-1].job_type == f"{entity_type}_catalog"
     assert result.cursor["continuation"]
     with pytest.raises(ValueError, match="batch_limit"):
         adapter.validate_enqueue(f"{entity_type}_catalog", {}, {})
+
+
+def test_npc_catalog_prioritizes_continuation_and_rejects_non_entity_pages():
+    class CatalogClient(FixtureClient):
+        def fetch_catalog(self, *, continuation: str | None, limit: int) -> dict:
+            return {
+                "continue": {"cmcontinue": "page|NEXT"},
+                "query": {"categorymembers": [
+                    {"pageid": 1, "title": "NPCs"},
+                    {"pageid": 2, "title": "Captain Bluebear"},
+                    {"pageid": 3, "title": "..."},
+                ]},
+            }
+
+    result = TibiaWikiNpcAdapter(CatalogClient("npc")).fetch(
+        request("npc", "catalog", scope={"batch_limit": 3}),
+    )
+    assert [member["page_title"] for member in result.child_jobs[0].payload["members"]] == ["Captain Bluebear"]
+    assert result.child_jobs[-1].priority == NPC_CATALOG_CONTINUATION_PRIORITY
+    assert result.provider_metadata["invalid_members"] == 2
+
+
+def test_npc_detail_batch_imports_multiple_immutable_documents_and_validates_bounds():
+    class BatchClient(FixtureClient):
+        def fetch_details(self, *, members: list[dict[str, str]]) -> dict:
+            pages = []
+            for index, member in enumerate(members):
+                pages.append({
+                    "pageid": int(member["external_id"]),
+                    "title": member["page_title"],
+                    "revisions": [{"slots": {"main": {"content": (
+                        "{{Infobox NPC\n"
+                        f"| name = {member['page_title']}\n"
+                        "| job = Trader\n"
+                        "| city = Thais\n"
+                        "}}"
+                    )}}}],
+                })
+            return {"query": {"pages": pages}}
+
+    adapter = TibiaWikiNpcAdapter(BatchClient("npc"))
+    members = [
+        {"external_id": "800", "page_title": "First NPC"},
+        {"external_id": "801", "page_title": "Second NPC"},
+    ]
+    adapter.validate_enqueue("npc_detail_batch", {}, {"members": members})
+    result = adapter.fetch(request("npc", "detail_batch", payload={"members": members}))
+    assert adapter.validate(result).valid
+    assert [document.provider_document_id for document in result.documents] == ["npc:800", "npc:801"]
+    assert all(document.metadata["batch_fetch"] for document in result.documents)
+    with pytest.raises(ValueError, match="between 1 and 50"):
+        adapter.validate_enqueue("npc_detail_batch", {}, {"members": []})
+
+
+def test_npc_detail_batch_preserves_malformed_page_as_raw_only():
+    class MalformedBatchClient(FixtureClient):
+        def fetch_details(self, *, members: list[dict[str, str]]) -> dict:
+            return {
+                "query": {
+                    "pages": [{
+                        "pageid": int(members[0]["external_id"]),
+                        "title": members[0]["page_title"],
+                        "revisions": [],
+                    }],
+                },
+            }
+
+    adapter = TibiaWikiNpcAdapter(MalformedBatchClient("npc"))
+    members = [{"external_id": "991", "page_title": "Malformed Keeper"}]
+    result = adapter.fetch(request("npc", "detail_batch", payload={"members": members}))
+    assert result.partial is True
+    assert len(result.documents) == 1
+    assert result.documents[0].provider_document_id == "npc_raw:991"
+    assert result.documents[0].metadata["raw_only_reason"] == "malformed_or_insufficient_detail"
+    assert adapter.validate(result).valid is True
+    assert adapter.normalize(result.documents[0], context("npc")).action == "noop"
 
 
 def test_npc_detail_maps_provider_fields_without_leaking_unknown_data():
@@ -137,6 +217,95 @@ def test_npc_detail_maps_provider_fields_without_leaking_unknown_data():
     assert [value.name for value in dto.buys] == ["Explorer Brooch", "Rope"]
     assert [value.name for value in dto.destinations] == ["Northport", "Liberty Bay"]
     assert result.documents[0].raw_json["future_envelope_field"] == "retained"
+
+
+def test_npc_structured_location_travel_and_moving_locations_are_preserved():
+    raw = deepcopy(fixture("tibiawiki_npc_detail.json"))
+    raw["parse"]["title"] = "Captain Test"
+    raw["parse"]["pageid"] = 8800
+    raw["parse"]["wikitext"]["*"] = """{{Infobox NPC
+| name = Captain Test
+| job = Ship Captain
+| location = [[Thais]] boat by the harbour.
+| city = Thais
+| notes = {{TransportList
+ |{{TransportCell|Carlin|110}}
+ |{{TransportCell|Unknown Port}}
+}}
+}}"""
+    dto = NpcKnowledgeDTO.from_canonical_data(
+        TibiaWikiNpcAdapter(FixtureClient("npc")).normalize(
+            detail_document("npc", raw), context("npc"),
+        ).canonical_data,
+    )
+    assert dto.location_name == "Thais"
+    assert dto.location_text == "Thais boat by the harbour."
+    assert dto.location_mode == "static"
+    assert [(value.name, value.price, value.currency) for value in dto.destinations] == [
+        ("Carlin", 110, "gold_coin"),
+        ("Unknown Port", None, None),
+    ]
+
+    raw["parse"]["title"] = "Moving Test"
+    raw["parse"]["pageid"] = 8801
+    raw["parse"]["wikitext"]["*"] = """{{Infobox NPC
+| name = Moving Test
+| job = Merchant
+| location = Travels every day.
+| predictloc = dynamic provider expression
+| city = Svargrond
+| city2 = Liberty Bay
+}}"""
+    moving = NpcKnowledgeDTO.from_canonical_data(
+        TibiaWikiNpcAdapter(FixtureClient("npc")).normalize(
+            detail_document("npc", raw), context("npc"),
+        ).canonical_data,
+    )
+    assert moving.location_name is None and moving.location_mode == "moving"
+    assert [value.name for value in moving.location_names] == ["Svargrond", "Liberty Bay"]
+
+    raw["parse"]["title"] = "Multiple Static Test"
+    raw["parse"]["pageid"] = 8802
+    raw["parse"]["wikitext"]["*"] = raw["parse"]["wikitext"]["*"].replace(
+        "| predictloc = dynamic provider expression\n",
+        "",
+    )
+    multiple = NpcKnowledgeDTO.from_canonical_data(
+        TibiaWikiNpcAdapter(FixtureClient("npc")).normalize(
+            detail_document("npc", raw), context("npc"),
+        ).canonical_data,
+    )
+    assert multiple.location_name is None and multiple.location_mode == "multiple"
+
+
+def test_npc_provider_placeholders_are_not_named_trade_evidence():
+    raw = deepcopy(fixture("tibiawiki_npc_detail.json"))
+    raw["parse"]["wikitext"]["*"] = raw["parse"]["wikitext"]["*"].replace(
+        "[[Explorer Brooch]], [[Rope]]", "--",
+    ).replace("[[Shovel]]", "unknown")
+    normalized = TibiaWikiNpcAdapter(FixtureClient("npc")).normalize(
+        detail_document("npc", raw), context("npc"),
+    )
+    dto = NpcKnowledgeDTO.from_canonical_data(normalized.canonical_data)
+    assert dto.buys == dto.sells == ()
+    assert "buys" not in dto.supplied_fields and "sells" not in dto.supplied_fields
+
+
+def test_npc_provider_placeholder_replay_repairs_legacy_bridge_idempotently(db, named_registry):
+    apply_detail(db, "npc", fixture("tibiawiki_npc_detail.json"))
+    row = db.query(TibiaWikiNpc).one()
+    row.buys = [{"name": "--", "price": None}]
+    row.sells = [{"name": "unknown", "price": None}]
+    row.supplied_fields = sorted(set(row.supplied_fields or []) | {"buys", "sells"})
+    raw = deepcopy(fixture("tibiawiki_npc_detail.json"))
+    raw["parse"]["wikitext"]["*"] = raw["parse"]["wikitext"]["*"].replace(
+        "[[Explorer Brooch]], [[Rope]]", "--",
+    ).replace("[[Shovel]]", "unknown")
+    repaired = apply_detail(db, "npc", raw)
+    assert repaired.status == "updated"
+    assert row.buys == row.sells == []
+    assert "buys" not in row.supplied_fields and "sells" not in row.supplied_fields
+    assert apply_detail(db, "npc", raw).status == "unchanged"
 
 
 def test_location_detail_maps_levels_access_and_named_references():
@@ -386,7 +555,10 @@ def test_normalization_is_idempotent_preserves_protected_fields_and_resolves_exa
     assert location_applied.metrics["references_resolved"] == 2
     assert not db.get(KnowledgeRelationship, npc_ref.id).is_current
     assert not db.get(KnowledgeRelationship, location_ref.id).is_current
-    resolved = db.query(KnowledgeRelationship).filter_by(is_current=True).all()
+    resolved = db.query(KnowledgeRelationship).filter(
+        KnowledgeRelationship.is_current.is_(True),
+        KnowledgeRelationship.resolution_state == "resolved",
+    ).all()
     assert {row.target_entity_id for row in resolved} == {npc.knowledge_entity_id, location.knowledge_entity_id}
     assert db.query(KnowledgeExternalMapping).filter(
         KnowledgeExternalMapping.entity_type_id.in_(["npc", "location", "area", "town"])
@@ -476,6 +648,41 @@ def test_named_places_and_access_use_canonical_entities_and_deduplicated_graph(d
         ("access", "leads_to", "location"),
     }
     assert len(rows) == 4
+
+
+def test_npc_location_and_destinations_are_exact_only_replay_safe_and_reviewable(db, named_registry):
+    apply_detail(db, "location", _place_fixture(page_id=2900, name="Thais", kind="Town"))
+    apply_detail(db, "location", _place_fixture(page_id=2901, name="Carlin", kind="Town"))
+    raw = deepcopy(fixture("tibiawiki_npc_detail.json"))
+    raw["parse"]["pageid"] = 2800
+    raw["parse"]["title"] = "Captain Exact"
+    raw["parse"]["wikitext"]["*"] = """{{Infobox NPC
+| name = Captain Exact
+| job = Ship Captain
+| location = [[Thais]] boat by the harbour.
+| city = Thais
+| notes = {{TransportList
+ |{{TransportCell|Carlin|110}}
+ |{{TransportCell|Almost Carlin|120}}
+}}
+}}"""
+    first = apply_detail(db, "npc", raw)
+    second = apply_detail(db, "npc", raw)
+    rows = db.query(KnowledgeRelationship).filter_by(
+        source_entity_id=first.entity_uuid, is_current=True,
+    ).all()
+    assert second.entity_uuid == first.entity_uuid
+    assert len(rows) == 3
+    by_name = {row.target_entity.canonical_name if row.target_entity else row.unresolved_name: row for row in rows}
+    assert by_name["Thais"].relationship_type_code == "located_at"
+    assert by_name["Carlin"].relationship_type_code == "travels_to"
+    assert by_name["Carlin"].source_context["price"] == 110
+    assert by_name["Almost Carlin"].resolution_state == "unresolved"
+    assert by_name["Almost Carlin"].source_context["resolution_policy"] == "exact_name_or_alias_only"
+    assert not db.query(KnowledgeRelationship).filter(
+        KnowledgeRelationship.relationship_type_code.like("%hunt%"),
+        KnowledgeRelationship.source_entity_id == first.entity_uuid,
+    ).count()
 
 
 def test_named_place_relationships_preserve_unresolved_and_ambiguous_names(db, named_registry):

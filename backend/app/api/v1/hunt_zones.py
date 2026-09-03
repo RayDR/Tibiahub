@@ -3,21 +3,22 @@ from collections import defaultdict
 from typing import List, Optional
 from fastapi import APIRouter, Depends, HTTPException, Query
 from fastapi import Request, Response
-from sqlalchemy import or_
-from sqlalchemy.orm import Session, selectinload
+from sqlalchemy import or_, select
+from sqlalchemy.orm import Session
 
 from app.core.config import settings
 from app.db.database import SessionLocal, get_db
-from app.models.spawn_location import SpawnLocation
 from app.models import HuntZone as HuntZoneModel
 from app.models.external_data import TibiaWikiLocation, TibiaWikiQuest
 from app.models.user import User
 from app.models.workspace_audit import WorkspaceAudit
+from app.knowledge.models import KnowledgeEntity, KnowledgeEntityAlias
 from app.schemas import (
     HuntZone,
     HuntZoneAccess,
     HuntZoneAccessQuest,
     HuntZoneCreate,
+    HuntZoneList,
     HuntRecommendation,
 )
 from app.api.v1.local_media import (
@@ -28,7 +29,7 @@ from app.api.v1.local_media import (
 from app.services.entity_metadata_service import EntityMetadataService
 from app.services.text_utils import normalize_search_text
 from app.services.hunt_service import HuntRecommendationService
-from app.services.map_presentation_service import zone_spatial_presentations
+from app.services.hunt_zone_projection_service import HuntZoneProjectionService
 from app.services import media_asset_service as media_svc
 from app.api.v1.endpoints.auth import get_current_knowledge_editor
 
@@ -134,54 +135,8 @@ def _zone_access(zone: HuntZoneModel, location: TibiaWikiLocation | None, quest_
     )
 
 
-def _zone_details(db: Session, zones: list[HuntZoneModel]) -> list[dict]:
-    if not zones:
-        return []
-    locations = _unique_location_knowledge(db, zones)
-    all_names: list[str] = []
-    for zone in zones:
-        normalized = zone.normalized_name or normalize_search_text(zone.name)
-        all_names.extend(_access_quest_names(zone, locations.get(normalized)))
-    quest_index = _canonical_quest_index(db, all_names)
-    spatial_by_zone = zone_spatial_presentations(db, zones)
-    results: list[dict] = []
-    for zone in zones:
-        normalized = zone.normalized_name or normalize_search_text(zone.name)
-        location = locations.get(normalized)
-        access = _zone_access(zone, location, quest_index)
-        payload = HuntZone.model_validate(zone).model_dump()
-        payload["slug"] = _canonical_zone_slug(zone)
-        payload["spatial"] = spatial_by_zone[zone.id]
-        payload["access"] = access.model_dump()
-        if not payload.get("min_level") and location and location.minimum_level is not None:
-            payload["min_level"] = location.minimum_level
-        if payload.get("max_level") is None and location and location.maximum_level is not None:
-            payload["max_level"] = location.maximum_level
-        if access.premium_required is True:
-            payload["requires_premium"] = True
-        if access.quest_required is True:
-            payload["requires_quest"] = True
-        canonical = zone.raw_data if isinstance(zone.raw_data, dict) else {}
-        recommendations = canonical.get("vocation_recommendations")
-        payload["vocation_recommendations"] = recommendations if isinstance(recommendations, dict) else None
-        supplied = list(zone.supplied_fields or []) if zone.supplied_fields is not None else None
-        payload["supplied_fields"] = supplied
-        expected = {
-            "city", "location", "vocation_recommendations", "creatures", "access_notes",
-            "access_quests", "premium_required", "experience", "loot", "map_references",
-            "source_reference",
-        }
-        payload["missing_fields"] = sorted(expected - set(supplied or [])) if supplied is not None else sorted(expected)
-        payload["data_sources"] = sorted({
-            value for value in (zone.source_provider, zone.source_name) if value
-        }) or None
-        if access.quests:
-            primary = access.quests[0]
-            payload["quest_id"] = primary.id
-            payload["quest_name"] = primary.name
-            payload["quest_slug"] = primary.slug
-        results.append(payload)
-    return results
+def _zone_details(db: Session, zones: list[HuntZoneModel], *, detail: bool = True) -> list[dict]:
+    return HuntZoneProjectionService.project(db, zones, detail=detail)
 
 
 def _zone_detail(db: Session, zone: HuntZoneModel) -> dict:
@@ -206,7 +161,7 @@ def _placeholder_map_svg(label: str) -> bytes:
     ).encode("utf-8")
 
 
-@router.get("/highlights", response_model=List[HuntZone])
+@router.get("/highlights", response_model=List[HuntZoneList])
 async def get_hunt_zone_highlights(
     limit: int = Query(12, ge=1, le=50),
     db: Session = Depends(get_db),
@@ -222,20 +177,20 @@ async def get_hunt_zone_highlights(
 
         raw_zones = (
             db.query(HuntZoneModel)
-            .options(
-                selectinload(HuntZoneModel.creature_spawns).selectinload(SpawnLocation.creature),
-                selectinload(HuntZoneModel.quest),
-            )
             .filter(HuntZoneModel.id.in_(zone_ids))
             .all()
         )
         by_id = {zone.id: zone for zone in raw_zones}
-        return _zone_details(db, [by_id[zone_id] for zone_id in zone_ids if zone_id in by_id])
+        return _zone_details(
+            db,
+            [by_id[zone_id] for zone_id in zone_ids if zone_id in by_id],
+            detail=False,
+        )
     except Exception:
         return []
 
 
-@router.get("/", response_model=List[HuntZone])
+@router.get("/", response_model=List[HuntZoneList])
 async def get_hunt_zones(
     skip: int = Query(0, ge=0),
     limit: int = Query(100, ge=1, le=500),
@@ -243,13 +198,21 @@ async def get_hunt_zones(
     max_level: Optional[int] = None,
     city: Optional[str] = None,
     search: Optional[str] = None,
+    canonical_only: bool = Query(False),
     db: Session = Depends(get_db)
 ):
     """Get list of hunt zones with optional filters"""
-    query = db.query(HuntZoneModel).options(
-        selectinload(HuntZoneModel.creature_spawns).selectinload(SpawnLocation.creature),
-        selectinload(HuntZoneModel.quest),
-    )
+    query = db.query(HuntZoneModel)
+
+    if canonical_only:
+        query = query.join(
+            KnowledgeEntity,
+            KnowledgeEntity.uuid == HuntZoneModel.knowledge_entity_id,
+        ).filter(
+            KnowledgeEntity.entity_type == "hunt_zone",
+            KnowledgeEntity.status == "active",
+            KnowledgeEntity.visibility == "public",
+        )
     
     if min_level is not None:
         query = query.filter(HuntZoneModel.min_level >= min_level)
@@ -264,13 +227,18 @@ async def get_hunt_zones(
 
     if search:
         normalized_search = normalize_search_text(search)
+        alias_entities = select(KnowledgeEntityAlias.entity_uuid).where(
+            KnowledgeEntityAlias.entity_type == "hunt_zone",
+            KnowledgeEntityAlias.normalized_alias == normalized_search,
+        )
         query = query.filter(
             (HuntZoneModel.name.ilike(f"%{search}%")) |
             (HuntZoneModel.city.ilike(f"%{search}%")) |
-            (HuntZoneModel.normalized_name.contains(normalized_search))
+            (HuntZoneModel.normalized_name.contains(normalized_search)) |
+            (HuntZoneModel.knowledge_entity_id.in_(alias_entities))
         )
     
-    zones = query.offset(skip).limit(limit).all()
+    zones = query.order_by(HuntZoneModel.name).offset(skip).limit(limit).all()
     if search:
         EntityMetadataService.record_searches(
             db,
@@ -278,7 +246,7 @@ async def get_hunt_zones(
             matches=[(zone.normalized_name or zone.name, zone.name, zone.id) for zone in zones[: min(len(zones), 5)]],
         )
         db.commit()
-    return _zone_details(db, zones)
+    return _zone_details(db, zones, detail=False)
 
 
 @router.get("/{zone_identifier}", response_model=HuntZone)
@@ -288,18 +256,29 @@ async def get_hunt_zone(
     db: Session = Depends(get_db),
 ):
     """Get detailed information about a specific hunt zone"""
-    query = db.query(HuntZoneModel).options(
-        selectinload(HuntZoneModel.creature_spawns).selectinload(SpawnLocation.creature),
-        selectinload(HuntZoneModel.quest),
-    )
+    query = db.query(HuntZoneModel)
     if zone_identifier.isdigit():
         query = query.filter(HuntZoneModel.id == int(zone_identifier))
     else:
         normalized = normalize_search_text(zone_identifier.replace("-", " ").replace("_", " "))
+        alias_entities = select(KnowledgeEntityAlias.entity_uuid).where(
+            KnowledgeEntityAlias.entity_type == "hunt_zone",
+            KnowledgeEntityAlias.normalized_alias == normalized,
+        )
         query = query.filter(or_(
             HuntZoneModel.slug == zone_identifier,
             HuntZoneModel.normalized_name == normalized,
+            HuntZoneModel.knowledge_entity_id.in_(alias_entities),
         ))
+    # A provider-backed bridge and its retained legacy free-text row may share
+    # a display name. Stable numeric compatibility lookups remain exact; name
+    # and slug discovery prefer the canonical provider row without deleting or
+    # mutating the legacy evidence.
+    if not zone_identifier.isdigit():
+        query = query.order_by(
+            HuntZoneModel.knowledge_entity_id.is_(None),
+            HuntZoneModel.id,
+        )
     zone = query.first()
     
     if not zone:
@@ -455,7 +434,7 @@ async def create_hunt_zone(
     # is ``quest_id`` and is intentionally managed by knowledge workflows.
     db_zone = HuntZoneModel(**zone.model_dump(exclude={
         "quest_name", "quest_slug", "vocation_recommendations", "canonical_id",
-        "missing_fields", "data_sources",
+        "missing_fields", "data_sources", "spatial",
     }))
     db.add(db_zone)
     db.flush()
@@ -471,4 +450,4 @@ async def create_hunt_zone(
     db.commit()
     db.refresh(db_zone)
     
-    return db_zone
+    return _zone_detail(db, db_zone)

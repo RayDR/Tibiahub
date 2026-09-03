@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState } from 'react';
 import { Link, useLocation, useNavigate } from 'react-router-dom';
-import { BookOpen, ChevronDown, Compass, Home, Map, Settings, Shield } from 'lucide-react';
+import { BookOpen, ChevronDown, Compass, Home, Map, Settings, Shield, UserRound } from 'lucide-react';
 import { useTranslation } from 'react-i18next';
 
 import { useAuth } from '../context/AuthContext';
@@ -30,7 +30,7 @@ export default function Navigation() {
 
   const isActive = (path: string) => {
     if (path === '/') return location.pathname === '/';
-    if (path === '/cyclopedia') return location.pathname === '/cyclopedia' || /^\/(creatures|items|quests|hunt-zones|npcs|locations)\//.test(location.pathname);
+    if (path === '/cyclopedia') return location.pathname === '/cyclopedia' || location.pathname === '/npcs' || /^\/(creatures|items|quests|hunt-zones|npcs|locations)\//.test(location.pathname);
     return location.pathname === path || location.pathname.startsWith(`${path}/`);
   };
 
@@ -80,6 +80,7 @@ export default function Navigation() {
                     <button type="button" className="app-nav-link min-h-11 rounded-r-lg px-2" aria-label={t('a11y.openCyclopediaMenu')} aria-expanded={cyclopediaMenuOpen} onClick={() => setCyclopediaMenuOpen(value => !value)}><ChevronDown className={`size-4 transition-transform ${cyclopediaMenuOpen ? 'rotate-180' : ''}`} /></button>
                     {cyclopediaMenuOpen ? <div className="ds-dropdown absolute left-0 top-full mt-2 w-56">
                       {cyclopediaSections.map(entry => <button key={entry.key} type="button" onClick={() => { setCyclopediaMenuOpen(false); navigate(`/cyclopedia?tab=${entry.key}`); }} className="flex min-h-11 w-full items-center gap-2 rounded-sm px-3 text-left text-sm text-content-secondary hover:bg-surface-hover hover:text-content-primary"><KnowledgeCategoryIcon category={categoryForTab(entry.key)} label={t(entry.i18nLabel)} className="size-8" mediaClassName="size-7" /><span>{t(entry.i18nLabel)}</span></button>)}
+                      <button type="button" onClick={() => { setCyclopediaMenuOpen(false); navigate('/npcs'); }} className="flex min-h-11 w-full items-center gap-2 rounded-sm px-3 text-left text-sm text-content-secondary hover:bg-surface-hover hover:text-content-primary"><span className="grid size-8 shrink-0 place-items-center rounded-lg bg-primary/10 text-primary"><UserRound className="size-4" /></span><span>{t('nav.npcs')}</span></button>
                     </div> : null}
                   </div>;
                 }

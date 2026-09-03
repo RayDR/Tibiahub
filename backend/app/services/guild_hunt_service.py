@@ -11,10 +11,13 @@ from datetime import UTC, datetime
 from sqlalchemy.orm import Session, selectinload
 
 from app.core.permissions import can_manage_guild
+from app.knowledge.models import KnowledgeEntity
 from app.models.hunt import GuildHunt, GuildHuntParticipant
+from app.models.hunt_zone import HuntZone
 from app.models.user import User
 from app.models.user_character import UserCharacter
 from app.models.workspace_audit import WorkspaceAudit
+from app.services.hunt_zone_projection_service import HuntZoneProjectionService
 
 
 class GuildHuntError(ValueError):
@@ -23,6 +26,92 @@ class GuildHuntError(ValueError):
 
 class GuildHuntPlannerService:
     ACTIVE_ATTENDANCE = {"registered", "attended"}
+
+    @staticmethod
+    def _canonical_zone(db: Session, entity_id, *, require_current: bool = True) -> tuple[KnowledgeEntity, HuntZone]:
+        entity = db.query(KnowledgeEntity).filter(KnowledgeEntity.uuid == entity_id).first()
+        if entity is None:
+            raise GuildHuntError("Canonical Hunting Zone does not exist")
+        if entity.entity_type != "hunt_zone":
+            raise GuildHuntError("Knowledge entity is not a Hunting Zone")
+        if require_current and (entity.status != "active" or entity.visibility != "public"):
+            raise GuildHuntError("Canonical Hunting Zone is not current")
+        zone = db.query(HuntZone).filter(HuntZone.knowledge_entity_id == entity.uuid).first()
+        if zone is None:
+            raise GuildHuntError("Canonical Hunting Zone has no authoritative domain bridge")
+        return entity, zone
+
+    @staticmethod
+    def zone_summaries(db: Session, hunts: list[GuildHunt]) -> dict:
+        """Project every linked zone in a bounded batch for list/calendar responses."""
+        entity_ids = {hunt.hunting_zone_id for hunt in hunts if hunt.hunting_zone_id}
+        if not entity_ids:
+            return {}
+        entities = {
+            row.uuid: row
+            for row in db.query(KnowledgeEntity).filter(KnowledgeEntity.uuid.in_(entity_ids)).all()
+        }
+        zones = db.query(HuntZone).filter(HuntZone.knowledge_entity_id.in_(entity_ids)).all()
+        projected = HuntZoneProjectionService.project(db, zones, detail=False, creature_preview_limit=4)
+        projections = {row.get("canonical_id"): row for row in projected if row.get("canonical_id")}
+        summaries = {}
+        for entity_id in entity_ids:
+            entity = entities.get(entity_id)
+            if entity is None:
+                continue
+            row = projections.get(entity_id)
+            if row is None:
+                summaries[entity_id] = {
+                    "canonical_id": entity.uuid,
+                    "name": entity.canonical_name,
+                    "slug": entity.slug,
+                    "is_current": entity.status == "active" and entity.visibility == "public",
+                }
+                continue
+            spatial = row.get("spatial") if isinstance(row.get("spatial"), dict) else {}
+            media = row.get("representative_media") if isinstance(row.get("representative_media"), dict) else {}
+            access_quests = []
+            if row.get("access_required") is True and row.get("quest_name"):
+                access_quests.append({
+                    "id": row.get("quest_id"),
+                    "name": row["quest_name"],
+                    "slug": row.get("quest_slug"),
+                })
+            summaries[entity_id] = {
+                "canonical_id": entity.uuid,
+                "domain_id": row.get("id"),
+                "name": row.get("name") or entity.canonical_name,
+                "slug": row.get("slug") or entity.slug,
+                "city": row.get("city"),
+                "region": row.get("region"),
+                "min_level": row.get("min_level"),
+                "max_level": row.get("max_level"),
+                "recommended_level": row.get("recommended_level"),
+                "recommended_vocations": row.get("recommended_vocations"),
+                "difficulty": row.get("difficulty"),
+                "creature_count": row.get("creature_count") or 0,
+                "boss_count": row.get("boss_count") or 0,
+                "creature_preview": row.get("creature_preview") or [],
+                "access_required": row.get("access_required"),
+                "access_quest_count": row.get("access_quest_count") or 0,
+                "access_quests": access_quests,
+                "spatial_state": row.get("spatial_state") or "knowledge_only",
+                "map_available": spatial.get("geometry_status") == "mapped",
+                "map_floor": spatial.get("z"),
+                "media_url": media.get("url") if media.get("status") == "available" else None,
+                "is_current": entity.status == "active" and entity.visibility == "public",
+            }
+        return summaries
+
+    @staticmethod
+    def _zone_audit_value(db: Session, entity_id) -> dict | None:
+        if entity_id is None:
+            return None
+        entity = db.query(KnowledgeEntity).filter(KnowledgeEntity.uuid == entity_id).first()
+        return {
+            "canonical_id": str(entity_id),
+            "name": entity.canonical_name if entity else None,
+        }
 
     @staticmethod
     def can_manage(db: Session, user: User, hunt: GuildHunt) -> bool:
@@ -72,12 +161,20 @@ class GuildHuntPlannerService:
             raise PermissionError("Guild leader permission required")
         values = dict(values)
         values.pop("guild_name", None)
+        if values.get("hunting_zone_id") is not None:
+            GuildHuntPlannerService._canonical_zone(db, values["hunting_zone_id"])
         GuildHuntPlannerService._validate_capacity(values)
         GuildHuntPlannerService._validate_schedule(values["scheduled_at"])
         hunt = GuildHunt(guild_name=guild_name, created_by_id=actor.id, status="scheduled", **values)
         db.add(hunt)
         db.flush()
-        GuildHuntPlannerService.audit(db, actor, hunt, "guild_hunt_created")
+        GuildHuntPlannerService.audit(
+            db,
+            actor,
+            hunt,
+            "guild_hunt_created",
+            {"hunting_zone": GuildHuntPlannerService._zone_audit_value(db, hunt.hunting_zone_id)},
+        )
         return hunt
 
     @staticmethod
@@ -86,6 +183,9 @@ class GuildHuntPlannerService:
             raise PermissionError("Guild leader permission required")
         if hunt.status != "scheduled":
             raise GuildHuntError("Only scheduled hunts can be edited")
+        old_zone_id = hunt.hunting_zone_id
+        if "hunting_zone_id" in values and values["hunting_zone_id"] is not None:
+            GuildHuntPlannerService._canonical_zone(db, values["hunting_zone_id"])
         merged = {field: getattr(hunt, field) for field in ("maximum_participants", "required_ek", "required_ed", "required_rp", "required_ms")}
         merged.update({key: value for key, value in values.items() if value is not None})
         GuildHuntPlannerService._validate_capacity(merged)
@@ -95,9 +195,15 @@ class GuildHuntPlannerService:
         if merged["maximum_participants"] < registered:
             raise GuildHuntError("Capacity cannot be lower than current registrations")
         for key, value in values.items():
-            if value is not None:
+            if value is not None or key == "hunting_zone_id":
                 setattr(hunt, key, value)
-        GuildHuntPlannerService.audit(db, actor, hunt, "guild_hunt_updated")
+        metadata = {}
+        if old_zone_id != hunt.hunting_zone_id:
+            metadata["hunting_zone_change"] = {
+                "from": GuildHuntPlannerService._zone_audit_value(db, old_zone_id),
+                "to": GuildHuntPlannerService._zone_audit_value(db, hunt.hunting_zone_id),
+            }
+        GuildHuntPlannerService.audit(db, actor, hunt, "guild_hunt_updated", metadata)
         return hunt
 
     @staticmethod

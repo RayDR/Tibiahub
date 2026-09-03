@@ -15,6 +15,38 @@ export interface GuildHuntParticipant {
   left_at?: string;
 }
 
+export interface GuildHuntZoneSummary {
+  canonical_id: string;
+  domain_id?: number;
+  name: string;
+  slug?: string;
+  city?: string;
+  region?: string;
+  min_level?: number;
+  max_level?: number;
+  recommended_level?: number;
+  recommended_vocations?: string[];
+  difficulty?: string;
+  creature_count: number;
+  boss_count: number;
+  creature_preview: Array<{
+    id?: number;
+    canonical_id?: string;
+    name: string;
+    slug?: string;
+    is_boss?: boolean;
+    image_url?: string;
+  }>;
+  access_required?: boolean | null;
+  access_quest_count: number;
+  access_quests: Array<{ id?: number; canonical_id?: string; name: string; slug?: string }>;
+  spatial_state: 'resolved_point' | 'resolved_bounds' | 'knowledge_only' | 'unresolved';
+  map_available: boolean;
+  map_floor?: number;
+  media_url?: string;
+  is_current: boolean;
+}
+
 export interface GuildHunt {
   id: number;
   guild_name: string;
@@ -23,6 +55,8 @@ export interface GuildHunt {
   server_name: string;
   location: string;
   target: string;
+  hunting_zone_id?: string | null;
+  hunting_zone_summary?: GuildHuntZoneSummary | null;
   recommended_level: number;
   recommended_vocations: VocationCode[];
   maximum_participants: number;
@@ -50,6 +84,7 @@ export interface GuildHuntInput {
   server_name: string;
   location: string;
   target: string;
+  hunting_zone_id?: string | null;
   recommended_level: number;
   recommended_vocations: VocationCode[];
   maximum_participants: number;

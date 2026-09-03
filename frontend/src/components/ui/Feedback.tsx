@@ -53,3 +53,33 @@ export const LoadingState: React.FC<StateProps> = ({ icon, title, description, c
 export const Skeleton: React.FC<React.HTMLAttributes<HTMLDivElement>> = ({ className, ...props }) => (
   <div className={cn('ds-skeleton h-4 w-full', className)} aria-hidden="true" {...props} />
 );
+
+/**
+ * ErrorState — distinct from EmptyState. Use for network/backend failures,
+ * permission problems, and retryable error conditions.
+ */
+export const ErrorState: React.FC<StateProps> = ({ icon, title, description, action, className, ...props }) => (
+  <div className={cn('ds-empty-state border border-danger/30 bg-danger-subtle', className)} role="alert" {...props}>
+    <div>
+      {icon ? <div className="mb-3 text-3xl text-danger">{icon}</div> : null}
+      {title ? <h3 className="text-lg font-semibold text-danger">{title}</h3> : null}
+      {description ? <p className="mt-1 text-sm text-content-secondary">{description}</p> : null}
+    </div>
+    {action}
+  </div>
+);
+
+/**
+ * DegradedState — for when an external dependency is unavailable but the
+ * page can still show cached/partial data. Warning tone, informational.
+ */
+export const DegradedState: React.FC<StateProps> = ({ icon, title, description, action, className, ...props }) => (
+  <div className={cn('ds-alert border-warning/40 bg-warning-subtle', className)} role="status" aria-live="polite" {...props}>
+    {icon ? <div className="text-xl text-warning">{icon}</div> : null}
+    <div className="min-w-0">
+      {title ? <p className="font-semibold text-warning">{title}</p> : null}
+      {description ? <p className="mt-1 text-sm text-content-secondary">{description}</p> : null}
+      {action ? <div className="mt-2">{action}</div> : null}
+    </div>
+  </div>
+);

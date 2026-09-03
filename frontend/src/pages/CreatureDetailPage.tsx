@@ -457,7 +457,7 @@ const CreatureDetailPage: React.FC = () => {
           </div>
         </div>
       </div>
-      <MapMetadataPanel entityId={creature.knowledge_entity_id || undefined} />
+      <MapMetadataPanel entityId={creature.knowledge_entity_id || undefined} mapTarget={{ entityType: creature.is_boss ? 'boss' : 'creature', name: creature.name, slug: creature.slug, canonicalEntityId: creature.knowledge_entity_id }} />
       <div className="mt-6 flex justify-end"><SuggestCorrectionLink entityType="Creature" entityName={creature.name} /></div>
     </Page>
   );

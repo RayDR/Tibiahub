@@ -1,9 +1,10 @@
 import { lazy, Suspense, useEffect, useState } from "react";
 import { ListOrdered, MapPin, Radar } from "lucide-react";
 import { useTranslation } from "react-i18next";
+import { Link } from "react-router-dom";
 
 import { spatialApi } from "../services/api";
-import { tibiaMapApi, type TibiaMapBootstrap } from "../services/tibiaMap";
+import { buildMapEntityUrl, tibiaMapApi, type TibiaMapBootstrap, type TibiaMapSearchType } from "../services/tibiaMap";
 import type {
   SpatialPointMetadata,
   SpatialRegionMetadata,
@@ -13,13 +14,16 @@ import { formatDisplayFloor } from "../utils/tibiaFloors";
 
 const TibiaMapViewer = lazy(() => import('./map/TibiaMapViewer'));
 const hasTrustedGeometry = (value: { confidence: string; verification_state: string }) => value.verification_state === 'verified' || value.confidence === 'verified' || value.confidence === 'high';
+const hasResolvedPoint = (point: SpatialPointMetadata): point is SpatialPointMetadata & { x: number; y: number; z: number } => point.x != null && point.y != null && point.z != null;
 
 export default function MapMetadataPanel({
   entityId,
   locationIdentifier,
+  mapTarget,
 }: {
   entityId?: string;
   locationIdentifier?: string;
+  mapTarget?: { entityType: TibiaMapSearchType; name: string; slug?: string | null; canonicalEntityId?: string | null };
 }) {
   const { t } = useTranslation();
   const [points, setPoints] = useState<SpatialPointMetadata[]>([]);
@@ -54,10 +58,7 @@ export default function MapMetadataPanel({
           );
           nextPoints = (payload.points || []).filter(hasTrustedGeometry);
           nextRegions = (payload.regions || []).filter(hasTrustedGeometry);
-          const origin = nextPoints.find(
-            (point: SpatialPointMetadata) =>
-              point.x != null && point.y != null && point.z != null,
-          );
+          const origin = nextPoints.find(hasResolvedPoint);
           if (origin) {
             void spatialApi.nearby(origin.x, origin.y, origin.z, controller.signal)
               .then((value) => { if (current) setNearby(value.items || []); })
@@ -85,10 +86,7 @@ export default function MapMetadataPanel({
               (item: { map_region?: SpatialRegionMetadata }) =>
                 item.map_region ? [item.map_region] : [],
             ).filter(hasTrustedGeometry);
-          const origin = nextPoints.find(
-            (point: SpatialPointMetadata) =>
-              point.x != null && point.y != null && point.z != null,
-          );
+          const origin = nextPoints.find(hasResolvedPoint);
           if (origin) {
             void spatialApi.nearby(origin.x, origin.y, origin.z, controller.signal)
               .then((value) => { if (current) setNearby(value.items || []); })
@@ -149,7 +147,7 @@ export default function MapMetadataPanel({
           </div>
         ) : (
           <div className="space-y-4">
-            {mapOrigin && mapBootstrap?.world_map ? <Suspense fallback={<div className="grid min-h-64 place-items-center text-content-muted">{t('map.loading')}</div>}><TibiaMapViewer imageUrl={mapBootstrap.world_map.image_url} pathfindingUrl={mapBootstrap.world_map.pathfinding_url} label={mapOrigin.name || t('spatialMetadata.preview')} floor={mapOrigin.z} floorLabel={t('map.floor', { floor: formatDisplayFloor(mapOrigin.z as number) })} mapBounds={mapBootstrap.world_map.bounds} center={{ x: mapOrigin.x as number, y: mapOrigin.y as number }} markers={points.filter((point) => point.x != null && point.y != null).map((point) => ({ x: point.x as number, y: point.y as number, label: point.name }))} regions={regions.filter((region) => region.bounds.min_x != null && region.bounds.min_y != null && region.bounds.max_x != null && region.bounds.max_y != null).map((region) => ({ minX: region.bounds.min_x as number, minY: region.bounds.min_y as number, maxX: region.bounds.max_x as number, maxY: region.bounds.max_y as number, label: region.name }))} paths={routes.map((route) => ({ id: route.id, label: route.name, points: (route.steps || []).filter((step) => step.x != null && step.y != null).map((step) => ({ x: step.x as number, y: step.y as number, z: step.z })) }))} coordinateMode="world" resetLabel={t('map.reset')} zoomInLabel={t('map.zoomIn')} zoomOutLabel={t('map.zoomOut')} emptyMessage={t('map.noBaseMap')} /></Suspense> : <div className="rounded-lg border border-dashed border-line bg-surface-base/40 p-4 text-sm text-content-secondary">{t('spatialMetadata.placeholder')}</div>}
+            {mapOrigin && mapBootstrap?.world_map ? <><Suspense fallback={<div className="grid min-h-64 place-items-center text-content-muted">{t('map.loading')}</div>}><TibiaMapViewer imageUrl={mapBootstrap.world_map.image_url} pathfindingUrl={mapBootstrap.world_map.pathfinding_url} label={mapOrigin.name || t('spatialMetadata.preview')} floor={mapOrigin.z} floorLabel={t('map.floor', { floor: formatDisplayFloor(mapOrigin.z as number) })} mapBounds={mapBootstrap.world_map.bounds} center={{ x: mapOrigin.x as number, y: mapOrigin.y as number }} markers={points.filter((point) => point.x != null && point.y != null).map((point) => ({ x: point.x as number, y: point.y as number, label: point.name }))} regions={regions.filter((region) => region.bounds.min_x != null && region.bounds.min_y != null && region.bounds.max_x != null && region.bounds.max_y != null).map((region) => ({ minX: region.bounds.min_x as number, minY: region.bounds.min_y as number, maxX: region.bounds.max_x as number, maxY: region.bounds.max_y as number, label: region.name }))} paths={routes.map((route) => ({ id: route.id, label: route.name, points: (route.steps || []).filter((step) => step.x != null && step.y != null).map((step) => ({ x: step.x as number, y: step.y as number, z: step.z })) }))} coordinateMode="world" resetLabel={t('map.reset')} zoomInLabel={t('map.zoomIn')} zoomOutLabel={t('map.zoomOut')} emptyMessage={t('map.noBaseMap')} /></Suspense>{mapTarget ? <div className="mt-3 flex justify-end"><Link to={buildMapEntityUrl({ ...mapTarget, floor: mapOrigin.z as number, location: mapOrigin.name })} className="app-button-secondary app-button-sm">{t('map.openDetails')}</Link></div> : null}</> : <div className="rounded-lg border border-dashed border-line bg-surface-base/40 p-4 text-sm text-content-secondary">{t('spatialMetadata.placeholder')}</div>}
             {points.map((point) => (
               <div
                 key={point.id}

@@ -35,6 +35,8 @@ def _pair(code: str, inverse: str, sources: tuple[str, ...], targets: tuple[str,
 
 INITIAL_RELATIONSHIP_TYPES = tuple(definition for pair in (
     _pair("drops", "dropped_by", ("creature",), ("item",)),
+    _pair("sells_item", "sold_by_npc", ("npc",), ("item",)),
+    _pair("buys_item", "bought_by_npc", ("npc",), ("item",)),
     _pair("requires_item", "required_by_quest", ("quest",), ("item",)),
     _pair("rewards_item", "rewarded_by_quest", ("quest",), ("item",)),
     _pair("requires_quest", "prerequisite_for", ("quest",), ("quest",)),
@@ -50,6 +52,7 @@ INITIAL_RELATIONSHIP_TYPES = tuple(definition for pair in (
     _pair("mission_references_npc", "referenced_by_mission", ("quest",), ("npc",)),
     _pair("mission_occurs_at_location", "hosts_mission", ("quest",), ("area", "town", "location")),
     _pair("located_at", "hosts_npc", ("creature", "item", "quest", "npc", "boss", "hunt_zone", "access"), ("area", "town", "location")),
+    _pair("travels_to", "served_by_npc", ("npc",), ("area", "town", "location")),
     _pair("contained_in", "contains", ("area", "location"), ("area", "town")),
     _pair("leads_to", "destination_of_access", ("access",), ("area", "town", "location")),
     _pair("represented_by", "represents_location", ("area", "town", "location", "hunt_zone", "access"), ("map_point", "map_region")),

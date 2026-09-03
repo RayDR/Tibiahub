@@ -16,7 +16,8 @@ function currentContext(pathname: string, t: (key: string) => string): { parent?
   if (pathname.startsWith('/items/')) return { parent: { label: t('nav.search'), to: '/cyclopedia?tab=items' }, label: t('shell.context.item') };
   if (pathname.startsWith('/hunt-zones/')) return { parent: { label: t('nav.search'), to: '/cyclopedia?tab=zones' }, label: t('shell.context.huntZone') };
   if (pathname.startsWith('/quests/')) return { parent: { label: t('nav.search'), to: '/cyclopedia?tab=quests' }, label: t('shell.context.quest') };
-  if (pathname.startsWith('/npcs/')) return { parent: { label: t('nav.search'), to: '/cyclopedia' }, label: t('shell.context.npc') };
+  if (pathname === '/npcs') return { parent: { label: t('nav.search'), to: '/cyclopedia' }, label: t('nav.npcs') };
+  if (pathname.startsWith('/npcs/')) return { parent: { label: t('nav.npcs'), to: '/npcs' }, label: t('shell.context.npc') };
   if (pathname.startsWith('/locations/')) return { parent: { label: t('nav.search'), to: '/cyclopedia?tab=zones' }, label: t('shell.context.location') };
   if (pathname === '/planner') return { label: t('nav.planner') };
   if (pathname === '/map') return { label: t('nav.map') };

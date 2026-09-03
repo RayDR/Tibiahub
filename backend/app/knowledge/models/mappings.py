@@ -21,12 +21,6 @@ class KnowledgeExternalMapping(Base):
             "external_id",
             name="uq_knowledge_external_mapping_identifier",
         ),
-        UniqueConstraint(
-            "provider_id",
-            "entity_type_id",
-            "entity_uuid",
-            name="uq_knowledge_external_mapping_entity",
-        ),
         Index("ix_knowledge_external_mappings_entity", "entity_uuid"),
     )
 

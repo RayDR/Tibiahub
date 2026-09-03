@@ -23,8 +23,17 @@ export interface WorkspaceAuditEntry {
   safe_metadata?: Record<string, unknown>;
 }
 
+export interface WorkspaceAuditPage {
+  items: WorkspaceAuditEntry[];
+  total: number;
+  skip: number;
+  limit: number;
+}
+
 export const workspaceApi = {
   async guilds(): Promise<GuildDirectoryEntry[]> { return (await api.get('/admin/guilds')).data; },
   async adminGuild(key: string): Promise<AdminGuildWorkspace> { return (await api.get(`/admin/guilds/${encodeURIComponent(key)}`)).data; },
-  async guildAudits(key: string): Promise<WorkspaceAuditEntry[]> { return (await api.get(`/admin/guilds/${encodeURIComponent(key)}/audits`)).data; },
+  async guildAudits(key: string, skip = 0, limit = 20, signal?: AbortSignal): Promise<WorkspaceAuditPage> {
+    return (await api.get(`/admin/guilds/${encodeURIComponent(key)}/audits`, { params: { skip, limit, paged: true }, signal })).data;
+  },
 };

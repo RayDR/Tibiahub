@@ -99,3 +99,6 @@ class GuildMemberSnapshotPayload(BaseModel):
     guild_name: str
     source: str
     members: List[GuildMemberSnapshotResponse]
+    total: int
+    skip: int = 0
+    limit: int = 400

@@ -28,7 +28,9 @@ from sqlalchemy.orm import Session
 from app.core.config import settings
 from app.db.database import SessionLocal
 from app.models.creature import Creature
-from app.models.external_data import CachedResource, Item, SyncJob, SyncJobError, TibiaWikiQuest
+from app.models.external_data import (
+    CachedResource, Item, SyncJob, SyncJobError, TibiaWikiNpc, TibiaWikiQuest,
+)
 from app.models.hunt_zone import HuntZone
 from app.models.loot import Loot
 from app.models.settings import SystemSettings
@@ -764,40 +766,11 @@ class SyncService:
 
     @staticmethod
     def _upsert_hunt_zone(db: Session, payload: dict[str, Any]) -> str:
-        name = payload.get("name")
-        if not name:
-            raise ValueError("Missing hunt zone name")
-        normalized_name = normalize_search_text(name)
-        zone = db.query(HuntZone).filter(HuntZone.normalized_name == normalized_name).first()
-        created = zone is None
-        if not zone:
-            zone = HuntZone(name=name, normalized_name=normalized_name, min_level=0)
-            db.add(zone)
-        zone.name = name
-        zone.slug = payload.get("slug") or zone.slug
-        zone.normalized_name = normalized_name
-        zone.city = payload.get("city") or payload.get("location") or zone.city
-        zone.region = payload.get("region") or zone.region
-        zone.source_provider = payload.get("source_provider") or zone.source_provider
-        zone.description = payload.get("description") or zone.description
-        zone.source_name = payload.get("source_name") or zone.source_name or "tibiawiki"
-        zone.source_url = payload.get("source_url") or zone.source_url
-        zone.recommended_level = payload.get("recommended_level") if payload.get("recommended_level") is not None else zone.recommended_level
-        zone.min_level = payload.get("min_level") if payload.get("min_level") is not None else zone.min_level
-        zone.max_level = payload.get("max_level") if payload.get("max_level") is not None else zone.max_level
-        zone.recommended_vocations = payload.get("recommended_vocations") or zone.recommended_vocations
-        zone.recommended_party_size = payload.get("recommended_party_size") or zone.recommended_party_size
-        zone.exp_rating = payload.get("exp_rating") or zone.exp_rating
-        zone.profit_rating = payload.get("profit_rating") or zone.profit_rating
-        zone.danger_rating = payload.get("danger_rating") or zone.danger_rating
-        zone.map_x = payload.get("map_x") if payload.get("map_x") is not None else zone.map_x
-        zone.map_y = payload.get("map_y") if payload.get("map_y") is not None else zone.map_y
-        zone.map_z = payload.get("map_z") if payload.get("map_z") is not None else zone.map_z
-        zone.map_bounds = payload.get("map_bounds") or zone.map_bounds
-        zone.map_image_url = payload.get("map_image_url") or zone.map_image_url
-        zone.raw_data = payload
-        zone.last_synced_at = datetime.now(UTC)
-        return "created" if created else "updated"
+        _ = (db, payload)
+        raise ValueError(
+            "Direct HuntZone upserts are disabled; enqueue a tibiawiki "
+            "hunt_zone_catalog Knowledge job"
+        )
 
     @staticmethod
     async def _run_segment(
@@ -1330,7 +1303,7 @@ class SyncService:
         representative: bool = False,
         force_refetch: bool = False,
     ) -> dict[str, Any]:
-        groups: list[list[tuple[str, str, Any, str, str, str]]] = [[], [], []]
+        groups: list[list[tuple[str, str, Any, str, str, str]]] = [[], [], [], []]
         for creature in (
             db.query(Creature)
             .filter(
@@ -1348,9 +1321,28 @@ class SyncService:
             if source:
                 groups[1].append(("item_image", "item", loot, loot.item_name, media_asset_service.build_loot_asset_key(loot), source))
         for zone in db.query(HuntZone).filter(HuntZone.map_image_url.isnot(None)).order_by(HuntZone.id).all():
+            if zone.source_provider == "tibiamaps" and zone.knowledge_entity_id is None:
+                continue
+            if (
+                zone.source_provider == "tibiawiki"
+                and "image_reference" not in set(zone.supplied_fields or [])
+            ):
+                continue
             source = media_asset_service.build_zone_source_url(zone)
             if source:
                 groups[2].append(("hunt_zone_map", "hunt_zone", zone, zone.name, media_asset_service.build_zone_asset_key(zone), source))
+        for npc in (
+            db.query(TibiaWikiNpc)
+            .filter(TibiaWikiNpc.image_url.isnot(None), TibiaWikiNpc.knowledge_entity_id.isnot(None))
+            .order_by(TibiaWikiNpc.id)
+            .all()
+        ):
+            source = media_asset_service.build_npc_source_url(npc)
+            if source and "image_reference" in set(npc.supplied_fields or []):
+                groups[3].append((
+                    "npc_image", "npc", npc, npc.name,
+                    media_asset_service.build_npc_asset_key(npc), source,
+                ))
 
         if representative:
             queued: list[tuple[str, str, Any, str, str, str]] = []
@@ -1411,7 +1403,10 @@ class SyncService:
                 counters[outcome.result] += 1
 
                 if outcome.asset:
-                    entity.image_asset_id = outcome.asset.id
+                    if entity_type == "hunt_zone":
+                        entity.map_asset_id = outcome.asset.id
+                    elif hasattr(entity, "image_asset_id"):
+                        entity.image_asset_id = outcome.asset.id
                     db.add(entity)
             if len(samples) < 10:
                 safe_url = outcome.safe_url or (outcome.asset.resolved_url if outcome.asset else None) or source_url

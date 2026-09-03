@@ -18,15 +18,33 @@ import { useConfirmation } from "../../context/ConfirmationContext";
 import { useSearchParams } from "react-router-dom";
 import { useGuildContext } from "../../utils/guildContext";
 import { useGuildCapability } from "../../hooks/useGuildCapability";
+import { WorkspaceContentHeader } from "../../components/workspace/WorkspacePrimitives";
+import {
+  Alert,
+  DegradedState,
+  Dialog,
+  DialogBody,
+  DialogFooter,
+  DialogHeader,
+  EmptyState,
+  ErrorState,
+  FormField,
+  Input,
+  LoadingState,
+  Select,
+  Textarea,
+} from "../../components/ui";
+import { formatDate, formatDateTime, formatTime } from "../../utils/locale";
 
 export const Events: React.FC = () => {
-  useTranslation();
+  const { t, i18n } = useTranslation();
   const { user } = useAuth();
   const toast = useToast();
   const confirmation = useConfirmation();
   const [searchParams, setSearchParams] = useSearchParams();
   const [events, setEvents] = useState<Event[]>([]);
   const [loading, setLoading] = useState(true);
+  const [loadError, setLoadError] = useState(false);
   const [showCreateModal, setShowCreateModal] = useState(false);
   const [showDetailModal, setShowDetailModal] = useState(false);
   const [selectedEvent, setSelectedEvent] = useState<Event | null>(null);
@@ -87,6 +105,7 @@ export const Events: React.FC = () => {
   const loadEvents = async () => {
     try {
       setLoading(true);
+      setLoadError(false);
       const data = await eventsApi.getEvents(
         "active",
         filter === "all" ? undefined : filter,
@@ -95,26 +114,30 @@ export const Events: React.FC = () => {
       setEvents(data);
     } catch (error) {
       console.error("Failed to load events:", error);
+      setLoadError(true);
     } finally {
       setLoading(false);
     }
   };
 
-  const handleCreateEvent = async (event: EventCreate) => {
+  const handleCreateEvent = async (event: EventCreate): Promise<boolean> => {
     try {
+      if (!scopedGuild) {
+        toast.error(t("eventsUI.messages.selectGuild"));
+        return false;
+      }
       const payload: EventCreate = {
         ...event,
-        guild_name: user?.is_superuser
-          ? scopedGuild
-          : event.guild_name || user?.guild_name,
+        guild_name: scopedGuild,
       };
       await eventsApi.createEvent(payload);
-      setShowCreateModal(false);
-      loadEvents();
-      toast.success("Event created successfully!");
+      await loadEvents();
+      toast.success(t("eventsUI.messages.created"));
+      return true;
     } catch (error) {
       console.error("Failed to create event:", error);
-      toast.error("Failed to create event");
+      toast.error(t("eventsUI.messages.createError"));
+      return false;
     }
   };
 
@@ -126,9 +149,9 @@ export const Events: React.FC = () => {
         const updated = await eventsApi.getEvent(eventId);
         setSelectedEvent(updated);
       }
-      toast.success("Successfully joined the event!");
+      toast.success(t("eventsUI.messages.joined"));
     } catch (error: any) {
-      toast.error(error.message || "Failed to join event");
+      toast.error(t("eventsUI.messages.joinError"));
     }
   };
 
@@ -170,7 +193,7 @@ export const Events: React.FC = () => {
             setSelectedEvent(updated);
           }
         } catch (error: any) {
-          toast.error(error.message || "Failed to draw winner");
+          toast.error(t("eventsUI.messages.drawError"));
         } finally {
           setIsDrawing(false);
         }
@@ -183,8 +206,8 @@ export const Events: React.FC = () => {
 
   const handleDeleteEvent = async (eventId: number) => {
     const confirmed = await confirmation.confirm(
-      "Are you sure you want to delete this event?",
-      { danger: true },
+      t("eventsUI.confirm.delete"),
+      { title: t("eventsUI.actions.delete"), confirmLabel: t("eventsUI.actions.delete"), danger: true },
     );
     if (!confirmed) return;
 
@@ -193,10 +216,10 @@ export const Events: React.FC = () => {
       loadEvents();
       setShowDetailModal(false);
       setSelectedEvent(null);
-      toast.success("Event deleted successfully");
+      toast.success(t("eventsUI.messages.deleted"));
     } catch (error) {
       console.error("Failed to delete event:", error);
-      toast.error("Failed to delete event");
+      toast.error(t("eventsUI.messages.deleteError"));
     }
   };
 
@@ -218,69 +241,68 @@ export const Events: React.FC = () => {
     switch (type) {
       case "raffle":
         return {
-          label: "Raffle",
+          label: t("eventsUI.types.raffle"),
           badge: "bg-primary/15 text-primary border-primary/50",
         };
       case "contest":
         return {
-          label: "Contest",
+          label: t("eventsUI.types.contest"),
           badge: "bg-danger/15 text-danger border-danger/50",
         };
       case "hunt":
       case "hunt_event":
         return {
-          label: "Hunt",
+          label: t("eventsUI.types.hunt"),
           badge: "bg-success/15 text-success border-success/50",
         };
       case "quest":
         return {
-          label: "Quest",
+          label: t("eventsUI.types.quest"),
           badge: "bg-accent/15 text-accent border-accent/50",
         };
       default:
         return {
-          label: "Custom",
+          label: t("eventsUI.types.custom"),
           badge: "bg-surface text-content-secondary border-line",
         };
     }
   };
 
   return (
-    <div className="space-y-4 sm:space-y-6 p-3 sm:p-6 max-w-7xl mx-auto">
-      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 sm:gap-4">
-        <h1 className="text-2xl sm:text-3xl font-serif text-content-primary flex items-center gap-2 sm:gap-3">
-          <Trophy className="w-6 h-6 sm:w-8 sm:h-8 text-primary" />
-          {filter === "contest" ? "Guild Contests" : "Events & Raffles"}
-        </h1>
-        {canManageEvents && (
+    <div className="workspace-page">
+      <WorkspaceContentHeader
+        title={filter === "contest" ? t("eventsUI.contestsTitle") : t("eventsUI.title")}
+        description={scopedGuild}
+        icon={<Trophy />}
+        action={canManageEvents ? (
           <button
             onClick={() => setShowCreateModal(true)}
-            className="flex items-center gap-2 bg-primary hover:bg-primary-hover text-content-on-primary px-3 sm:px-4 py-2 rounded-md transition-colors font-medium text-sm sm:text-base"
+            className="app-button-primary"
           >
-            <Plus size={18} className="sm:w-5 sm:h-5" />
-            <span className="hidden xs:inline">Create Event</span>
-            <span className="xs:hidden">Create</span>
+            <Plus className="size-4" />
+            <span className="hidden xs:inline">{t("eventsUI.actions.create")}</span>
+            <span className="xs:hidden">{t("guild.create")}</span>
           </button>
-        )}
-      </div>
+        ) : undefined}
+      />
 
       <div className="flex flex-wrap gap-2 sm:gap-3">
         {[
-          { key: "all", label: "All Events", icon: null },
+          { key: "all", label: t("eventsUI.filters.all"), icon: null },
           ...(featureFlags.guild_raffles_enabled
-            ? [{ key: "raffle", label: "Raffles", icon: <Ticket size={16} /> }]
+            ? [{ key: "raffle", label: t("eventsUI.filters.raffles"), icon: <Ticket size={16} /> }]
             : []),
           ...(featureFlags.guild_contests_enabled
             ? [
                 {
                   key: "contest",
-                  label: "Contests",
+                  label: t("eventsUI.filters.contests"),
                   icon: <Trophy size={16} />,
                 },
               ]
             : []),
-          { key: "hunt", label: "Hunts", icon: <Users size={16} /> },
-          { key: "quest", label: "Quests", icon: <Calendar size={16} /> },
+          { key: "hunt", label: t("eventsUI.filters.hunts"), icon: <Users size={16} /> },
+          { key: "quest", label: t("eventsUI.filters.quests"), icon: <Calendar size={16} /> },
         ].map(({ key, label, icon }) => (
           <button
             key={key}
@@ -306,19 +328,20 @@ export const Events: React.FC = () => {
         ))}
       </div>
 
-      {loading ? (
-        <div className="text-center py-12 text-content-secondary">
-          Loading events...
-        </div>
+      {loading && events.length === 0 ? (
+        <LoadingState title={t("eventsUI.states.loading")} />
+      ) : loadError && events.length === 0 ? (
+        <ErrorState
+          title={t("eventsUI.states.error")}
+          description={t("eventsUI.states.errorHelp")}
+          action={<button type="button" onClick={() => void loadEvents()} className="app-button-secondary">{t("common.retry")}</button>}
+        />
       ) : events.length === 0 ? (
-        <div className="bg-surface-base/50 rounded-lg border border-line p-12 text-center">
-          <Trophy size={48} className="mx-auto mb-4 text-content-muted" />
-          <p className="text-content-secondary">
-            No active events at the moment
-          </p>
-        </div>
+        <EmptyState icon={<Trophy />} title={t("eventsUI.states.empty")} description={t("eventsUI.states.emptyHelp")} />
       ) : (
-        <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-4 sm:gap-6">
+        <>
+          {loadError ? <DegradedState title={t("eventsUI.states.degraded")} description={t("eventsUI.states.degradedHelp")} action={<button type="button" onClick={() => void loadEvents()} className="app-button-secondary app-button-sm">{t("common.retry")}</button>} /> : null}
+          <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-4 sm:gap-6">
           {events.map((event) => (
             <div
               key={event.id}
@@ -381,7 +404,7 @@ export const Events: React.FC = () => {
                   <div className="flex items-center gap-2 text-content-secondary">
                     <Calendar size={16} />
                     <span>
-                      {new Date(event.draw_date).toLocaleDateString()}
+                      {formatDate(event.draw_date, i18n.resolvedLanguage || i18n.language)}
                     </span>
                   </div>
                 )}
@@ -391,7 +414,7 @@ export const Events: React.FC = () => {
                 <div className="flex items-center gap-2 p-3 bg-success/20 border border-success/30 rounded-md mb-4">
                   <Trophy size={16} className="text-success" />
                   <span className="text-success font-medium text-sm">
-                    Winner: {event.winner_name}
+                    {t("eventsUI.winner", { name: event.winner_name })}
                     {event.winner_number && (
                       <span className="ml-2 text-success">
                         #{event.winner_number}
@@ -406,7 +429,7 @@ export const Events: React.FC = () => {
                   className="flex-1 px-4 py-2 bg-surface hover:bg-surface-raised text-content-primary rounded-md transition-colors font-medium text-sm"
                   onClick={() => openEventDetail(event)}
                 >
-                  View Details
+                  {t("eventsUI.actions.details")}
                 </button>
                 {!event.is_drawn && !hasUserJoined(event) && (
                   <button
@@ -416,18 +439,19 @@ export const Events: React.FC = () => {
                       event.participant_count >= (event.total_slots || Infinity)
                     }
                   >
-                    Join Event
+                    {t("eventsUI.actions.join")}
                   </button>
                 )}
                 {hasUserJoined(event) && !event.is_drawn && (
                   <span className="flex-1 px-4 py-2 bg-success/15 text-success rounded-md text-center font-medium text-sm border border-success/50">
-                    Joined ✓
+                    {t("eventsUI.actions.joined")} ✓
                   </span>
                 )}
               </div>
             </div>
           ))}
-        </div>
+          </div>
+        </>
       )}
 
       {showCreateModal && (
@@ -473,7 +497,7 @@ interface CreateEventModalProps {
   rafflesEnabled: boolean;
   defaultType: "raffle" | "contest";
   onClose: () => void;
-  onCreate: (event: EventCreate) => void;
+  onCreate: (event: EventCreate) => Promise<boolean>;
 }
 
 const CreateEventModal: React.FC<CreateEventModalProps> = ({
@@ -483,6 +507,7 @@ const CreateEventModal: React.FC<CreateEventModalProps> = ({
   onClose,
   onCreate,
 }) => {
+  const { t } = useTranslation();
   const [formData, setFormData] = useState<EventCreate>({
     type: defaultType,
     title: "",
@@ -501,15 +526,23 @@ const CreateEventModal: React.FC<CreateEventModalProps> = ({
     guild_name: "",
     guild_world: "",
   });
+  const [submitting, setSubmitting] = useState(false);
+  const [submitError, setSubmitError] = useState(false);
 
-  const handleSubmit = (e: React.FormEvent) => {
+  const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    onCreate({
+    if (submitting) return;
+    setSubmitting(true);
+    setSubmitError(false);
+    const created = await onCreate({
       ...formData,
       start_date: formData.start_date,
       end_date: formData.end_date || undefined,
       draw_date: formData.draw_date || undefined,
     });
+    setSubmitting(false);
+    if (created) onClose();
+    else setSubmitError(true);
   };
 
   const toLocalInput = (value?: string) => {
@@ -518,78 +551,72 @@ const CreateEventModal: React.FC<CreateEventModalProps> = ({
   };
 
   return (
-    <div
-      className="fixed inset-0 bg-surface-base/80 backdrop-blur-sm flex items-center justify-center z-modal p-4"
-      onClick={onClose}
+    <Dialog
+      open
+      onClose={() => { if (!submitting) onClose(); }}
+      label={t("eventsUI.create.title")}
+      className="ds-dialog-lg"
     >
-      <div
-        className="bg-surface-base border border-line rounded-lg w-full max-w-2xl max-h-[90vh] overflow-y-auto"
-        onClick={(e) => e.stopPropagation()}
-      >
-        <div className="p-6 border-b border-line sticky top-0 bg-surface-base z-10">
+      <form onSubmit={handleSubmit} className="contents">
+        <DialogHeader>
           <h2 className="text-2xl font-bold text-content-primary">
-            Create New Event
+            {t("eventsUI.create.title")}
           </h2>
-        </div>
+        </DialogHeader>
 
-        <form onSubmit={handleSubmit} className="p-6 space-y-5">
-          <div>
-            <label className="block text-sm font-medium text-content-secondary mb-2">
-              Event Type
-            </label>
-            <select
+        <DialogBody className="space-y-5">
+          {submitError ? (
+            <Alert tone="danger">
+              {t("eventsUI.create.error")}
+            </Alert>
+          ) : null}
+
+          <FormField label={t("eventsUI.fields.type")} required>
+            <Select
               value={formData.type}
               onChange={(e) =>
                 setFormData({ ...formData, type: e.target.value as any })
               }
               required
-              className="w-full bg-surface-base border border-line rounded-md p-3 text-content-primary focus:border-primary focus:outline-none focus:ring-2 focus:ring-primary/20"
+              disabled={submitting}
             >
-              {rafflesEnabled && <option value="raffle">Raffle</option>}
-              {contestsEnabled && <option value="contest">Contest</option>}
-              <option value="hunt">Hunt</option>
-              <option value="quest">Quest</option>
-              <option value="custom">Custom</option>
-            </select>
-          </div>
+              {rafflesEnabled && <option value="raffle">{t("eventsUI.types.raffle")}</option>}
+              {contestsEnabled && <option value="contest">{t("eventsUI.types.contest")}</option>}
+              <option value="hunt">{t("eventsUI.types.hunt")}</option>
+              <option value="quest">{t("eventsUI.types.quest")}</option>
+              <option value="custom">{t("eventsUI.types.custom")}</option>
+            </Select>
+          </FormField>
 
-          <div>
-            <label className="block text-sm font-medium text-content-secondary mb-2">
-              Title
-            </label>
-            <input
+          <FormField label={t("eventsUI.fields.title")} required>
+            <Input
               type="text"
               value={formData.title}
               onChange={(e) =>
                 setFormData({ ...formData, title: e.target.value })
               }
               required
-              className="w-full bg-surface-base border border-line rounded-md p-3 text-content-primary focus:border-primary focus:outline-none focus:ring-2 focus:ring-primary/20"
-              placeholder="Enter event title"
+              disabled={submitting}
+              placeholder={t("eventsUI.placeholders.title")}
             />
-          </div>
+          </FormField>
 
-          <div>
-            <label className="block text-sm font-medium text-content-secondary mb-2">
-              Description
-            </label>
-            <textarea
+          <FormField label={t("eventsUI.fields.description")}>
+            <Textarea
               value={formData.description}
               onChange={(e) =>
                 setFormData({ ...formData, description: e.target.value })
               }
               rows={3}
-              className="w-full bg-surface-base border border-line rounded-md p-3 text-content-primary focus:border-primary focus:outline-none focus:ring-2 focus:ring-primary/20 resize-none"
-              placeholder="Describe your event..."
+              disabled={submitting}
+              className="resize-none"
+              placeholder={t("eventsUI.placeholders.description")}
             />
-          </div>
+          </FormField>
 
           <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-            <div>
-              <label className="block text-sm font-medium text-content-secondary mb-2">
-                Start Date
-              </label>
-              <input
+            <FormField label={t("eventsUI.fields.startDate")} required>
+              <Input
                 type="datetime-local"
                 required
                 value={toLocalInput(formData.start_date)}
@@ -599,14 +626,11 @@ const CreateEventModal: React.FC<CreateEventModalProps> = ({
                     start_date: new Date(e.target.value).toISOString(),
                   })
                 }
-                className="w-full bg-surface-base border border-line rounded-md p-3 text-content-primary focus:border-primary focus:outline-none focus:ring-2 focus:ring-primary/20"
+                disabled={submitting}
               />
-            </div>
-            <div>
-              <label className="block text-sm font-medium text-content-secondary mb-2">
-                End Date (optional)
-              </label>
-              <input
+            </FormField>
+            <FormField label={t("eventsUI.fields.endDate")}>
+              <Input
                 type="datetime-local"
                 value={toLocalInput(formData.end_date)}
                 onChange={(e) =>
@@ -617,14 +641,11 @@ const CreateEventModal: React.FC<CreateEventModalProps> = ({
                       : "",
                   })
                 }
-                className="w-full bg-surface-base border border-line rounded-md p-3 text-content-primary focus:border-primary focus:outline-none focus:ring-2 focus:ring-primary/20"
+                disabled={submitting}
               />
-            </div>
-            <div>
-              <label className="block text-sm font-medium text-content-secondary mb-2">
-                Draw Date (raffles)
-              </label>
-              <input
+            </FormField>
+            <FormField label={t("eventsUI.fields.drawDate")}>
+              <Input
                 type="datetime-local"
                 value={toLocalInput(formData.draw_date)}
                 onChange={(e) =>
@@ -635,48 +656,40 @@ const CreateEventModal: React.FC<CreateEventModalProps> = ({
                       : "",
                   })
                 }
-                className="w-full bg-surface-base border border-line rounded-md p-3 text-content-primary focus:border-primary focus:outline-none focus:ring-2 focus:ring-primary/20"
+                disabled={submitting}
               />
-            </div>
+            </FormField>
           </div>
 
-          <div>
-            <label className="block text-sm font-medium text-content-secondary mb-2">
-              Rules
-            </label>
-            <textarea
+          <FormField label={t("eventsUI.fields.rules")}>
+            <Textarea
               value={formData.rules}
               onChange={(e) =>
                 setFormData({ ...formData, rules: e.target.value })
               }
               rows={4}
-              className="w-full bg-surface-base border border-line rounded-md p-3 text-content-primary focus:border-primary focus:outline-none focus:ring-2 focus:ring-primary/20 resize-none font-mono text-sm"
-              placeholder="Define event rules and guidelines..."
+              disabled={submitting}
+              className="resize-none font-mono text-sm"
+              placeholder={t("eventsUI.placeholders.rules")}
             />
-          </div>
+          </FormField>
 
-          <div>
-            <label className="block text-sm font-medium text-content-secondary mb-2">
-              Reward
-            </label>
-            <input
+          <FormField label={t("eventsUI.fields.reward")}>
+            <Input
               type="text"
               value={formData.reward}
               onChange={(e) =>
                 setFormData({ ...formData, reward: e.target.value })
               }
-              className="w-full bg-surface-base border border-line rounded-md p-3 text-content-primary focus:border-primary focus:outline-none focus:ring-2 focus:ring-primary/20"
-              placeholder="e.g., 500k gold, Demon Helmet, etc."
+              disabled={submitting}
+              placeholder={t("eventsUI.placeholders.reward")}
             />
-          </div>
+          </FormField>
 
           {formData.type === "raffle" && (
             <div className="grid grid-cols-2 gap-4">
-              <div>
-                <label className="block text-sm font-medium text-content-secondary mb-2">
-                  Total Slots
-                </label>
-                <input
+              <FormField label={t("eventsUI.fields.totalSlots")}>
+                <Input
                   type="number"
                   value={formData.total_slots}
                   onChange={(e) =>
@@ -686,40 +699,34 @@ const CreateEventModal: React.FC<CreateEventModalProps> = ({
                     })
                   }
                   min="1"
-                  className="w-full bg-surface-base border border-line rounded-md p-3 text-content-primary focus:border-primary focus:outline-none focus:ring-2 focus:ring-primary/20"
+                  disabled={submitting}
                 />
-              </div>
+              </FormField>
 
-              <div>
-                <label className="block text-sm font-medium text-content-secondary mb-2">
-                  Entry Cost
-                </label>
-                <input
+              <FormField label={t("eventsUI.fields.entryCost")}>
+                <Input
                   type="text"
                   value={formData.entry_cost}
                   onChange={(e) =>
                     setFormData({ ...formData, entry_cost: e.target.value })
                   }
-                  placeholder="e.g., 100k gold"
-                  className="w-full bg-surface-base border border-line rounded-md p-3 text-content-primary focus:border-primary focus:outline-none focus:ring-2 focus:ring-primary/20"
+                  placeholder={t("eventsUI.placeholders.entryCost")}
+                  disabled={submitting}
                 />
-              </div>
+              </FormField>
             </div>
           )}
 
-          <div>
-            <label className="block text-sm font-medium text-content-secondary mb-2">
-              Draw Date (Optional)
-            </label>
-            <input
+          <FormField label={t("eventsUI.fields.drawDateOptional")}>
+            <Input
               type="datetime-local"
               value={formData.draw_date}
               onChange={(e) =>
                 setFormData({ ...formData, draw_date: e.target.value })
               }
-              className="w-full bg-surface-base border border-line rounded-md p-3 text-content-primary focus:border-primary focus:outline-none focus:ring-2 focus:ring-primary/20"
+              disabled={submitting}
             />
-          </div>
+          </FormField>
 
           <div className="flex items-center gap-3 bg-surface-base/50 p-3 rounded-md border border-line">
             <input
@@ -730,13 +737,14 @@ const CreateEventModal: React.FC<CreateEventModalProps> = ({
                 setFormData({ ...formData, is_public: e.target.checked })
               }
               className="w-5 h-5 rounded border-line bg-surface-base text-primary"
+              disabled={submitting}
             />
             <label htmlFor="is_public" className="cursor-pointer">
               <span className="block text-sm font-medium text-content-primary">
-                Public Event
+                {t("eventsUI.fields.publicEvent")}
               </span>
               <span className="block text-xs text-content-secondary">
-                Generate a public link for live viewing
+                {t("eventsUI.fields.publicEventHelp")}
               </span>
             </label>
           </div>
@@ -744,14 +752,11 @@ const CreateEventModal: React.FC<CreateEventModalProps> = ({
           {formData.is_public && (
             <div className="space-y-4 bg-surface-base/50 p-4 rounded-md border border-line">
               <h3 className="text-sm font-semibold text-primary">
-                Public Event Configuration
+                {t("eventsUI.create.publicConfiguration")}
               </h3>
 
-              <div>
-                <label className="block text-sm font-medium text-content-secondary mb-2">
-                  Participant Mode
-                </label>
-                <select
+              <FormField label={t("eventsUI.fields.participantMode")}>
+                <Select
                   value={formData.participant_mode}
                   onChange={(e) =>
                     setFormData({
@@ -759,39 +764,36 @@ const CreateEventModal: React.FC<CreateEventModalProps> = ({
                       participant_mode: e.target.value,
                     })
                   }
-                  className="w-full bg-surface-base border border-line rounded-md p-3 text-content-primary focus:border-primary focus:outline-none focus:ring-2 focus:ring-primary/20"
+                  disabled={submitting}
                 >
                   <option value="manual">
-                    Manual - Add participants manually
+                    {t("eventsUI.modes.manual")}
                   </option>
                   <option value="guild_auto">
-                    Guild Auto - Load from guild automatically
+                    {t("eventsUI.modes.guildAuto")}
                   </option>
-                </select>
-              </div>
+                </Select>
+              </FormField>
 
               {formData.participant_mode === "guild_auto" && (
                 <>
-                  <div>
-                    <label className="block text-sm font-medium text-content-secondary mb-2">
-                      Guild Name
-                    </label>
-                    <input
+                  <FormField label={t("eventsUI.fields.guildName")}>
+                    <Input
                       type="text"
                       value={formData.guild_name}
                       onChange={(e) =>
                         setFormData({ ...formData, guild_name: e.target.value })
                       }
-                      placeholder="e.g., Bloodborne Warhowl"
-                      className="w-full bg-surface-base border border-line rounded-md p-3 text-content-primary focus:border-primary focus:outline-none focus:ring-2 focus:ring-primary/20"
+                      placeholder={t("eventsUI.fields.guildName")}
+                      disabled={submitting}
                     />
-                  </div>
+                  </FormField>
 
-                  <div>
-                    <label className="block text-sm font-medium text-content-secondary mb-2">
-                      Active Days Limit
-                    </label>
-                    <input
+                  <FormField
+                    label={t("eventsUI.fields.activeDays")}
+                    helpText={t("eventsUI.fields.activeDaysHelp")}
+                  >
+                    <Input
                       type="number"
                       value={formData.active_days_limit}
                       onChange={(e) =>
@@ -802,18 +804,15 @@ const CreateEventModal: React.FC<CreateEventModalProps> = ({
                       }
                       min="1"
                       max="365"
-                      className="w-full bg-surface-base border border-line rounded-md p-3 text-content-primary focus:border-primary focus:outline-none focus:ring-2 focus:ring-primary/20"
+                      disabled={submitting}
                     />
-                    <p className="text-xs text-content-muted mt-1">
-                      Only load members active within last X days
-                    </p>
-                  </div>
+                  </FormField>
 
-                  <div>
-                    <label className="block text-sm font-medium text-content-secondary mb-2">
-                      Guild World (Optional)
-                    </label>
-                    <input
+                  <FormField
+                    label={t("eventsUI.fields.guildWorld")}
+                    helpText={t("eventsUI.fields.guildWorldHelp")}
+                  >
+                    <Input
                       type="text"
                       value={formData.guild_world}
                       onChange={(e) =>
@@ -822,36 +821,35 @@ const CreateEventModal: React.FC<CreateEventModalProps> = ({
                           guild_world: e.target.value,
                         })
                       }
-                      placeholder="e.g., Antica, Belobra..."
-                      className="w-full bg-surface-base border border-line rounded-md p-3 text-content-primary focus:border-primary focus:outline-none focus:ring-2 focus:ring-primary/20"
+                      placeholder={t("eventsUI.fields.guildWorld")}
+                      disabled={submitting}
                     />
-                    <p className="text-xs text-content-muted mt-1">
-                      Restrict participants to this world
-                    </p>
-                  </div>
+                  </FormField>
                 </>
               )}
             </div>
           )}
+        </DialogBody>
 
-          <div className="flex gap-3 pt-4">
+        <DialogFooter>
             <button
               type="button"
               onClick={onClose}
-              className="flex-1 px-4 py-3 bg-surface hover:bg-surface-raised text-content-primary rounded-md transition-colors font-medium"
+              className="app-button-secondary"
+              disabled={submitting}
             >
-              Cancel
+              {t("common.cancel")}
             </button>
             <button
               type="submit"
-              className="flex-1 px-4 py-3 bg-primary hover:bg-primary-hover text-content-on-primary rounded-md transition-colors font-medium"
+              className="app-button-primary"
+              disabled={submitting}
             >
-              Create Event
+              {submitting ? t("eventsUI.actions.creating") : t("eventsUI.actions.create")}
             </button>
-          </div>
-        </form>
-      </div>
-    </div>
+        </DialogFooter>
+      </form>
+    </Dialog>
   );
 };
 
@@ -877,6 +875,7 @@ const EventDetailModal: React.FC<EventDetailModalProps> = ({
   winnerName,
   canManage,
 }) => {
+  const { t, i18n } = useTranslation();
   const toast = useToast();
   const confirmation = useConfirmation();
   const [isPublicEdit, setIsPublicEdit] = useState(event.is_public);
@@ -894,23 +893,23 @@ const EventDetailModal: React.FC<EventDetailModalProps> = ({
   const addLog = (message: string) => {
     setSyncLog((prev) => [
       ...prev,
-      `[${new Date().toLocaleTimeString()}] ${message}`,
+      `[${formatTime(new Date(), i18n.resolvedLanguage || i18n.language)}] ${message}`,
     ]);
   };
 
   const handleTogglePublic = async () => {
     try {
       addLog(
-        `Changing event visibility to ${!isPublicEdit ? "PUBLIC" : "PRIVATE"}...`,
+        t("eventsUI.logs.visibilityChanging", { visibility: t(!isPublicEdit ? "eventsUI.visibility.public" : "eventsUI.visibility.private") }),
       );
       await eventsApi.updateEvent(event.id, { is_public: !isPublicEdit });
       setIsPublicEdit(!isPublicEdit);
-      addLog(`✅ Event is now ${!isPublicEdit ? "PUBLIC" : "PRIVATE"}`);
-      toast.success?.(`Event is now ${!isPublicEdit ? "public" : "private"}`);
+      addLog(t("eventsUI.logs.visibilityChanged", { visibility: t(!isPublicEdit ? "eventsUI.visibility.public" : "eventsUI.visibility.private") }));
+      toast.success?.(t("eventsUI.messages.visibilityChanged", { visibility: t(!isPublicEdit ? "eventsUI.visibility.public" : "eventsUI.visibility.private") }));
     } catch (err: any) {
       const errorMsg = err.message || err.toString();
       addLog(`❌ Error: ${errorMsg}`);
-      toast.error?.(`Failed to update visibility: ${errorMsg}`);
+      toast.error?.(t("eventsUI.messages.visibilityError"));
       console.error("Toggle public error:", err);
     }
   };
@@ -918,21 +917,21 @@ const EventDetailModal: React.FC<EventDetailModalProps> = ({
   const handleSyncParticipants = async () => {
     if (!canManageEvent) return;
     setSyncLoading(true);
-    addLog("🔄 Refreshing participant list...");
+    addLog(t("eventsUI.logs.refreshing"));
 
     try {
-      addLog(`Loading current guild roster...`);
-      addLog(`Guild: ${event.guild_name || "Not configured"}`);
+      addLog(t("eventsUI.logs.loadingRoster"));
+      addLog(t("eventsUI.logs.guild", { guild: event.guild_name || t("eventsUI.values.notConfigured") }));
 
       const result = await eventsApi.loadGuildParticipants(event.id, true);
 
-      addLog(`✅ Update completed!`);
-      addLog(`  - Loaded: ${result.loaded} new participants`);
-      addLog(`  - Updated: ${result.updated} existing participants`);
-      addLog(`  - Total: ${result.total} participants`);
+      addLog(t("eventsUI.logs.updateCompleted"));
+      addLog(t("eventsUI.logs.loaded", { count: result.loaded }));
+      addLog(t("eventsUI.logs.updated", { count: result.updated }));
+      addLog(t("eventsUI.logs.total", { count: result.total }));
 
       toast.success?.(
-        `Participants updated! ${result.total} total participants`,
+        t("eventsUI.messages.participantsUpdated", { count: result.total }),
       );
 
       // Refresh event data without full reload
@@ -942,7 +941,7 @@ const EventDetailModal: React.FC<EventDetailModalProps> = ({
     } catch (err: any) {
       const errorMsg = err.message || err.toString();
       addLog(`❌ Error: ${errorMsg}`);
-      toast.error?.(`Failed to refresh participants: ${errorMsg}`);
+      toast.error?.(t("eventsUI.messages.participantsError"));
       console.error("Sync error:", err);
     } finally {
       setSyncLoading(false);
@@ -952,21 +951,21 @@ const EventDetailModal: React.FC<EventDetailModalProps> = ({
   const handleAddManualParticipant = async () => {
     if (!manualCharName.trim() || !canManageEvent) return;
     setAddingManual(true);
-    addLog(`Adding manual participant: ${manualCharName}...`);
+    addLog(t("eventsUI.logs.adding", { name: manualCharName }));
 
     try {
-      addLog(`Validating character...`);
+      addLog(t("eventsUI.logs.validating"));
       const result = await eventsApi.addManualParticipant(event.id, {
         character_name: manualCharName,
       });
 
-      addLog(`✅ Participant added!`);
-      addLog(`  - Character: ${result.character_name}`);
-      addLog(`  - Level: ${result.character_level}`);
-      addLog(`  - Vocation: ${result.character_vocation}`);
-      addLog(`  - Number: #${result.assigned_number}`);
+      addLog(t("eventsUI.logs.added"));
+      addLog(t("eventsUI.logs.character", { name: result.character_name }));
+      addLog(t("eventsUI.logs.level", { level: result.character_level }));
+      addLog(t("eventsUI.logs.vocation", { vocation: result.character_vocation }));
+      addLog(t("eventsUI.logs.number", { number: result.assigned_number }));
 
-      toast.success?.(`${result.character_name} added successfully!`);
+      toast.success?.(t("eventsUI.messages.participantAdded", { name: result.character_name }));
       setManualCharName("");
 
       // Refresh event data without immediate reload
@@ -976,7 +975,7 @@ const EventDetailModal: React.FC<EventDetailModalProps> = ({
     } catch (err: any) {
       const errorMsg = err.message || err.toString();
       addLog(`❌ Error: ${errorMsg}`);
-      toast.error?.(`Failed to add participant: ${errorMsg}`);
+      toast.error?.(t("eventsUI.messages.addError"));
       console.error("Add participant error:", err);
     } finally {
       setAddingManual(false);
@@ -991,19 +990,19 @@ const EventDetailModal: React.FC<EventDetailModalProps> = ({
 
     if (
       !(await confirmation.confirm(
-        `¿Marcar a ${participantName} como NO participante? No volverá a aparecer en actualizaciones automáticas.`,
+        t("eventsUI.confirm.exclude", { name: participantName }),
         { danger: true },
       ))
     ) {
       return;
     }
 
-    addLog(`🚫 Excluding ${participantName}...`);
+    addLog(t("eventsUI.logs.excluding", { name: participantName }));
 
     try {
       await eventsApi.excludeParticipant(event.id, participantId);
-      addLog(`✅ ${participantName} excluido permanentemente`);
-      toast.success?.(`${participantName} excluido del evento`);
+      addLog(t("eventsUI.logs.excluded", { name: participantName }));
+      toast.success?.(t("eventsUI.messages.excluded", { name: participantName }));
 
       setTimeout(() => {
         window.location.reload();
@@ -1011,7 +1010,7 @@ const EventDetailModal: React.FC<EventDetailModalProps> = ({
     } catch (err: any) {
       const errorMsg = err.message || err.toString();
       addLog(`❌ Error: ${errorMsg}`);
-      toast.error?.(`Failed to exclude: ${errorMsg}`);
+      toast.error?.(t("eventsUI.messages.excludeError"));
       console.error("Exclude error:", err);
     }
   };
@@ -1024,19 +1023,19 @@ const EventDetailModal: React.FC<EventDetailModalProps> = ({
 
     if (
       !(await confirmation.confirm(
-        `¿Eliminar a ${participantName}? Podrá volver a agregarse en la próxima actualización.`,
+        t("eventsUI.confirm.remove", { name: participantName }),
         { danger: true },
       ))
     ) {
       return;
     }
 
-    addLog(`🗑️ Deleting ${participantName}...`);
+    addLog(t("eventsUI.logs.removing", { name: participantName }));
 
     try {
       await eventsApi.deleteParticipant(event.id, participantId);
-      addLog(`✅ ${participantName} eliminado`);
-      toast.success?.(`${participantName} eliminado del evento`);
+      addLog(t("eventsUI.logs.removed", { name: participantName }));
+      toast.success?.(t("eventsUI.messages.removed", { name: participantName }));
 
       setTimeout(() => {
         window.location.reload();
@@ -1044,21 +1043,14 @@ const EventDetailModal: React.FC<EventDetailModalProps> = ({
     } catch (err: any) {
       const errorMsg = err.message || err.toString();
       addLog(`❌ Error: ${errorMsg}`);
-      toast.error?.(`Failed to delete: ${errorMsg}`);
+      toast.error?.(t("eventsUI.messages.removeError"));
       console.error("Delete error:", err);
     }
   };
 
   return (
-    <div
-      className="fixed inset-0 bg-surface-base/80 backdrop-blur-sm flex items-center justify-center z-modal p-4"
-      onClick={onClose}
-    >
-      <div
-        className="bg-surface-base border border-line rounded-lg w-full max-w-3xl max-h-[90vh] overflow-y-auto"
-        onClick={(e) => e.stopPropagation()}
-      >
-        <div className="p-6 border-b border-line flex justify-between items-start sticky top-0 bg-surface-base z-10">
+    <Dialog open onClose={onClose} label={event.title} className="ds-dialog-lg">
+        <DialogHeader className="flex justify-between items-start">
           <h2 className="text-2xl font-bold text-content-primary">
             {event.title}
           </h2>
@@ -1066,17 +1058,18 @@ const EventDetailModal: React.FC<EventDetailModalProps> = ({
             <button
               onClick={() => onDelete(event.id)}
               className="p-2 bg-danger/15 hover:bg-danger/20 text-danger border border-danger/50 rounded-md transition-colors"
+              aria-label={t("eventsUI.actions.delete")}
             >
               <Trash2 size={18} />
             </button>
           )}
-        </div>
+        </DialogHeader>
 
-        <div className="p-6 space-y-6">
+        <DialogBody className="space-y-6">
           {event.description && (
             <div>
               <h3 className="text-lg font-semibold text-content-primary mb-2">
-                Description
+                {t("eventsUI.fields.description")}
               </h3>
               <p className="text-content-secondary leading-relaxed">
                 {event.description}
@@ -1088,7 +1081,7 @@ const EventDetailModal: React.FC<EventDetailModalProps> = ({
             <div className="bg-surface-base/50 border border-line rounded-lg p-4">
               <h3 className="text-lg font-semibold text-primary mb-3 flex items-center gap-2">
                 <Trophy size={18} />
-                Rules
+                {t("eventsUI.fields.rules")}
               </h3>
               <p className="text-content-secondary whitespace-pre-line leading-relaxed font-mono text-sm">
                 {event.rules}
@@ -1098,26 +1091,26 @@ const EventDetailModal: React.FC<EventDetailModalProps> = ({
 
           <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
             <div>
-              <div className="text-sm text-content-secondary">Starts</div>
+              <div className="text-sm text-content-secondary">{t("eventsUI.fields.starts")}</div>
               <div className="text-content-primary font-medium">
                 {event.start_date
-                  ? new Date(event.start_date).toLocaleString()
-                  : "TBD"}
+                  ? formatDateTime(event.start_date, i18n.resolvedLanguage || i18n.language)
+                  : t("eventsUI.values.tbd")}
               </div>
             </div>
             {event.end_date && (
               <div>
-                <div className="text-sm text-content-secondary">Ends</div>
+                <div className="text-sm text-content-secondary">{t("eventsUI.fields.ends")}</div>
                 <div className="text-content-primary font-medium">
-                  {new Date(event.end_date).toLocaleString()}
+                  {formatDateTime(event.end_date, i18n.resolvedLanguage || i18n.language)}
                 </div>
               </div>
             )}
             {event.draw_date && (
               <div>
-                <div className="text-sm text-content-secondary">Draw</div>
+                <div className="text-sm text-content-secondary">{t("eventsUI.fields.draw")}</div>
                 <div className="text-content-primary font-medium">
-                  {new Date(event.draw_date).toLocaleString()}
+                  {formatDateTime(event.draw_date, i18n.resolvedLanguage || i18n.language)}
                 </div>
               </div>
             )}
@@ -1126,7 +1119,7 @@ const EventDetailModal: React.FC<EventDetailModalProps> = ({
           {event.reward && (
             <div className="bg-primary/20 border border-primary/30 rounded-lg p-4">
               <h3 className="text-lg font-semibold text-primary mb-3">
-                Reward
+                {t("eventsUI.fields.reward")}
               </h3>
               <div className="flex items-center gap-3">
                 <Gift size={24} className="text-primary" />
@@ -1142,14 +1135,13 @@ const EventDetailModal: React.FC<EventDetailModalProps> = ({
             <div className="bg-gradient-to-br from-accent/20 to-surface-base border border-accent/50 rounded-lg p-6 space-y-4">
               <h3 className="text-lg font-semibold text-accent mb-3 flex items-center gap-2">
                 <Users size={18} />
-                Admin Controls
+                {t("eventsUI.admin.title")}
               </h3>
 
               {/* Info Box for Public Events */}
               {isPublicEdit && (
                 <div className="p-3 bg-info/20 border border-info/30 rounded-md text-sm text-info">
-                  ℹ️ Public events should be drawn from the public page.
-                  Participants update automatically.
+                  {t("eventsUI.admin.publicHelp")}
                 </div>
               )}
 
@@ -1157,12 +1149,12 @@ const EventDetailModal: React.FC<EventDetailModalProps> = ({
               <div className="flex items-center justify-between p-3 bg-surface-base/50 rounded-md">
                 <div>
                   <div className="font-medium text-content-primary">
-                    Event Visibility
+                    {t("eventsUI.admin.visibility")}
                   </div>
                   <div className="text-xs text-content-secondary">
                     {isPublicEdit
-                      ? "🌐 Public - Anyone can view"
-                      : "🔒 Private - Members only"}
+                      ? t("eventsUI.visibility.publicHelp")
+                      : t("eventsUI.visibility.privateHelp")}
                   </div>
                 </div>
                 <button
@@ -1173,7 +1165,7 @@ const EventDetailModal: React.FC<EventDetailModalProps> = ({
                       : "bg-surface-raised hover:bg-surface-hover text-content-secondary"
                   }`}
                 >
-                  {isPublicEdit ? "Public" : "Private"}
+                  {t(isPublicEdit ? "eventsUI.visibility.public" : "eventsUI.visibility.private")}
                 </button>
               </div>
 
@@ -1182,14 +1174,14 @@ const EventDetailModal: React.FC<EventDetailModalProps> = ({
                 <div className="space-y-3">
                   <div className="p-3 bg-surface-base/50 rounded-md">
                     <div className="text-sm text-content-secondary mb-2">
-                      Mode:{" "}
+                      {t("eventsUI.admin.mode")}: {" "}
                       <span className="text-primary font-mono">
                         {event.participant_mode || "manual"}
                       </span>
                       {event.guild_name && (
                         <>
                           {" "}
-                          | Guild:{" "}
+                          | {t("eventsUI.admin.guild")}: {" "}
                           <span className="text-primary">
                             {event.guild_name}
                           </span>
@@ -1207,26 +1199,28 @@ const EventDetailModal: React.FC<EventDetailModalProps> = ({
                       {syncLoading ? (
                         <>
                           <Loader2 className="animate-spin" size={16} />
-                          Refreshing...
+                          {t("eventsUI.actions.refreshing")}
                         </>
                       ) : (
                         <>
                           <Users size={16} />
-                          Refresh Guild Participants
+                          {t("eventsUI.actions.refreshParticipants")}
                         </>
                       )}
                     </button>
 
                     {/* Manual Add */}
-                    <div className="flex gap-2">
-                      <input
+                    <div className="flex flex-wrap gap-2">
+                      <Input
                         type="text"
                         value={manualCharName}
                         onChange={(e) => setManualCharName(e.target.value)}
-                        placeholder="Character name..."
-                        className="flex-1 bg-surface-base border border-line rounded-md p-2 text-content-primary text-sm"
-                        onKeyPress={(e) =>
-                          e.key === "Enter" && handleAddManualParticipant()
+                        placeholder={t("eventsUI.placeholders.character")}
+                        className="min-w-0 flex-1 text-sm"
+                        aria-label={t("eventsUI.fields.character")}
+                        disabled={addingManual}
+                        onKeyDown={(e) =>
+                          e.key === "Enter" && void handleAddManualParticipant()
                         }
                       />
                       <button
@@ -1237,7 +1231,7 @@ const EventDetailModal: React.FC<EventDetailModalProps> = ({
                         {addingManual ? (
                           <Loader2 className="animate-spin" size={16} />
                         ) : (
-                          "Add"
+                          t("eventsUI.actions.add")
                         )}
                       </button>
                     </div>
@@ -1248,7 +1242,7 @@ const EventDetailModal: React.FC<EventDetailModalProps> = ({
                     onClick={() => setShowLog(!showLog)}
                     className="w-full px-4 py-2 bg-surface hover:bg-surface-raised text-content-secondary rounded-md text-sm font-medium transition-colors"
                   >
-                    {showLog ? "🔽 Hide Logs" : "🔼 Show Logs"}
+                    {showLog ? t("eventsUI.actions.hideLogs") : t("eventsUI.actions.showLogs")}
                   </button>
 
                   {/* Log Display */}
@@ -1256,7 +1250,7 @@ const EventDetailModal: React.FC<EventDetailModalProps> = ({
                     <div className="bg-surface-base border border-line rounded-md p-3 max-h-48 overflow-y-auto font-mono text-xs">
                       {syncLog.length === 0 ? (
                         <div className="text-content-muted">
-                          No logs yet. Perform an action to see logs.
+                          {t("eventsUI.admin.noLogs")}
                         </div>
                       ) : (
                         syncLog.map((log, i) => (
@@ -1272,14 +1266,15 @@ const EventDetailModal: React.FC<EventDetailModalProps> = ({
                   {isPublicEdit && event.uuid && (
                     <div className="p-3 bg-success/20 border border-success/30 rounded-md">
                       <div className="text-xs text-success mb-1">
-                        Public URL:
+                        {t("eventsUI.admin.publicUrl")}
                       </div>
                       <div className="flex gap-2">
-                        <input
+                        <Input
                           type="text"
                           value={publicUrl}
                           readOnly
-                          className="flex-1 bg-surface-base border border-success/50 rounded p-2 text-success text-xs font-mono"
+                          aria-label={t("eventsUI.admin.publicUrl")}
+                          className="min-w-0 flex-1 text-xs font-mono"
                         />
                         <button
                           onClick={() =>
@@ -1287,7 +1282,7 @@ const EventDetailModal: React.FC<EventDetailModalProps> = ({
                           }
                           className="px-3 py-2 bg-success hover:bg-success-hover text-content-on-primary rounded text-xs"
                         >
-                          Copy
+                          {t("eventsUI.actions.copy")}
                         </button>
                       </div>
                     </div>
@@ -1307,7 +1302,7 @@ const EventDetailModal: React.FC<EventDetailModalProps> = ({
                   onClick={() => onDrawWinner(event.id)}
                   disabled={isDrawing || event.participants.length === 0}
                 >
-                  {isDrawing ? "Drawing Winner..." : "Draw Winner"}
+                  {isDrawing ? t("eventsUI.actions.drawing") : t("eventsUI.actions.draw")}
                 </button>
 
                 {isDrawing && winnerNumber && (
@@ -1326,7 +1321,7 @@ const EventDetailModal: React.FC<EventDetailModalProps> = ({
                   <div className="mt-6 bg-gradient-to-br from-primary/30 to-primary/30 border border-primary/50 rounded-lg p-6 animate-pulse">
                     <Trophy size={40} className="mx-auto text-primary mb-3" />
                     <h3 className="text-2xl font-bold text-primary mb-2">
-                      🎉 Winner: {winnerName} 🎉
+                      🎉 {t("eventsUI.winner", { name: winnerName })} 🎉
                     </h3>
                     {winnerNumber && (
                       <p className="text-3xl font-bold text-primary">
@@ -1342,7 +1337,7 @@ const EventDetailModal: React.FC<EventDetailModalProps> = ({
             <div className="bg-gradient-to-br from-success/30 to-success/30 border border-success/50 rounded-lg p-6 text-center">
               <Trophy size={40} className="mx-auto text-success mb-3" />
               <h3 className="text-2xl font-bold text-success mb-2">
-                Winner: {event.winner_name}
+                {t("eventsUI.winner", { name: event.winner_name })}
               </h3>
               {event.winner_number && (
                 <p className="text-3xl font-bold text-success">
@@ -1354,7 +1349,7 @@ const EventDetailModal: React.FC<EventDetailModalProps> = ({
 
           <div>
             <h3 className="text-lg font-semibold text-content-primary mb-4">
-              Participants ({event.participant_count})
+              {t("eventsUI.participants", { count: event.participant_count })}
             </h3>
             <div className="bg-surface-base/50 border border-line rounded-lg p-4 max-h-64 overflow-y-auto">
               <div className="grid grid-cols-1 gap-3">
@@ -1379,11 +1374,11 @@ const EventDetailModal: React.FC<EventDetailModalProps> = ({
                           onClick={() =>
                             handleExcludeParticipant(
                               p.id,
-                              p.username || "Unknown participant",
+                              p.username || t("eventsUI.values.unknownParticipant"),
                             )
                           }
                           className="px-2 py-1 bg-danger/15 hover:bg-danger/20 text-danger rounded text-xs border border-danger/50 transition-colors"
-                          title="Excluir permanentemente (no volverá en actualizaciones automáticas)"
+                          title={t("eventsUI.actions.exclude")}
                         >
                           🚫
                         </button>
@@ -1391,11 +1386,11 @@ const EventDetailModal: React.FC<EventDetailModalProps> = ({
                           onClick={() =>
                             handleDeleteParticipant(
                               p.id,
-                              p.username || "Unknown participant",
+                              p.username || t("eventsUI.values.unknownParticipant"),
                             )
                           }
                           className="px-2 py-1 bg-surface hover:bg-surface-raised text-content-secondary rounded text-xs border border-line transition-colors"
-                          title="Eliminar (puede volver en próxima actualización)"
+                          title={t("eventsUI.actions.remove")}
                         >
                           🗑️
                         </button>
@@ -1406,18 +1401,17 @@ const EventDetailModal: React.FC<EventDetailModalProps> = ({
               </div>
             </div>
           </div>
-        </div>
+        </DialogBody>
 
-        <div className="p-6 border-t border-line sticky bottom-0 bg-surface-base">
+        <DialogFooter>
           <button
             onClick={onClose}
-            className="w-full px-4 py-3 bg-surface hover:bg-surface-raised text-content-primary rounded-md transition-colors font-medium"
+            className="app-button-secondary"
           >
-            Close
+            {t("common.close")}
           </button>
-        </div>
-      </div>
-    </div>
+        </DialogFooter>
+    </Dialog>
   );
 };
 

@@ -136,3 +136,25 @@ def test_scope_policy_and_legacy_compatibility(db):
     assert scope_from_legacy("guild_only", guild_name="One").scope_type is ScopeType.GUILD
     assert scope_from_legacy("world_only", world_name="Antica").scope_type is ScopeType.SERVER
     assert scope_from_legacy("public").scope_type is ScopeType.GLOBAL
+
+
+def test_guild_permissions_directory_and_roster(client, db):
+    from app.models.guild_management import GuildDirectory, GuildRosterCharacter
+    admin = make_user(db, username="perm-admin", is_superuser=True)
+    member = make_user(db, username="perm-member", guild_name="Bald Dwarfs")
+    db.add(GuildDirectory(guild_name="Bald Dwarfs", normalized_guild_name="bald dwarfs", world_name="Antica", normalized_world_name="antica", is_active=True))
+    db.add(GuildRosterCharacter(guild_name="Bald Dwarfs", normalized_guild_name="bald dwarfs", character_name="Roster Member One", normalized_character_name="roster member one", guild_rank="Member", level=100, vocation="Knight", is_current=True, world_name="Antica", normalized_world_name="antica"))
+    db.commit()
+
+    resp = client.get("/api/v1/guild-management/directory", headers=auth(admin))
+    assert resp.status_code == 200
+    assert len(resp.json()) > 0
+    assert resp.json()[0]["guild_name"] == "Bald Dwarfs"
+
+    resp_member = client.get("/api/v1/guild-management/directory", headers=auth(member))
+    assert resp_member.status_code == 403
+
+    resp_roster = client.get("/api/v1/guild-management/guilds/Bald Dwarfs/roster", headers=auth(admin))
+    assert resp_roster.status_code == 200
+    assert len(resp_roster.json()) > 0
+    assert resp_roster.json()[0]["character_name"] == "Roster Member One"

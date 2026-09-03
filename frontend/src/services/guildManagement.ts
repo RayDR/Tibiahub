@@ -59,23 +59,6 @@ export interface SystemSettings {
     cyclopedia_category_images: Record<string, string>;
 }
 
-export interface GuildSyncResult {
-    success: boolean;
-    guild_name: string;
-    total_members: number;
-    synced_users: number;
-    updated_characters: number;
-    new_characters: number;
-    invalid_users: Array<{
-        user_id: number;
-        username: string;
-        character_name: string;
-        reason: string;
-    }>;
-    unlinked_users: number;
-    message: string;
-}
-
 export type GuildManagementCapability =
     | 'raffles.manage'
     | 'events.manage'
@@ -154,11 +137,6 @@ export const guildManagementApi = {
         return response.data;
     },
 
-    getGuilds: async (): Promise<string[]> => {
-        const response = await api.get('/guild-management/guilds');
-        return response.data;
-    },
-
     // Get users with safe defaults (active, non-test accounts)
     getUsers: async (
         skip = 0,
@@ -186,25 +164,6 @@ export const guildManagementApi = {
     // Update user
     updateUser: async (userId: number, data: Partial<GuildMember>): Promise<GuildMember> => {
         const response = await api.put(`/guild-management/users/${userId}`, data);
-        return response.data;
-    },
-
-    // Delete user
-    deleteUser: async (userId: number): Promise<{ message: string }> => {
-        const response = await api.delete(`/guild-management/users/${userId}`);
-        return response.data;
-    },
-
-    // Update user character
-    updateUserCharacter: async (userId: number, characterName: string): Promise<{
-        success: boolean;
-        message: string;
-        character_name: string;
-        validation_passed: boolean;
-        validation_message?: string;
-        character_data: { level?: number; vocation?: string };
-    }> => {
-        const response = await api.put(`/guild-management/users/${userId}/character?character_name=${encodeURIComponent(characterName)}`);
         return response.data;
     },
 
@@ -241,16 +200,6 @@ export const guildManagementApi = {
             },
             timeout: ADMIN_ACTION_TIMEOUT_MS,
         });
-        return response.data;
-    },
-
-    // Sync guild with Tibia API
-    syncGuild: async (guildName = 'Ashclaw'): Promise<GuildSyncResult> => {
-        const response = await api.post(
-            `/guild-management/sync-guild?guild_name=${guildName}`,
-            undefined,
-            { timeout: ADMIN_ACTION_TIMEOUT_MS }
-        );
         return response.data;
     },
 };

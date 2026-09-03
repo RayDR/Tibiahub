@@ -6,7 +6,8 @@ from app.knowledge.dto.quest import (
     QuestAccessReference, QuestItemReference, QuestKnowledgeDTO, QuestMissionDTO, QuestNamedReference,
 )
 from app.knowledge.dto.npc_location import (
-    LocationKnowledgeDTO, NamedKnowledgeReference, NpcKnowledgeDTO, NpcTradeReference,
+    LocationKnowledgeDTO, NamedKnowledgeReference, NpcDestinationReference,
+    NpcKnowledgeDTO, NpcTradeReference,
 )
 from app.knowledge.dto.spatial import MapPointDTO, MapRegionDTO, RouteDTO, RouteStepDTO
 from app.knowledge.dto.hunt_zone import HuntVocationRecommendation, HuntZoneKnowledgeDTO
@@ -25,6 +26,7 @@ __all__ = [
     "LocationKnowledgeDTO",
     "NamedKnowledgeReference",
     "NpcKnowledgeDTO",
+    "NpcDestinationReference",
     "NpcTradeReference",
     "MapPointDTO",
     "MapRegionDTO",

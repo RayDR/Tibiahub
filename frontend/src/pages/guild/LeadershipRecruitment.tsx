@@ -3,7 +3,6 @@ import {
   useCallback,
   useEffect,
   useMemo,
-  useRef,
   useState,
 } from "react";
 import { Link } from "react-router-dom";
@@ -17,11 +16,12 @@ import {
   Vote,
 } from "lucide-react";
 import { useTranslation } from "react-i18next";
+import { formatDate, formatDateTime } from "../../utils/locale";
 import { useAuth } from "../../context/AuthContext";
 import {
   EmptyState,
   MobileSectionTabs,
-  WorkspaceHeader,
+  WorkspaceContentHeader,
 } from "../../components/workspace/WorkspacePrimitives";
 import {
   InlineError,
@@ -35,6 +35,18 @@ import {
   LeadershipSummary,
   leadershipApi,
 } from "../../services/leadership";
+import { useGuildContext } from "../../utils/guildContext";
+import {
+  Alert,
+  Dialog,
+  DialogBody,
+  DialogFooter,
+  DialogHeader,
+  FormField,
+  Input,
+  Select,
+  Textarea,
+} from "../../components/ui";
 
 const statuses = [
   "all",
@@ -55,6 +67,7 @@ export default function LeadershipRecruitment({
 }) {
   const { t } = useTranslation();
   const { user } = useAuth();
+  const selectedGuild = useGuildContext(user);
   const [summary, setSummary] = useState<LeadershipSummary | null>(null);
   const [openings, setOpenings] = useState<LeadershipOpening[]>([]);
   const [applications, setApplications] = useState<LeadershipApplication[]>([]);
@@ -75,8 +88,8 @@ export default function LeadershipRecruitment({
   const load = useCallback(async () => {
     setLoading(true);
     const summaryResult = await Promise.allSettled([
-      leadershipApi.summary(guildKey),
-      leadershipApi.openings(guildKey),
+      leadershipApi.summary({ guildKey, guildName: selectedGuild }),
+      leadershipApi.openings({ guildKey, guildName: selectedGuild }),
     ]);
     const nextSummary =
       summaryResult[0].status === "fulfilled" ? summaryResult[0].value : null;
@@ -84,10 +97,10 @@ export default function LeadershipRecruitment({
     if (summaryResult[1].status === "fulfilled")
       setOpenings(summaryResult[1].value);
     const apps = nextSummary?.capabilities.review
-      ? leadershipApi.applications(guildKey)
+      ? leadershipApi.applications({ guildKey, guildName: selectedGuild })
       : guildKey
         ? Promise.resolve([])
-        : leadershipApi.mine();
+        : leadershipApi.mine({ guildName: selectedGuild });
     const appResult = await Promise.allSettled([apps]);
     if (appResult[0].status === "fulfilled")
       setApplications(appResult[0].value);
@@ -97,7 +110,7 @@ export default function LeadershipRecruitment({
       applications: appResult[0].status === "rejected",
     });
     setLoading(false);
-  }, [guildKey]);
+  }, [guildKey, selectedGuild]);
   useEffect(() => {
     void load();
   }, [load]);
@@ -148,20 +161,21 @@ export default function LeadershipRecruitment({
       />
     );
   return (
-    <div className="space-y-5">
+    <div className="workspace-page">
       <LeadershipBreadcrumbs
         adminBase={
           guildKey ? `/admin/guilds/${encodeURIComponent(guildKey)}` : undefined
         }
       />
-      <WorkspaceHeader
+      <WorkspaceContentHeader
         title={t("leadership.recruitment.title")}
-        subtitle={guildName || summary?.guild_name}
+        description={guildName || selectedGuild || summary?.guild_name}
+        icon={<Users />}
         action={
           summary?.capabilities.manage ? (
             <button
               onClick={() => setShowOpening((value) => !value)}
-              className="inline-flex min-h-11 items-center justify-center gap-2 rounded-lg bg-primary px-4 font-semibold text-content-inverse"
+              className="app-button-primary inline-flex min-h-11 items-center justify-center gap-2 rounded-lg px-4 font-semibold"
             >
               <Plus className="h-4 w-4" />
               {t("leadership.openings.create")}
@@ -172,6 +186,8 @@ export default function LeadershipRecruitment({
       {showOpening && (
         <OpeningForm
           guildKey={guildKey}
+          guildName={selectedGuild}
+          onCancel={() => setShowOpening(false)}
           onDone={() => {
             setShowOpening(false);
             void load();
@@ -207,7 +223,7 @@ export default function LeadershipRecruitment({
           canManage={Boolean(summary?.capabilities.manage)}
           onApply={setApplying}
           onAction={async (id, action) => {
-            await leadershipApi.openingAction(id, action, guildKey);
+            await leadershipApi.openingAction(id, action, { guildKey, guildName: selectedGuild });
             await load();
           }}
         />
@@ -238,21 +254,21 @@ export default function LeadershipRecruitment({
                   aria-hidden
                   className="absolute left-3 top-3.5 h-4 w-4 text-content-muted"
                 />
-                <input
+                <Input
                   value={search}
                   onChange={(event) => setSearch(event.target.value)}
                   placeholder={t("leadership.pipeline.search")}
-                  className="min-h-11 w-full rounded-lg bg-surface-base pl-9 pr-3"
+                  className="pl-9"
+                  aria-label={t("leadership.pipeline.search")}
                 />
               </label>
               <label className="flex items-center gap-2 text-sm">
                 <span>{t("leadership.pipeline.sort")}</span>
-                <select
+                <Select
                   value={sort}
                   onChange={(event) =>
                     setSort(event.target.value as "newest" | "oldest")
                   }
-                  className="min-h-11 rounded-lg bg-surface-base px-3"
                 >
                   <option value="newest">
                     {t("leadership.pipeline.newest")}
@@ -260,7 +276,7 @@ export default function LeadershipRecruitment({
                   <option value="oldest">
                     {t("leadership.pipeline.oldest")}
                   </option>
-                </select>
+                </Select>
               </label>
             </div>
             <MobileSectionTabs
@@ -296,6 +312,7 @@ export default function LeadershipRecruitment({
         <ApplicationForm
           opening={applying}
           character={user?.tibia_character_name || ""}
+          guildName={selectedGuild}
           onCancel={() => setApplying(null)}
           onDone={() => {
             setApplying(null);
@@ -314,7 +331,7 @@ function CandidateCard({
   item: LeadershipApplication;
   to: string;
 }) {
-  const { t } = useTranslation();
+  const { t, i18n } = useTranslation();
   const profile = item.profile || {};
   const next = item.valid_actions?.[0];
   return (
@@ -335,7 +352,7 @@ function CandidateCard({
         </p>
         <p className="mt-1 text-xs text-content-muted">
           {t("leadership.pipeline.submitted", {
-            date: new Date(item.submitted_at).toLocaleDateString(),
+            date: formatDate(item.submitted_at, i18n.resolvedLanguage || i18n.language),
           })}
         </p>
         <div className="mt-3 flex flex-wrap gap-2 text-xs">
@@ -384,7 +401,7 @@ function OpeningList({
     action: "open" | "pause" | "close" | "archive",
   ) => Promise<void>;
 }) {
-  const { t } = useTranslation();
+  const { t, i18n } = useTranslation();
   const [busy, setBusy] = useState<number | null>(null);
   const items = canManage
     ? openings
@@ -470,7 +487,7 @@ function OpeningList({
             <span>
               {item.application_deadline
                 ? t("leadership.openings.deadline", {
-                    date: new Date(item.application_deadline).toLocaleString(),
+                    date: formatDateTime(item.application_deadline, i18n.resolvedLanguage || i18n.language),
                   })
                 : t("leadership.openings.noDeadline")}
             </span>
@@ -540,9 +557,13 @@ function OpeningList({
 
 function OpeningForm({
   guildKey,
+  guildName,
+  onCancel,
   onDone,
 }: {
   guildKey?: string;
+  guildName?: string;
+  onCancel: () => void;
   onDone: () => void;
 }) {
   const { t } = useTranslation();
@@ -567,7 +588,7 @@ function OpeningForm({
           votes_required: 1,
           target_count: 4,
         },
-        guildKey,
+        { guildKey, guildName },
       );
       onDone();
     } catch {
@@ -576,27 +597,25 @@ function OpeningForm({
     }
   };
   return (
-    <form
-      onSubmit={submit}
-      className="grid gap-3 rounded-xl border border-primary/20 p-4"
-    >
-      <h2 className="font-semibold">{t("leadership.openings.create")}</h2>
+    <Dialog open onClose={() => { if (!busy) onCancel(); }} label={t("leadership.openings.create")} className="ds-dialog-lg">
+    <form onSubmit={submit} className="contents">
+      <DialogHeader>
+        <h2 className="font-semibold">{t("leadership.openings.create")}</h2>
+      </DialogHeader>
+      <DialogBody className="space-y-3">
       {(
         ["title", "description", "responsibilities", "requirements"] as const
       ).map((key) => (
-        <label key={key} className="grid gap-1 text-sm">
-          <span>
-            {t(`leadership.openings.${key === "title" ? "titleField" : key}`)}
-          </span>
+        <FormField key={key} label={t(`leadership.openings.${key === "title" ? "titleField" : key}`)} required={key !== "description"}>
           {key === "title" ? (
-            <input
+            <Input
               name="title"
               required
               minLength={3}
-              className="min-h-11 rounded-lg bg-surface-base px-3"
+              disabled={busy}
             />
           ) : (
-            <textarea
+            <Textarea
               name={key}
               required={key !== "description"}
               minLength={key === "description" ? undefined : 10}
@@ -607,58 +626,65 @@ function OpeningForm({
                     )
                   : undefined
               }
-              className="min-h-28 rounded-lg bg-surface-base p-3"
+              className="min-h-28"
+              disabled={busy}
             />
           )}
-        </label>
+        </FormField>
       ))}
-      <label className="grid gap-1 text-sm">
-        <span>{t("leadership.openings.count")}</span>
-        <input
+      <FormField label={t("leadership.openings.count")}>
+        <Input
           name="count"
           type="number"
           min={1}
           max={20}
           defaultValue={1}
-          className="min-h-11 rounded-lg bg-surface-base px-3"
+          disabled={busy}
         />
-      </label>
+      </FormField>
       <label className="flex min-h-11 items-center gap-3">
-        <input name="review" type="checkbox" defaultChecked />
+        <input name="review" type="checkbox" defaultChecked disabled={busy} />
         {t("leadership.openings.allowReview")}
       </label>
       <label className="flex min-h-11 items-center gap-3">
-        <input name="voting" type="checkbox" />
+        <input name="voting" type="checkbox" disabled={busy} />
         {t("leadership.openings.enableVoting")}
       </label>
       {error && (
-        <p role="alert" className="text-sm text-danger">
-          {t("leadership.errors.action")}
-        </p>
+        <Alert tone="danger">{t("leadership.errors.action")}</Alert>
       )}
+      </DialogBody>
+      <DialogFooter>
+      <button type="button" onClick={onCancel} disabled={busy} className="app-button-secondary">
+        {t("leadership.actions.cancel")}
+      </button>
       <button
+        type="submit"
         disabled={busy}
-        className="min-h-11 rounded-lg bg-primary font-semibold text-content-inverse"
+        className="app-button-primary"
       >
         {busy ? t("leadership.actions.saving") : t("leadership.actions.save")}
       </button>
+      </DialogFooter>
     </form>
+    </Dialog>
   );
 }
 
 function ApplicationForm({
   opening,
   character,
+  guildName,
   onCancel,
   onDone,
 }: {
   opening: LeadershipOpening;
   character: string;
+  guildName?: string;
   onCancel: () => void;
   onDone: () => void;
 }) {
   const { t } = useTranslation();
-  const first = useRef<HTMLTextAreaElement>(null);
   const [answers, setAnswers] = useState({
     why_apply: "",
     contribution: "",
@@ -670,7 +696,6 @@ function ApplicationForm({
   const [error, setError] = useState("");
   const dirty = Object.values(answers).some(Boolean) || conduct;
   useEffect(() => {
-    first.current?.focus();
     const handler = (event: BeforeUnloadEvent) => {
       if (dirty) {
         event.preventDefault();
@@ -686,11 +711,15 @@ function ApplicationForm({
     setBusy(true);
     setError("");
     try {
-      await leadershipApi.apply(opening.id, {
-        character_name: character,
-        ...answers,
-        conduct_agreed: conduct,
-      });
+      await leadershipApi.apply(
+        opening.id,
+        {
+          character_name: character,
+          ...answers,
+          conduct_agreed: conduct,
+        },
+        { guildName },
+      );
       onDone();
     } catch {
       setError(t("leadership.errors.submit"));
@@ -698,20 +727,17 @@ function ApplicationForm({
     }
   };
   return (
-    <div
-      role="presentation"
-      className="fixed inset-0 z-modal flex items-end bg-surface-base/70 sm:items-center sm:justify-center"
-    >
+    <Dialog open onClose={() => { if (!busy) onCancel(); }} label={t("leadership.applications.formTitle")} className="ds-dialog-lg">
       <form
-        role="dialog"
-        aria-modal="true"
-        aria-labelledby="application-title"
         onSubmit={submit}
-        className="max-h-[92dvh] w-full overflow-y-auto rounded-t-2xl bg-surface-base p-4 pb-[max(1rem,env(safe-area-inset-bottom))] sm:max-w-2xl sm:rounded-2xl"
+        className="contents"
       >
-        <h2 id="application-title" className="text-lg font-semibold">
+        <DialogHeader>
+        <h2 className="text-lg font-semibold">
           {t("leadership.applications.formTitle")}
         </h2>
+        </DialogHeader>
+        <DialogBody>
         <section className="mt-3 rounded-lg bg-surface-base p-3 text-sm">
           <h3 className="font-semibold">
             {t("leadership.applications.automaticProfile")}
@@ -734,14 +760,15 @@ function ApplicationForm({
               "availability",
               "leadership_experience",
             ] as const
-          ).map((key, index) => (
-            <label key={key} className="mt-4 block text-sm">
-              <span>{t(`leadership.questions.${key}`)}</span>
-              <span className="mt-1 block text-xs text-content-muted">
-                {t(`leadership.helpers.${key}`)}
-              </span>
-              <textarea
-                ref={index === 0 ? first : undefined}
+          ).map((key) => (
+            <FormField
+              key={key}
+              className="mt-4"
+              label={t(`leadership.questions.${key}`)}
+              helpText={`${t(`leadership.helpers.${key}`)} · ${t("leadership.applications.characterCount", { count: answers[key].length, max: 2000 })}`}
+              required
+            >
+              <Textarea
                 value={answers[key]}
                 onChange={(event) =>
                   setAnswers((value) => ({
@@ -756,16 +783,10 @@ function ApplicationForm({
                 }
                 maxLength={2000}
                 required
-                aria-describedby={`${key}-count`}
-                className="mt-2 min-h-28 w-full resize-y rounded-lg bg-surface-base p-3"
+                disabled={busy}
+                className="min-h-28 resize-y"
               />
-              <span id={`${key}-count`} className="text-xs text-content-muted">
-                {t("leadership.applications.characterCount", {
-                  count: answers[key].length,
-                  max: 2000,
-                })}
-              </span>
-            </label>
+            </FormField>
           ))}
         </section>
         <label className="mt-4 flex items-start gap-3 rounded-lg border border-line p-3 text-sm">
@@ -774,34 +795,37 @@ function ApplicationForm({
             checked={conduct}
             onChange={(event) => setConduct(event.target.checked)}
             required
+            disabled={busy}
             className="mt-1"
           />
           <span>{t("leadership.conduct.text")}</span>
         </label>
         {error && (
-          <p role="alert" className="mt-3 text-sm text-danger">
+          <Alert tone="danger" className="mt-3">
             <AlertCircle className="mr-1 inline h-4 w-4" />
             {error}
-          </p>
+          </Alert>
         )}
-        <div className="sticky bottom-0 mt-4 flex gap-2 bg-surface-base py-2 pb-[env(safe-area-inset-bottom)]">
+        </DialogBody>
+        <DialogFooter>
           <button
             type="button"
             onClick={onCancel}
-            className="min-h-11 flex-1 rounded-lg border border-line"
+            disabled={busy}
+            className="app-button-secondary"
           >
             {t("leadership.actions.cancel")}
           </button>
           <button
             disabled={busy}
-            className="min-h-11 flex-1 rounded-lg bg-primary font-semibold text-content-inverse"
+            className="app-button-primary"
           >
             {busy
               ? t("leadership.actions.submitting")
               : t("leadership.actions.submit")}
           </button>
-        </div>
+        </DialogFooter>
       </form>
-    </div>
+    </Dialog>
   );
 }

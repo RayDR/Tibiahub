@@ -16,14 +16,17 @@ class HuntZone(Base):
     )
     
     id = Column(Integer, primary_key=True, index=True)
-    name = Column(String(100), unique=True, nullable=False, index=True)
-    slug = Column(String(150), nullable=True, index=True)
-    normalized_name = Column(String(150), index=True)
+    # Provider-backed and legacy free-text rows may legitimately share a
+    # display name. Canonical identity is the Knowledge UUID; provider bridge
+    # identity is constrained separately by (source_provider, external_id).
+    name = Column(String(255), nullable=False, index=True)
+    slug = Column(String(255), nullable=True, index=True)
+    normalized_name = Column(String(255), index=True)
     city = Column(String(100))  # Nearest city
-    region = Column(String(100), nullable=True)
+    region = Column(Text, nullable=True)
     source_provider = Column(String(50), nullable=True, index=True)
     source_name = Column(String(50), nullable=True, index=True)
-    source_url = Column(String(255), nullable=True)
+    source_url = Column(String(1024), nullable=True)
     external_id = Column(String(100), nullable=True, index=True)
     knowledge_entity_id = Column(
         Uuid(as_uuid=True),
@@ -79,7 +82,7 @@ class HuntZone(Base):
     map_y = Column(Integer, nullable=True)
     map_z = Column(Integer, nullable=True)
     map_bounds = Column(JSONBType, nullable=True)
-    map_image_url = Column(String(255))
+    map_image_url = Column(String(1024))
     map_asset_id = Column(Integer, ForeignKey("media_assets.id"), nullable=True)
     raw_data = Column(JSONBType, nullable=True)
     last_synced_at = Column(DateTime(timezone=True), nullable=True)

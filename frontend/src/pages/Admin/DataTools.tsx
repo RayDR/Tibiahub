@@ -1,21 +1,21 @@
 /**
- * DataTools – consolidated page for API Monitor, Database Sync, and Admin Sync.
- * Replaces three separate admin pages with a single tabbed interface.
+ * DataTools – consolidated page for API Monitor, durable Full Sync, and Knowledge.
  */
 import { useEffect, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import axios from 'axios';
-import { useToast } from '../../context/ToastContext';
 import {
-    CheckCircle, XCircle, AlertCircle, Loader2,
+    CheckCircle, XCircle, AlertCircle,
     RefreshCw, Database, Globe, BookOpen, Code,
-    GitBranch, Download, Eye,
     Workflow,
 } from 'lucide-react';
 import KnowledgeOperations from './KnowledgeOperations';
 import FullSyncDashboard from './FullSyncDashboard';
+import { WorkspaceContentHeader } from '../../components/workspace/WorkspacePrimitives';
+import { DegradedState, ErrorState, LoadingState } from '../../components/ui';
+import { formatNumber, formatTime } from '../../utils/locale';
 
-type Tab = 'api-monitor' | 'db-sync' | 'admin-sync' | 'knowledge';
+type Tab = 'api-monitor' | 'admin-sync' | 'knowledge';
 
 // ── API Monitor types ──────────────────────────────────────────────────────────
 interface APIStatus {
@@ -35,29 +35,6 @@ interface APIMonitorResponse {
     apis: APIStatus[];
 }
 
-// ── DB Sync types ──────────────────────────────────────────────────────────────
-interface SyncChange {
-    timestamp: string;
-    change_type: string;
-    source_api: string;
-    entity: string;
-    entity_id: number;
-    action: string;
-    old_data?: any;
-    new_data?: any;
-    status: string;
-    approval_required: boolean;
-}
-interface SyncPreview {
-    status: string;
-    message: string;
-    backup_created: boolean;
-    total_changes: number;
-    pending_approvals: number;
-    changes: SyncChange[];
-    action_required: boolean;
-}
-
 const API_BASE = import.meta.env.VITE_API_URL || '/api/v1';
 
 function authHeader() {
@@ -73,38 +50,43 @@ function getStatusIcon(status: string) {
 
 // ── API Monitor tab ────────────────────────────────────────────────────────────
 function APIMonitorTab() {
+    const { t, i18n } = useTranslation();
     const [loading, setLoading] = useState(true);
     const [data, setData] = useState<APIMonitorResponse | null>(null);
+    const [error, setError] = useState(false);
     const [expandedAPI, setExpandedAPI] = useState<string | null>(null);
 
     const load = async () => {
         setLoading(true);
+        setError(false);
         try {
             const response = await axios.get<APIMonitorResponse>(
                 `${API_BASE}/guild-management/api-monitor`,
                 { headers: authHeader() }
             );
             setData(response.data);
-        } catch { /* ignore */ }
+        } catch { setError(true); }
         finally { setLoading(false); }
     };
 
     useEffect(() => { void load(); }, []);
 
-    if (loading) return <div className="flex items-center justify-center py-16"><Loader2 className="w-6 h-6 animate-spin text-primary" /></div>;
+    if (loading && !data) return <LoadingState title={t('adminDataTools.monitor.loading')} />;
+    if (error && !data) return <ErrorState title={t('adminDataTools.monitor.error')} description={t('adminDataTools.monitor.errorHelp')} action={<button type="button" onClick={() => void load()} className="app-button-secondary">{t('common.retry')}</button>} />;
 
     return (
         <div className="space-y-4">
+            {error ? <DegradedState title={t('adminDataTools.monitor.degraded')} description={t('adminDataTools.monitor.degradedHelp')} action={<button type="button" onClick={() => void load()} className="app-button-secondary app-button-sm">{t('common.retry')}</button>} /> : null}
             <div className="flex items-center justify-between">
                 {data && (
                     <div className="flex gap-4 text-sm text-content-secondary">
-                        <span><span className="text-content-primary font-medium">{data.total_apis}</span> APIs</span>
-                        <span><span className="text-success font-medium">{data.online_count}</span> online</span>
-                        <span>checked {new Date(data.timestamp).toLocaleTimeString()}</span>
+                        <span>{t('adminDataTools.monitor.apiCount', { value: formatNumber(data.total_apis, i18n.resolvedLanguage || i18n.language) })}</span>
+                        <span>{t('adminDataTools.monitor.onlineCount', { value: formatNumber(data.online_count, i18n.resolvedLanguage || i18n.language) })}</span>
+                        <span>{t('adminDataTools.monitor.checked', { time: formatTime(data.timestamp, i18n.resolvedLanguage || i18n.language) })}</span>
                     </div>
                 )}
                 <button onClick={load} className="flex items-center gap-1 rounded border border-line px-3 py-1.5 text-sm text-content-secondary hover:text-content-primary">
-                    <RefreshCw className="w-3.5 h-3.5" /> Refresh
+                    <RefreshCw className="w-3.5 h-3.5" /> {t('common.refresh')}
                 </button>
             </div>
             <div className="space-y-3">
@@ -130,7 +112,7 @@ function APIMonitorTab() {
                         {api.full_response && (
                             <div className="mt-2">
                                 <button onClick={() => setExpandedAPI(expandedAPI === api.name ? null : api.name)} className="text-xs text-primary hover:text-primary flex items-center gap-1">
-                                    <Code className="w-3.5 h-3.5" /> {expandedAPI === api.name ? 'Hide' : 'Show'} full response
+                                    <Code className="w-3.5 h-3.5" /> {expandedAPI === api.name ? t('adminDataTools.monitor.hideResponse') : t('adminDataTools.monitor.showResponse')}
                                 </button>
                                 {expandedAPI === api.name && (
                                     <pre className="mt-2 text-xs text-success bg-surface-base rounded p-3 overflow-x-auto max-h-64 overflow-y-auto">
@@ -146,122 +128,6 @@ function APIMonitorTab() {
     );
 }
 
-// ── Database Sync tab ──────────────────────────────────────────────────────────
-function DBSyncTab() {
-    const toast = useToast();
-    const [loading, setLoading] = useState(false);
-    const [preview, setPreview] = useState<SyncPreview | null>(null);
-    const [selectedChanges, setSelectedChanges] = useState<number[]>([]);
-
-    const handlePreview = async () => {
-        setLoading(true);
-        try {
-            const response = await axios.post<SyncPreview>(`${API_BASE}/sync/preview`, {}, { headers: authHeader() });
-            setPreview(response.data);
-            setSelectedChanges([]);
-            toast.success('Preview loaded');
-        } catch {
-            toast.error('Failed to preview changes');
-        } finally {
-            setLoading(false);
-        }
-    };
-
-    const handleApprove = async (approveAll: boolean) => {
-        setLoading(true);
-        try {
-            await axios.post(`${API_BASE}/sync/approve`, {}, {
-                params: { approve_all: approveAll, change_indices: approveAll ? undefined : selectedChanges },
-                headers: authHeader(),
-            });
-            toast.success('Changes approved and applied');
-            setPreview(null);
-            setSelectedChanges([]);
-        } catch {
-            toast.error('Failed to apply changes');
-        } finally {
-            setLoading(false);
-        }
-    };
-
-    return (
-        <div className="space-y-4">
-            <div className="flex items-center gap-3">
-                <button
-                    onClick={handlePreview}
-                    disabled={loading}
-                    className="flex items-center gap-2 rounded-md bg-info px-4 py-2 text-sm font-medium text-content-on-primary hover:bg-info-hover disabled:opacity-50"
-                >
-                    {loading ? <Loader2 className="w-4 h-4 animate-spin" /> : <Eye className="w-4 h-4" />}
-                    Preview Changes
-                </button>
-                {preview && preview.changes.length > 0 && (
-                    <>
-                        <button
-                            onClick={() => void handleApprove(false)}
-                            disabled={loading || selectedChanges.length === 0}
-                            className="flex items-center gap-2 rounded-md bg-primary px-4 py-2 text-sm font-medium text-content-on-primary hover:bg-primary-hover disabled:opacity-50"
-                        >
-                            <Download className="w-4 h-4" /> Apply Selected ({selectedChanges.length})
-                        </button>
-                        <button
-                            onClick={() => void handleApprove(true)}
-                            disabled={loading}
-                            className="flex items-center gap-2 rounded-md bg-success px-4 py-2 text-sm font-medium text-content-on-primary hover:bg-success-hover disabled:opacity-50"
-                        >
-                            <CheckCircle className="w-4 h-4" /> Apply All
-                        </button>
-                    </>
-                )}
-            </div>
-
-            {preview && (
-                <div className="space-y-3">
-                    <div className="flex gap-4 text-sm text-content-secondary">
-                        <span><span className="text-content-primary font-medium">{preview.total_changes}</span> changes</span>
-                        <span><span className="text-primary font-medium">{preview.pending_approvals}</span> need approval</span>
-                        {preview.backup_created && <span className="text-success">✓ Backup created</span>}
-                    </div>
-                    {preview.changes.length === 0 ? (
-                        <div className="text-center py-8 text-content-muted bg-surface-base/50 rounded-lg border border-line">No pending changes.</div>
-                    ) : (
-                        <div className="bg-surface-base/50 border border-line rounded-lg overflow-hidden">
-                            <div className="overflow-x-auto">
-                                <table className="w-full">
-                                    <thead className="bg-surface-base/50">
-                                        <tr>
-                                            <th className="p-3 text-left"><input type="checkbox" onChange={(e) => setSelectedChanges(e.target.checked ? preview.changes.map((_, i) => i) : [])} checked={selectedChanges.length === preview.changes.length} /></th>
-                                            <th className="p-3 text-left text-xs uppercase text-content-secondary">Entity</th>
-                                            <th className="p-3 text-left text-xs uppercase text-content-secondary">Action</th>
-                                            <th className="p-3 text-left text-xs uppercase text-content-secondary">Source</th>
-                                            <th className="p-3 text-left text-xs uppercase text-content-secondary">Status</th>
-                                        </tr>
-                                    </thead>
-                                    <tbody>
-                                        {preview.changes.map((change, i) => (
-                                            <tr key={i} className="border-t border-line">
-                                                <td className="p-3"><input type="checkbox" checked={selectedChanges.includes(i)} onChange={() => setSelectedChanges((prev) => prev.includes(i) ? prev.filter((x) => x !== i) : [...prev, i])} /></td>
-                                                <td className="p-3 text-sm text-content-primary">{change.entity}</td>
-                                                <td className="p-3 text-sm text-content-secondary">{change.action}</td>
-                                                <td className="p-3 text-xs text-content-secondary">{change.source_api}</td>
-                                                <td className="p-3 text-xs">
-                                                    <span className={`px-2 py-1 rounded ${change.approval_required ? 'bg-primary/15 text-primary' : 'bg-surface text-content-secondary'}`}>
-                                                        {change.status}
-                                                    </span>
-                                                </td>
-                                            </tr>
-                                        ))}
-                                    </tbody>
-                                </table>
-                            </div>
-                        </div>
-                    )}
-                </div>
-            )}
-        </div>
-    );
-}
-
 function AdminSyncTab() {
     return <FullSyncDashboard />;
 }
@@ -272,21 +138,18 @@ export default function DataTools({ initialTab = 'api-monitor' }: { initialTab?:
     const [activeTab, setActiveTab] = useState<Tab>(initialTab);
 
     const tabs: { id: Tab; label: string; icon: any; description: string }[] = [
-        { id: 'api-monitor', label: 'API Monitor', icon: Globe, description: 'External API health checks' },
-        { id: 'db-sync', label: 'Database Sync', icon: GitBranch, description: 'Preview and apply DB changes' },
-        { id: 'admin-sync', label: 'Data Sync', icon: RefreshCw, description: 'Trigger bestiary syncs' },
+        { id: 'api-monitor', label: t('adminDataTools.tabs.monitor'), icon: Globe, description: t('adminDataTools.tabs.monitorHelp') },
+        { id: 'admin-sync', label: t('adminDataTools.tabs.sync'), icon: RefreshCw, description: t('adminDataTools.tabs.syncHelp') },
         { id: 'knowledge', label: t('knowledgeOps.navigation'), icon: Workflow, description: t('knowledgeOps.subtitle') },
     ];
 
     return (
-        <div className="space-y-4">
-            <div className="bg-surface-base/50 border border-line rounded-lg p-4">
-                <div className="flex items-center gap-3 mb-1">
-                    <Database className="w-5 h-5 text-primary" />
-                    <h1 className="text-xl font-semibold text-content-primary">Data Tools</h1>
-                </div>
-                <p className="text-sm text-content-secondary">API monitoring, database sync previews, and bestiary data updates — all in one place.</p>
-            </div>
+        <div className="workspace-page">
+            <WorkspaceContentHeader
+                title={t('adminDataTools.title')}
+                description={t('adminDataTools.subtitle')}
+                icon={<Database />}
+            />
 
             {/* Tabs */}
             <div className="flex gap-1 border-b border-line">
@@ -309,7 +172,6 @@ export default function DataTools({ initialTab = 'api-monitor' }: { initialTab?:
             {/* Tab content */}
             <div>
                 {activeTab === 'api-monitor' && <APIMonitorTab />}
-                {activeTab === 'db-sync' && <DBSyncTab />}
                 {activeTab === 'admin-sync' && <AdminSyncTab />}
                 {activeTab === 'knowledge' && <KnowledgeOperations />}
             </div>

@@ -21,33 +21,35 @@ from app.models import Creature, HuntZone
 from app.models.external_data import Item, TibiaWikiQuest
 from app.services.text_utils import normalize_search_text
 from app.services.map_presentation_service import zone_spatial_presentations
+from app.services.hunt_zone_projection_service import public_zone_fields
 
 router = APIRouter()
 
 
 def _zone_payload(rec, engine=None, player_level=None, spatial=None):
     zone = rec['zone']
-    location_x = zone.location_x if zone.location_x is not None else zone.map_x
-    location_y = zone.location_y if zone.location_y is not None else zone.map_y
+    public = public_zone_fields(zone)
+    location_x = public["location_x"] if public["location_x"] is not None else public["map_x"]
+    location_y = public["location_y"] if public["location_y"] is not None else public["map_y"]
     profile = engine.recommendation_profile(zone, player_level) if engine and player_level is not None else {}
     return {
         "zone_id": zone.id, "zone_name": zone.name, "zone_slug": zone.slug,
         "score": round(rec['score'], 2), "reasons": rec['reasons'],
         "is_preselected": bool(rec.get("is_preselected")),
-        "avg_exp_hour": zone.avg_exp_hour, "avg_profit_hour": zone.avg_profit_hour,
-        "rate_basis": "stored_local_average" if zone.avg_exp_hour or zone.avg_profit_hour else None,
-        "min_level": zone.min_level, "max_level": zone.max_level, "difficulty": zone.difficulty,
-        "requires_premium": zone.requires_premium, "requires_quest": zone.requires_quest,
-        "quest_name": zone.quest_name, "city": zone.city, "region": zone.region, "size": zone.size,
+        "avg_exp_hour": public["avg_exp_hour"], "avg_profit_hour": public["avg_profit_hour"],
+        "rate_basis": "stored_local_average" if public["avg_exp_hour"] or public["avg_profit_hour"] else None,
+        "min_level": public["min_level"], "max_level": public["max_level"], "difficulty": public["difficulty"],
+        "requires_premium": public["requires_premium"], "requires_quest": public["requires_quest"],
+        "quest_name": zone.quest_name, "city": public["city"], "region": public["region"], "size": public["size"],
         "recommended_party_size": zone.recommended_party_size,
-        "suggested_level": profile.get("suggested_level") or zone.recommended_level,
-        "effective_min_level": profile.get("minimum_level") or zone.min_level,
+        "suggested_level": profile.get("suggested_level") or public["recommended_level"],
+        "effective_min_level": profile.get("minimum_level") or public["min_level"],
         "level_fit": profile.get("level_fit"), "danger": profile.get("danger"),
         "raw_creature_exp": profile.get("raw_experience"),
         "profile_basis": profile.get("profile_basis"),
         "map_image_url": None,
-        "map_bounds": zone.map_bounds, "location_x": location_x,
-        "location_y": location_y, "location_z": zone.location_z if zone.location_z is not None else zone.map_z,
+        "map_bounds": public["map_bounds"], "location_x": location_x,
+        "location_y": location_y, "location_z": public["location_z"] if public["location_z"] is not None else public["map_z"],
         "spatial": spatial,
         "creatures": [{
             "id": spawn.creature.id, "name": spawn.creature.name, "slug": spawn.creature.slug,

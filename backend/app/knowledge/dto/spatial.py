@@ -97,6 +97,24 @@ class MapRegionDTO:
             if self.maximum_z is not None and self.maximum_z != max(geometry_floors):
                 raise ValueError("maximum_z must match the trusted geometry")
 
+    @property
+    def geometry_bounds(self) -> tuple[int, int, int, int, int, int] | None:
+        """Return trusted XYZ bounds without requiring a PostGIS round trip."""
+        if self.geometry is None:
+            return None
+        positions = [
+            tuple(int(value) for value in position)
+            for position in _positions(self.geometry.get("coordinates"))
+        ]
+        return (
+            min(position[0] for position in positions),
+            min(position[1] for position in positions),
+            min(position[2] for position in positions),
+            max(position[0] for position in positions),
+            max(position[1] for position in positions),
+            max(position[2] for position in positions),
+        )
+
 
 @dataclass(frozen=True, slots=True)
 class RouteStepDTO:

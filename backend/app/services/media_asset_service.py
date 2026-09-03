@@ -231,11 +231,27 @@ def build_loot_source_url(loot) -> Optional[str]:
     )
 
 def build_zone_asset_key(zone) -> str:
+    provider = (getattr(zone, "source_provider", None) or "").strip()
+    external_id = (getattr(zone, "external_id", None) or "").strip()
+    if provider and external_id:
+        return f"zone:{_normalize_key_part(provider)}:{_normalize_key_part(external_id)}"
     return f"zone:{_normalize_key_part(zone.name)}"
 
 
 def build_zone_source_url(zone) -> Optional[str]:
     return (getattr(zone, "map_image_url", None) or None)
+
+
+def build_npc_asset_key(npc) -> str:
+    provider = (getattr(npc, "source_name", None) or "").strip()
+    external_id = (getattr(npc, "external_id", None) or "").strip()
+    if provider and external_id:
+        return f"npc:{_normalize_key_part(provider)}:{_normalize_key_part(external_id)}"
+    return f"npc:{_normalize_key_part(npc.name)}"
+
+
+def build_npc_source_url(npc) -> Optional[str]:
+    return (getattr(npc, "image_url", None) or "").strip() or None
 
 
 # ── internal fetch helpers ────────────────────────────────────────────────────

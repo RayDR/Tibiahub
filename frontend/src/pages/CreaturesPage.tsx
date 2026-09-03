@@ -202,6 +202,7 @@ const mergeUniqueCreatures = (current: CreatureSimple[], incoming: CreatureSimpl
 };
 
 const rawZoneExperience = (zone: HuntZone): number => {
+  if (zone.raw_creature_experience != null) return zone.raw_creature_experience;
   const seen = new Set<number>();
   return (zone.creature_spawns || []).reduce((total, spawn) => {
     const creature = spawn.creature;
@@ -1091,17 +1092,18 @@ const CreaturesPage: React.FC = () => {
     } finally {
       const isCurrent = activeRequestRef.current === controller;
       if (!reset) loadMoreLockRef.current = false;
-      if (!isCurrent || !mountedRef.current) return;
-      activeRequestRef.current = null;
-      if (reset) setLoading(false);
-      else setLoadingMore(false);
+      if (isCurrent && mountedRef.current) {
+        activeRequestRef.current = null;
+        if (reset) setLoading(false);
+        else setLoadingMore(false);
 
-      setInitialLoaded(true);
-      // Restore scroll position if returning from a detail page (cache miss path)
-      if (pendingScrollRestoreRef.current !== null) {
-        const y = pendingScrollRestoreRef.current;
-        pendingScrollRestoreRef.current = null;
-        requestAnimationFrame(() => window.scrollTo({ top: y, behavior: 'instant' }));
+        setInitialLoaded(true);
+        // Restore scroll position if returning from a detail page (cache miss path)
+        if (pendingScrollRestoreRef.current !== null) {
+          const y = pendingScrollRestoreRef.current;
+          pendingScrollRestoreRef.current = null;
+          requestAnimationFrame(() => window.scrollTo({ top: y, behavior: 'instant' }));
+        }
       }
     }
   }

@@ -13,9 +13,15 @@ import {
   AppTabs,
   Badge,
   Card,
+  DataRegion,
+  DegradedState,
   Dialog,
+  DialogBody,
+  DialogFooter,
+  DialogHeader,
   Dropdown,
   EmptyState,
+  ErrorState,
   FormField,
   Input,
   LoadingState,
@@ -28,8 +34,9 @@ import {
   Textarea,
   Toolbar,
 } from '../../components/ui';
+import { WorkspaceContentHeader } from '../../components/workspace/WorkspacePrimitives';
 
-const tabItems = ['components', 'states', 'data'].map((key) => ({ key, label: key }));
+const tabItems = ['components', 'states', 'data', 'workspace'].map((key) => ({ key, label: key }));
 
 export default function ThemePlayground() {
   const { t } = useTranslation();
@@ -41,24 +48,16 @@ export default function ThemePlayground() {
   const localizedTabs = tabItems.map((item) => ({ ...item, label: t(`themePlayground.tabs.${item.key}`) }));
 
   return (
-    <div className="space-y-6">
-      <Panel className="p-4 sm:p-6">
-        <div className="flex flex-col gap-4 sm:flex-row sm:items-start sm:justify-between">
-          <div className="flex gap-3">
-            <span className="grid size-10 shrink-0 place-items-center rounded-lg bg-primary-subtle text-primary">
-              <Palette className="size-5" aria-hidden="true" />
-            </span>
-            <div>
-              <h1 className="text-xl font-semibold sm:text-2xl">{t('themePlayground.title')}</h1>
-              <p className="mt-1 max-w-3xl text-sm text-content-secondary">{t('themePlayground.subtitle')}</p>
-            </div>
-          </div>
-          <AppButton variant="secondary" size="sm" onClick={resetAppearance}>
+    <div className="workspace-page">
+      <WorkspaceContentHeader
+        title={t('themePlayground.title')}
+        description={t('themePlayground.subtitle')}
+        icon={<Palette />}
+        action={<AppButton variant="secondary" size="sm" onClick={resetAppearance}>
             <RotateCcw className="size-4" aria-hidden="true" />
             {t('themePlayground.reset')}
-          </AppButton>
-        </div>
-      </Panel>
+          </AppButton>}
+      />
 
       <Section aria-labelledby="theme-gallery-title">
         <div>
@@ -217,10 +216,91 @@ export default function ThemePlayground() {
         </TableContainer>
       ) : null}
 
-      <Dialog open={dialogOpen} onClose={() => setDialogOpen(false)} label={t('themePlayground.dialog.title')} className="p-5 sm:p-6">
-        <h2 className="text-xl font-semibold">{t('themePlayground.dialog.title')}</h2>
-        <p className="mt-2 text-sm text-content-secondary">{t('themePlayground.dialog.description')}</p>
-        <div className="mt-5 flex justify-end"><AppButton onClick={() => setDialogOpen(false)}>{t('themePlayground.dialog.close')}</AppButton></div>
+      {activeTab === 'workspace' ? (
+        <div className="grid gap-4">
+          <Card className="space-y-5 p-4 sm:p-6">
+            <h2 className="text-lg font-semibold">{t('themePlayground.workspace.headings')}</h2>
+            <div className="space-y-3 rounded-xl border border-line p-4">
+              <p className="text-xs text-content-muted">{t('themePlayground.workspace.shellHeading')}</p>
+              <WorkspaceContentHeader
+                title={t('themePlayground.workspace.sectionTitle')}
+                description={t('themePlayground.workspace.sectionHelp')}
+                action={<AppButton size="sm" variant="secondary">{t('themePlayground.workspace.action')}</AppButton>}
+              />
+              <div className="pl-4">
+                <h3 className="workspace-section-header text-base">{t('themePlayground.workspace.subSection')}</h3>
+                <p className="workspace-section-description">{t('themePlayground.workspace.subSectionHelp')}</p>
+              </div>
+            </div>
+          </Card>
+
+          <Card className="space-y-5 p-4 sm:p-6">
+            <h2 className="text-lg font-semibold">{t('themePlayground.workspace.dataRegion')}</h2>
+            <DataRegion maxHeight="16rem">
+              <Table>
+                <thead>
+                  <tr><th>{t('guildMembers.fields.character')}</th><th>{t('guildMembers.fields.level')}</th><th>{t('guildMembers.fields.vocation')}</th><th>{t('workspace.adminUsers.columns.status')}</th></tr>
+                </thead>
+                <tbody>
+                  {Array.from({ length: 12 }, (_, i) => (
+                    <tr key={i}>
+                      <td className="font-medium text-content-primary">{t('themePlayground.workspace.character', { number: i + 1 })}</td>
+                      <td>{100 + i * 7}</td>
+                      <td>{['Knight', 'Druid', 'Sorcerer', 'Paladin'][i % 4]}</td>
+                      <td><Badge tone={i % 3 === 0 ? 'success' : 'neutral'}>{t(i % 3 === 0 ? 'identity.registered' : 'identity.unregistered')}</Badge></td>
+                    </tr>
+                  ))}
+                </tbody>
+              </Table>
+            </DataRegion>
+            <p className="text-xs text-content-muted">{t('themePlayground.workspace.dataRegionHelp')}</p>
+          </Card>
+
+          <div className="grid gap-4 xl:grid-cols-2">
+            <Card className="space-y-4 p-4 sm:p-6">
+              <h2 className="text-lg font-semibold">{t('themePlayground.workspace.errorStates')}</h2>
+              <ErrorState
+                title={t('themePlayground.workspace.errorTitle')}
+                description={t('themePlayground.workspace.errorDesc')}
+                action={<AppButton size="sm" variant="danger">{t('common.retry')}</AppButton>}
+              />
+              <DegradedState
+                title={t('themePlayground.workspace.degradedTitle')}
+                description={t('themePlayground.workspace.degradedDesc')}
+              />
+            </Card>
+
+            <Card className="space-y-4 p-4 sm:p-6">
+              <h2 className="text-lg font-semibold">{t('themePlayground.workspace.structuredDialog')}</h2>
+              <AppButton onClick={() => setDialogOpen(true)}>{t('themePlayground.dialog.open')}</AppButton>
+            </Card>
+          </div>
+        </div>
+      ) : null}
+
+      <Dialog open={dialogOpen} onClose={() => setDialogOpen(false)} label={t('themePlayground.dialog.title')}>
+        {activeTab === 'workspace' ? (
+          <>
+            <DialogHeader>
+              <h2 className="text-xl font-semibold">{t('themePlayground.workspace.structuredDialog')}</h2>
+              <AppButton variant="ghost" size="sm" onClick={() => setDialogOpen(false)} aria-label={t('themePlayground.dialog.close')}>✕</AppButton>
+            </DialogHeader>
+            <DialogBody>
+              <p className="text-sm text-content-secondary">{t('themePlayground.dialog.description')}</p>
+              <p className="mt-3 text-xs text-content-muted">{t('themePlayground.workspace.dialogHelp')}</p>
+            </DialogBody>
+            <DialogFooter>
+              <AppButton variant="secondary" size="sm" onClick={() => setDialogOpen(false)}>{t('themePlayground.dialog.close')}</AppButton>
+              <AppButton size="sm">{t('themePlayground.actions.primary')}</AppButton>
+            </DialogFooter>
+          </>
+        ) : (
+          <div className="p-5 sm:p-6">
+            <h2 className="text-xl font-semibold">{t('themePlayground.dialog.title')}</h2>
+            <p className="mt-2 text-sm text-content-secondary">{t('themePlayground.dialog.description')}</p>
+            <div className="mt-5 flex justify-end"><AppButton onClick={() => setDialogOpen(false)}>{t('themePlayground.dialog.close')}</AppButton></div>
+          </div>
+        )}
       </Dialog>
     </div>
   );

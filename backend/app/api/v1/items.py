@@ -319,11 +319,39 @@ def _item_related_entities(db: Session, item: ExternalItemModel) -> list[ItemRel
         rows.extend(("quest", row) for row in db.query(TibiaWikiQuest).filter(TibiaWikiQuest.normalized_name.in_(quest_names)).all())
     if location_names:
         rows.extend(("location", row) for row in db.query(TibiaWikiLocation).filter(TibiaWikiLocation.normalized_name.in_(location_names)).all())
-    return [
-        ItemRelatedEntity(kind=kind, name=row.name, slug=row.slug)
+    by_kind_and_name = {
+        (kind, normalize_search_text(row.name)): row
         for kind, row in rows
         if getattr(row, "slug", None)
-    ]
+    }
+    output: list[ItemRelatedEntity] = []
+    for field, semantic in (
+        (item.buy_from or [], "npc_sells_to_player"),
+        (item.sell_to or [], "npc_buys_from_player"),
+    ):
+        for value in field:
+            name = _record_name(value)
+            row = by_kind_and_name.get(("npc", normalize_search_text(name or "")))
+            if row is None:
+                continue
+            output.append(ItemRelatedEntity(
+                kind="npc", name=row.name, slug=row.slug,
+                canonical_id=row.knowledge_entity_id,
+                semantic=semantic,
+                price=value.get("price") if isinstance(value, dict) else None,
+                currency=value.get("currency") if isinstance(value, dict) else None,
+                qualifier=value.get("qualifier") if isinstance(value, dict) else None,
+            ))
+    emitted = {("npc", normalize_search_text(value.name)) for value in output}
+    output.extend(
+        ItemRelatedEntity(
+            kind=kind, name=row.name, slug=row.slug,
+            canonical_id=row.knowledge_entity_id,
+        )
+        for (kind, normalized), row in by_kind_and_name.items()
+        if (kind, normalized) not in emitted
+    )
+    return output
 
 
 def _build_canonical_item_result(db: Session, item: ExternalItemModel) -> ItemSearchResult:

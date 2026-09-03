@@ -7,7 +7,7 @@ from pathlib import Path
 import hashlib
 import re
 
-from fastapi import APIRouter, Depends, File, HTTPException, UploadFile, status
+from fastapi import APIRouter, Depends, File, HTTPException, Query, UploadFile, status
 from sqlalchemy.orm import Session
 from sqlalchemy import func
 from datetime import UTC, datetime
@@ -213,8 +213,8 @@ def get_tibia_api_status(
 def get_all_users(
     current_user: User = Depends(get_current_admin_user),
     db: Session = Depends(get_db),
-    skip: int = 0,
-    limit: int = 100,
+    skip: int = Query(0, ge=0),
+    limit: int = Query(100, ge=1, le=101),
     include_inactive: bool = False,
     exclude_test_accounts: bool = True,
     guild_name: Optional[str] = None,
@@ -235,7 +235,7 @@ def get_all_users(
         ).distinct()
         query = query.filter(User.id.in_(member_ids))
 
-    users = query.order_by(User.created_at.desc()).offset(skip).limit(limit).all()
+    users = query.order_by(User.created_at.desc(), User.id.desc()).offset(skip).limit(limit).all()
 
     if exclude_test_accounts:
         users = [user for user in users if not _looks_like_test_account(user)]
@@ -369,7 +369,7 @@ def get_registered_guilds(
 @router.get("/settings", response_model=SystemSettings)
 def get_system_settings(
     db: Session = Depends(get_db),
-    current_user: User = Depends(get_admin_or_guild_leader)
+    current_user: User = Depends(get_current_admin_user)
 ):
     """
     Get current system settings
@@ -400,7 +400,7 @@ def get_system_settings(
 def update_system_settings(
     settings_update: UpdateSystemSettings,
     db: Session = Depends(get_db),
-    current_user: User = Depends(get_admin_or_guild_leader)
+    current_user: User = Depends(get_current_admin_user)
 ):
     """
     Update system settings

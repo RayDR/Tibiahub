@@ -41,6 +41,21 @@ def _require_event_management(db: Session, current_user: User, event: Event) -> 
     raise HTTPException(status_code=403, detail="Insufficient permissions for this guild event")
 
 
+def _require_event_visibility(db: Session, current_user: User, event: Event) -> None:
+    """Protect private event details while preserving intentional public access."""
+    if event.is_public:
+        return
+    guild_name = (event.guild_name or "").strip()
+    if guild_name and (
+        GuildAuthorizationService.is_verified_member(db, current_user, guild_name)
+        or can_manage_guild(current_user, guild_name, db=db, capability="events.manage")
+    ):
+        return
+    if not guild_name and (is_global_admin(current_user) or event.creator_id == current_user.id):
+        return
+    raise HTTPException(status_code=403, detail="Guild event access denied")
+
+
 def _is_event_registration_open(event: Event) -> bool:
     if event.is_deleted or event.status in {"archived", "deleted"}:
         return False
@@ -121,6 +136,7 @@ def get_event(
     event = db.query(Event).filter(Event.id == event_id, Event.is_active == True, Event.is_deleted == False).first()
     if not event:
         raise HTTPException(status_code=404, detail="Event not found")
+    _require_event_visibility(db, current_user, event)
     
     event_dict = EventSchema.from_orm(event).model_dump()
     event_dict['creator_name'] = event.creator.username if event.creator else None
@@ -164,9 +180,21 @@ def create_event(
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_manager_user)
 ):
-    """Create a new event (admin only)"""
+    """Create an event for a guild the caller is authorized to manage."""
+    target_guild = (event.guild_name or "").strip()
+    if not target_guild:
+        raise HTTPException(status_code=422, detail="A target guild is required")
+    if not can_manage_guild(
+        current_user,
+        target_guild,
+        db=db,
+        capability="events.manage",
+    ):
+        raise HTTPException(status_code=403, detail="Insufficient permissions for this guild event")
+    event_data = event.model_dump()
+    event_data["guild_name"] = target_guild
     new_event = Event(
-        **event.model_dump(),
+        **event_data,
         public_code=generate_unique_code(db, Event),
         creator_id=current_user.id
     )
@@ -197,6 +225,18 @@ def update_event(
     _require_event_management(db, current_user, event)
     
     update_data = event_update.model_dump(exclude_unset=True)
+    if "guild_name" in update_data:
+        target_guild = (update_data["guild_name"] or "").strip()
+        if not target_guild:
+            raise HTTPException(status_code=422, detail="A target guild is required")
+        if not can_manage_guild(
+            current_user,
+            target_guild,
+            db=db,
+            capability="events.manage",
+        ):
+            raise HTTPException(status_code=403, detail="Insufficient permissions for target guild event")
+        update_data["guild_name"] = target_guild
     if "status" in update_data and update_data["status"] not in {"active", "disabled", "completed", "archived", "cancelled"}:
         raise HTTPException(status_code=400, detail="Invalid event status")
     if "archive_after_days" in update_data and update_data["archive_after_days"] is not None:

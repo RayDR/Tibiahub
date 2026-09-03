@@ -6,17 +6,28 @@ from dataclasses import asdict, dataclass
 from datetime import UTC, datetime
 from uuid import UUID
 
-from sqlalchemy.orm import Session
+from sqlalchemy.orm import Session, selectinload
+from sqlalchemy.exc import IntegrityError
 
 from app.knowledge.adapters.protocol import KnowledgeNormalizationResult
 from app.knowledge.dto import HuntZoneKnowledgeDTO
 from app.knowledge.indexing import normalize_name
-from app.knowledge.models import KnowledgeEntity, KnowledgeExternalMapping
-from app.knowledge.services.entities import KnowledgeEntityService
+from app.knowledge.metadata import refresh_search_metadata
+from app.knowledge.models import (
+    KnowledgeEntity,
+    KnowledgeEntityAlias,
+    KnowledgeExternalMapping,
+    KnowledgeSearchMetadata,
+)
+from app.knowledge.services.entities import (
+    DuplicateKnowledgeAliasError,
+    DuplicateKnowledgeEntityError,
+    KnowledgeEntityService,
+)
+from app.knowledge.services.failures import InvalidNormalizationContractError
 from app.knowledge.schemas import KnowledgeEntityCreate
 from app.knowledge.services.graph import KnowledgeGraphService, RelationshipInput
 from app.knowledge.services.item_relationships import exact_entity_candidates
-from app.knowledge.services.npc_location_normalization import exact_place_candidates
 from app.models import HuntZone
 from app.services.entity_metadata_service import EntityMetadataService
 from app.services.text_utils import normalize_search_text
@@ -31,6 +42,11 @@ class HuntZoneNormalizationApplied:
     metrics: dict[str, int]
 
 
+class HuntZoneIdentityConflictError(InvalidNormalizationContractError):
+    code = "hunt_zone_identity_conflict"
+    safe_message = "The Hunting Zone identity conflicts with an existing canonical record."
+
+
 def _resolve_entity(db: Session, result: KnowledgeNormalizationResult, dto: HuntZoneKnowledgeDTO):
     mapping = db.query(KnowledgeExternalMapping).filter_by(
         provider_id=result.provider_code,
@@ -40,19 +56,31 @@ def _resolve_entity(db: Session, result: KnowledgeNormalizationResult, dto: Hunt
     if mapping:
         return mapping.entity, False
     matches = exact_entity_candidates(db, "hunt_zone", dto.canonical_name)
-    if len(matches) == 1:
-        return matches[0], False
+    available = [
+        entity
+        for entity in matches
+        if db.query(KnowledgeExternalMapping).filter_by(
+            provider_id=result.provider_code,
+            entity_type_id="hunt_zone",
+            entity_uuid=entity.uuid,
+        ).first() is None
+    ]
+    if len(available) == 1:
+        return available[0], False
+    if len(available) > 1:
+        raise HuntZoneIdentityConflictError()
     candidate = result.candidate
     if candidate is None:
         raise ValueError("Hunt Zone normalization requires a canonical candidate")
+    collision = bool(matches)
     return KnowledgeEntityService.create(db, KnowledgeEntityCreate(
         entity_type="hunt_zone",
         canonical_name=candidate.canonical_name,
         language_neutral_id=candidate.language_neutral_id,
-        aliases=list(candidate.aliases),
+        aliases=[],
         source_priority=candidate.source_priority,
-        allow_name_collision=bool(matches),
-        slug_suffix=dto.external_id if matches else None,
+        allow_name_collision=collision,
+        slug_suffix=result.external_id if collision else None,
     )), True
 
 
@@ -69,23 +97,97 @@ def _ensure_mapping(db: Session, result: KnowledgeNormalizationResult, entity: K
             external_id=result.external_id,
             entity_uuid=entity.uuid,
         )
-        db.add(mapping)
+        try:
+            with db.begin_nested():
+                db.add(mapping)
+                db.flush()
+        except IntegrityError as exc:
+            existing = db.query(KnowledgeExternalMapping).filter_by(
+                provider_id=result.provider_code,
+                entity_type_id="hunt_zone",
+                external_id=result.external_id,
+            ).one_or_none()
+            if existing is None or existing.entity_uuid != entity.uuid:
+                raise HuntZoneIdentityConflictError() from exc
+            mapping = existing
     elif mapping.entity_uuid != entity.uuid:
-        raise ValueError("Hunt Zone provider identity conflicts with an existing canonical record")
+        raise HuntZoneIdentityConflictError()
     mapping.provider_metadata = dict(dto.provider_metadata)
+
+
+def _update_aliases(
+    db: Session,
+    entity: KnowledgeEntity,
+    aliases: tuple[str, ...],
+) -> tuple[int, int]:
+    existing = {
+        alias.normalized_alias
+        for alias in db.query(KnowledgeEntityAlias).filter(
+            KnowledgeEntityAlias.entity_uuid == entity.uuid,
+        ).all()
+    }
+    created = warnings = 0
+    for alias in aliases:
+        normalized = normalize_name(alias)
+        if not normalized or normalized in existing:
+            continue
+        try:
+            KnowledgeEntityService.add_alias(db, entity, alias)
+            existing.add(normalized)
+            created += 1
+        except (DuplicateKnowledgeAliasError, DuplicateKnowledgeEntityError):
+            warnings += 1
+    if created:
+        refresh_search_metadata(entity)
+    return created, warnings
+
+
+def _update_entity(
+    db: Session,
+    entity: KnowledgeEntity,
+    result: KnowledgeNormalizationResult,
+    dto: HuntZoneKnowledgeDTO,
+) -> tuple[bool, int, int]:
+    candidate = result.candidate
+    if candidate is None:
+        raise InvalidNormalizationContractError()
+    if entity.canonical_name != candidate.canonical_name:
+        canonical_matches = [
+            match
+            for match in exact_entity_candidates(db, "hunt_zone", candidate.canonical_name)
+            if match.uuid != entity.uuid
+        ]
+        if canonical_matches:
+            raise HuntZoneIdentityConflictError()
+    aliases_created, warnings = _update_aliases(
+        db,
+        entity,
+        (candidate.canonical_name, *dto.aliases),
+    )
+    changed = aliases_created > 0
+    if candidate.source_priority <= entity.source_priority:
+        if entity.canonical_name != candidate.canonical_name:
+            KnowledgeEntityService.update_name(db, entity, candidate.canonical_name)
+            changed = True
+        for field_name, value in (
+            ("source_priority", candidate.source_priority),
+            ("status", candidate.status),
+            ("visibility", candidate.visibility),
+            ("search_weight", candidate.search_weight),
+        ):
+            if getattr(entity, field_name) != value:
+                setattr(entity, field_name, value)
+                changed = True
+    refresh_search_metadata(entity)
+    return changed, aliases_created, warnings
 
 
 def _bridge(db: Session, entity: KnowledgeEntity, dto: HuntZoneKnowledgeDTO) -> tuple[bool, bool, bool]:
     row = db.query(HuntZone).filter_by(knowledge_entity_id=entity.uuid).first()
     if row is None:
         row = db.query(HuntZone).filter_by(source_provider="tibiawiki", external_id=dto.external_id).first()
-    if row is None:
-        matches = db.query(HuntZone).filter(
-            HuntZone.normalized_name == normalize_search_text(dto.canonical_name),
-        ).all()
-        row = matches[0] if len(matches) == 1 and matches[0].knowledge_entity_id is None else None
     if row is not None and row.knowledge_entity_id not in (None, entity.uuid):
-        raise ValueError("Hunt Zone bridge identity conflicts with an existing canonical record")
+        raise HuntZoneIdentityConflictError()
     created = row is None
     if row is None:
         row = HuntZone(
@@ -193,6 +295,52 @@ def _bridge(db: Session, entity: KnowledgeEntity, dto: HuntZoneKnowledgeDTO) -> 
     return created, changed, repaired
 
 
+def _exact_candidate_index(
+    db: Session,
+    names: tuple[str, ...],
+    target_types: tuple[str, ...],
+) -> dict[str, list[KnowledgeEntity]]:
+    normalized_names = {normalize_name(name) for name in names if normalize_name(name)}
+    if not normalized_names:
+        return {}
+    indexed: dict[str, dict[UUID, KnowledgeEntity]] = {
+        normalized: {} for normalized in normalized_names
+    }
+    canonical_rows = db.query(
+        KnowledgeSearchMetadata.normalized_name,
+        KnowledgeEntity,
+    ).join(
+        KnowledgeEntity,
+        KnowledgeEntity.uuid == KnowledgeSearchMetadata.entity_uuid,
+    ).options(
+        selectinload(KnowledgeEntity.aliases),
+    ).filter(
+        KnowledgeEntity.entity_type.in_(target_types),
+        KnowledgeSearchMetadata.normalized_name.in_(normalized_names),
+    ).all()
+    for normalized, entity in canonical_rows:
+        indexed[normalized][entity.uuid] = entity
+    alias_rows = db.query(
+        KnowledgeEntityAlias.normalized_alias,
+        KnowledgeEntity,
+    ).join(
+        KnowledgeEntity,
+        KnowledgeEntity.uuid == KnowledgeEntityAlias.entity_uuid,
+    ).options(
+        selectinload(KnowledgeEntity.aliases),
+    ).filter(
+        KnowledgeEntity.entity_type.in_(target_types),
+        KnowledgeEntityAlias.entity_type.in_(target_types),
+        KnowledgeEntityAlias.normalized_alias.in_(normalized_names),
+    ).all()
+    for normalized, entity in alias_rows:
+        indexed[normalized][entity.uuid] = entity
+    return {
+        normalized: list(matches.values())
+        for normalized, matches in indexed.items()
+    }
+
+
 def _named_relationship(
     db: Session,
     *,
@@ -203,16 +351,13 @@ def _named_relationship(
     unresolved_type: str,
     scope: str,
     document: str,
+    matches: list[KnowledgeEntity],
     retain_unresolved: bool = True,
-) -> tuple[UUID | None, bool]:
-    if set(target_types).issubset({"area", "town", "location"}):
-        matches = exact_place_candidates(db, name, target_types)
-    else:
-        matches = [match for target_type in target_types for match in exact_entity_candidates(db, target_type, name)]
+) -> tuple[UUID | None, str | None]:
     unique = {match.uuid: match for match in matches}
     target = next(iter(unique.values())) if len(unique) == 1 else None
     if target is None and not retain_unresolved:
-        return None, False
+        return None, None
     state = "resolved" if target else "ambiguous" if len(unique) > 1 else "unresolved"
     mutation = KnowledgeGraphService.upsert(db, RelationshipInput(
         source_entity_id=source.uuid,
@@ -231,16 +376,20 @@ def _named_relationship(
             "evidence": "explicit_provider_field_or_list",
         },
     ))
-    return mutation.relationship.id, state != "resolved"
+    return mutation.relationship.id, state
 
 
-def _sync_relationships(db: Session, entity: KnowledgeEntity, dto: HuntZoneKnowledgeDTO) -> tuple[int, int, int]:
+def _sync_relationships(
+    db: Session,
+    entity: KnowledgeEntity,
+    dto: HuntZoneKnowledgeDTO,
+) -> tuple[int, int, int, int, int]:
     document = f"hunt_zone:{dto.external_id}"
-    total = unresolved = retired = 0
+    total = resolved = unresolved = ambiguous = retired = 0
     specs = (
         ("creatures", "creatures", "has_creature", dto.creatures, ("creature", "boss"), "creature", True),
         ("access_quests", "access", "requires_hunt_quest", dto.access_quests, ("quest",), "quest", True),
-        ("city", "location", "located_at", (dto.city,) if dto.city else (), ("town",), "town", True),
+        ("city", "location", "located_at", (dto.city,) if dto.city else (), ("town", "location"), "town", True),
         # TibiaWiki's free-form location field often contains prose rather than a
         # canonical place identity. Keep that text on HuntZone.region, but only
         # project a graph edge when the complete value resolves exactly.
@@ -252,8 +401,10 @@ def _sync_relationships(db: Session, entity: KnowledgeEntity, dto: HuntZoneKnowl
             continue
         relation_types, current_ids = by_scope.setdefault(scope, (set(), set()))
         relation_types.add(relation)
-        for name in dict.fromkeys(value.strip() for value in names if value.strip()):
-            relationship_id, is_unresolved = _named_relationship(
+        unique_names = tuple(dict.fromkeys(value.strip() for value in names if value.strip()))
+        candidate_index = _exact_candidate_index(db, unique_names, target_types)
+        for name in unique_names:
+            relationship_id, state = _named_relationship(
                 db,
                 source=entity,
                 relation=relation,
@@ -262,13 +413,16 @@ def _sync_relationships(db: Session, entity: KnowledgeEntity, dto: HuntZoneKnowl
                 unresolved_type=unresolved_type,
                 scope=scope,
                 document=document,
+                matches=candidate_index.get(normalize_name(name), []),
                 retain_unresolved=retain_unresolved,
             )
             if relationship_id is None:
                 continue
             current_ids.add(relationship_id)
             total += 1
-            unresolved += int(is_unresolved)
+            resolved += int(state == "resolved")
+            unresolved += int(state == "unresolved")
+            ambiguous += int(state == "ambiguous")
     for scope, (relation_types, current_ids) in by_scope.items():
         retired += KnowledgeGraphService.reconcile_provider(
             db,
@@ -278,7 +432,7 @@ def _sync_relationships(db: Session, entity: KnowledgeEntity, dto: HuntZoneKnowl
             relationship_types=relation_types,
             current_ids=current_ids,
         )
-    return total, unresolved, retired
+    return total, resolved, unresolved, ambiguous, retired
 
 
 class HuntZoneKnowledgeNormalizationService:
@@ -289,18 +443,27 @@ class HuntZoneKnowledgeNormalizationService:
         dto = HuntZoneKnowledgeDTO.from_canonical_data(result.canonical_data)
         entity, entity_created = _resolve_entity(db, result, dto)
         _ensure_mapping(db, result, entity, dto)
+        entity_changed, aliases_created, alias_warnings = _update_entity(db, entity, result, dto)
         bridge_created, bridge_changed, repaired = _bridge(db, entity, dto)
-        relationships, unresolved, retired = _sync_relationships(db, entity, dto)
-        status = "created" if entity_created or bridge_created else "updated" if bridge_changed or retired else "unchanged"
+        relationships, resolved, unresolved, ambiguous, retired = _sync_relationships(db, entity, dto)
+        status = (
+            "created"
+            if entity_created or bridge_created
+            else "updated"
+            if entity_changed or bridge_changed or aliases_created or retired
+            else "unchanged"
+        )
         return HuntZoneNormalizationApplied(
             status=status,
             entity_uuid=entity.uuid,
-            aliases_created=len(result.candidate.aliases) + int(entity_created),
-            warnings=len(result.warnings),
+            aliases_created=aliases_created,
+            warnings=len(result.warnings) + alias_warnings,
             metrics={
                 "relationships_reconciled": relationships,
+                "resolved_relationships": resolved,
                 "relationships_retired": retired,
                 "unresolved_relationships": unresolved,
+                "ambiguous_relationships": ambiguous,
                 "entities_repaired": int(repaired),
             },
         )

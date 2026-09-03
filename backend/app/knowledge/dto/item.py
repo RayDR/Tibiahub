@@ -9,8 +9,10 @@ from typing import Any
 @dataclass(frozen=True, slots=True)
 class ItemNpcReference:
     name: str
-    price: int | None = None
+    price: int | float | None = None
     location: str | None = None
+    currency: str | None = None
+    qualifier: str | None = None
 
 
 @dataclass(frozen=True, slots=True)

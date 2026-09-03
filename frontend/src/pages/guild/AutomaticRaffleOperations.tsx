@@ -18,6 +18,7 @@ import {
   SchedulerHealth,
 } from "../../services/notifications";
 import { useGuildCapability } from "../../hooks/useGuildCapability";
+import { appLocale, formatDateTime } from "../../utils/locale";
 
 export function wallTimeToUtc(value: string, timeZone: string): string {
   if (!value) return "";
@@ -116,7 +117,7 @@ export default function AutomaticRaffleOperations({
     scheduledUtc = "";
   }
   const scheduledLocal = scheduledUtc
-    ? new Intl.DateTimeFormat(i18n.language, {
+    ? new Intl.DateTimeFormat(appLocale(i18n.resolvedLanguage || i18n.language), {
         dateStyle: "full",
         timeStyle: "short",
         timeZone: timezone,
@@ -521,7 +522,7 @@ export default function AutomaticRaffleOperations({
                 {t("raffle.operations.scheduledLocal")}
                 <strong className="block">
                   {selected.scheduled_run_at
-                    ? new Intl.DateTimeFormat(i18n.language, {
+                    ? new Intl.DateTimeFormat(appLocale(i18n.resolvedLanguage || i18n.language), {
                         dateStyle: "medium",
                         timeStyle: "short",
                         timeZone: selected.timezone_name,
@@ -554,7 +555,7 @@ export default function AutomaticRaffleOperations({
                   {t("raffle.testRun.heartbeat")}
                   <strong className="block">
                     {schedulerHealth?.heartbeat_at
-                      ? new Date(schedulerHealth.heartbeat_at).toLocaleString()
+                      ? formatDateTime(schedulerHealth.heartbeat_at, i18n.resolvedLanguage || i18n.language)
                       : t("raffle.testRun.unavailable")}
                   </strong>
                 </div>
@@ -823,14 +824,12 @@ export default function AutomaticRaffleOperations({
                           )}
                           <small className="block text-content-muted">
                             {t("raffle.testRun.deadline")}:{" "}
-                            {new Date(
-                              result.delivery_deadline_at,
-                            ).toLocaleString()}
+                            {formatDateTime(result.delivery_deadline_at, i18n.resolvedLanguage || i18n.language)}
                           </small>
                           {result.delivered_at && (
                             <small className="block text-content-muted">
                               {t("raffle.testRun.deliveredAt")}:{" "}
-                              {new Date(result.delivered_at).toLocaleString()} ·{" "}
+                              {formatDateTime(result.delivered_at, i18n.resolvedLanguage || i18n.language)} ·{" "}
                               {result.delivered_by_name}
                             </small>
                           )}
@@ -850,9 +849,7 @@ export default function AutomaticRaffleOperations({
                                     key={`${entry.created_at}-${index}`}
                                     className="mt-1"
                                   >
-                                    {new Date(
-                                      entry.created_at,
-                                    ).toLocaleString()}{" "}
+                                    {formatDateTime(entry.created_at, i18n.resolvedLanguage || i18n.language)}{" "}
                                     · {entry.actor} ·{" "}
                                     {t(
                                       `raffle.operations.delivery.${entry.new_status}`,

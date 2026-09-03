@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import { useTranslation } from "react-i18next";
 import {
   AlertCircle,
@@ -14,8 +14,11 @@ import {
   type KnowledgeRelationshipProvenance,
   type KnowledgeRelationshipReview,
 } from "../../services/knowledge";
+import { DegradedState, LoadingState, PaginationControls } from "../../components/ui";
+import { clampPageSkip } from "../../utils/pagination";
 
 type ReviewState = "resolved" | "unresolved" | "ambiguous";
+const PAGE_SIZE = 10;
 
 export default function KnowledgeRelationshipReviewPanel() {
   const { t } = useTranslation();
@@ -23,25 +26,49 @@ export default function KnowledgeRelationshipReviewPanel() {
   const confirmation = useConfirmation();
   const [state, setState] = useState<ReviewState>("unresolved");
   const [items, setItems] = useState<KnowledgeRelationshipReview[]>([]);
+  const [total, setTotal] = useState(0);
+  const [skip, setSkip] = useState(0);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(false);
   const [busy, setBusy] = useState<string | null>(null);
   const [provenance, setProvenance] =
     useState<KnowledgeRelationshipProvenance | null>(null);
+  const requestRef = useRef<AbortController | null>(null);
+  const retrySkipRef = useRef(0);
 
-  const load = useCallback(async () => {
+  const load = useCallback(async (nextSkip = 0) => {
+    requestRef.current?.abort();
+    retrySkipRef.current = nextSkip;
+    const controller = new AbortController();
+    requestRef.current = controller;
     setLoading(true);
     setError(false);
     try {
-      setItems((await knowledgeOperationsApi.relationshipReview(state)).items);
-    } catch {
-      setError(true);
+      let page = await knowledgeOperationsApi.relationshipReview({ resolution_state: state, skip: nextSkip, limit: PAGE_SIZE }, controller.signal);
+      if (page.items.length === 0 && page.total > 0 && nextSkip >= page.total) {
+        const previousSkip = clampPageSkip(nextSkip, PAGE_SIZE, page.total);
+        page = await knowledgeOperationsApi.relationshipReview({ resolution_state: state, skip: previousSkip, limit: PAGE_SIZE }, controller.signal);
+      }
+      if (controller.signal.aborted) return;
+      setItems(page.items);
+      setTotal(page.total);
+      setSkip(page.skip);
+    } catch (loadError: any) {
+      if (loadError?.name !== "CanceledError" && loadError?.code !== "ERR_CANCELED") setError(true);
     } finally {
-      setLoading(false);
+      if (requestRef.current === controller) {
+        requestRef.current = null;
+        setLoading(false);
+      }
     }
   }, [state]);
   useEffect(() => {
-    void load();
+    setItems([]);
+    setTotal(0);
+    setSkip(0);
+    setProvenance(null);
+    void load(0);
+    return () => requestRef.current?.abort();
   }, [load]);
 
   const resolve = async (
@@ -61,7 +88,7 @@ export default function KnowledgeRelationshipReviewPanel() {
         value,
       );
       toast.success(t("knowledgeGraph.review.resolved"));
-      await load();
+      await load(skip);
     } catch {
       toast.error(t("knowledgeGraph.review.actionError"));
     } finally {
@@ -82,7 +109,7 @@ export default function KnowledgeRelationshipReviewPanel() {
     try {
       await knowledgeOperationsApi.rejectRelationship(item.id, value);
       toast.success(t("knowledgeGraph.review.rejected"));
-      await load();
+      await load(skip);
     } catch {
       toast.error(t("knowledgeGraph.review.actionError"));
     } finally {
@@ -99,7 +126,7 @@ export default function KnowledgeRelationshipReviewPanel() {
     try {
       await knowledgeOperationsApi.verifyRelationship(item.id, value);
       toast.success(t("knowledgeGraph.review.verified"));
-      await load();
+      await load(skip);
     } catch {
       toast.error(t("knowledgeGraph.review.actionError"));
     } finally {
@@ -120,7 +147,7 @@ export default function KnowledgeRelationshipReviewPanel() {
           </p>
         </div>
         <button
-          onClick={() => void load()}
+          onClick={() => void load(skip)}
           className="flex min-h-11 items-center gap-2 rounded-lg border border-line px-3 text-sm"
         >
           <RefreshCw className={`h-4 w-4 ${loading ? "animate-spin" : ""}`} />
@@ -140,16 +167,21 @@ export default function KnowledgeRelationshipReviewPanel() {
           </button>
         ))}
       </div>
-      {error ? (
+      {loading && items.length === 0 ? (
+        <LoadingState title={t("common.loading")} />
+      ) : error && items.length === 0 ? (
         <div className="rounded-lg bg-danger/10 p-3 text-sm text-danger">
           <AlertCircle className="mr-2 inline h-4 w-4" />
           {t("knowledgeGraph.review.loadError")}
+          <button type="button" className="ml-3 underline" onClick={() => void load(retrySkipRef.current)}>{t("common.retry")}</button>
         </div>
       ) : !loading && items.length === 0 ? (
         <p className="rounded-lg border border-line p-4 text-sm text-content-secondary">
           {t("knowledgeGraph.review.empty")}
         </p>
       ) : (
+        <>
+        {error ? <DegradedState title={t("knowledgeGraph.review.loadError")} action={<button type="button" className="app-button-secondary app-button-sm" onClick={() => void load(retrySkipRef.current)}>{t("common.retry")}</button>} /> : null}
         <div className="grid gap-3 md:grid-cols-2">
           {items.map((item) => (
             <article
@@ -236,6 +268,8 @@ export default function KnowledgeRelationshipReviewPanel() {
             </article>
           ))}
         </div>
+        <PaginationControls skip={skip} limit={PAGE_SIZE} total={total} loading={loading} onPrevious={() => void load(Math.max(0, skip - PAGE_SIZE))} onNext={() => void load(skip + PAGE_SIZE)} />
+        </>
       )}
       {provenance && (
         <div className="rounded-lg border border-line bg-surface-base p-3 text-xs text-content-secondary">
