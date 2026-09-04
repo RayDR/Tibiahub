@@ -17,6 +17,7 @@ from app.models.hunt_zone import HuntZone
 from app.models.media_asset import MediaAsset
 from app.models.user import User
 from app.api.v1.endpoints.auth import get_current_user, get_current_admin_user
+from app.services import media_asset_service
 
 router = APIRouter()
 
@@ -46,12 +47,41 @@ def cyclopedia_category_visuals(response: Response, db: Session = Depends(get_db
             ExternalItem.normalized_name.contains("scroll"),
         ),
     ).order_by(ExternalItem.normalized_name == "tome of knowledge", ExternalItem.id.asc()).limit(40).all()
-    item_keys = {f"item:knowledge:{row.knowledge_entity_id}" for row in [*item_candidates, *quest_candidates]}
-    assets = db.query(MediaAsset).filter(MediaAsset.asset_key.in_(item_keys), MediaAsset.status == "cached").all() if item_keys else []
+
+    def item_keys(row):
+        return (
+            media_asset_service.build_canonical_item_asset_key(row.knowledge_entity_id),
+            media_asset_service.build_legacy_item_asset_key(row.name),
+        )
+
+    item_keys_by_id = {row.id: item_keys(row) for row in [*item_candidates, *quest_candidates]}
+    item_keys = {key for keys in item_keys_by_id.values() for key in keys if key}
+    assets = (
+        db.query(MediaAsset)
+        .filter(MediaAsset.asset_key.in_(item_keys), MediaAsset.status == "cached")
+        .all()
+        if item_keys
+        else []
+    )
     assets_by_key = {row.asset_key: row for row in assets}
+
     def choose_item(candidates):
-        available = [row for row in candidates if f"item:knowledge:{row.knowledge_entity_id}" in assets_by_key]
-        return min(available, key=lambda row: ("gif" not in (assets_by_key[f"item:knowledge:{row.knowledge_entity_id}"].content_type or "").lower(), row.id), default=None)
+        def resolved_asset(row):
+            canonical_key, legacy_key = item_keys_by_id[row.id]
+            return assets_by_key.get(canonical_key) or (
+                assets_by_key.get(legacy_key) if legacy_key else None
+            )
+
+        available = [row for row in candidates if resolved_asset(row)]
+        return min(
+            available,
+            key=lambda row: (
+                "gif" not in (resolved_asset(row).content_type or "").lower(),
+                row.id,
+            ),
+            default=None,
+        )
+
     item = choose_item(item_candidates)
     quest_item = choose_item(quest_candidates)
     zone = db.query(HuntZone).join(MediaAsset, HuntZone.map_asset_id == MediaAsset.id).filter(

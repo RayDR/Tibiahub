@@ -23,6 +23,7 @@ from app.models.settings import SystemSettings as SettingsModel
 from app.models.quest import Quest
 from app.models.user import User
 from app.services.sync_service import SyncService
+from app.services.media_reconciliation_service import MediaReconciliationService
 from app.services.world_map_sync_service import WorldMapSyncService
 from app.core.config import settings
 
@@ -114,6 +115,16 @@ class ImageCanaryRequest(BaseModel):
 class WorldMapImportRequest(BaseModel):
     upstream_commit: str = Field(min_length=7, max_length=64, pattern="^[0-9a-fA-F]+$")
     confirmation: str
+
+
+@router.get("/media/reconciliation")
+def get_media_reconciliation(
+    sample_limit: int = Query(10, ge=0, le=50),
+    db: Session = Depends(get_db),
+    _admin: User = Depends(get_current_admin_user),
+):
+    """Return bounded, sanitized media diagnostics without network access."""
+    return MediaReconciliationService.report(db, sample_limit=sample_limit)
 
 
 @router.post("/world-maps/import-staged")
