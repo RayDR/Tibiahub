@@ -30,6 +30,11 @@ import {
   type TibiaMapResult,
 } from '../services/tibiaMap';
 import { formatDisplayFloor } from '../utils/tibiaFloors';
+import {
+  markersForMapMode,
+  requestedMapSelection,
+  resolveMapSearchSelection,
+} from '../utils/tibiaMapSelection';
 
 const TibiaMapViewer = lazy(() => import('../components/map/TibiaMapViewer'));
 const layerIcons = {
@@ -96,8 +101,38 @@ export default function TibiaMapPage() {
   const [searchError, setSearchError] = useState(false);
   const [sidebarOpen, setSidebarOpen] = useState(true);
   const [showPathfinding, setShowPathfinding] = useState(false);
-  const defaultFocused = useRef(false);
   const requestedLayers = useRef<Set<TibiaMapLayer>>(new Set());
+  const internalParamsUpdate = useRef<string | null>(null);
+  const [navigationRequestKey, setNavigationRequestKey] = useState(() => params.toString());
+  const requestedSelection = useMemo(() => requestedMapSelection(params), [params]);
+  const [searchRequestedSelection, setSearchRequestedSelection] = useState(() => requestedMapSelection(params));
+
+  const replaceParams = (next: URLSearchParams) => {
+    internalParamsUpdate.current = next.toString();
+    setParams(next, { replace: true });
+  };
+
+  const clearSelectionState = () => {
+    setSelected(null);
+    setFocusedEvidence(null);
+    setContext(null);
+  };
+
+  useEffect(() => {
+    const serialized = params.toString();
+    if (internalParamsUpdate.current === serialized) {
+      internalParamsUpdate.current = null;
+      return;
+    }
+    setQuery(params.get('q') || params.get('slug')?.replace(/-/g, ' ') || '');
+    setFloor(initialFloor(params.get('floor')));
+    setResults([]);
+    setSearchError(false);
+    clearSelectionState();
+    setSearchRequestedSelection(requestedMapSelection(params));
+    setNavigationRequestKey(serialized);
+  // Synchronize external history/deep-link navigation. Internal replacements already own local state.
+  }, [params]);
 
   useEffect(() => {
     const controller = new AbortController();
@@ -137,17 +172,10 @@ export default function TibiaMapPage() {
         if (row.slug) next.set('slug', row.slug);
       }
       next.set('floor', String(evidence?.z ?? floor));
-      setParams(next, { replace: true });
+      setSearchRequestedSelection(requestedMapSelection(next));
+      replaceParams(next);
     }
   };
-
-  useEffect(() => {
-    if (defaultFocused.current || params.has('floor') || query.trim() || selected || !bootstrap?.default_results?.length) return;
-    defaultFocused.current = true;
-    selectResult(bootstrap.default_results[0], false, false);
-  // Default focus is a one-time bootstrap behavior; later selection is user-controlled.
-  // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [bootstrap?.default_results, query, selected]);
 
   useEffect(() => {
     if (!bootstrap) return undefined;
@@ -199,14 +227,7 @@ export default function TibiaMapPage() {
           const townMatches = (bootstrap?.towns || []).filter((town) => town.name.toLocaleLowerCase().includes(normalized.toLocaleLowerCase()));
           const combined = [...townMatches, ...data];
           setResults(combined);
-          const requestedType = params.get('entityType');
-          const requestedEntity = params.get('entity');
-          const requestedSlug = params.get('slug');
-          const next = combined.find((row) => (
-            (!requestedType || row.entity_type === requestedType)
-            && (!requestedEntity || row.canonical_entity_id === requestedEntity)
-            && (!requestedSlug || row.slug === requestedSlug)
-          )) || combined[0] || null;
+          const next = resolveMapSearchSelection(combined, searchRequestedSelection);
           selectResult(next, false, false, params.get('location'));
         })
         .catch(() => {
@@ -218,9 +239,9 @@ export default function TibiaMapPage() {
         .finally(() => { if (current) setSearchLoading(false); });
     }, 250);
     return () => { current = false; window.clearTimeout(timer); controller.abort(); };
-  // URL params only restore the initial deep link; selection updates must not restart search.
+  // Internal URL replacements do not restart search; external history navigation does.
   // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [bootstrap?.towns, query]);
+  }, [bootstrap?.towns, navigationRequestKey, query, searchRequestedSelection]);
 
   useEffect(() => {
     setContext(null);
@@ -277,7 +298,11 @@ export default function TibiaMapPage() {
       kind: 'group' as const,
     });
   }, [activeLayers, floor, layerResults, t]);
-  const mapMarkers = useMemo(() => [...layerMarkers, ...entityMarkers], [entityMarkers, layerMarkers]);
+  const isolatedMarkerMode = Boolean(selected || requestedSelection || query.trim().length >= 2);
+  const mapMarkers = useMemo(
+    () => markersForMapMode(isolatedMarkerMode, layerMarkers, entityMarkers),
+    [entityMarkers, isolatedMarkerMode, layerMarkers],
+  );
   const focus = focusedEvidence && (focusedEvidence.z == null || focusedEvidence.z === floor) ? focusedEvidence : null;
   const regions = focus?.bounds ? [{
     minX: focus.bounds.min_x,
@@ -312,8 +337,10 @@ export default function TibiaMapPage() {
     const next = new URLSearchParams({ q: target.name, entityType: target.entityType, floor: String(floor) });
     if (target.canonicalEntityId) next.set('entity', target.canonicalEntityId);
     if (target.slug) next.set('slug', target.slug);
-    setParams(next, { replace: true });
+    replaceParams(next);
+    setSearchRequestedSelection(requestedMapSelection(next));
     setQuery(target.name);
+    clearSelectionState();
     setSidebarOpen(true);
   };
 
@@ -321,7 +348,9 @@ export default function TibiaMapPage() {
     setQuery('');
     setResults([]);
     setSearchError(false);
-    selectResult(null);
+    setSearchRequestedSelection(null);
+    clearSelectionState();
+    replaceParams(new URLSearchParams({ floor: String(floor) }));
   };
 
   const renderResult = (row: TibiaMapResult) => {
@@ -413,7 +442,16 @@ export default function TibiaMapPage() {
           <Search className="pointer-events-none absolute left-3 top-1/2 size-4 -translate-y-1/2 text-content-muted" />
           <input
             value={query}
-            onChange={(event) => { setQuery(event.target.value); if (event.target.value.trim()) setSidebarOpen(true); }}
+            onChange={(event) => {
+              const value = event.target.value;
+              setQuery(value);
+              setSearchRequestedSelection(null);
+              clearSelectionState();
+              const next = new URLSearchParams({ floor: String(floor) });
+              if (value.trim()) next.set('q', value);
+              replaceParams(next);
+              if (value.trim()) setSidebarOpen(true);
+            }}
             placeholder={t('map.searchPlaceholder')}
             aria-label={t('map.searchLabel')}
             className="app-input h-11 w-full bg-surface-overlay pl-10 pr-9 shadow-lg backdrop-blur"
@@ -467,6 +505,7 @@ export default function TibiaMapPage() {
         <div className="flex items-center gap-2">
           {selected.image_url ? <img src={selected.image_url} alt="" className="size-10 object-contain [image-rendering:pixelated]" /> : null}
           <div className="min-w-0"><h2 className="truncate font-bold">{selected.name}</h2><p className="text-[11px] uppercase tracking-wide text-content-muted">{t(`map.layers.${selected.entity_type}`, { defaultValue: selected.entity_type })}</p></div>
+          <button type="button" onClick={clearSearch} aria-label={t('a11y.clearSearch')} className="ml-auto grid size-9 shrink-0 place-items-center rounded-lg text-content-muted hover:bg-surface-hover hover:text-content-primary"><X className="size-4" /></button>
         </div>
         {selected.spatial_state === 'unresolved'
           ? <p className="mt-2 flex gap-2 text-xs text-content-muted"><AlertTriangle className="size-4 shrink-0 text-warning" />{t('map.spatialUnresolved')}</p>
