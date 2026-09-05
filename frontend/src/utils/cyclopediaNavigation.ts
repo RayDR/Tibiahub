@@ -10,6 +10,7 @@ export interface CyclopediaRouteState {
 export interface CyclopediaLocationState {
   tab: string;
   q?: string;
+  location?: string;
   selected?: string;
   category?: string;
   sort?: string;
@@ -25,6 +26,7 @@ export function buildCyclopediaPath(state: CyclopediaLocationState): string {
   params.set('tab', state.tab);
 
   if (state.q?.trim()) params.set('q', state.q.trim());
+  if (state.location?.trim()) params.set('location', state.location.trim());
   if (state.selected?.trim()) params.set('selected', state.selected.trim());
   if (state.category?.trim()) params.set('category', state.category.trim());
   if (state.sort?.trim()) params.set('sort', state.sort.trim());

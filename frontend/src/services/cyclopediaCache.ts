@@ -56,12 +56,13 @@ export function cacheClear(prefix?: string): void {
 export function buildCacheKey(params: {
   mode: string;
   search: string;
+  location?: string;
   category: string;
   sort: string;
   order: string;
   skip: number;
 }): string {
-  return `cyclopedia:${params.mode}:${params.skip}:${params.search}:${params.category}:${params.sort}:${params.order}`;
+  return `cyclopedia:${params.mode}:${params.skip}:${params.search}:${params.location || ''}:${params.category}:${params.sort}:${params.order}`;
 }
 
 // ── server version tracking ───────────────────────────────────────────────────
@@ -111,6 +112,7 @@ const SNAPSHOT_PREFIX = 'cyclopedia_snap_';
 export interface CyclopediaSnapshot {
   mode: string;
   searchTerm: string;
+  location?: string;
   selected: string;
   category: string;
   sort: string;

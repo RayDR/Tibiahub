@@ -10,7 +10,6 @@ import CreaturesPage from "./pages/CreaturesPage";
 import CreatureDetailPage from "./pages/CreatureDetailPage";
 import QuestDetailPage from "./pages/QuestDetailPage";
 import NpcDetailPage from "./pages/NpcDetailPage";
-import NpcDirectoryPage from "./pages/NpcDirectoryPage";
 import LocationDetailPage from "./pages/LocationDetailPage";
 import ItemDetailPage from "./pages/ItemDetailPage";
 import HuntZoneDetailPage from "./pages/HuntZoneDetailPage";
@@ -63,6 +62,7 @@ import RaffleAssistance from "./pages/Admin/RaffleAssistance";
 import MaintenanceGate from "./components/maintenance/MaintenanceGate";
 import SeoRouteDefaults from "./components/SeoRouteDefaults";
 import RouteExperience from "./components/navigation/RouteExperience";
+import { buildLegacyNpcBrowseRedirect } from "./utils/npcCyclopedia";
 
 const Leadership = lazy(() => import("./pages/guild/Leadership"));
 const LeadershipRecruitment = lazy(
@@ -151,7 +151,7 @@ function App() {
                 <Route path="/quests/:questId" element={<QuestDetailPage />} />
                 <Route path="/items/:identifier" element={<ItemDetailPage />} />
                 <Route path="/hunt-zones/:identifier" element={<HuntZoneDetailPage />} />
-                <Route path="/npcs" element={<NpcDirectoryPage />} />
+                <Route path="/npcs" element={<Navigate to={buildLegacyNpcBrowseRedirect(location.search)} replace />} />
                 <Route path="/npcs/:identifier" element={<NpcDetailPage />} />
                 <Route
                   path="/locations/:identifier"

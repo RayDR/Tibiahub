@@ -470,7 +470,7 @@ export interface NamedKnowledgeSummary {
 }
 
 export interface NpcMedia {
-  status: 'available' | 'reference_only' | 'missing';
+  status: 'available' | 'cached' | 'unavailable' | 'reference_only' | 'missing';
   url?: string | null;
   source_provider?: string | null;
   source_url?: string | null;

@@ -242,7 +242,7 @@ export default function MapMetadataPanel({
                     {nearby.map((item) => (
                       <a
                         key={item.source_entity_id}
-                        href={`/cyclopedia?tab=${item.entity_type === "quest" ? "quests" : item.entity_type === "hunt_zone" ? "zones" : item.entity_type === "item" ? "items" : "creatures"}&q=${encodeURIComponent(item.canonical_name)}`}
+                        href={`/cyclopedia?tab=${item.entity_type === "quest" ? "quests" : item.entity_type === "hunt_zone" ? "zones" : item.entity_type === "item" ? "loot" : item.entity_type === "npc" ? "npcs" : "creatures"}&q=${encodeURIComponent(item.canonical_name)}`}
                         className="rounded-lg bg-surface-base/60 p-3 text-sm"
                       >
                         <strong>{item.canonical_name}</strong>

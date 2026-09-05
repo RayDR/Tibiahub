@@ -118,7 +118,7 @@ i18n
                             "identity": "Guide Thaisano",
                             "section": "Search section",
                             "searchLabel": "Search TibiaHub",
-                            "placeholder": "Creature, boss, item, quest or hunting zone",
+                            "placeholder": "Creature, boss, item, quest, hunting zone or NPC",
                             "search": "Explore",
                             "localOnly": "Find useful Tibia knowledge and continue with the smart guide.",
                             "quickFilters": "Available search sections",
@@ -137,7 +137,8 @@ i18n
                                     "boss": "Boss",
                                     "item": "Item",
                                     "quest": "Quest",
-                                    "zone": "Hunting zone"
+                                    "zone": "Hunting zone",
+                                    "npc": "NPC"
                                 }
                             },
                             "exploreTitle": "What TibiaHub can search",
@@ -147,7 +148,8 @@ i18n
                                 "bosses": { "title": "Bosses", "help": "Boss records, difficulty and related encounters." },
                                 "items": { "title": "Loot and items", "help": "Find items and the creatures that may drop them." },
                                 "quests": { "title": "Quests", "help": "Requirements, missions, NPCs and related places." },
-                                "zones": { "title": "Hunting zones", "help": "Explore hunting areas and recommended level ranges." }
+                                "zones": { "title": "Hunting zones", "help": "Explore hunting areas and recommended level ranges." },
+                                "npcs": { "title": "NPCs", "help": "Browse canonical NPCs, services, quests, travel, and known locations." }
                             },
                             "prompts": {
                                 "hunt": "Find creatures related to Dragon",
@@ -190,7 +192,7 @@ i18n
                         "activityUnavailable": "Recent activity is temporarily unavailable; the rest of TibiaHub is still ready.",
                         "partialHighlights": "Some discovery sections could not be refreshed. Available local results are shown.",
                         "loadingHighlights": "Loading local highlights…",
-                        "discovery": { "section": "Search section", "label": "Search the Cyclopedia", "placeholder": "Search creatures, bosses, or quests", "search": "Discover", "localOnly": "Search TibiaHub knowledge about creatures, quests, items, and hunt zones." },
+                        "discovery": { "section": "Search section", "label": "Search the Cyclopedia", "placeholder": "Search creatures, bosses, quests, or NPCs", "search": "Discover", "localOnly": "Search TibiaHub knowledge about creatures, quests, items, hunt zones, and NPCs." },
                         "shortcuts": { "title": "Choose your next action", "cyclopedia": "Cyclopedia", "cyclopediaHelp": "Browse creatures, bosses, items, quests, and locations.", "planner": "Team Planner", "plannerHelp": "Build a hunt recommendation from your party and goal.", "quests": "Quest knowledge", "questsHelp": "Review requirements, missions, NPCs, and locations.", "guild": "Guild command center", "guildHelp": "Open member, event, leadership, and hunt operations.", "account": "Sign in", "accountHelp": "Enable recent activity and your guild workspace." },
                         "discoveryData": { "title": "Popular and recent knowledge", "help": "Explore entries players are visiting across TibiaHub.", "emptyHelp": "Highlights will appear as knowledge becomes available.", "creature": "Creature", "item": "Item", "zone": "Hunt zone", "creatureStats": "{{hp}} HP · {{exp}} EXP", "dropSources": "{{count}} known creature sources", "minimumLevel": "Minimum level: {{level}}" },
                         "profileCard": {
@@ -222,7 +224,8 @@ i18n
                         "bossesPlaceholder": "Search bosses...",
                         "lootPlaceholder": "Search loot...",
                         "questsPlaceholder": "Search quests...",
-                        "zonesPlaceholder": "Search zones..."
+                        "zonesPlaceholder": "Search zones...",
+                        "npcsPlaceholder": "Search NPCs..."
                     },
                     "themes": {
                         "medieval": { "name": "Medieval", "description": "Warm gold, parchment text, and deep blue steel." },
@@ -292,7 +295,7 @@ i18n
                         "cards": {
                             "recent": "Recent searches",
                             "yourRecent": "Continue Where You Left Off", "mostVisited": "Most visited by you", "visits": "{{count}} visits",
-                            "topGlobal": "Top 5 most searched (global)", "recentSearch": "Recent search", "searchWithQuery": "Search: {{query}}", "experience": "{{value}} EXP", "creature": "Creature", "boss": "Boss", "quest": "Quest", "huntZone": "Hunt zone", "drops": "{{count}} drops"
+                            "topGlobal": "Top 5 most searched (global)", "recentSearch": "Recent search", "searchWithQuery": "Search: {{query}}", "experience": "{{value}} EXP", "creature": "Creature", "boss": "Boss", "quest": "Quest", "npc": "NPC", "huntZone": "Hunt zone", "drops": "{{count}} drops"
                         },
                         "items": {
                             "creaturesMatched": "{{count}} creatures matched",
@@ -314,6 +317,12 @@ i18n
                             "mapPreviewUnavailable": "Map preview unavailable",
                             "usingPlaceholder": "Using local placeholder", "level": "Level {{level}}+", "rawExp": "Raw EXP", "profit": "Profit", "suggested": "Suggested", "danger": "Danger", "notRecorded": "Not recorded", "needsAnalysis": "Needs spawn analysis", "comparePlanner": "Compare in Planner"
                         },
+                        "npcs": {
+                            "searchPlaceholder": "Search NPCs by name, occupation, or known location…",
+                            "locationFilter": "Filter NPCs by documented location",
+                            "locationPlaceholder": "Documented location…",
+                            "locationHelp": "Optionally narrow this bounded NPC list by its documented location."
+                        },
                         "states": {
                             "errorTitle": "Something went wrong",
                             "errorSubtitle": "Please try again in a moment.",
@@ -323,6 +332,10 @@ i18n
                             "creatureEmptySubtitle": "Try another search or category.",
                             "bossEmptyTitle": "No bosses found.",
                             "bossEmptySubtitle": "Try another boss name or clear the search.",
+                            "npcErrorTitle": "NPCs could not be loaded",
+                            "npcErrorSubtitle": "The local NPC directory is temporarily unavailable. Try again in a moment.",
+                            "npcEmptyTitle": "No NPCs found.",
+                            "npcEmptySubtitle": "Try another name, occupation, or documented location.",
                             "unknown": "Unknown",
                             "unknownRegion": "Unknown region",
                             "notAvailable": "Not available"
@@ -1030,7 +1043,7 @@ i18n
                             "identity": "Guide Thaisano",
                             "section": "Sección de búsqueda",
                             "searchLabel": "Buscar en TibiaHub",
-                            "placeholder": "Criatura, boss, objeto, quest o zona de caza",
+                            "placeholder": "Criatura, boss, objeto, quest, zona de caza o NPC",
                             "search": "Explorar",
                             "localOnly": "Encuentra conocimiento útil de Tibia y continúa con la guía inteligente.",
                             "quickFilters": "Secciones de búsqueda disponibles",
@@ -1049,7 +1062,8 @@ i18n
                                     "boss": "Boss",
                                     "item": "Objeto",
                                     "quest": "Quest",
-                                    "zone": "Zona de caza"
+                                    "zone": "Zona de caza",
+                                    "npc": "NPC"
                                 }
                             },
                             "exploreTitle": "Qué puede buscar TibiaHub",
@@ -1059,7 +1073,8 @@ i18n
                                 "bosses": { "title": "Bosses", "help": "Registros de bosses, dificultad y encuentros relacionados." },
                                 "items": { "title": "Loot y objetos", "help": "Encuentra objetos y las criaturas que pueden soltarlos." },
                                 "quests": { "title": "Quests", "help": "Requisitos, misiones, NPC y lugares relacionados." },
-                                "zones": { "title": "Zonas de caza", "help": "Explora áreas de caza y rangos de nivel recomendados." }
+                                "zones": { "title": "Zonas de caza", "help": "Explora áreas de caza y rangos de nivel recomendados." },
+                                "npcs": { "title": "NPCs", "help": "Explora NPCs canónicos, servicios, quests, viajes y ubicaciones conocidas." }
                             },
                             "prompts": {
                                 "hunt": "Buscar criaturas relacionadas con Dragon",
@@ -1102,7 +1117,7 @@ i18n
                         "activityUnavailable": "La actividad reciente no está disponible temporalmente; el resto de TibiaHub sigue listo.",
                         "partialHighlights": "Algunas secciones no pudieron actualizarse. Se muestran los resultados locales disponibles.",
                         "loadingHighlights": "Cargando destacados locales…",
-                        "discovery": { "section": "Sección de búsqueda", "label": "Buscar en la Cyclopedia", "placeholder": "Buscar criaturas, bosses o quests", "search": "Descubrir", "localOnly": "Busca conocimiento de TibiaHub sobre criaturas, quests, objetos y zonas de caza." },
+                        "discovery": { "section": "Sección de búsqueda", "label": "Buscar en la Cyclopedia", "placeholder": "Buscar criaturas, bosses, quests o NPCs", "search": "Descubrir", "localOnly": "Busca conocimiento de TibiaHub sobre criaturas, quests, objetos, zonas de caza y NPCs." },
                         "shortcuts": { "title": "Elige tu siguiente acción", "cyclopedia": "Cyclopedia", "cyclopediaHelp": "Explora criaturas, bosses, objetos, quests y ubicaciones.", "planner": "Planner de equipo", "plannerHelp": "Genera una recomendación de caza según tu equipo y objetivo.", "quests": "Conocimiento de quests", "questsHelp": "Revisa requisitos, etapas, NPC y ubicaciones.", "guild": "Centro de comando de guild", "guildHelp": "Abre operaciones de miembros, eventos, liderazgo y cacerías.", "account": "Iniciar sesión", "accountHelp": "Activa la actividad reciente y el espacio de tu guild." },
                         "discoveryData": { "title": "Conocimiento popular y reciente", "help": "Entidades reales disponibles localmente en la versión actual de datos.", "emptyHelp": "Los destacados aparecerán después de sincronizar los datos locales.", "creature": "Criatura", "item": "Objeto", "zone": "Zona de caza", "creatureStats": "{{hp}} HP · {{exp}} EXP", "dropSources": "{{count}} fuentes conocidas de criaturas", "minimumLevel": "Nivel mínimo: {{level}}" },
                         "profileCard": {
@@ -1134,7 +1149,8 @@ i18n
                         "bossesPlaceholder": "Buscar bosses...",
                         "lootPlaceholder": "Buscar loot...",
                         "questsPlaceholder": "Buscar quests...",
-                        "zonesPlaceholder": "Buscar zonas..."
+                        "zonesPlaceholder": "Buscar zonas...",
+                        "npcsPlaceholder": "Buscar NPCs..."
                     },
                     "themes": {
                         "medieval": { "name": "Medieval", "description": "Oro cálido, texto pergamino y acero azul profundo." },
@@ -1204,7 +1220,7 @@ i18n
                         "cards": {
                             "recent": "Búsquedas recientes",
                             "yourRecent": "Continúa donde lo dejaste", "mostVisited": "Más visitados por ti", "visits": "{{count}} visitas",
-                            "topGlobal": "Top 5 más buscados (global)", "recentSearch": "Búsqueda reciente", "searchWithQuery": "Búsqueda: {{query}}", "experience": "{{value}} EXP", "creature": "Criatura", "boss": "Boss", "quest": "Quest", "huntZone": "Zona de caza", "drops": "{{count}} drops"
+                            "topGlobal": "Top 5 más buscados (global)", "recentSearch": "Búsqueda reciente", "searchWithQuery": "Búsqueda: {{query}}", "experience": "{{value}} EXP", "creature": "Criatura", "boss": "Boss", "quest": "Quest", "npc": "NPC", "huntZone": "Zona de caza", "drops": "{{count}} drops"
                         },
                         "items": {
                             "creaturesMatched": "{{count}} criaturas encontradas",
@@ -1226,6 +1242,12 @@ i18n
                             "mapPreviewUnavailable": "Vista previa del mapa no disponible",
                             "usingPlaceholder": "Usando placeholder local", "level": "Nivel {{level}}+", "rawExp": "EXP base", "profit": "Ganancia", "suggested": "Sugerido", "danger": "Peligro", "notRecorded": "Sin registrar", "needsAnalysis": "Requiere análisis de spawns", "comparePlanner": "Comparar en el Planner"
                         },
+                        "npcs": {
+                            "searchPlaceholder": "Buscar NPCs por nombre, ocupación o ubicación conocida…",
+                            "locationFilter": "Filtrar NPCs por ubicación documentada",
+                            "locationPlaceholder": "Ubicación documentada…",
+                            "locationHelp": "Opcionalmente limita esta lista acotada de NPCs por su ubicación documentada."
+                        },
                         "states": {
                             "errorTitle": "Algo salió mal",
                             "errorSubtitle": "Inténtalo de nuevo en un momento.",
@@ -1235,6 +1257,10 @@ i18n
                             "creatureEmptySubtitle": "Prueba otra búsqueda o categoría.",
                             "bossEmptyTitle": "No se encontraron bosses.",
                             "bossEmptySubtitle": "Prueba otro nombre de boss o limpia la búsqueda.",
+                            "npcErrorTitle": "No se pudieron cargar los NPCs",
+                            "npcErrorSubtitle": "El directorio local de NPCs no está disponible temporalmente. Inténtalo de nuevo en un momento.",
+                            "npcEmptyTitle": "No se encontraron NPCs.",
+                            "npcEmptySubtitle": "Prueba otro nombre, ocupación o ubicación documentada.",
                             "unknown": "Desconocido",
                             "unknownRegion": "Región desconocida",
                             "notAvailable": "No disponible"
