@@ -134,7 +134,7 @@ def _resolve_item_media_descriptor(item_id: int) -> LocalMediaDescriptor:
 
         label = item.name if item else (loot.item_name or "Unknown Item")
         asset_key = (
-            f"item:knowledge:{item.knowledge_entity_id}"
+            media_svc.build_canonical_item_asset_key(item.knowledge_entity_id)
             if item
             else media_svc.build_loot_asset_key(loot)
         )

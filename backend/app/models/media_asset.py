@@ -1,5 +1,4 @@
 """MediaAsset — locally-cached media files with deduplication by asset_key."""
-from pathlib import Path
 from sqlalchemy import Column, DateTime, Integer, String, Text
 from sqlalchemy.sql import func
 
@@ -46,14 +45,18 @@ class MediaAsset(Base):
     # ── helpers ──────────────────────────────────────────────────────────────
 
     def file_exists(self) -> bool:
-        if not self.local_path:
-            return False
-        return Path(self.local_path).exists()
+        from app.services.media_path_service import resolve_media_local_path
+
+        path = resolve_media_local_path(self.local_path)
+        return bool(path and path.exists() and path.is_file())
 
     def read_bytes(self) -> bytes | None:
         if not self.file_exists():
             return None
         try:
-            return Path(self.local_path).read_bytes()
+            from app.services.media_path_service import resolve_media_local_path
+
+            path = resolve_media_local_path(self.local_path)
+            return path.read_bytes() if path else None
         except OSError:
             return None

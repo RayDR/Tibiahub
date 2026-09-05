@@ -23,6 +23,12 @@ from app.models.settings import SystemSettings as SettingsModel
 from app.models.quest import Quest
 from app.models.user import User
 from app.services.sync_service import SyncService
+from app.services.media_reconciliation_service import MediaReconciliationService
+from app.services.entity_media_ingestion_service import (
+    MEDIA_CANARY_SIZE,
+    EntityMediaIngestionService,
+    MediaCanaryRequiredError,
+)
 from app.services.world_map_sync_service import WorldMapSyncService
 from app.core.config import settings
 
@@ -114,6 +120,138 @@ class ImageCanaryRequest(BaseModel):
 class WorldMapImportRequest(BaseModel):
     upstream_commit: str = Field(min_length=7, max_length=64, pattern="^[0-9a-fA-F]+$")
     confirmation: str
+
+
+class EntityMediaBatchRequest(BaseModel):
+    after_id: int = Field(0, ge=0)
+    batch_size: int = Field(10, ge=1, le=25)
+
+
+class EntityMediaCanaryRequest(BaseModel):
+    after_id: int = Field(0, ge=0)
+
+
+@router.get("/media/reconciliation")
+def get_media_reconciliation(
+    sample_limit: int = Query(10, ge=0, le=50),
+    db: Session = Depends(get_db),
+    _admin: User = Depends(get_current_admin_user),
+):
+    """Return bounded, sanitized media diagnostics without network access."""
+    return MediaReconciliationService.report(db, sample_limit=sample_limit)
+
+
+def _enqueue_entity_media(
+    db: Session,
+    admin: User,
+    *,
+    entity_type: str,
+    after_id: int,
+    batch_size: int,
+    canary: bool,
+):
+    try:
+        result = EntityMediaIngestionService.enqueue(
+            db,
+            entity_type=entity_type,
+            after_id=after_id,
+            batch_size=batch_size,
+            canary=canary,
+            created_by_id=admin.id,
+        )
+    except MediaCanaryRequiredError as exc:
+        raise HTTPException(status_code=409, detail="A successful media canary is required") from exc
+    except ValueError as exc:
+        raise HTTPException(status_code=422, detail="Invalid media batch request") from exc
+    db.add(WorkspaceAudit(
+        workspace_type="global_admin",
+        actor_id=admin.id,
+        action="entity_media_canary_enqueued" if canary else "entity_media_batch_enqueued",
+        target_type="knowledge_job",
+        target_id=str(result.job.id),
+        safe_metadata={
+            "entity_type": entity_type,
+            "after_id": after_id,
+            "batch_size": batch_size,
+            "created": result.created,
+        },
+    ))
+    db.commit()
+    db.refresh(result.job)
+    return {
+        "job_id": result.job.id,
+        "created": result.created,
+        "state": result.job.state,
+        "entity_type": entity_type,
+        "mode": "canary" if canary else "batch",
+        "cursor": {"after_id": after_id},
+        "batch_size": batch_size,
+        "progress_url": f"/api/v1/admin/knowledge/jobs/{result.job.id}",
+    }
+
+
+@router.post("/media/npcs/canary", status_code=202)
+def enqueue_npc_media_canary(
+    payload: EntityMediaCanaryRequest,
+    db: Session = Depends(get_db),
+    admin: User = Depends(get_current_admin_user),
+):
+    return _enqueue_entity_media(
+        db,
+        admin,
+        entity_type="npc",
+        after_id=payload.after_id,
+        batch_size=MEDIA_CANARY_SIZE,
+        canary=True,
+    )
+
+
+@router.post("/media/npcs/batch", status_code=202)
+def enqueue_npc_media_batch(
+    payload: EntityMediaBatchRequest,
+    db: Session = Depends(get_db),
+    admin: User = Depends(get_current_admin_user),
+):
+    return _enqueue_entity_media(
+        db,
+        admin,
+        entity_type="npc",
+        after_id=payload.after_id,
+        batch_size=payload.batch_size,
+        canary=False,
+    )
+
+
+@router.post("/media/locations/canary", status_code=202)
+def enqueue_location_media_canary(
+    payload: EntityMediaCanaryRequest,
+    db: Session = Depends(get_db),
+    admin: User = Depends(get_current_admin_user),
+):
+    return _enqueue_entity_media(
+        db,
+        admin,
+        entity_type="location",
+        after_id=payload.after_id,
+        batch_size=MEDIA_CANARY_SIZE,
+        canary=True,
+    )
+
+
+@router.post("/media/locations/batch", status_code=202)
+def enqueue_location_media_batch(
+    payload: EntityMediaBatchRequest,
+    db: Session = Depends(get_db),
+    admin: User = Depends(get_current_admin_user),
+):
+    return _enqueue_entity_media(
+        db,
+        admin,
+        entity_type="location",
+        after_id=payload.after_id,
+        batch_size=payload.batch_size,
+        canary=False,
+    )
 
 
 @router.post("/world-maps/import-staged")

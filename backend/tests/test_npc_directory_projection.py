@@ -173,14 +173,14 @@ def test_detail_accepts_canonical_uuid_and_keeps_legacy_slug(client, db):
     assert UUID(canonical.json()["canonical_id"]) == row.knowledge_entity_id
 
 
-def test_npc_media_is_reference_only_and_never_hotlinked(client, db):
+def test_npc_media_is_unavailable_and_never_hotlinked(client, db):
     row = npc(db, "Image Keeper", image_url="https://provider.invalid/image.gif")
     db.commit()
     directory = client.get("/api/v1/npcs/directory").json()["items"][0]
     detail = client.get(f"/api/v1/npcs/{row.knowledge_entity_id}").json()
-    assert directory["media"]["status"] == detail["media"]["status"] == "reference_only"
+    assert directory["media"]["status"] == detail["media"]["status"] == "unavailable"
     assert directory["media"]["url"] is None and detail["image_url"] is None
-    assert detail["media"]["source_url"] == "https://provider.invalid/image.gif"
+    assert detail["media"]["source_url"] is None
 
 
 def test_npc_media_uses_safe_local_cache_and_failed_cache_keeps_directory_available(
@@ -204,10 +204,10 @@ def test_npc_media_uses_safe_local_cache_and_failed_cache_keeps_directory_availa
     page = client.get("/api/v1/npcs/directory").json()["items"]
     by_name = {value["name"]: value for value in page}
     assert by_name["Cached Keeper"]["media"]["status"] == "cached"
-    assert by_name["Cached Keeper"]["media"]["url"] == f"/api/v1/npcs/{cached.id}/image"
+    assert by_name["Cached Keeper"]["media"]["url"] == f"/api/v1/npcs/{cached.knowledge_entity_id}/image"
     image = client.get(f"/api/v1/npcs/{cached.id}/image")
     assert image.status_code == 200 and image.headers["x-image-source"] == "local-media-asset"
-    assert by_name["Failed Keeper"]["media"]["status"] == "reference_only"
+    assert by_name["Failed Keeper"]["media"]["status"] == "unavailable"
     failed_image = client.get(f"/api/v1/npcs/{failed.id}/image")
     assert failed_image.status_code == 404
     assert failed_image.headers["x-image-status"] == "failed"

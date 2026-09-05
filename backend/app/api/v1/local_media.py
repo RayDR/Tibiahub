@@ -3,7 +3,6 @@
 from __future__ import annotations
 
 import hashlib
-import re
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Callable
@@ -14,6 +13,8 @@ from sqlalchemy.orm import Session
 
 from app.db.database import SessionLocal
 from app.models.media_asset import MediaAsset
+from app.services import media_asset_service
+from app.services.media_path_service import resolve_media_local_path
 
 
 @dataclass(frozen=True)
@@ -29,26 +30,21 @@ class LocalMediaDescriptor:
     fallback_label: str
 
 
-def _legacy_item_asset_key(label: str) -> str | None:
-    """Build the historical item media key from a canonical display name."""
-    normalized = (label or "").strip().lower()
-    for extension in (".gif", ".png", ".jpg", ".jpeg", ".webp"):
-        if normalized.endswith(extension):
-            normalized = normalized[: -len(extension)]
-            break
-    normalized = re.sub(r"[^a-z0-9]+", "_", normalized).strip("_")
-    return f"item:{normalized}" if normalized else None
-
-
 def _bridge_legacy_item_descriptor(
     db: Session,
     descriptor: LocalMediaDescriptor,
 ) -> LocalMediaDescriptor:
     """Reuse an already-cached legacy item asset for a canonical item key."""
-    if descriptor.status == "cached" or not descriptor.asset_key.startswith("item:knowledge:"):
+    canonical_file = resolve_media_local_path(descriptor.local_path)
+    if (
+        descriptor.status == "cached"
+        and canonical_file
+        and canonical_file.exists()
+        and canonical_file.is_file()
+    ) or not descriptor.asset_key.startswith("item:knowledge:"):
         return descriptor
 
-    legacy_key = _legacy_item_asset_key(descriptor.fallback_label)
+    legacy_key = media_asset_service.build_legacy_item_asset_key(descriptor.fallback_label)
     if not legacy_key:
         return descriptor
 
@@ -116,8 +112,8 @@ def build_local_media_file_response(
     if not descriptor.local_path:
         return None
 
-    path = Path(descriptor.local_path)
-    if not path.exists() or not path.is_file():
+    path = resolve_media_local_path(descriptor.local_path)
+    if not path or not path.exists() or not path.is_file():
         return None
 
     etag = _compute_etag(path, descriptor.asset_hash)

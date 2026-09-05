@@ -296,6 +296,9 @@ def test_reference_worker_persists_document_normalizes_and_heartbeats():
     with factory.begin() as db:
         job = enqueue(db)
         job_id = job.id
+        provider = db.get(KnowledgeProvider, "reference")
+        provider.health = "degraded"
+        provider.consecutive_failures = 2
     worker = KnowledgeWorker(
         worker_id="reference-worker",
         lease_seconds=60,
@@ -317,6 +320,10 @@ def test_reference_worker_persists_document_normalizes_and_heartbeats():
         assert {"ProviderImported", "KnowledgeNormalized", "EntityCreated"} <= event_types
         metrics = job.attempts[0].metrics
         assert metrics["documents_received"] == 1 and metrics["entities_created"] == 1
+        provider = db.get(KnowledgeProvider, "reference")
+        assert provider.health == "healthy"
+        assert provider.last_success_at is not None
+        assert provider.consecutive_failures == 0
     engine.dispose()
 
 
@@ -378,6 +385,10 @@ def test_worker_classifies_retryable_and_permanent_adapter_failures(adapter, exp
         job = db.get(KnowledgeJob, job_id)
         assert job.state == expected_state and job.last_error_code == expected_code
         assert "password" not in (job.safe_last_error or "").lower()
+        provider = db.get(KnowledgeProvider, "reference")
+        assert provider.health == "degraded"
+        assert provider.last_failure_at is not None
+        assert provider.consecutive_failures == 1
     engine.dispose()
 
 

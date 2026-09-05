@@ -6,6 +6,7 @@ import { Link, useLocation, useNavigate, useParams } from 'react-router-dom';
 import MapMetadataPanel from '../components/MapMetadataPanel';
 import { Badge, EmptyState, Page, PageHeader } from '../components/ui';
 import { namedKnowledgeApi } from '../services/api';
+import { buildMapEntityUrl } from '../services/tibiaMap';
 import type { NamedKnowledgeRelationship, NpcKnowledgeDetail, NpcNamedReference } from '../types';
 import { createCyclopediaRouteState, resolveCyclopediaReturnTarget } from '../utils/cyclopediaNavigation';
 import { useSeoMetadata } from '../utils/seo';
@@ -138,7 +139,7 @@ export default function NpcDetailPage() {
             {npc.last_synced_at ? <p className="mt-1">{t('namedKnowledge.updated', { date: new Date(npc.last_synced_at).toLocaleString() })}</p> : null}
             {npc.source_url ? <a href={npc.source_url} target="_blank" rel="noreferrer" className="mt-3 inline-flex min-h-11 items-center gap-1 text-primary hover:text-primary-hover">{t('namedKnowledge.source')}<ArrowUpRight className="size-3.5" /></a> : null}
           </div>
-          {npc.spatial.geometry_status === 'mapped' ? <Link to={`/map?entity=${encodeURIComponent(npc.canonical_id)}&entityType=npc`} className="app-button-secondary w-full justify-center"><Navigation className="size-4" />{t('npcDetail.openMap')}</Link> : null}
+          {npc.spatial.geometry_status === 'mapped' ? <Link to={buildMapEntityUrl({ canonicalEntityId: npc.canonical_id, entityType: 'npc', name: npc.name, slug: npc.slug })} className="app-button-secondary w-full justify-center"><Navigation className="size-4" />{t('npcDetail.openMap')}</Link> : null}
         </aside>
       </div>
     </article>

@@ -77,6 +77,7 @@ class Settings(BaseSettings):
     KNOWLEDGE_WORKER_LEASE_SECONDS: int = Field(120, ge=30, le=3600)
     KNOWLEDGE_WORKER_MAX_IDLE_SECONDS: int = Field(30, ge=1, le=3600)
     IMAGE_CACHE_MAX_AGE_SECONDS: int = 86400
+    MEDIA_STORAGE_ROOT: str = "/forge/tibiahub-storage/media"
     RESET_PASSWORD_URL: str = "https://tibiahub.domoforge.com/reset-password"
     VERIFY_EMAIL_URL: str = "https://tibiahub.domoforge.com/verify-email"
     PASSWORD_RESET_TTL_MINUTES: int = Field(60, ge=10, le=1440)
@@ -133,6 +134,8 @@ class Settings(BaseSettings):
             raise ValueError(f"Production requires the external TibiaHub secret file: {RUNTIME_SECRETS_FILE}")
         if self.APP_ENV == "production" and len(self.SECRET_KEY.get_secret_value()) < 32:
             raise ValueError("Production requires a strong SECRET_KEY in the external secret file")
+        if not Path(self.MEDIA_STORAGE_ROOT).is_absolute():
+            raise ValueError("MEDIA_STORAGE_ROOT must be an absolute path")
         if self.smtp_configured and self.SMTP_USE_TLS == self.SMTP_USE_SSL:
             raise ValueError("Configured SMTP requires exactly one of SMTP_USE_TLS or SMTP_USE_SSL")
         return self

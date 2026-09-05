@@ -20,11 +20,11 @@ from sqlalchemy.orm import Session
 
 from app.core.config import settings
 from app.models.media_asset import MediaAsset
+from app.services.media_path_service import media_destination, resolve_media_local_path
 from app.services.sync_error_service import SAFE_MESSAGES, classify_exception, sanitize_url
 
 logger = logging.getLogger(__name__)
 
-_MEDIA_DIR = Path("backend/storage/media")
 # Don't retry a failed asset for this many seconds (avoid hammering external hosts)
 _RETRY_COOLDOWN_SECONDS = 3600
 _MAX_IMAGE_BYTES = 5 * 1024 * 1024
@@ -45,6 +45,17 @@ _MAX_FETCH_ATTEMPTS = 3
 class UnsafeMediaError(ValueError):
     """A media source or payload failed a user-safe validation check."""
 
+    def __init__(
+        self,
+        message: str,
+        *,
+        error_code: str = "invalid_image_payload",
+        retryable: bool = False,
+    ) -> None:
+        super().__init__(message)
+        self.error_code = error_code
+        self.retryable = retryable
+
 
 def escape_svg_text(value: str, *, limit: int) -> str:
     """XML-escape dynamic text before inserting it into an SVG text node."""
@@ -56,28 +67,28 @@ def escape_svg_text(value: str, *, limit: int) -> str:
 def validate_raster_image(content: bytes, declared_content_type: str | None = None) -> tuple[str, str]:
     """Validate size, declared MIME type, and decoded raster format."""
     if not content:
-        raise UnsafeMediaError("The image is empty")
+        raise UnsafeMediaError("The image is empty", error_code="invalid_image_payload")
     if len(content) > _MAX_IMAGE_BYTES:
-        raise UnsafeMediaError("The image exceeds the maximum allowed size")
+        raise UnsafeMediaError("The image exceeds the maximum allowed size", error_code="oversized_resource")
 
     declared = (declared_content_type or "").split(";", 1)[0].strip().lower()
     if declared and declared not in _ALLOWED_CONTENT_TYPES:
-        raise UnsafeMediaError("Unsupported image content type")
+        raise UnsafeMediaError("Unsupported image content type", error_code="unsupported_content_type")
     try:
         with Image.open(io.BytesIO(content)) as image:
             if image.width * image.height > _MAX_IMAGE_PIXELS:
-                raise UnsafeMediaError("The image dimensions are too large")
+                raise UnsafeMediaError("The image dimensions are too large", error_code="oversized_resource")
             image.verify()
             actual_format = (image.format or "").upper()
     except (UnidentifiedImageError, OSError, ValueError, Image.DecompressionBombError) as exc:
-        raise UnsafeMediaError("Invalid image data") from exc
+        raise UnsafeMediaError("Invalid image data", error_code="invalid_image_payload") from exc
 
     matching = next(
         ((mime, extension) for mime, (fmt, extension) in _ALLOWED_CONTENT_TYPES.items() if fmt == actual_format),
         None,
     )
     if not matching:
-        raise UnsafeMediaError("Unsupported image format")
+        raise UnsafeMediaError("Unsupported image format", error_code="unsupported_image_format")
     actual_mime, extension = matching
     # Decoders commonly tolerate arbitrary bytes after a valid image. Reject
     # those payloads so an executable/script cannot be smuggled as a raster.
@@ -93,30 +104,30 @@ def validate_raster_image(content: bytes, declared_content_type: str | None = No
     else:  # WebP RIFF length includes bytes after the first eight-byte header.
         logical_size = int.from_bytes(content[4:8], "little") + 8 if len(content) >= 12 and content[:4] == b"RIFF" else -1
     if logical_size != len(content):
-        raise UnsafeMediaError("Image contains unsupported trailing data")
+        raise UnsafeMediaError("Image contains unsupported trailing data", error_code="invalid_image_payload")
     if declared and declared != actual_mime:
-        raise UnsafeMediaError("Image content type does not match its data")
+        raise UnsafeMediaError("Image content type does not match its data", error_code="invalid_image_payload")
     return actual_mime, extension
 
 
 def validate_remote_url(url: str) -> None:
     parsed = urlparse(url)
     if parsed.scheme != "https" or not parsed.hostname:
-        raise UnsafeMediaError("Only allowlisted HTTPS image URLs are allowed")
+        raise UnsafeMediaError("Only allowlisted HTTPS image URLs are allowed", error_code="unsafe_source")
     if parsed.username or parsed.password:
-        raise UnsafeMediaError("Authenticated image URLs are not allowed")
+        raise UnsafeMediaError("Authenticated image URLs are not allowed", error_code="unsafe_source")
     if parsed.hostname.lower() not in _ALLOWED_MEDIA_HOSTS:
-        raise UnsafeMediaError("The image provider host is not allowed")
+        raise UnsafeMediaError("The image provider host is not allowed", error_code="unsafe_source")
     try:
         addresses = socket.getaddrinfo(parsed.hostname, parsed.port or (443 if parsed.scheme == "https" else 80), type=socket.SOCK_STREAM)
     except socket.gaierror as exc:
-        raise UnsafeMediaError("The image host could not be resolved") from exc
+        raise UnsafeMediaError("The image host could not be resolved", error_code="resolution_failed", retryable=True) from exc
     if not addresses:
-        raise UnsafeMediaError("The image host could not be resolved")
+        raise UnsafeMediaError("The image host could not be resolved", error_code="resolution_failed", retryable=True)
     for address in addresses:
         ip = ipaddress.ip_address(address[4][0])
         if not ip.is_global:
-            raise UnsafeMediaError("The image host is not publicly reachable")
+            raise UnsafeMediaError("The image host is not publicly reachable", error_code="unsafe_source")
 
 
 def _validate_connected_peer(response: httpx.Response) -> None:
@@ -124,13 +135,13 @@ def _validate_connected_peer(response: httpx.Response) -> None:
     stream = response.extensions.get("network_stream")
     peer = stream.get_extra_info("server_addr") if stream else None
     if not peer:
-        raise UnsafeMediaError("The image connection could not be verified")
+        raise UnsafeMediaError("The image connection could not be verified", error_code="unsafe_source")
     try:
         ip = ipaddress.ip_address(peer[0])
     except (ValueError, TypeError, IndexError) as exc:
-        raise UnsafeMediaError("The image connection could not be verified") from exc
+        raise UnsafeMediaError("The image connection could not be verified", error_code="unsafe_source") from exc
     if not ip.is_global:
-        raise UnsafeMediaError("The image host is not publicly reachable")
+        raise UnsafeMediaError("The image host is not publicly reachable", error_code="unsafe_source")
 
 
 # ── key / URL builders ────────────────────────────────────────────────────────
@@ -193,6 +204,17 @@ def build_loot_asset_key(loot) -> str:
     return f"item:{_normalize_key_part(loot.item_name)}"
 
 
+def build_canonical_item_asset_key(knowledge_entity_id) -> str:
+    """Build the primary Item media key from canonical Knowledge identity."""
+    return f"item:knowledge:{knowledge_entity_id}"
+
+
+def build_legacy_item_asset_key(item_name: str) -> str | None:
+    """Build the exact historical Loot/name key; no fuzzy lookup is allowed."""
+    normalized = _normalize_key_part(item_name or "")
+    return f"item:{normalized}" if normalized else None
+
+
 
 def build_loot_source_url(loot) -> Optional[str]:
     """Priority: explicit override → stored provider URL → alias fallback."""
@@ -242,7 +264,8 @@ def build_zone_source_url(zone) -> Optional[str]:
     return (getattr(zone, "map_image_url", None) or None)
 
 
-def build_npc_asset_key(npc) -> str:
+def build_legacy_npc_asset_key(npc) -> str:
+    """Build the historical provider/external-ID NPC key exactly."""
     provider = (getattr(npc, "source_name", None) or "").strip()
     external_id = (getattr(npc, "external_id", None) or "").strip()
     if provider and external_id:
@@ -250,8 +273,28 @@ def build_npc_asset_key(npc) -> str:
     return f"npc:{_normalize_key_part(npc.name)}"
 
 
+def build_canonical_npc_asset_key(knowledge_entity_id) -> str:
+    return f"npc:knowledge:{knowledge_entity_id}"
+
+
+def build_npc_asset_key(npc) -> str:
+    canonical_id = getattr(npc, "knowledge_entity_id", None)
+    if canonical_id is not None:
+        return build_canonical_npc_asset_key(canonical_id)
+    return build_legacy_npc_asset_key(npc)
+
+
 def build_npc_source_url(npc) -> Optional[str]:
+    if (getattr(npc, "provider_metadata", None) or {}).get("media_evidence_status") != "eligible":
+        return None
     return (getattr(npc, "image_url", None) or "").strip() or None
+
+
+def build_location_asset_key(location) -> str:
+    canonical_id = getattr(location, "knowledge_entity_id", None)
+    if canonical_id is None:
+        raise ValueError("Location media requires canonical Knowledge identity")
+    return f"location:knowledge:{canonical_id}"
 
 
 # ── internal fetch helpers ────────────────────────────────────────────────────
@@ -426,7 +469,8 @@ async def _resolve_wiki_special_path(
 
         if len(exact_response.content) > 1024 * 1024:
             raise UnsafeMediaError(
-                "The provider metadata response is too large"
+                "The provider metadata response is too large",
+                error_code="oversized_resource",
             )
 
         resolved_url = _extract_mediawiki_image_url(
@@ -461,7 +505,8 @@ async def _resolve_wiki_special_path(
 
         if len(search_response.content) > 1024 * 1024:
             raise UnsafeMediaError(
-                "The provider metadata response is too large"
+                "The provider metadata response is too large",
+                error_code="oversized_resource",
             )
 
         return _extract_mediawiki_image_url(
@@ -469,15 +514,30 @@ async def _resolve_wiki_special_path(
             expected_title=asset_name,
         )
 
-    except Exception as exc:
+    except (UnsafeMediaError, httpx.HTTPError):
+        raise
+    except (TypeError, ValueError, KeyError) as exc:
         logger.warning(
             "mediawiki_image_resolution_failed "
             "asset=%s error_type=%s",
             asset_name[:160],
             type(exc).__name__,
         )
-
-        return None
+        raise UnsafeMediaError(
+            "The provider returned invalid image metadata",
+            error_code="invalid_image_payload",
+        ) from exc
+    except Exception as exc:
+        logger.warning(
+            "mediawiki_image_resolution_failed asset=%s error_type=%s",
+            asset_name[:160],
+            type(exc).__name__,
+        )
+        raise UnsafeMediaError(
+            "The provider image reference could not be resolved",
+            error_code="resolution_failed",
+            retryable=True,
+        ) from exc
 
 
 async def _fetch_image_once(source_url: str) -> tuple[bytes, str, str]:
@@ -501,7 +561,10 @@ async def _fetch_image_once(source_url: str) -> tuple[bytes, str, str]:
         if parsed_source.hostname == "tibia.fandom.com" and "/Special:FilePath/" in parsed_source.path:
             resolved = await _resolve_wiki_special_path(source_url, client)
             if not resolved:
-                raise UnsafeMediaError("The provider could not resolve the image resource")
+                raise UnsafeMediaError(
+                    "The provider could not resolve the image resource",
+                    error_code="resolution_failed",
+                )
             current_url = resolved
         for _ in range(_MAX_REDIRECTS + 1):
             validate_remote_url(current_url)
@@ -510,25 +573,25 @@ async def _fetch_image_once(source_url: str) -> tuple[bytes, str, str]:
                 if resp.is_redirect:
                     location = resp.headers.get("location")
                     if not location:
-                        raise UnsafeMediaError("Invalid image redirect")
+                        raise UnsafeMediaError("Invalid image redirect", error_code="unsafe_source")
                     current_url = str(resp.url.join(location))
                     continue
                 resp.raise_for_status()
                 declared_type = resp.headers.get("content-type")
                 declared_length = resp.headers.get("content-length")
                 if declared_length and int(declared_length) > _MAX_IMAGE_BYTES:
-                    raise UnsafeMediaError("The image exceeds the maximum allowed size")
+                    raise UnsafeMediaError("The image exceeds the maximum allowed size", error_code="oversized_resource")
                 chunks: list[bytes] = []
                 total = 0
                 async for chunk in resp.aiter_bytes():
                     total += len(chunk)
                     if total > _MAX_IMAGE_BYTES:
-                        raise UnsafeMediaError("The image exceeds the maximum allowed size")
+                        raise UnsafeMediaError("The image exceeds the maximum allowed size", error_code="oversized_resource")
                     chunks.append(chunk)
                 content = b"".join(chunks)
                 content_type, _ = validate_raster_image(content, declared_type)
                 return content, content_type, str(resp.url)
-        raise UnsafeMediaError("Too many image redirects")
+        raise UnsafeMediaError("Too many image redirects", error_code="unsafe_source")
 
 
 async def _fetch_image(source_url: str) -> tuple[bytes, str, str]:
@@ -548,7 +611,7 @@ async def _fetch_image(source_url: str) -> tuple[bytes, str, str]:
             if attempt + 1 >= _MAX_FETCH_ATTEMPTS:
                 raise
             await asyncio.sleep(2 ** attempt)
-    raise UnsafeMediaError("Image download attempts exhausted")
+    raise UnsafeMediaError("Image download attempts exhausted", error_code="unknown_provider_error", retryable=True)
 
 
 # ── public API ────────────────────────────────────────────────────────────────
@@ -563,6 +626,7 @@ class MediaFetchOutcome:
     http_status: int | None = None
     retryable: bool | None = None
     safe_url: str | None = None
+    network_performed: bool = False
 
 
 def _atomic_image_write(destination: Path, content: bytes) -> None:
@@ -581,6 +645,24 @@ def _atomic_image_write(destination: Path, content: bytes) -> None:
             Path(temporary_name).unlink(missing_ok=True)
 
 
+def stored_media_error(asset: MediaAsset, fallback: str = "unknown_provider_error") -> tuple[str, str]:
+    value = (asset.error_message or "").strip()
+    code, separator, _message = value.partition(": ")
+    if separator and code in SAFE_MESSAGES:
+        return code, SAFE_MESSAGES[code]
+    return fallback, SAFE_MESSAGES[fallback]
+
+
+def _classify_media_exception(exc: Exception) -> tuple[str, int | None, bool, str]:
+    if isinstance(exc, UnsafeMediaError):
+        code = exc.error_code if exc.error_code in SAFE_MESSAGES else "unknown_provider_error"
+        return code, None, exc.retryable, SAFE_MESSAGES[code]
+    category, status, retryable, message = classify_exception(exc)
+    if category in {"download_failed", "item_failure"}:
+        return "unknown_provider_error", status, retryable, SAFE_MESSAGES["unknown_provider_error"]
+    return category, status, retryable, message
+
+
 async def cache_media_asset(
     db: Session,
     *,
@@ -588,6 +670,7 @@ async def cache_media_asset(
     source_url: str,
     force_refetch: bool = False,
     retry_failed: bool = False,
+    release_transaction_before_fetch: bool = False,
 ) -> MediaFetchOutcome:
     """Use the canonical downloader and atomically update one served media asset."""
     asset = db.query(MediaAsset).filter(MediaAsset.asset_key == asset_key).first()
@@ -595,13 +678,14 @@ async def cache_media_asset(
         return MediaFetchOutcome(asset=asset, result="cached")
 
     if asset and asset.status == "missing" and not force_refetch:
+        error_category, safe_message = stored_media_error(asset)
         return MediaFetchOutcome(
             asset=asset,
             result="skipped",
-            error_category="unsupported_resource",
-            safe_message=asset.error_message,
+            error_category=error_category,
+            safe_message=safe_message,
             retryable=False,
-            safe_url=asset.source_url,
+            safe_url=sanitize_url(asset.source_url),
         )
 
     if asset and asset.status == "failed" and not (force_refetch or retry_failed):
@@ -610,14 +694,24 @@ async def cache_media_asset(
             if fetched_at.tzinfo is None:
                 fetched_at = fetched_at.replace(tzinfo=UTC)
             if (datetime.now(UTC) - fetched_at).total_seconds() < _RETRY_COOLDOWN_SECONDS:
-                return MediaFetchOutcome(asset=asset, result="failed", error_category="download_failed", safe_message=asset.error_message)
+                error_category, safe_message = stored_media_error(asset)
+                return MediaFetchOutcome(asset=asset, result="failed", error_category=error_category, safe_message=safe_message)
+
+    if release_transaction_before_fetch and db.in_transaction():
+        # Durable media jobs perform provider I/O without retaining a database
+        # transaction or pool lock. State is re-read before persistence below.
+        db.rollback()
 
     database_mutated = False
     try:
         content, content_type, resolved_url = await _fetch_image(source_url)
+        if release_transaction_before_fetch:
+            asset = db.query(MediaAsset).filter(MediaAsset.asset_key == asset_key).first()
+            if asset and asset.status == "cached" and asset.file_exists() and not force_refetch:
+                return MediaFetchOutcome(asset=asset, result="cached", network_performed=True)
         _, extension = validate_raster_image(content, content_type)
         safe_key = re.sub(r"[^a-z0-9_]", "_", asset_key).strip("_")
-        destination = _MEDIA_DIR / f"{safe_key}{extension}"
+        destination = media_destination(f"{safe_key}{extension}")
         _atomic_image_write(destination, content)
         created = asset is None
         if asset is None:
@@ -635,19 +729,25 @@ async def cache_media_asset(
         asset.error_message = None
         db.commit()
         logger.info("media_asset_cached key=%s size=%d", asset_key, len(content))
-        return MediaFetchOutcome(asset=asset, result="created" if created else "updated")
+        return MediaFetchOutcome(
+            asset=asset,
+            result="created" if created else "updated",
+            network_performed=True,
+        )
     except Exception as exc:
         if database_mutated:
             db.rollback()
         asset = db.query(MediaAsset).filter(MediaAsset.asset_key == asset_key).first()
-        if isinstance(exc, UnsafeMediaError):
-            category, status, retryable, safe_message = "unsupported_resource", None, False, SAFE_MESSAGES["unsupported_resource"]
-        else:
-            category, status, retryable, safe_message = classify_exception(exc)
+        category, status, retryable, safe_message = _classify_media_exception(exc)
         permanent_missing = (
             category in {
-                "unsupported_resource",
                 "provider_not_found",
+                "unsupported_content_type",
+                "unsupported_image_format",
+                "invalid_image_payload",
+                "oversized_resource",
+                "unsafe_source",
+                "resolution_failed",
             }
             and retryable is False
         )
@@ -666,7 +766,7 @@ async def cache_media_asset(
                 if permanent_missing
                 else "failed"
             )
-            asset.error_message = safe_message
+            asset.error_message = f"{category}: {safe_message}"
             asset.last_fetched_at = datetime.now(UTC)
             db.commit()
         parsed = urlparse(safe_url or "")
@@ -686,6 +786,7 @@ async def cache_media_asset(
             http_status=status,
             retryable=retryable,
             safe_url=safe_url,
+            network_performed=True,
         )
 
 def get_asset(db: Session, asset_key: str) -> Optional[MediaAsset]:
@@ -700,8 +801,8 @@ def clear_asset(db: Session, *, asset_key: str) -> bool:
         return False
     try:
         if asset.local_path:
-            path = Path(asset.local_path)
-            if path.exists() and path.is_file():
+            path = resolve_media_local_path(asset.local_path)
+            if path and path.exists() and path.is_file():
                 path.unlink(missing_ok=True)
         db.delete(asset)
         db.commit()

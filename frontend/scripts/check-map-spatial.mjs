@@ -20,7 +20,7 @@ for (const layer of ["'hunt_zone'", "'creature'", "'boss'", "'item'", "'quest'",
 expect(map.includes('locationNotMapped'), 'Map selections need an explicit unmapped state.');
 expect(map.includes('100dvh-var(--app-nav-clearance)-var(--app-mobile-nav-clearance)'), 'Map workspace must fill the viewport below primary navigation.');
 expect(map.includes('overflow-x-auto') && map.includes('map.layers.${layer}'), 'Map category chips must remain horizontally scrollable and use universal local layers.');
-expect(map.includes("kind: 'town'") && map.includes('bootstrap?.towns'), 'Town labels must come from authoritative map bootstrap data.');
+expect(map.includes("entity_type === 'town'") && map.includes('bootstrap?.towns'), 'Town results must come from authoritative map bootstrap data.');
 expect(map.includes('townMatches') && map.includes('combined = [...townMatches, ...data]'), 'Known authoritative towns must participate in universal map search.');
 expect(map.includes('RECENT_MAP_TARGETS_KEY') && map.includes('entityType: row.entity_type') && !map.includes('x: row.x, y: row.y, z: row.z, name: row.name'), 'Recent map navigation must not persist a second coordinate store.');
 expect(map.includes('controlFooter={floorControl}') && mapViewer.includes('{controlFooter}</Controls>'), 'Floor selection must share the right-side map control stack.');
