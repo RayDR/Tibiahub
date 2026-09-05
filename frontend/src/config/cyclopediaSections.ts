@@ -1,5 +1,5 @@
-export type CyclopediaTabKey = 'creatures' | 'bosses' | 'loot' | 'quests' | 'zones';
-export type CyclopediaMode = 'creatures' | 'bosses' | 'items' | 'quests' | 'zones';
+export type CyclopediaTabKey = 'creatures' | 'bosses' | 'loot' | 'quests' | 'zones' | 'npcs';
+export type CyclopediaMode = 'creatures' | 'bosses' | 'items' | 'quests' | 'zones' | 'npcs';
 
 export interface CyclopediaSection {
   key: CyclopediaTabKey;
@@ -13,6 +13,7 @@ export const cyclopediaSections: CyclopediaSection[] = [
   { key: 'loot', i18nLabel: 'nav.loot', mode: 'items' },
   { key: 'quests', i18nLabel: 'nav.quests', mode: 'quests' },
   { key: 'zones', i18nLabel: 'nav.zones', mode: 'zones' },
+  { key: 'npcs', i18nLabel: 'nav.npcs', mode: 'npcs' },
 ];
 
 export const tabToMode = (tab: string): CyclopediaMode | null => {

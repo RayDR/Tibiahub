@@ -23,6 +23,7 @@ const CYCLOPEDIA_TAB_KEYS = new Set([
   'items',
   'quests',
   'zones',
+  'npcs',
 ]);
 
 const AppTabs: React.FC<AppTabsProps> = ({

@@ -18,24 +18,28 @@ import {
   creaturesApi,
   huntZonesApi,
   itemsApi,
+  namedKnowledgeApi,
   questsApi,
 } from '../../services/api';
 import KnowledgeCategoryIcon from '../knowledge/KnowledgeCategoryIcon';
 import { buildKnowledgeSearchPath } from '../../utils/cyclopediaNavigation';
+import { localNpcMediaUrl } from '../../utils/npcCyclopedia';
 
 export type KnowledgeSearchSection =
   | 'creatures'
   | 'bosses'
   | 'items'
   | 'quests'
-  | 'zones';
+  | 'zones'
+  | 'npcs';
 
 type KnowledgeSuggestionKind =
   | 'creature'
   | 'boss'
   | 'item'
   | 'quest'
-  | 'zone';
+  | 'zone'
+  | 'npc';
 
 export interface KnowledgeSuggestion {
   key: string;
@@ -59,6 +63,7 @@ interface KnowledgeSearchBoxProps {
   externalSuggestions?: KnowledgeSuggestion[];
   externalLoading?: boolean;
   compact?: boolean;
+  placeholder?: string;
 }
 
 const CACHE_STORAGE_KEY =
@@ -342,6 +347,22 @@ async function loadRemoteSuggestions(
     }));
   }
 
+  if (section === 'npcs') {
+    const page = await namedKnowledgeApi.listNpcs(
+      { search: query, skip: 0, limit: MAX_REMOTE_RESULTS },
+      signal,
+    );
+
+    return page.items.map((row) => ({
+      key: `npc:${row.canonical_id}`,
+      section,
+      kind: 'npc',
+      label: row.name,
+      to: `/npcs/${row.canonical_id}`,
+      imageUrl: localNpcMediaUrl(row.media) || undefined,
+    }));
+  }
+
   const rows = await huntZonesApi.getAll(
     {
       search: query,
@@ -397,6 +418,7 @@ export default function KnowledgeSearchBox({
   externalSuggestions,
   externalLoading = false,
   compact = false,
+  placeholder,
 }: KnowledgeSearchBoxProps) {
   const { t } = useTranslation();
   const navigate = useNavigate();
@@ -653,6 +675,9 @@ export default function KnowledgeSearchBox({
           <option value="zones">
             {t('home.assistantPreview.categories.zones.title')}
           </option>
+          <option value="npcs">
+            {t('home.assistantPreview.categories.npcs.title')}
+          </option>
         </select>
       ) : null}
 
@@ -696,9 +721,7 @@ export default function KnowledgeSearchBox({
             onChange={(event) =>
               onQueryChange(event.target.value)
             }
-            placeholder={t(
-              'home.assistantPreview.placeholder',
-            )}
+            placeholder={placeholder || t('home.assistantPreview.placeholder')}
           />
 
           {query.trim().length > 0 ? (

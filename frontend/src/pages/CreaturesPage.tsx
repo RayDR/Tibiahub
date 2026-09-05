@@ -17,11 +17,13 @@ import { faBook, faScroll } from '@fortawesome/free-solid-svg-icons';
 
 import CreatureCard from '../components/CreatureCard';
 import HuntZoneCard from '../components/HuntZoneCard';
+import NpcCard from '../components/NpcCard';
 import ImageWithFallback from '../components/ImageWithFallback';
 import {
   creaturesApi,
   huntZonesApi,
   itemsApi,
+  namedKnowledgeApi,
   questsApi,
   type CreatureCategoryPreview,
 } from '../services/api';
@@ -38,7 +40,7 @@ import {
   saveSnapshot,
 } from '../services/cyclopediaCache';
 import { checkAndInvalidateIfStale } from '../services/cyclopediaCache';
-import { CreatureSimple, HuntZone, ItemSearchResult, QuestSearchResult } from '../types';
+import { CreatureSimple, HuntZone, ItemSearchResult, NpcDirectoryItem, QuestSearchResult } from '../types';
 import PageHeader from '../components/ui/PageHeader';
 import AppTabs from '../components/ui/AppTabs';
 import AppCard from '../components/ui/AppCard';
@@ -67,6 +69,12 @@ import {
   createCyclopediaRouteState,
   saveCyclopediaReturnTarget,
 } from '../utils/cyclopediaNavigation';
+import {
+  localNpcMediaUrl,
+  mergeNpcRows,
+  NPC_CYCLOPEDIA_PAGE_SIZE,
+  npcPageHasMore,
+} from '../utils/npcCyclopedia';
 
 type SearchMode = KnowledgeSearchSection;
 type CreatureSort = 'name' | 'experience' | 'hitpoints' | 'difficulty';
@@ -78,6 +86,17 @@ interface CyclopediaPreviewCard {
   to: string;
   imageUrl?: string;
   createdAt?: string;
+}
+
+interface CyclopediaCachedResults {
+  creatures: CreatureSimple[];
+  items: ItemSearchResult[];
+  quests: QuestSearchResult[];
+  zones: HuntZone[];
+  npcs: NpcDirectoryItem[];
+  npcTotal: number;
+  hasMore: boolean;
+  usedHighlightsSource: boolean;
 }
 
 type SelectedSuggestionKind =
@@ -267,7 +286,7 @@ function CreatureCategoryMedia({
 }
 
 const CreaturesPage: React.FC = () => {
-  const PAGE_SIZE = 20;
+  const PAGE_SIZE = NPC_CYCLOPEDIA_PAGE_SIZE;
   const { t } = useTranslation();
   const navigate = useNavigate();
   const [searchParams, setSearchParams] = useSearchParams();
@@ -281,6 +300,12 @@ const CreaturesPage: React.FC = () => {
   });
 
   const [searchTerm, setSearchTerm] = useState(() => new URLSearchParams(window.location.search).get('q') || '');
+  const [npcLocation, setNpcLocation] = useState(() => {
+    const params = new URLSearchParams(window.location.search);
+    return tabToMode((params.get('tab') || '').toLowerCase()) === 'npcs'
+      ? params.get('location') || ''
+      : '';
+  });
   const [selectedResult, setSelectedResult] = useState(() => normalizeSelectedValue(new URLSearchParams(window.location.search).get('selected') || ''));
   const [creatureSort, setCreatureSort] = useState<CreatureSort>('name');
   const [itemSort, setItemSort] = useState<ItemBrowseSort>('name');
@@ -293,6 +318,8 @@ const CreaturesPage: React.FC = () => {
   const [items, setItems] = useState<ItemSearchResult[]>([]);
   const [quests, setQuests] = useState<QuestSearchResult[]>([]);
   const [zones, setZones] = useState<HuntZone[]>([]);
+  const [npcs, setNpcs] = useState<NpcDirectoryItem[]>([]);
+  const [npcTotal, setNpcTotal] = useState(0);
   const [loading, setLoading] = useState(false);
   const [loadingMore, setLoadingMore] = useState(false);
   const [initialLoaded, setInitialLoaded] = useState(false);
@@ -395,6 +422,17 @@ const CreaturesPage: React.FC = () => {
       }));
     }
 
+    if (mode === 'npcs') {
+      return npcs.slice(0, 20).map((npc) => ({
+        key: `npc:${npc.canonical_id}`,
+        section: mode,
+        kind: 'npc',
+        label: npc.name,
+        to: `/npcs/${npc.canonical_id}`,
+        imageUrl: localNpcMediaUrl(npc.media) || undefined,
+      }));
+    }
+
     return zones.slice(0, 20).map((zone) => ({
       key: `zone:${zone.id}`,
       section: mode,
@@ -403,27 +441,41 @@ const CreaturesPage: React.FC = () => {
       to: `/hunt-zones/${zone.slug || zone.id}`,
       imageUrl: `/api/v1/hunt-zones/${zone.id}/map-image`,
     }));
-  }, [creatures, items, mode, quests, zones]);
+  }, [creatures, items, mode, npcs, quests, zones]);
 
   const resetResults = () => {
     setCreatures([]);
     setItems([]);
     setQuests([]);
     setZones([]);
+    setNpcs([]);
+    setNpcTotal(0);
     setSkip(0);
     setHasMore(false);
     setUsedHighlightsSource(false);
     setErrorMessage(null);
   };
 
-  const errorTitle = mode === 'bosses' ? t('cyclopedia.states.bossErrorTitle') : t('cyclopedia.states.errorTitle');
+  const errorTitle = mode === 'bosses'
+    ? t('cyclopedia.states.bossErrorTitle')
+    : mode === 'npcs'
+      ? t('cyclopedia.states.npcErrorTitle')
+      : t('cyclopedia.states.errorTitle');
   const errorSubtitle = mode === 'bosses'
     ? t('cyclopedia.states.bossErrorSubtitle')
-    : t('cyclopedia.states.errorSubtitle');
-  const emptyTitle = mode === 'bosses' ? t('cyclopedia.states.bossEmptyTitle') : t('cyclopedia.states.creatureEmptyTitle');
+    : mode === 'npcs'
+      ? t('cyclopedia.states.npcErrorSubtitle')
+      : t('cyclopedia.states.errorSubtitle');
+  const emptyTitle = mode === 'bosses'
+    ? t('cyclopedia.states.bossEmptyTitle')
+    : mode === 'npcs'
+      ? t('cyclopedia.states.npcEmptyTitle')
+      : t('cyclopedia.states.creatureEmptyTitle');
   const emptySubtitle = mode === 'bosses'
     ? t('cyclopedia.states.bossEmptySubtitle')
-    : t('cyclopedia.states.creatureEmptySubtitle');
+    : mode === 'npcs'
+      ? t('cyclopedia.states.npcEmptySubtitle')
+      : t('cyclopedia.states.creatureEmptySubtitle');
 
   useEffect(() => {
     const stored = localStorage.getItem(
@@ -696,7 +748,7 @@ const CreaturesPage: React.FC = () => {
         } else if (mode === 'quests') {
           const data = await questsApi.getHighlights(5, controller.signal);
           top = data.map((q) => ({ id: `quest:${q.id || q.name}`, name: q.name, subtitle: q.group_name || t('cyclopedia.cards.quest'), to: q.slug || q.id ? `/quests/${q.slug || q.id}` : '/cyclopedia?tab=quests' }));
-        } else {
+        } else if (mode === 'zones') {
           const data = await huntZonesApi.getHighlights(5, controller.signal);
           top = data.map((z) => ({ id: `zone:${z.id}`, name: z.name, subtitle: z.region || z.city || t('cyclopedia.cards.huntZone'), to: `/hunt-zones/${z.slug || z.id}`, imageUrl: `/api/v1/hunt-zones/${z.id}/map-image` }));
         }
@@ -756,6 +808,7 @@ const CreaturesPage: React.FC = () => {
       : mode === 'items'
         ? itemCategory
         : '';
+    const cacheLocation = mode === 'npcs' ? npcLocation.trim() : '';
     const cacheSort = mode === 'items' ? itemSort : creatureSort;
     const requiresRemoteFetch = mode === 'creatures'
       ? true
@@ -763,45 +816,45 @@ const CreaturesPage: React.FC = () => {
         ? true
         : mode === 'items'
           ? true
-          : mode === 'quests'
-            ? normalized.length > 1
-            : normalized.length > 0;
+          : mode === 'npcs'
+            ? true
+            : mode === 'quests'
+              ? normalized.length > 1
+              : normalized.length > 0;
 
     if (reset && !requiresRemoteFetch) {
       const key = buildCacheKey({
         mode,
         search: normalized,
+        location: cacheLocation,
         category: cacheCategory,
         sort: cacheSort,
         order: sortOrder,
         skip: 0,
       });
-      const cached = cacheGet<{
-        creatures: CreatureSimple[];
-        items: ItemSearchResult[];
-        quests: QuestSearchResult[];
-        zones: HuntZone[];
-        hasMore: boolean;
-        usedHighlightsSource: boolean;
-      }>(key);
+      const cached = cacheGet<CyclopediaCachedResults>(key);
 
       if (cached) {
         setCreatures(cached.creatures);
         setItems(cached.items);
         setQuests(cached.quests);
         setZones(cached.zones);
+        setNpcs(cached.npcs);
+        setNpcTotal(cached.npcTotal);
         setHasMore(cached.hasMore);
         setUsedHighlightsSource(cached.usedHighlightsSource);
-        setSkip(cached.creatures.length + cached.items.length + cached.quests.length + cached.zones.length);
+        setSkip(cached.creatures.length + cached.items.length + cached.quests.length + cached.zones.length + cached.npcs.length);
       } else {
         setCreatures([]);
         setItems([]);
         setQuests([]);
         setZones([]);
+        setNpcs([]);
+        setNpcTotal(0);
         setHasMore(false);
         setSkip(0);
         setUsedHighlightsSource(false);
-        cacheSet(key, { creatures: [], items: [], quests: [], zones: [], hasMore: false, usedHighlightsSource: false });
+        cacheSet(key, { creatures: [], items: [], quests: [], zones: [], npcs: [], npcTotal: 0, hasMore: false, usedHighlightsSource: false });
       }
 
       setErrorMessage(null);
@@ -820,27 +873,23 @@ const CreaturesPage: React.FC = () => {
       const key = buildCacheKey({
         mode,
         search: normalized,
+        location: cacheLocation,
         category: cacheCategory,
         sort: cacheSort,
         order: sortOrder,
         skip: 0,
       });
-      const cached = cacheGet<{
-        creatures: CreatureSimple[];
-        items: ItemSearchResult[];
-        quests: QuestSearchResult[];
-        zones: HuntZone[];
-        hasMore: boolean;
-        usedHighlightsSource: boolean;
-      }>(key);
+      const cached = cacheGet<CyclopediaCachedResults>(key);
       if (cached) {
         setCreatures(cached.creatures);
         setItems(cached.items);
         setQuests(cached.quests);
         setZones(cached.zones);
+        setNpcs(cached.npcs);
+        setNpcTotal(cached.npcTotal);
         setHasMore(cached.hasMore);
         setUsedHighlightsSource(cached.usedHighlightsSource);
-        setSkip(cached.creatures.length + cached.items.length + cached.quests.length + cached.zones.length);
+        setSkip(cached.creatures.length + cached.items.length + cached.quests.length + cached.zones.length + cached.npcs.length);
         setInitialLoaded(true);
         setLoading(false);
         // Restore scroll if returning from a detail page
@@ -915,6 +964,8 @@ const CreaturesPage: React.FC = () => {
         setItems([]);
         setQuests([]);
         setZones([]);
+        setNpcs([]);
+        setNpcTotal(0);
 
         searchPreviewCards = data
           .slice(0, 5)
@@ -938,6 +989,8 @@ const CreaturesPage: React.FC = () => {
             items: [],
             quests: [],
             zones: [],
+            npcs: [],
+            npcTotal: 0,
             hasMore:
               data.length === PAGE_SIZE,
             usedHighlightsSource: false,
@@ -962,6 +1015,8 @@ const CreaturesPage: React.FC = () => {
         setItems([]);
         setQuests([]);
         setZones([]);
+        setNpcs([]);
+        setNpcTotal(0);
         searchPreviewCards = data.slice(0, 5).map((c) => ({
           id: `boss:${c.id}`,
           name: c.name,
@@ -969,7 +1024,7 @@ const CreaturesPage: React.FC = () => {
           to: `/creatures/${c.slug || c.id}`,
           imageUrl: `/api/v1/creatures/${c.id}/image`,
         }));
-        if (reset) _cacheResult = { creatures: data, items: [], quests: [], zones: [], hasMore: data.length === PAGE_SIZE, usedHighlightsSource: false };
+        if (reset) _cacheResult = { creatures: data, items: [], quests: [], zones: [], npcs: [], npcTotal: 0, hasMore: data.length === PAGE_SIZE, usedHighlightsSource: false };
       } else if (mode === 'items') {
         let data: ItemSearchResult[] = [];
         if (normalized.length !== 1) {
@@ -992,6 +1047,8 @@ const CreaturesPage: React.FC = () => {
         setCreatures([]);
         setQuests([]);
         setZones([]);
+        setNpcs([]);
+        setNpcTotal(0);
         searchPreviewCards = data.slice(0, 5).map((i) => ({
           id: `item:${i.normalized_name}`,
           name: i.item_name,
@@ -999,7 +1056,7 @@ const CreaturesPage: React.FC = () => {
           to: `/items/${i.slug || i.normalized_name.split(' ').join('-')}`,
           imageUrl: i.image_item_id ? `/api/v1/items/${i.image_item_id}/image` : undefined,
         }));
-        if (reset) _cacheResult = { creatures: [], items: data, quests: [], zones: [], hasMore: data.length === PAGE_SIZE, usedHighlightsSource: false };
+        if (reset) _cacheResult = { creatures: [], items: data, quests: [], zones: [], npcs: [], npcTotal: 0, hasMore: data.length === PAGE_SIZE, usedHighlightsSource: false };
       } else if (mode === 'quests') {
         let data: QuestSearchResult[] = [];
         if (normalized.length > 1) {
@@ -1014,14 +1071,16 @@ const CreaturesPage: React.FC = () => {
         setCreatures([]);
         setItems([]);
         setZones([]);
+        setNpcs([]);
+        setNpcTotal(0);
         searchPreviewCards = data.slice(0, 5).map((q) => ({
           id: `quest:${q.id || q.name}`,
           name: q.name,
           subtitle: q.group_name || t('cyclopedia.cards.quest'),
           to: q.slug || q.id ? `/quests/${q.slug || q.id}` : '/cyclopedia?tab=quests',
         }));
-        if (reset) _cacheResult = { creatures: [], items: [], quests: data, zones: [], hasMore: data.length === PAGE_SIZE, usedHighlightsSource: false };
-      } else {
+        if (reset) _cacheResult = { creatures: [], items: [], quests: data, zones: [], npcs: [], npcTotal: 0, hasMore: data.length === PAGE_SIZE, usedHighlightsSource: false };
+      } else if (mode === 'zones') {
         const data = normalized
           ? await huntZonesApi.getAll({ search: normalized || undefined, skip: nextSkip, limit: PAGE_SIZE }, controller.signal)
           : [];
@@ -1032,6 +1091,8 @@ const CreaturesPage: React.FC = () => {
         setCreatures([]);
         setItems([]);
         setQuests([]);
+        setNpcs([]);
+        setNpcTotal(0);
         searchPreviewCards = data.slice(0, 5).map((z) => ({
           id: `zone:${z.id}`,
           name: z.name,
@@ -1039,13 +1100,50 @@ const CreaturesPage: React.FC = () => {
           to: `/hunt-zones/${z.slug || z.id}`,
           imageUrl: `/api/v1/hunt-zones/${z.id}/map-image`,
         }));
-        if (reset) _cacheResult = { creatures: [], items: [], quests: [], zones: data, hasMore: data.length === PAGE_SIZE, usedHighlightsSource: false };
+        if (reset) _cacheResult = { creatures: [], items: [], quests: [], zones: data, npcs: [], npcTotal: 0, hasMore: data.length === PAGE_SIZE, usedHighlightsSource: false };
+      } else {
+        const page = await namedKnowledgeApi.listNpcs(
+          {
+            search: normalized || undefined,
+            location: cacheLocation || undefined,
+            skip: nextSkip,
+            limit: PAGE_SIZE,
+          },
+          controller.signal,
+        );
+        if (controller.signal.aborted || activeRequestRef.current !== controller) return;
+        const merged = reset ? page.items : mergeNpcRows(npcs, page.items);
+        setNpcs(merged);
+        setNpcTotal(page.total);
+        setSkip(page.skip + page.items.length);
+        setHasMore(npcPageHasMore(page));
+        setCreatures([]);
+        setItems([]);
+        setQuests([]);
+        setZones([]);
+        searchPreviewCards = page.items.slice(0, 5).map((npc) => ({
+          id: `npc:${npc.canonical_id}`,
+          name: npc.name,
+          subtitle: npc.title || npc.occupation || npc.location_name || t('cyclopedia.cards.npc'),
+          to: `/npcs/${npc.canonical_id}`,
+          imageUrl: localNpcMediaUrl(npc.media) || undefined,
+        }));
+        _cacheResult = {
+          creatures: [],
+          items: [],
+          quests: [],
+          zones: [],
+          npcs: merged,
+          npcTotal: page.total,
+          hasMore: npcPageHasMore(page),
+          usedHighlightsSource: false,
+        };
       }
 
       // Write to in-memory cache for fast tab switching
-      if (reset && _cacheResult !== null) {
+      if (_cacheResult !== null) {
         cacheSet(
-          buildCacheKey({ mode, search: normalized, category: cacheCategory, sort: cacheSort, order: sortOrder, skip: 0 }),
+          buildCacheKey({ mode, search: normalized, location: cacheLocation, category: cacheCategory, sort: cacheSort, order: sortOrder, skip: 0 }),
           _cacheResult,
         );
       }
@@ -1115,6 +1213,7 @@ const CreaturesPage: React.FC = () => {
     const tabParam = (searchParams.get('tab') || searchParams.get('section') || '').toLowerCase();
     const nextMode = (tabToMode(tabParam) as SearchMode) || 'creatures';
     const nextQuery = searchParams.get('q') || '';
+    const nextNpcLocation = nextMode === 'npcs' ? searchParams.get('location') || '' : '';
     const nextSelected = normalizeSelectedValue(searchParams.get('selected') || '');
     const nextCreatureCategory =
       nextMode === 'creatures'
@@ -1139,6 +1238,7 @@ const CreaturesPage: React.FC = () => {
 
     setMode(nextMode);
     setSearchTerm(nextQuery);
+    setNpcLocation(nextNpcLocation);
     setSelectedResult(nextSelected);
     setCreatureCategory(nextCreatureCategory);
     setItemCategory(nextItemCategory);
@@ -1161,6 +1261,7 @@ const CreaturesPage: React.FC = () => {
     const nextPath = buildCyclopediaPath({
       tab: modeToTab(mode),
       q: searchTerm,
+      location: mode === 'npcs' ? npcLocation : '',
       selected: selectedResult,
       category: mode === 'creatures' ? creatureCategory : mode === 'items' ? itemCategory : '',
       sort: (mode === 'creatures' || mode === 'bosses')
@@ -1182,6 +1283,7 @@ const CreaturesPage: React.FC = () => {
   }, [
     mode,
     searchTerm,
+    npcLocation,
     selectedResult,
     creatureCategory,
     itemCategory,
@@ -1202,7 +1304,7 @@ const CreaturesPage: React.FC = () => {
       clearTimeout(timer);
       activeRequestRef.current?.abort();
     };
-  }, [searchTerm, selectedResult, mode, creatureSort, itemSort, sortOrder, creatureCategory, itemCategory, snapshotReadyTick]);
+  }, [searchTerm, selectedResult, mode, creatureSort, itemSort, sortOrder, creatureCategory, itemCategory, npcLocation, snapshotReadyTick]);
 
   // Persist scroll position + state when navigating away (e.g. to creature detail).
   useEffect(() => {
@@ -1213,6 +1315,7 @@ const CreaturesPage: React.FC = () => {
         saveSnapshot({
           mode,
           searchTerm,
+          location: mode === 'npcs' ? npcLocation : '',
           selected: selectedResult,
           category: activeCategory,
           sort: activeSort,
@@ -1229,6 +1332,7 @@ const CreaturesPage: React.FC = () => {
       saveSnapshot({
         mode,
         searchTerm,
+        location: mode === 'npcs' ? npcLocation : '',
         selected: selectedResult,
         category: activeCategory,
         sort: activeSort,
@@ -1237,9 +1341,9 @@ const CreaturesPage: React.FC = () => {
         savedAt: Date.now(),
       });
     };
-  }, [mode, searchTerm, selectedResult, creatureCategory, itemCategory, creatureSort, itemSort, sortOrder]);
+  }, [mode, searchTerm, selectedResult, creatureCategory, itemCategory, npcLocation, creatureSort, itemSort, sortOrder]);
 
-  const hasActiveQuery = searchTerm.trim().length > 0 || selectedResult.trim().length > 0 || (mode === 'creatures' && !!creatureCategory) || (mode === 'items' && !!itemCategory);
+  const hasActiveQuery = searchTerm.trim().length > 0 || selectedResult.trim().length > 0 || (mode === 'creatures' && !!creatureCategory) || (mode === 'items' && !!itemCategory) || (mode === 'npcs' && !!npcLocation.trim());
 
   const creatureResultCount =
     mode === 'creatures' &&
@@ -1258,13 +1362,14 @@ const CreaturesPage: React.FC = () => {
         : itemTotal || items.length
       : items.length;
 
-  const isEmpty = hasActiveQuery && !loading && creatures.length === 0 && items.length === 0 && quests.length === 0 && zones.length === 0;
+  const isEmpty = (hasActiveQuery || mode === 'npcs') && !loading && creatures.length === 0 && items.length === 0 && quests.length === 0 && zones.length === 0 && npcs.length === 0;
 
   const cyclopediaPath = useMemo(
     () =>
       buildCyclopediaPath({
         tab: modeToTab(mode),
         q: searchTerm,
+        location: mode === 'npcs' ? npcLocation : '',
         selected: selectedResult,
         category: mode === 'creatures' ? creatureCategory : mode === 'items' ? itemCategory : '',
         sort: (mode === 'creatures' || mode === 'bosses')
@@ -1274,7 +1379,7 @@ const CreaturesPage: React.FC = () => {
             : undefined,
         order: (mode === 'creatures' || mode === 'bosses' || mode === 'items') && sortOrder !== 'asc' ? sortOrder : undefined,
       }),
-    [mode, searchTerm, selectedResult, creatureCategory, itemCategory, creatureSort, itemSort, sortOrder],
+    [mode, searchTerm, selectedResult, creatureCategory, itemCategory, npcLocation, creatureSort, itemSort, sortOrder],
   );
 
   const cyclopediaRouteState = useMemo(
@@ -1286,6 +1391,7 @@ const CreaturesPage: React.FC = () => {
     saveSnapshot({
       mode,
       searchTerm,
+      location: mode === 'npcs' ? npcLocation : '',
       selected: selectedResult,
       category: mode === 'creatures' ? creatureCategory : mode === 'items' ? itemCategory : '',
       sort: mode === 'items' ? itemSort : creatureSort,
@@ -1313,6 +1419,7 @@ const CreaturesPage: React.FC = () => {
     if (
       suggestion.kind === 'creature' ||
       suggestion.kind === 'boss' ||
+      suggestion.kind === 'npc' ||
       isQuestDetail
     ) {
       persistCyclopediaState();
@@ -1384,6 +1491,7 @@ const CreaturesPage: React.FC = () => {
       mode === 'creatures' ||
       mode === 'bosses' ||
       mode === 'items' ||
+      mode === 'npcs' ||
       effectiveSearchTerm.trim().length > 0;
 
     if (
@@ -1427,11 +1535,13 @@ const CreaturesPage: React.FC = () => {
     items.length,
     quests.length,
     zones.length,
+    npcs.length,
     skip,
     searchTerm,
     selectedResult,
     creatureCategory,
     itemCategory,
+    npcLocation,
     creatureSort,
     itemSort,
     sortOrder,
@@ -1441,7 +1551,7 @@ const CreaturesPage: React.FC = () => {
   // Runs once, 3 s after first successful data load, only caches highlights.
   useEffect(() => {
     if (!initialLoaded) return;
-    const MODES: SearchMode[] = ['creatures', 'bosses', 'items', 'quests', 'zones'];
+    const MODES: SearchMode[] = ['creatures', 'bosses', 'items', 'quests', 'zones', 'npcs'];
     const others = MODES.filter((m) => m !== mode);
     const timer = window.setTimeout(async () => {
       for (const m of others) {
@@ -1462,21 +1572,26 @@ const CreaturesPage: React.FC = () => {
               items: [],
               quests: [],
               zones: [],
+              npcs: [],
+              npcTotal: 0,
               hasMore: data.length === 12,
               usedHighlightsSource: false,
             });
           } else if (m === 'bosses') {
             const data = await creaturesApi.getBosses({ skip: 0, limit: 12 });
-            cacheSet(key, { creatures: data, items: [], quests: [], zones: [], hasMore: true, usedHighlightsSource: false });
+            cacheSet(key, { creatures: data, items: [], quests: [], zones: [], npcs: [], npcTotal: 0, hasMore: true, usedHighlightsSource: false });
           } else if (m === 'items') {
             const data = await itemBrowserApi.browse({ skip: 0, limit: PAGE_SIZE, sort_by: 'name', sort_order: 'asc' });
-            cacheSet(key, { creatures: [], items: data, quests: [], zones: [], hasMore: data.length === PAGE_SIZE, usedHighlightsSource: false });
+            cacheSet(key, { creatures: [], items: data, quests: [], zones: [], npcs: [], npcTotal: 0, hasMore: data.length === PAGE_SIZE, usedHighlightsSource: false });
           } else if (m === 'quests') {
             const data = await questsApi.list({ skip: 0, limit: 20 });
-            cacheSet(key, { creatures: [], items: [], quests: data, zones: [], hasMore: false, usedHighlightsSource: false });
+            cacheSet(key, { creatures: [], items: [], quests: data, zones: [], npcs: [], npcTotal: 0, hasMore: false, usedHighlightsSource: false });
           } else if (m === 'zones') {
             const data = await huntZonesApi.getHighlights(12);
-            cacheSet(key, { creatures: [], items: [], quests: [], zones: data, hasMore: false, usedHighlightsSource: false });
+            cacheSet(key, { creatures: [], items: [], quests: [], zones: data, npcs: [], npcTotal: 0, hasMore: false, usedHighlightsSource: false });
+          } else if (m === 'npcs') {
+            const page = await namedKnowledgeApi.listNpcs({ skip: 0, limit: PAGE_SIZE });
+            cacheSet(key, { creatures: [], items: [], quests: [], zones: [], npcs: page.items, npcTotal: page.total, hasMore: npcPageHasMore(page), usedHighlightsSource: false });
           }
         } catch {
           // Prefetch failure is silent — doesn't affect main UX
@@ -1489,6 +1604,7 @@ const CreaturesPage: React.FC = () => {
   const resetTabFilters = () => {
     setCreatureCategory('');
     setItemCategory('');
+    setNpcLocation('');
     setCreatureSort('name');
     setItemSort('name');
     setSortOrder('asc');
@@ -1625,6 +1741,7 @@ const CreaturesPage: React.FC = () => {
                   searchSuggestions
                 }
                 externalLoading={loading}
+                placeholder={mode === 'npcs' ? t('cyclopedia.npcs.searchPlaceholder') : undefined}
               />
             ) : (
               <>
@@ -1649,6 +1766,7 @@ const CreaturesPage: React.FC = () => {
                       searchSuggestions
                     }
                     externalLoading={loading}
+                    placeholder={mode === 'npcs' ? t('cyclopedia.npcs.searchPlaceholder') : undefined}
                     compact
                   />
                 </div>
@@ -1675,12 +1793,30 @@ const CreaturesPage: React.FC = () => {
                         searchSuggestions
                       }
                       externalLoading={loading}
+                      placeholder={mode === 'npcs' ? t('cyclopedia.npcs.searchPlaceholder') : undefined}
                       compact
                     />
                   </div>
                 ) : null}
               </>
             )}
+
+            {mode === 'npcs' ? (
+              <div className="grid gap-2 px-1 pb-1 sm:grid-cols-[minmax(0,1fr)_minmax(12rem,0.4fr)] sm:items-end">
+                <p className="text-xs text-content-muted">{t('cyclopedia.npcs.locationHelp')}</p>
+                <label className="block">
+                  <span className="sr-only">{t('cyclopedia.npcs.locationFilter')}</span>
+                  <input
+                    type="search"
+                    value={npcLocation}
+                    onChange={(event) => setNpcLocation(event.target.value)}
+                    placeholder={t('cyclopedia.npcs.locationPlaceholder')}
+                    className="app-input min-h-10 w-full"
+                    autoComplete="off"
+                  />
+                </label>
+              </div>
+            ) : null}
 
             {(mode === 'creatures' || mode === 'bosses') && !isSearchCompact ? (
               <div className="space-y-2">
@@ -1880,7 +2016,7 @@ const CreaturesPage: React.FC = () => {
               <CompactEntityStrip title={t('cyclopedia.discovery.popularLoot')} items={topPreviewCards} variant="rail" nudgeSessionKey="popular-loot" linkState={cyclopediaRouteState} onNavigate={persistCyclopediaState} />
               <CompactEntityStrip title={t('cyclopedia.discovery.trendingLoot')} items={lootTrendingPreviewCards} variant="rail" nudgeSessionKey="trending-loot" linkState={cyclopediaRouteState} onNavigate={persistCyclopediaState} />
             </div>
-          ) : mode === 'quests' ? null : (
+          ) : mode === 'quests' || mode === 'npcs' ? null : (
             <CyclopediaDiscovery
               mode={mode}
               primaryItems={topPreviewCards}
@@ -1961,6 +2097,12 @@ const CreaturesPage: React.FC = () => {
           </div>
         ) : null}
 
+        {!loading && mode === 'npcs' ? (
+          <div className="mb-4 rounded-xl border border-line bg-surface-base/50 p-3 text-xs text-content-muted" aria-live="polite">
+            {t('npcDirectory.resultCount', { count: npcTotal })}
+          </div>
+        ) : null}
+
         {loading && (
           <div className="flex justify-center py-20">
             <Loader2 className="animate-spin text-primary" size={48} />
@@ -2026,11 +2168,13 @@ const CreaturesPage: React.FC = () => {
             ))}
 
             {mode === 'zones' && zones.map((zone) => <div key={zone.id} data-cyclopedia-result className="ds-enter h-full"><HuntZoneCard zone={zone} linkState={cyclopediaRouteState} onNavigate={persistCyclopediaState} rawExperience={rawZoneExperience(zone)} /></div>)}
+
+            {mode === 'npcs' && npcs.map((npc) => <div key={npc.canonical_id} data-cyclopedia-result className="ds-enter h-full"><NpcCard npc={npc} linkState={cyclopediaRouteState} onNavigate={persistCyclopediaState} /></div>)}
             </div>
           </>
         )}
 
-        {hasMore && (creatures.length + items.length + quests.length + zones.length) > 0 ? (
+        {hasMore && (creatures.length + items.length + quests.length + zones.length + npcs.length) > 0 ? (
           <div
             ref={loadMoreSentinelRef}
             className="h-px w-full"

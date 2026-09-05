@@ -73,7 +73,7 @@ export function useSeoMetadata(metadata: SeoMetadata | null): void {
 
 export function defaultSeoForPath(pathname: string): SeoMetadata {
   if (pathname === '/') return { title: 'Tibia guides, hunts and Cyclopedia', description: 'Explore Tibia creatures, items, quests, hunt zones, routes and player tools with TibiaHub.', canonicalPath: '/' };
-  if (pathname === '/cyclopedia') return { title: 'Tibia Cyclopedia', description: 'Browse TibiaHub knowledge about creatures, bosses, items, quests and hunt zones.', canonicalPath: '/cyclopedia', breadcrumbs: [{ name: 'Home', path: '/' }, { name: 'Cyclopedia', path: '/cyclopedia' }] };
+  if (pathname === '/cyclopedia') return { title: 'Tibia Cyclopedia', description: 'Browse TibiaHub knowledge about creatures, bosses, items, quests, hunt zones and NPCs.', canonicalPath: '/cyclopedia', breadcrumbs: [{ name: 'Home', path: '/' }, { name: 'Cyclopedia', path: '/cyclopedia' }] };
   if (pathname === '/map') return { title: 'Interactive Tibia Map', description: 'Search local TibiaHub knowledge and explore mapped hunt zones, creatures, quests, and locations.', canonicalPath: '/map', breadcrumbs: [{ name: 'Home', path: '/' }, { name: 'Map', path: '/map' }] };
   const publicDetail = /^\/(creatures|items|quests|hunt-zones|npcs|locations)\/[^/]+$/.test(pathname);
   if (publicDetail) return { title: 'Tibia knowledge entry', description: 'Explore this Tibia knowledge entry in TibiaHub.', canonicalPath: pathname, type: 'article' };

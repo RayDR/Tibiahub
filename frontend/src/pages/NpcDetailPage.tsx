@@ -9,6 +9,7 @@ import { namedKnowledgeApi } from '../services/api';
 import { buildMapEntityUrl } from '../services/tibiaMap';
 import type { NamedKnowledgeRelationship, NpcKnowledgeDetail, NpcNamedReference } from '../types';
 import { createCyclopediaRouteState, resolveCyclopediaReturnTarget } from '../utils/cyclopediaNavigation';
+import { localNpcMediaUrl } from '../utils/npcCyclopedia';
 import { useSeoMetadata } from '../utils/seo';
 
 function ReferenceList({ values, empty, ambiguous }: { values: NpcNamedReference[]; empty: string; ambiguous: string }) {
@@ -34,6 +35,16 @@ function QuestRelationships({ values }: { values: NamedKnowledgeRelationship[] }
   </ul>;
 }
 
+function NpcDetailPortrait({ mediaUrl }: { mediaUrl: string | null }) {
+  const [failed, setFailed] = useState(false);
+
+  useEffect(() => setFailed(false), [mediaUrl]);
+
+  return mediaUrl && !failed
+    ? <img src={mediaUrl} alt="" aria-hidden="true" loading="lazy" decoding="async" onError={() => setFailed(true)} className="size-full object-contain [image-rendering:pixelated]" />
+    : <UserRound className="size-20" aria-hidden="true" />;
+}
+
 export default function NpcDetailPage() {
   const { t } = useTranslation();
   const location = useLocation();
@@ -47,7 +58,7 @@ export default function NpcDetailPage() {
     description: npc.description || t('npcDetail.seoDescription', { name: npc.name }),
     canonicalPath: `/npcs/${npc.canonical_id}`,
     type: 'article',
-    breadcrumbs: [{ name: 'Home', path: '/' }, { name: t('npcDirectory.title'), path: '/npcs' }, { name: npc.name, path: `/npcs/${npc.canonical_id}` }],
+    breadcrumbs: [{ name: 'Home', path: '/' }, { name: t('nav.npcs'), path: '/cyclopedia?tab=npcs' }, { name: npc.name, path: `/npcs/${npc.canonical_id}` }],
   } : null);
 
   useEffect(() => {
@@ -68,18 +79,19 @@ export default function NpcDetailPage() {
   const locations = useMemo(() => (npc?.relationships || []).filter(value => ['located_at', 'hosts_npc'].includes(value.relationship_type)), [npc?.relationships]);
 
   if (loading) return <Page variant="focused"><div role="status" className="flex min-h-[24rem] items-center justify-center text-primary"><Loader2 className="animate-spin" size={42} /><span className="sr-only">{t('namedKnowledge.loading')}</span></div></Page>;
-  if (!npc) return <Page variant="focused"><EmptyState icon={<UserRound />} title={t('namedKnowledge.npcUnavailable')} description={t('namedKnowledge.notFound')} action={<Link to="/npcs" className="app-button-secondary">{t('npcDetail.back')}</Link>} /></Page>;
+  if (!npc) return <Page variant="focused"><EmptyState icon={<UserRound />} title={t('namedKnowledge.npcUnavailable')} description={t('namedKnowledge.notFound')} action={<Link to="/cyclopedia?tab=npcs" className="app-button-secondary">{t('npcDetail.back')}</Link>} /></Page>;
 
-  const backTarget = resolveCyclopediaReturnTarget((location.state as { from?: string } | null)?.from, '/npcs');
+  const backTarget = resolveCyclopediaReturnTarget((location.state as { from?: string } | null)?.from, '/cyclopedia?tab=npcs');
   const cyclopediaState = createCyclopediaRouteState(backTarget);
   const tradeKnown = npc.field_coverage.buys !== 'unknown' || npc.field_coverage.sells !== 'unknown';
   const destinationsKnown = npc.field_coverage.destinations !== 'unknown';
   const questsKnown = npc.field_coverage.related_quests !== 'unknown' || questRelationships.length > 0;
+  const mediaUrl = localNpcMediaUrl(npc.media);
 
   return <Page variant="focused">
     <button onClick={() => navigate(backTarget)} className="mb-4 flex min-h-11 items-center gap-2 text-content-secondary hover:text-content-primary"><ArrowLeft className="size-4" />{t('npcDetail.back')}</button>
     <article>
-      <PageHeader eyebrow={t('npcDetail.eyebrow')} title={npc.name} subtitle={npc.title || npc.occupation || undefined} iconElement={<UserRound className="size-7" />} breadcrumbs={[{ label: t('npcDirectory.title'), to: '/npcs' }, { label: npc.name }]} />
+      <PageHeader eyebrow={t('npcDetail.eyebrow')} title={npc.name} subtitle={npc.title || npc.occupation || undefined} iconElement={<UserRound className="size-7" />} breadcrumbs={[{ label: t('nav.npcs'), to: '/cyclopedia?tab=npcs' }, { label: npc.name }]} />
 
       <div className="grid gap-6 lg:grid-cols-[minmax(0,1fr)_18rem]">
         <div className="min-w-0 space-y-6">
@@ -129,9 +141,9 @@ export default function NpcDetailPage() {
         <aside className="space-y-4 lg:sticky lg:top-28 lg:self-start">
           <div className="rounded-2xl border border-line bg-surface-base/70 p-4">
             <div className="grid aspect-square place-items-center rounded-xl bg-primary/10 text-primary">
-              {npc.media.status === 'available' && npc.media.url ? <img src={npc.media.url} alt="" className="size-full object-contain [image-rendering:pixelated]" /> : <UserRound className="size-20" aria-hidden="true" />}
+              <NpcDetailPortrait mediaUrl={mediaUrl} />
             </div>
-            <p className="mt-3 text-xs text-content-muted">{npc.media.status === 'reference_only' ? t('npcDetail.mediaReferenceOnly') : npc.media.status === 'missing' ? t('npcDetail.mediaMissing') : t('npcDetail.mediaAvailable')}</p>
+            <p className="mt-3 text-xs text-content-muted">{mediaUrl ? t('npcDetail.mediaAvailable') : npc.media.status === 'reference_only' ? t('npcDetail.mediaReferenceOnly') : t('npcDetail.mediaMissing')}</p>
           </div>
           <div className="rounded-2xl border border-line bg-surface-base/70 p-4 text-xs text-content-muted">
             <h2 className="font-semibold text-content-primary">{t('npcDetail.provenance')}</h2>

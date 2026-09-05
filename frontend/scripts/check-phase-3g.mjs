@@ -12,7 +12,8 @@ const requireText = (source, value, message) => {
   if (!source.includes(value)) fail(message);
 };
 
-const directory = read('src/pages/NpcDirectoryPage.tsx');
+const cyclopedia = read('src/pages/CreaturesPage.tsx');
+const card = read('src/components/NpcCard.tsx');
 const detail = read('src/pages/NpcDetailPage.tsx');
 const app = read('src/App.tsx');
 const navigation = read('src/components/Navigation.tsx');
@@ -22,18 +23,19 @@ const endpoint = read('../backend/app/api/v1/npcs_locations.py');
 const projection = read('../backend/app/services/npc_projection_service.py');
 const mapEndpoint = read('../backend/app/api/v1/tibia_map.py');
 
-requireText(app, 'path="/npcs"', 'canonical NPC directory route is missing');
+requireText(app, 'path="/npcs"', 'legacy NPC browse route is missing');
+requireText(app, 'buildLegacyNpcBrowseRedirect(location.search)', 'legacy NPC browse route does not redirect into Cyclopedia');
 requireText(app, 'path="/npcs/:identifier"', 'legacy-compatible NPC detail route is missing');
-requireText(navigation, "navigate('/npcs')", 'NPC directory is not integrated into Cyclopedia navigation');
+requireText(navigation, 'cyclopediaSections.map', 'NPC browse navigation is not driven by the Cyclopedia section contract');
 requireText(apiClient, "'/npcs/directory'", 'frontend does not use the paginated NPC API');
 requireText(types, 'interface NpcDirectoryPage', 'paginated directory contract is untyped');
-requireText(directory, 'window.setTimeout', 'directory search is not debounced');
-requireText(directory, 'controller.abort()', 'stale directory requests are not cancelled');
-requireText(directory, 'PaginationControls', 'directory lacks server pagination controls');
-requireText(directory, 'location: requestedLocation', 'supported location filtering is not sent to the server');
-requireText(directory, 'npc.canonical_id', 'new detail navigation does not prefer canonical identity');
-requireText(directory, 'npc.map_available', 'cards do not distinguish verified map coverage');
-requireText(directory, "value == null", 'cards do not distinguish unknown from known-empty counts');
+requireText(cyclopedia, 'window.setTimeout', 'Cyclopedia NPC search is not debounced');
+requireText(cyclopedia, 'controller.abort()', 'stale Cyclopedia NPC requests are not cancelled');
+requireText(cyclopedia, 'namedKnowledgeApi.listNpcs', 'Cyclopedia does not use the bounded NPC directory API');
+requireText(cyclopedia, 'location: cacheLocation || undefined', 'supported location filtering is not sent to the server');
+requireText(card, 'npc.canonical_id', 'new detail navigation does not prefer canonical identity');
+requireText(card, 'npc.map_available', 'cards do not distinguish verified map coverage');
+requireText(card, "value == null", 'cards do not distinguish unknown from known-empty counts');
 requireText(types, 'npc_buys_from_player', 'NPC-buy semantics are not represented in the detail contract');
 requireText(detail, "t('npcDetail.buysHelp')", 'player-facing NPC-buy semantics are not explained');
 requireText(detail, "t('npcDetail.sellsHelp')", 'player-facing NPC-sell semantics are not explained');
@@ -49,11 +51,12 @@ requireText(endpoint, 'TibiaWikiNpc.normalized_name.asc(), TibiaWikiNpc.id.asc()
 requireText(endpoint, 'model.knowledge_entity_id == canonical_id', 'detail API does not accept canonical UUIDs');
 requireText(projection, 'exact canonical name or verified alias', 'exact relationship resolution contract is undocumented');
 requireText(projection, '"ambiguous" if len(matches) > 1 else "unresolved"', 'ambiguous exact matches can be auto-selected');
-requireText(projection, '"reference_only" if row.image_url else "missing"', 'unsafe provider media is not classified');
+requireText(projection, '"status": "cached" if cached else "unavailable"', 'NPC media does not expose the local-cache availability contract');
+requireText(projection, '"source_url": None', 'NPC media projection can expose an unsafe provider URL');
 requireText(projection, '_spatial_evidence_by_entity', 'NPC projection does not reuse exact map evidence');
 requireText(mapEndpoint, 'navigation_url=f"/npcs/{row.knowledge_entity_id}", image_url=None', 'map results use legacy NPC identity or remote media');
-if (/https?:\/\//.test(directory)) fail('directory contains a direct external media URL');
-if (/#[0-9a-f]{3,8}\b|rgba?\(/i.test(directory + detail)) fail('NPC UI contains raw colors');
+if (/https?:\/\//.test(card)) fail('NPC card contains a direct external media URL');
+if (/#[0-9a-f]{3,8}\b|rgba?\(/i.test(card + detail)) fail('NPC UI contains raw colors');
 if (/fuzzy|levenshtein|similarity/i.test(projection)) fail('NPC reference projection contains a fuzzy fallback');
 
 if (!process.exitCode) {

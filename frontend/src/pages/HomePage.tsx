@@ -129,6 +129,12 @@ export default function HomePage() {
       help: t('home.assistantPreview.categories.zones.help'),
       to: '/cyclopedia?tab=zones',
     },
+    {
+      key: 'npcs',
+      title: t('home.assistantPreview.categories.npcs.title'),
+      help: t('home.assistantPreview.categories.npcs.help'),
+      to: '/cyclopedia?tab=npcs',
+    },
   ];
 
   const clearActivity = async () => {
@@ -251,7 +257,7 @@ export default function HomePage() {
           </p>
         </div>
 
-        <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-5">
+        <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-6">
           {searchOptions.map((option) => (
             <HomeCapabilityCard
               key={option.key}

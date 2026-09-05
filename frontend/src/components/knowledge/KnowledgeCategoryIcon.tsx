@@ -1,5 +1,5 @@
 import type { LucideIcon } from 'lucide-react';
-import { BookOpenCheck, Crown, Gem, MapPinned, Swords } from 'lucide-react';
+import { BookOpenCheck, Crown, Gem, MapPinned, Swords, UserRound } from 'lucide-react';
 import { useEffect, useState } from 'react';
 
 import api from '../../services/api';
@@ -9,7 +9,8 @@ export type KnowledgeCategory =
   | 'bosses'
   | 'items'
   | 'quests'
-  | 'zones';
+  | 'zones'
+  | 'npcs';
 
 type CategoryVisuals = Partial<Record<KnowledgeCategory, string>>;
 
@@ -19,6 +20,7 @@ const fallbackIcons: Record<KnowledgeCategory, LucideIcon> = {
   items: Gem,
   quests: BookOpenCheck,
   zones: MapPinned,
+  npcs: UserRound,
 };
 
 let visualCache: CategoryVisuals | null = null;
