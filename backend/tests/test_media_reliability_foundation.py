@@ -200,7 +200,7 @@ def test_reconciliation_is_bounded_sanitized_and_network_free(db, tmp_path, monk
     assert groups["location"]["counts"]["no_media_asset"] == 1
     assert all(len(group["samples"]) <= 1 for group in report["groups"])
     assert report["download_performed"] is False and report["read_only"] is True
-    assert report["location_media_contract"]["ingestion_enabled"] is False
+    assert report["location_media_contract"]["ingestion_enabled"] is True
     assert report["category_images"]["uses_media_asset"] is False
     serialized = str(report)
     assert "/private/" not in serialized and "token=secret" not in serialized

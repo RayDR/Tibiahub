@@ -22,9 +22,10 @@ from app.knowledge.services.failures import (
     MalformedProviderPayloadError, OversizedProviderResponseError, ProviderResponseEnvelopeError,
 )
 from app.services.bestiary_source import (
-    _build_sprite_url, _build_wiki_page_url, _extract_infobox_param_map,
+    _build_wiki_page_url, _extract_infobox_param_map,
     _extract_links, _strip_markup, _to_bool, _to_int,
 )
+from app.services.media_evidence_service import explicit_provider_media_reference
 from app.services.text_utils import slugify
 
 
@@ -205,13 +206,15 @@ def _npc_parts(raw: dict[str, Any]) -> tuple[str, str, str, NpcKnowledgeDTO]:
     )
     destinations_supplied = destinations_supplied or bool(transport_destinations)
     quests, quests_supplied = _names(params, "quests", "relatedquests", "related quests")
+    media_evidence = explicit_provider_media_reference(wikitext, "npc")
     supplied = frozenset(key for key, flag in {
         "canonical_name": name_supplied, "title": title_supplied, "occupation": occupation_supplied,
         "sex": sex_supplied, "location_name": bool(location_names),
         "location_text": location_supplied, "location_names": bool(location_names),
         "location_mode": location_mode is not None, "description": description_supplied,
         "buys": buys_supplied, "sells": sells_supplied, "destinations": destinations_supplied,
-        "related_quests": quests_supplied, "image_reference": True, "source_reference": True, "slug": True,
+        "related_quests": quests_supplied, "image_reference": media_evidence.eligible,
+        "source_reference": True, "slug": True,
     }.items() if flag)
     aliases = () if normalize_name(page_title) == normalize_name(canonical_name) else (page_title,)
     dto = NpcKnowledgeDTO(
@@ -222,13 +225,15 @@ def _npc_parts(raw: dict[str, Any]) -> tuple[str, str, str, NpcKnowledgeDTO]:
         buys=tuple(NpcTradeReference(name=value.name) for value in buys),
         sells=tuple(NpcTradeReference(name=value.name) for value in sells),
         destinations=destinations, related_quests=quests,
-        image_reference=_build_sprite_url(canonical_name), source_reference=_build_wiki_page_url(page_title),
+        image_reference=media_evidence.source_url, source_reference=_build_wiki_page_url(page_title),
         provider_metadata={
             "page_title": page_title,
             "template_parameters": sorted(params),
             "location_text": location_text,
             "location_names": [value.name for value in location_names],
             "location_mode": location_mode,
+            "media_evidence_status": media_evidence.state,
+            "media_evidence_field": media_evidence.field_name,
         },
         supplied_fields=supplied,
     )
@@ -311,6 +316,7 @@ def _location_parts(raw: dict[str, Any]) -> tuple[str, str, str, LocationKnowled
     quests, quests_supplied = _names(params, "quests", "relatedquests")
     sublocations, sublocations_supplied = _names(params, "sublocations", "subareas", "areas")
     access, access_supplied = _text(params, "access", "accessnotes", "access notes")
+    media_evidence = explicit_provider_media_reference(wikitext, "location")
 
     # Body prose can describe access to a subarea rather than this canonical
     # location. Preserve it only in the immutable raw document.
@@ -322,7 +328,7 @@ def _location_parts(raw: dict[str, Any]) -> tuple[str, str, str, LocationKnowled
         "premium_required": premium_supplied, "minimum_level": minimum_supplied,
         "maximum_level": maximum_supplied, "npcs": npcs_supplied, "creatures": creatures_supplied,
         "quests": quests_supplied, "sublocations": sublocations_supplied, "access_notes": access_supplied,
-        "image_reference": True, "source_reference": True, "slug": True,
+        "image_reference": media_evidence.eligible, "source_reference": True, "slug": True,
     }.items() if flag)
     aliases = () if normalize_name(page_title) == normalize_name(canonical_name) else (page_title,)
     dto = LocationKnowledgeDTO(
@@ -331,12 +337,15 @@ def _location_parts(raw: dict[str, Any]) -> tuple[str, str, str, LocationKnowled
         premium_required=_to_bool(premium_raw) if premium_supplied else None,
         minimum_level=minimum_level, maximum_level=_to_int(maximum_raw),
         npcs=npcs, creatures=creatures, quests=quests, sublocations=sublocations, access_notes=access,
-        image_reference=_build_sprite_url(canonical_name), source_reference=_build_wiki_page_url(page_title),
+        image_reference=media_evidence.source_url, source_reference=_build_wiki_page_url(page_title),
         provider_metadata={
             "page_title": page_title,
             "template_parameters": sorted(params),
             "access_quest_names": [value.name for value in access_quests],
             "vocation_level_parameters": list(vocation_level_keys),
+            "media_evidence_status": media_evidence.state,
+            "media_evidence_field": media_evidence.field_name,
+            "rejected_unrelated_media_reference": media_evidence.rejected_unrelated_reference,
         },
         supplied_fields=supplied,
     )

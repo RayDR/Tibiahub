@@ -54,6 +54,10 @@ from app.knowledge.services.provider_health import (
 from app.knowledge.services.idempotency import scope_hash
 from app.knowledge.storage import KnowledgeDocumentStore
 from app.services.character_ownership_service import CharacterOwnershipService
+from app.services.entity_media_ingestion_service import (
+    MEDIA_JOB_TYPES,
+    EntityMediaIngestionService,
+)
 
 
 logger = logging.getLogger("app.knowledge.worker")
@@ -141,7 +145,8 @@ class KnowledgeWorker:
                         )
                         return None
             attempt = KnowledgeJobService.start_attempt(db, job_id, self.worker_id)
-            record_provider_attempt(provider)
+            if job.job_type not in MEDIA_JOB_TYPES:
+                record_provider_attempt(provider)
             cursor_value = None
             if job.entity_type_id:
                 cursor = (
@@ -282,6 +287,31 @@ class KnowledgeWorker:
             )
             KnowledgeJobService.heartbeat(db, self.worker_id, state="idle")
 
+    def _run_media_job(self, request: KnowledgeFetchRequest) -> None:
+        metrics = asyncio.run(EntityMediaIngestionService.run_batch(
+            self.session_factory,
+            entity_type=request.entity_type or "",
+            after_id=int(request.scope["after_id"]),
+            batch_size=int(request.scope["batch_size"]),
+            canary=bool(request.scope["canary"]),
+        ))
+        with self.session_factory.begin() as db:
+            job = db.execute(
+                select(KnowledgeJob)
+                .where(KnowledgeJob.id == request.job_id)
+                .with_for_update()
+            ).scalar_one()
+            KnowledgeJobService.assert_owner(job, self.worker_id, datetime.now(UTC))
+            KnowledgeJobService.complete(
+                db,
+                job.id,
+                request.attempt_id,
+                self.worker_id,
+                partial=bool(metrics["failure_codes"]),
+                metrics=metrics,
+            )
+            KnowledgeJobService.heartbeat(db, self.worker_id, state="idle")
+
     def _handle_failure(self, job_id: UUID, attempt_id: UUID | None, error: BaseException) -> None:
         failure = classify_failure(error)
         if attempt_id is None:
@@ -293,7 +323,7 @@ class KnowledgeWorker:
                 if job is None or job.state == "cancelled":
                     return
                 provider = db.get(KnowledgeProvider, job.provider_id)
-                if provider is not None:
+                if provider is not None and job.job_type not in MEDIA_JOB_TYPES:
                     record_provider_failure(provider, failure)
                 correlation_id = job.correlation_id
                 KnowledgeJobService.fail(
@@ -392,6 +422,9 @@ class KnowledgeWorker:
                 self._heartbeat("idle")
                 return True
             attempt_id, request = started
+            if request.job_type in MEDIA_JOB_TYPES:
+                self._run_media_job(request)
+                return True
             self._require_provider_available(request.provider_code)
             try:
                 adapter = self.adapters.resolve(request.provider_code, request.job_type, request.entity_type)

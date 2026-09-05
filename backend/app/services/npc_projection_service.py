@@ -19,7 +19,10 @@ from app.knowledge.models import (
 )
 from app.models.external_data import Item, TibiaWikiLocation, TibiaWikiNpc, TibiaWikiQuest
 from app.models.media_asset import MediaAsset
-from app.services.media_asset_service import build_npc_asset_key
+from app.services.media_asset_service import (
+    build_canonical_npc_asset_key,
+    build_legacy_npc_asset_key,
+)
 
 
 REFERENCE_TYPES = {
@@ -55,19 +58,29 @@ def _coverage(row: TibiaWikiNpc, field: str) -> str:
 
 
 def _media(row: TibiaWikiNpc, assets: dict[str, MediaAsset]) -> dict[str, Any]:
-    key = build_npc_asset_key(row)
-    asset = assets.get(key)
+    canonical_key = build_canonical_npc_asset_key(row.knowledge_entity_id)
+    legacy_key = build_legacy_npc_asset_key(row)
+    asset = assets.get(canonical_key)
+    if not (asset and asset.status == "cached" and asset.file_exists()):
+        asset = assets.get(legacy_key)
     cached = bool(asset and asset.status == "cached" and asset.file_exists())
     return {
-        "status": "cached" if cached else "reference_only" if row.image_url else "missing",
-        "url": f"/api/v1/npcs/{row.id}/image" if cached else None,
-        "source_provider": row.source_name if row.image_url else None,
-        "source_url": row.image_url,
+        "status": "cached" if cached else "unavailable",
+        "url": f"/api/v1/npcs/{row.knowledge_entity_id}/image" if cached else None,
+        "source_provider": None,
+        "source_url": None,
     }
 
 
 def _media_assets(db: Session, rows: Iterable[TibiaWikiNpc]) -> dict[str, MediaAsset]:
-    keys = {build_npc_asset_key(row) for row in rows}
+    keys = {
+        key
+        for row in rows
+        for key in (
+            build_canonical_npc_asset_key(row.knowledge_entity_id),
+            build_legacy_npc_asset_key(row),
+        )
+    }
     if not keys:
         return {}
     return {

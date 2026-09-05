@@ -11,6 +11,7 @@ from app.models import Creature, HuntZone
 from app.models.external_data import Item, TibiaWikiLocation, TibiaWikiNpc
 from app.models.media_asset import MediaAsset
 from app.services import media_asset_service
+from app.services.media_evidence_service import EntityMediaEvidence, evidence_for_entities
 
 
 MEDIA_RECONCILIATION_STATUSES = (
@@ -68,9 +69,48 @@ class MediaReconciliationService:
         }
 
     @staticmethod
+    def _source_evidence(
+        rows,
+        evidence: dict[int, EntityMediaEvidence],
+        *,
+        sample_limit: int,
+    ) -> dict[str, Any]:
+        values = list(rows)
+        counts = Counter({
+            "explicit_reference": 0,
+            "eligible": 0,
+            "no_source_evidence": 0,
+            "malformed_source": 0,
+            "unresolved_source": 0,
+            "rejected_unrelated_reference": 0,
+            "moving_or_variant": 0,
+        })
+        samples = []
+        for row in values:
+            item = evidence[row.id]
+            counts["explicit_reference"] += int(item.explicit_reference)
+            counts["eligible"] += int(item.eligible)
+            counts["rejected_unrelated_reference"] += int(item.rejected_unrelated_reference)
+            counts["moving_or_variant"] += int(item.moving_or_variant)
+            if item.state in {"no_source_evidence", "malformed_source", "unresolved_source"}:
+                counts[item.state] += 1
+            if len(samples) < sample_limit and item.state != "eligible":
+                samples.append({
+                    "entity_id": str(row.knowledge_entity_id),
+                    "name": row.name,
+                    "state": item.state,
+                    "rejected_unrelated_reference": item.rejected_unrelated_reference,
+                })
+        return {"counts": dict(counts), "samples": samples}
+
+    @staticmethod
     def report(db: Session, *, sample_limit: int = 10) -> dict[str, Any]:
         assets = db.query(MediaAsset).all()
         by_key = {asset.asset_key: asset for asset in assets}
+        npc_rows = db.query(TibiaWikiNpc).order_by(TibiaWikiNpc.id).all()
+        location_rows = db.query(TibiaWikiLocation).order_by(TibiaWikiLocation.id).all()
+        npc_evidence = evidence_for_entities(db, "npc", npc_rows)
+        location_evidence = evidence_for_entities(db, "location", location_rows)
         status_by_asset_id: dict[int, tuple[str, str | None]] = {}
 
         def asset_status(asset: MediaAsset | None) -> tuple[str, str | None]:
@@ -88,11 +128,24 @@ class MediaReconciliationService:
                 yield str(row.id), row.name, status, error
 
         def npcs():
-            for row in db.query(TibiaWikiNpc).order_by(TibiaWikiNpc.id).all():
-                status, error = asset_status(
-                    by_key.get(media_asset_service.build_npc_asset_key(row))
+            for row in npc_rows:
+                canonical_asset = by_key.get(
+                    media_asset_service.build_canonical_npc_asset_key(row.knowledge_entity_id)
                 )
-                yield str(row.knowledge_entity_id), row.name, status, error
+                canonical_status, canonical_error = asset_status(canonical_asset)
+                if canonical_status == "cached":
+                    yield str(row.knowledge_entity_id), row.name, canonical_status, canonical_error
+                    continue
+                legacy_asset = by_key.get(media_asset_service.build_legacy_npc_asset_key(row))
+                legacy_status, legacy_error = asset_status(legacy_asset)
+                if legacy_status == "cached":
+                    yield str(row.knowledge_entity_id), row.name, "legacy_key_bridge", None
+                elif canonical_asset is not None:
+                    yield str(row.knowledge_entity_id), row.name, canonical_status, canonical_error
+                elif legacy_asset is not None:
+                    yield str(row.knowledge_entity_id), row.name, legacy_status, legacy_error
+                else:
+                    yield str(row.knowledge_entity_id), row.name, "no_media_asset", None
 
         def items():
             for row in db.query(Item).order_by(Item.id).all():
@@ -128,11 +181,11 @@ class MediaReconciliationService:
                 yield str(row.knowledge_entity_id), row.name, status, error
 
         def locations():
-            for row in db.query(TibiaWikiLocation).order_by(TibiaWikiLocation.id).all():
-                if row.knowledge_entity_id is None:
-                    yield str(row.id), row.name, "unresolved_canonical_binding", None
-                else:
-                    yield str(row.knowledge_entity_id), row.name, "no_media_asset", None
+            for row in location_rows:
+                status, error = asset_status(
+                    by_key.get(media_asset_service.build_location_asset_key(row))
+                )
+                yield str(row.knowledge_entity_id), row.name, status, error
 
         groups = [
             MediaReconciliationService._group("creature", creatures(), sample_limit=sample_limit),
@@ -141,6 +194,16 @@ class MediaReconciliationService:
             MediaReconciliationService._group("hunt_zone", hunt_zones(), sample_limit=sample_limit),
             MediaReconciliationService._group("location", locations(), sample_limit=sample_limit),
         ]
+        groups[1]["source_evidence"] = MediaReconciliationService._source_evidence(
+            npc_rows,
+            npc_evidence,
+            sample_limit=sample_limit,
+        )
+        groups[4]["source_evidence"] = MediaReconciliationService._source_evidence(
+            location_rows,
+            location_evidence,
+            sample_limit=sample_limit,
+        )
         return {
             "generated_at": datetime.now(UTC),
             "read_only": True,
@@ -155,8 +218,13 @@ class MediaReconciliationService:
                 "canonical_identity": "knowledge_entity_uuid",
                 "local_endpoint": "/api/v1/locations/{identifier}/image",
                 "source_requirement": "allowlisted_provider_image_evidence",
-                "ingestion_enabled": False,
-                "current_coverage": "none",
+                "ingestion_enabled": True,
+                "eligibility": "exact_retained_primary_infobox_file_reference",
+                "current_coverage": "reconciled",
+            },
+            "count_semantics": {
+                "asset_counts": "mutually_exclusive",
+                "source_evidence_counts": "base states are exclusive; explicit, eligible, rejected, and moving counts overlap",
             },
             "category_images": {
                 "storage": "separate_local_category_image_directory",

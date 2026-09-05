@@ -16,6 +16,7 @@ from app.db.database import get_db
 from app.knowledge.services import KnowledgeGraphService
 from app.knowledge.models import KnowledgeEntityAlias
 from app.models.external_data import TibiaWikiLocation, TibiaWikiNpc
+from app.models.media_asset import MediaAsset
 from app.services.entity_metadata_service import EntityMetadataService
 from app.services.npc_projection_service import detail_references, directory_rows
 from app.services import media_asset_service as media_svc
@@ -152,7 +153,7 @@ class LocationDetail(NamedReferenceSummary):
     relationships: list[NamedRelationship]
 
 
-def _summary(row) -> NamedReferenceSummary:
+def _summary(row, *, local_image_url: str | None = None) -> NamedReferenceSummary:
     supplied = sorted(set(row.supplied_fields or []))
     expected = (
         {"description", "title", "occupation", "location_name", "buys", "sells", "destinations", "related_quests"}
@@ -168,9 +169,7 @@ def _summary(row) -> NamedReferenceSummary:
         external_id=row.external_id,
         entity_type=row.knowledge_entity.entity_type,
         description=row.description,
-        # NPC provider images are reference-only until a local cache contract
-        # exists. Locations retain their existing legacy behavior.
-        image_url=None if isinstance(row, TibiaWikiNpc) else row.image_url,
+        image_url=local_image_url,
         source_url=row.source_url,
         source_provider=row.source_name,
         supplied_fields=supplied,
@@ -203,22 +202,63 @@ def _find(query, model, identifier: str):
     return query.filter(or_(model.slug == identifier, model.normalized_name == normalize_search_text(identifier))).first()
 
 
-def _npc_media_descriptor(db: Session, npc_id: int) -> LocalMediaDescriptor:
-    row = db.query(TibiaWikiNpc).filter_by(id=npc_id).first()
-    if row is None:
-        raise HTTPException(status_code=404, detail="NPC not found")
-    key = media_svc.build_npc_asset_key(row)
-    asset = media_svc.get_asset(db, key)
-    cached = bool(asset and asset.status == "cached" and asset.file_exists())
+def _media_keys(row) -> tuple[str, ...]:
+    canonical = (
+        media_svc.build_canonical_npc_asset_key(row.knowledge_entity_id)
+        if isinstance(row, TibiaWikiNpc)
+        else media_svc.build_location_asset_key(row)
+    )
+    if isinstance(row, TibiaWikiNpc):
+        return canonical, media_svc.build_legacy_npc_asset_key(row)
+    return (canonical,)
+
+
+def _media_descriptor(row, assets_by_key: dict[str, MediaAsset]) -> LocalMediaDescriptor:
+    keys = _media_keys(row)
+    asset = next(
+        (
+            assets_by_key[key]
+            for key in keys
+            if key in assets_by_key
+            and assets_by_key[key].status == "cached"
+            and assets_by_key[key].file_exists()
+        ),
+        None,
+    )
+    fallback_asset = next((assets_by_key[key] for key in keys if key in assets_by_key), None)
+    selected = asset or fallback_asset
+    if asset is not None:
+        status = "cached"
+    elif selected is not None and selected.status == "cached":
+        status = "local_file_missing"
+    else:
+        status = selected.status if selected is not None else "missing"
     return LocalMediaDescriptor(
-        local_path=str(asset.local_path) if cached and asset.local_path else None,
-        content_type=asset.content_type if cached else None,
-        size_bytes=asset.size_bytes if cached else None,
-        asset_hash=asset.sha256_hash if cached else None,
-        asset_key=key,
-        status=asset.status if asset else "missing",
+        local_path=str(asset.local_path) if asset and asset.local_path else None,
+        content_type=asset.content_type if asset else None,
+        size_bytes=asset.size_bytes if asset else None,
+        asset_hash=asset.sha256_hash if asset else None,
+        asset_key=selected.asset_key if selected is not None else keys[0],
+        status=status,
         fallback_label=row.name,
     )
+
+
+def _media_descriptors(db: Session, rows) -> dict[int, LocalMediaDescriptor]:
+    values = list(rows)
+    keys = {key for row in values for key in _media_keys(row)}
+    assets_by_key = {
+        asset.asset_key: asset
+        for asset in db.query(MediaAsset).filter(MediaAsset.asset_key.in_(keys)).all()
+    } if keys else {}
+    return {row.id: _media_descriptor(row, assets_by_key) for row in values}
+
+
+def _local_image_url(row, descriptor: LocalMediaDescriptor) -> str | None:
+    if descriptor.status != "cached":
+        return None
+    prefix = "npcs" if isinstance(row, TibiaWikiNpc) else "locations"
+    return f"/api/v1/{prefix}/{row.knowledge_entity_id}/image"
 
 
 def _npc_search_query(db: Session, search: str | None, location: str | None):
@@ -255,7 +295,11 @@ def search_npcs(
             (row.normalized_name, row.name, row.id) for row in rows[:5]
         ])
         db.commit()
-    return [_summary(row) for row in rows]
+    descriptors = _media_descriptors(db, rows)
+    return [
+        _summary(row, local_image_url=_local_image_url(row, descriptors[row.id]))
+        for row in rows
+    ]
 
 
 @router.get("/npcs/directory", response_model=NpcDirectoryPage)
@@ -289,10 +333,13 @@ def npc_directory(
     )
 
 
-@router.get("/npcs/{npc_id}/image")
-def get_npc_image(npc_id: int, request: Request, db: Session = Depends(get_db)):
+@router.get("/npcs/{identifier}/image")
+def get_npc_image(identifier: str, request: Request, db: Session = Depends(get_db)):
     """Serve only validated, worker-cached NPC media; never proxy providers."""
-    descriptor = _npc_media_descriptor(db, npc_id)
+    row = _find(db.query(TibiaWikiNpc), TibiaWikiNpc, identifier)
+    if row is None:
+        raise HTTPException(status_code=404, detail="NPC not found")
+    descriptor = _media_descriptors(db, [row])[row.id]
     if descriptor.status != "cached":
         raise HTTPException(
             status_code=404,
@@ -328,9 +375,11 @@ def get_npc(identifier: str, db: Session = Depends(get_db)):
     )
     if row is None:
         raise HTTPException(status_code=404, detail="NPC not found")
+    descriptor = _media_descriptors(db, [row])[row.id]
     references = detail_references(db, row)
     return NpcDetail(
-        **_summary(row).model_dump(), title=row.title, occupation=row.occupation, sex=row.sex,
+        **_summary(row, local_image_url=_local_image_url(row, descriptor)).model_dump(),
+        title=row.title, occupation=row.occupation, sex=row.sex,
         location_name=row.location_name or (row.provider_metadata or {}).get("location_text"),
         aliases=references["aliases"], field_coverage=references["field_coverage"],
         buys=references["buys"], sells=references["sells"],
@@ -363,7 +412,44 @@ def search_locations(
                 for row in rows[:5] if row.knowledge_entity.entity_type == entity_type
             ])
         db.commit()
-    return [_summary(row) for row in rows]
+    descriptors = _media_descriptors(db, rows)
+    return [
+        _summary(row, local_image_url=_local_image_url(row, descriptors[row.id]))
+        for row in rows
+    ]
+
+
+@router.get("/locations/{identifier}/image")
+def get_location_image(identifier: str, request: Request, db: Session = Depends(get_db)):
+    """Serve exact canonical Location media from the local cache only."""
+    row = _find(db.query(TibiaWikiLocation), TibiaWikiLocation, identifier)
+    if row is None:
+        raise HTTPException(status_code=404, detail="Location not found")
+    descriptor = _media_descriptors(db, [row])[row.id]
+    if descriptor.status != "cached":
+        raise HTTPException(
+            status_code=404,
+            detail="Location image unavailable",
+            headers={
+                "X-Image-Source": "unavailable",
+                "X-Image-Status": descriptor.status,
+                "X-Asset-Key": descriptor.asset_key,
+            },
+        )
+    response = build_local_media_file_response(
+        request,
+        descriptor,
+        default_media_type="image/gif",
+        cache_max_age_seconds=settings.IMAGE_CACHE_MAX_AGE_SECONDS,
+        extra_headers={
+            "X-Image-Source": "local-media-asset",
+            "X-Image-Status": "cached",
+            "X-Asset-Key": descriptor.asset_key,
+        },
+    )
+    if response is None:
+        raise HTTPException(status_code=404, detail="Location image unavailable")
+    return response
 
 
 @router.get("/locations/{identifier}", response_model=LocationDetail)
@@ -371,8 +457,10 @@ def get_location(identifier: str, db: Session = Depends(get_db)):
     row = _find(db.query(TibiaWikiLocation), TibiaWikiLocation, identifier)
     if row is None:
         raise HTTPException(status_code=404, detail="Location not found")
+    descriptor = _media_descriptors(db, [row])[row.id]
     return LocationDetail(
-        **_summary(row).model_dump(), location_kind=row.location_kind, region=row.region,
+        **_summary(row, local_image_url=_local_image_url(row, descriptor)).model_dump(),
+        location_kind=row.location_kind, region=row.region,
         parent_location=row.parent_location, premium_required=row.premium_required,
         minimum_level=row.minimum_level, maximum_level=row.maximum_level,
         npcs=list(row.npcs or []), creatures=list(row.creatures or []), quests=list(row.quests or []),

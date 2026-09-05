@@ -264,7 +264,8 @@ def build_zone_source_url(zone) -> Optional[str]:
     return (getattr(zone, "map_image_url", None) or None)
 
 
-def build_npc_asset_key(npc) -> str:
+def build_legacy_npc_asset_key(npc) -> str:
+    """Build the historical provider/external-ID NPC key exactly."""
     provider = (getattr(npc, "source_name", None) or "").strip()
     external_id = (getattr(npc, "external_id", None) or "").strip()
     if provider and external_id:
@@ -272,8 +273,28 @@ def build_npc_asset_key(npc) -> str:
     return f"npc:{_normalize_key_part(npc.name)}"
 
 
+def build_canonical_npc_asset_key(knowledge_entity_id) -> str:
+    return f"npc:knowledge:{knowledge_entity_id}"
+
+
+def build_npc_asset_key(npc) -> str:
+    canonical_id = getattr(npc, "knowledge_entity_id", None)
+    if canonical_id is not None:
+        return build_canonical_npc_asset_key(canonical_id)
+    return build_legacy_npc_asset_key(npc)
+
+
 def build_npc_source_url(npc) -> Optional[str]:
+    if (getattr(npc, "provider_metadata", None) or {}).get("media_evidence_status") != "eligible":
+        return None
     return (getattr(npc, "image_url", None) or "").strip() or None
+
+
+def build_location_asset_key(location) -> str:
+    canonical_id = getattr(location, "knowledge_entity_id", None)
+    if canonical_id is None:
+        raise ValueError("Location media requires canonical Knowledge identity")
+    return f"location:knowledge:{canonical_id}"
 
 
 # ── internal fetch helpers ────────────────────────────────────────────────────
@@ -605,6 +626,7 @@ class MediaFetchOutcome:
     http_status: int | None = None
     retryable: bool | None = None
     safe_url: str | None = None
+    network_performed: bool = False
 
 
 def _atomic_image_write(destination: Path, content: bytes) -> None:
@@ -648,6 +670,7 @@ async def cache_media_asset(
     source_url: str,
     force_refetch: bool = False,
     retry_failed: bool = False,
+    release_transaction_before_fetch: bool = False,
 ) -> MediaFetchOutcome:
     """Use the canonical downloader and atomically update one served media asset."""
     asset = db.query(MediaAsset).filter(MediaAsset.asset_key == asset_key).first()
@@ -674,9 +697,18 @@ async def cache_media_asset(
                 error_category, safe_message = stored_media_error(asset)
                 return MediaFetchOutcome(asset=asset, result="failed", error_category=error_category, safe_message=safe_message)
 
+    if release_transaction_before_fetch and db.in_transaction():
+        # Durable media jobs perform provider I/O without retaining a database
+        # transaction or pool lock. State is re-read before persistence below.
+        db.rollback()
+
     database_mutated = False
     try:
         content, content_type, resolved_url = await _fetch_image(source_url)
+        if release_transaction_before_fetch:
+            asset = db.query(MediaAsset).filter(MediaAsset.asset_key == asset_key).first()
+            if asset and asset.status == "cached" and asset.file_exists() and not force_refetch:
+                return MediaFetchOutcome(asset=asset, result="cached", network_performed=True)
         _, extension = validate_raster_image(content, content_type)
         safe_key = re.sub(r"[^a-z0-9_]", "_", asset_key).strip("_")
         destination = media_destination(f"{safe_key}{extension}")
@@ -697,7 +729,11 @@ async def cache_media_asset(
         asset.error_message = None
         db.commit()
         logger.info("media_asset_cached key=%s size=%d", asset_key, len(content))
-        return MediaFetchOutcome(asset=asset, result="created" if created else "updated")
+        return MediaFetchOutcome(
+            asset=asset,
+            result="created" if created else "updated",
+            network_performed=True,
+        )
     except Exception as exc:
         if database_mutated:
             db.rollback()
@@ -750,6 +786,7 @@ async def cache_media_asset(
             http_status=status,
             retryable=retryable,
             safe_url=safe_url,
+            network_performed=True,
         )
 
 def get_asset(db: Session, asset_key: str) -> Optional[MediaAsset]:
