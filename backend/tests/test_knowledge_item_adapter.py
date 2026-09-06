@@ -177,6 +177,38 @@ def test_item_detail_maps_real_fields_categories_and_unknown_envelope():
     assert dto.provider_metadata["provider_category"] == "Weapon"
 
 
+def test_item_detail_without_explicit_image_does_not_invent_gif_evidence():
+    dto = ItemKnowledgeDTO.from_canonical_data(
+        TibiaWikiItemAdapter(FixtureItemClient()).normalize(
+            _document(fixture("tibiawiki_item_detail.json")),
+            normalization_context(),
+        ).canonical_data,
+    )
+
+    assert dto.image_reference is None
+    assert "image_reference" not in dto.supplied_fields
+    assert dto.provider_metadata["media_evidence_status"] == "no_source_evidence"
+
+
+def test_item_detail_preserves_explicit_primary_infobox_image_evidence():
+    raw = fixture("tibiawiki_item_detail.json")
+    raw["parse"]["wikitext"]["*"] = raw["parse"]["wikitext"]["*"].replace(
+        "| itemid = 3288",
+        "| itemid = 3288\n| image = [[File:Magic Sword Sprite.png|64px]]",
+    )
+    dto = ItemKnowledgeDTO.from_canonical_data(
+        TibiaWikiItemAdapter(FixtureItemClient()).normalize(
+            _document(raw), normalization_context(),
+        ).canonical_data,
+    )
+
+    assert dto.image_reference.endswith(
+        "/Special:FilePath/Magic_Sword_Sprite.png"
+    )
+    assert "image_reference" in dto.supplied_fields
+    assert dto.provider_metadata["media_evidence_status"] == "eligible"
+
+
 def test_item_trade_parser_preserves_explicit_price_currency_and_unknown_price():
     raw = fixture("tibiawiki_item_detail.json")
     raw["parse"]["wikitext"]["*"] = raw["parse"]["wikitext"]["*"].replace(

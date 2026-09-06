@@ -19,6 +19,7 @@ export interface Loot {
   item_type?: string;
   item_image_url?: string;
   source_url?: string;
+  media: ItemMedia;
 }
 
 export interface LootWithCreature extends Loot {
@@ -268,6 +269,11 @@ export interface ItemRelatedEntity {
   slug: string;
 }
 
+export interface ItemMedia {
+  status: 'available' | 'unavailable';
+  url: string | null;
+}
+
 export interface ItemSearchResult {
   id?: number | null;
   image_item_id?: number | null;
@@ -275,6 +281,7 @@ export interface ItemSearchResult {
   normalized_name: string;
   slug?: string | null;
   item_image_url?: string | null;
+  media: ItemMedia;
   source_url?: string | null;
   knowledge_entity_id?: string | null;
   canonical_id?: string | null;
@@ -297,6 +304,7 @@ export interface ItemDetail {
   normalized_name: string;
   slug?: string | null;
   item_image_url?: string | null;
+  media: ItemMedia;
   source_url?: string | null;
   rarity?: string | null;
   drop_chance?: number | null;

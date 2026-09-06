@@ -2,6 +2,7 @@ import React, { useMemo, useState } from 'react';
 
 import type { Loot } from '../types';
 import ImageWithFallback from './ImageWithFallback';
+import { availableItemMediaUrl } from '../utils/entityMedia';
 
 interface LootDisplayProps {
   items: Loot[];
@@ -45,7 +46,7 @@ const LootDisplay: React.FC<LootDisplayProps> = ({ items }) => {
           <div key={loot.id} className="rounded-xl border border-line bg-surface-base/50 p-4">
             <div className="mb-3 flex items-center gap-3">
               <ImageWithFallback
-                src={loot.item_image_url ? `/api/v1/items/${loot.id}/image` : null}
+                src={availableItemMediaUrl(loot.media)}
                 alt={loot.item_name}
                 className="h-12 w-12 rounded-lg object-contain bg-surface"
                 containerClassName="h-12 w-12"

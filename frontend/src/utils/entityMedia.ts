@@ -1,7 +1,8 @@
+import type { ItemMedia } from '../types';
+
 export type LocalMediaEntityKind =
   | 'creature'
   | 'boss'
-  | 'item'
   | 'zone';
 
 export type EntityIdentifier =
@@ -74,12 +75,19 @@ export function buildLocalEntityMediaUrl(
     );
   }
 
-  if (kind === 'item') {
-    return (
-      `/api/v1/items/${id}/image` +
-      '?placeholder=false'
-    );
-  }
-
   return `/api/v1/hunt-zones/${id}/map-image`;
+}
+
+export function availableItemMediaUrl(
+  media: ItemMedia | null | undefined,
+): string | undefined {
+  if (
+    media?.status !== 'available'
+    || !media.url
+    || !media.url.startsWith('/api/v1/items/')
+    || !media.url.includes('placeholder=false')
+  ) {
+    return undefined;
+  }
+  return media.url;
 }

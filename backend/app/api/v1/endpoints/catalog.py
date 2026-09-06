@@ -56,21 +56,37 @@ def cyclopedia_category_visuals(response: Response, db: Session = Depends(get_db
 
     item_keys_by_id = {row.id: item_keys(row) for row in [*item_candidates, *quest_candidates]}
     item_keys = {key for keys in item_keys_by_id.values() for key in keys if key}
+    linked_asset_ids = {
+        row.image_asset_id
+        for row in [*item_candidates, *quest_candidates]
+        if row.image_asset_id is not None
+    }
     assets = (
         db.query(MediaAsset)
-        .filter(MediaAsset.asset_key.in_(item_keys), MediaAsset.status == "cached")
+        .filter(
+            or_(
+                MediaAsset.asset_key.in_(item_keys),
+                MediaAsset.id.in_(linked_asset_ids),
+            ),
+            MediaAsset.status == "cached",
+        )
         .all()
-        if item_keys
+        if item_keys or linked_asset_ids
         else []
     )
     assets_by_key = {row.asset_key: row for row in assets}
+    assets_by_id = {row.id: row for row in assets}
 
     def choose_item(candidates):
         def resolved_asset(row):
+            if row.image_asset_id is not None:
+                linked = assets_by_id.get(row.image_asset_id)
+                return linked if linked and linked.file_exists() else None
             canonical_key, legacy_key = item_keys_by_id[row.id]
-            return assets_by_key.get(canonical_key) or (
+            candidate = assets_by_key.get(canonical_key) or (
                 assets_by_key.get(legacy_key) if legacy_key else None
             )
+            return candidate if candidate and candidate.file_exists() else None
 
         available = [row for row in candidates if resolved_asset(row)]
         return min(
@@ -92,8 +108,8 @@ def cyclopedia_category_visuals(response: Response, db: Session = Depends(get_db
     return {
         "creatures": f"/api/v1/creatures/{creature.id}/image?placeholder=false" if creature else None,
         "bosses": f"/api/v1/creatures/{boss.id}/image?placeholder=false" if boss else None,
-        "items": f"/api/v1/items/{item.id}/image?placeholder=false" if item else None,
-        "quests": f"/api/v1/items/{quest_item.id}/image?placeholder=false" if quest_item else None,
+        "items": f"/api/v1/items/{item.knowledge_entity_id}/image?placeholder=false" if item else None,
+        "quests": f"/api/v1/items/{quest_item.knowledge_entity_id}/image?placeholder=false" if quest_item else None,
         "zones": f"/api/v1/hunt-zones/{zone.id}/map-image?placeholder=false" if zone else None,
     }
 
