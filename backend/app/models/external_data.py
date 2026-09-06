@@ -27,6 +27,12 @@ class Item(Base):
     source_name = Column(String(50), nullable=True, index=True)
     source_url = Column(String(1024), nullable=True)
     image_url = Column(String(1024), nullable=True)
+    image_asset_id = Column(
+        Integer,
+        ForeignKey("media_assets.id", ondelete="SET NULL"),
+        nullable=True,
+        index=True,
+    )
     knowledge_entity_id = Column(
         Uuid(as_uuid=True),
         ForeignKey("knowledge_entities.uuid", ondelete="SET NULL"),
@@ -74,6 +80,7 @@ class Item(Base):
     updated_at = Column(DateTime(timezone=True), onupdate=func.now())
 
     knowledge_entity = relationship("KnowledgeEntity")
+    image_asset = relationship("MediaAsset", foreign_keys=[image_asset_id])
 
 class HuntingPlace(Base):
     """Store hunting place data from TibiaWiki API"""

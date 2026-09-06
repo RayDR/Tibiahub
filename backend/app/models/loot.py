@@ -34,6 +34,24 @@ class Loot(Base):
     
     # Relationships
     creature = relationship("Creature", back_populates="loot_items")
+    image_asset = relationship("MediaAsset", foreign_keys=[image_asset_id])
+
+    @property
+    def media(self) -> dict[str, str | None]:
+        asset = self.image_asset
+        available = bool(
+            asset
+            and asset.status == "cached"
+            and asset.file_exists()
+        )
+        return {
+            "status": "available" if available else "unavailable",
+            "url": (
+                f"/api/v1/items/legacy-loot/{self.id}/image?placeholder=false"
+                if available
+                else None
+            ),
+        }
     
     def __repr__(self):
         return f"<Loot {self.item_name} from {self.creature.name if self.creature else 'Unknown'}>"

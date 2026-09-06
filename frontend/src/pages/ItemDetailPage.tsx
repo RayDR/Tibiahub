@@ -18,6 +18,7 @@ import { itemsApi } from '../services/api';
 import { activityApi } from '../services/activity';
 import { useAuth } from '../context/AuthContext';
 import type { ItemDetail, ItemRelatedEntity } from '../types';
+import { availableItemMediaUrl } from '../utils/entityMedia';
 import { SuggestCorrectionLink } from '../components/feedback/GitHubFeedbackLink';
 import { useSeoMetadata } from '../utils/seo';
 
@@ -57,13 +58,14 @@ export default function ItemDetailPage() {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(false);
   const canonicalItemPath = item ? `/items/${item.slug || item.normalized_name.split(' ').join('-')}` : '';
+  const itemMediaUrl = availableItemMediaUrl(item?.media);
 
   useSeoMetadata(item ? {
     title: `${item.item_name} — Tibia item`,
     description: item.description || `Attributes, creature drops, hunt zones and uses for ${item.item_name}.`,
     canonicalPath: canonicalItemPath,
     type: 'article',
-    image: `/api/v1/items/${item.id}/image`,
+    image: itemMediaUrl,
     breadcrumbs: [{ name: 'Home', path: '/' }, { name: 'Cyclopedia', path: '/cyclopedia' }, { name: item.item_name, path: canonicalItemPath }],
   } : null);
 
@@ -83,7 +85,7 @@ export default function ItemDetailPage() {
             name: result.item_name,
             slug: result.slug,
             normalized_name: result.normalized_name,
-            image_item_id: result.id,
+            media_url: availableItemMediaUrl(result.media),
           },
         }).catch(() => {
           // Visit history is non-blocking.
@@ -129,7 +131,7 @@ export default function ItemDetailPage() {
       eyebrow={t('itemDetail.eyebrow')}
       title={item.item_name}
       description={item.description || item.notes || undefined}
-      media={<div className="aspect-square rounded-2xl border border-line bg-surface-base/70 p-6"><ImageWithFallback src={`/api/v1/items/${item.id}/image`} alt={item.item_name} className="h-full w-full object-contain [image-rendering:pixelated]" containerClassName="h-full w-full" fallbackLabel={item.item_name} /></div>}
+      media={<div className="aspect-square rounded-2xl border border-line bg-surface-base/70 p-6"><ImageWithFallback src={itemMediaUrl} alt={item.item_name} className="h-full w-full object-contain [image-rendering:pixelated]" containerClassName="h-full w-full" fallbackLabel={item.item_name} /></div>}
       badges={<>{[item.category, item.item_type, item.item_class, item.rarity].filter(Boolean).map((value) => <KnowledgeBadge key={value} tone="primary">{value}</KnowledgeBadge>)}</>}
     />
 

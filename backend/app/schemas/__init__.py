@@ -2,7 +2,7 @@
 from __future__ import annotations
 
 from pydantic import BaseModel, ConfigDict, Field
-from typing import Any, Dict, List, Optional
+from typing import Any, Dict, List, Literal, Optional
 from enum import Enum
 from datetime import datetime
 from uuid import UUID
@@ -43,18 +43,23 @@ class LootBase(BaseModel):
     max_amount: int = 1
     item_value: Optional[int] = None
     item_type: Optional[str] = None
-    item_image_url: Optional[str] = None
     source_url: Optional[str] = None
 
 
 class LootCreate(LootBase):
-    pass
+    item_image_url: Optional[str] = None
+
+
+class ItemMedia(BaseModel):
+    status: Literal["available", "unavailable"] = "unavailable"
+    url: Optional[str] = None
 
 
 
 class Loot(LootBase):
     id: int
     creature_id: Optional[int] = None
+    media: ItemMedia = Field(default_factory=ItemMedia)
     
     model_config = ConfigDict(from_attributes=True)
 
@@ -406,7 +411,7 @@ class ItemSearchResult(BaseModel):
     item_name: str
     normalized_name: str
     slug: Optional[str] = None
-    item_image_url: Optional[str] = None
+    media: ItemMedia = Field(default_factory=ItemMedia)
     source_url: Optional[str] = None
     knowledge_entity_id: Optional[UUID] = None
     canonical_id: Optional[UUID] = None
@@ -428,7 +433,7 @@ class ItemDetail(BaseModel):
     item_name: str
     normalized_name: str
     slug: Optional[str] = None
-    item_image_url: Optional[str] = None
+    media: ItemMedia = Field(default_factory=ItemMedia)
     source_url: Optional[str] = None
     rarity: Optional[str] = None
     drop_chance: Optional[float] = None

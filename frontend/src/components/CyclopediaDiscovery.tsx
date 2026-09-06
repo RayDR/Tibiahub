@@ -101,13 +101,6 @@ function contextualImageUrl(
     );
   }
 
-  if (type === 'item') {
-    return buildLocalEntityMediaUrl(
-      'item',
-      item.id,
-    );
-  }
-
   if (type === 'hunt_zone') {
     return buildLocalEntityMediaUrl(
       'zone',

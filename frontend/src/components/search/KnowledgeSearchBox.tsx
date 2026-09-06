@@ -21,6 +21,7 @@ import {
   namedKnowledgeApi,
   questsApi,
 } from '../../services/api';
+import { availableItemMediaUrl } from '../../utils/entityMedia';
 import KnowledgeCategoryIcon from '../knowledge/KnowledgeCategoryIcon';
 import { buildKnowledgeSearchPath } from '../../utils/cyclopediaNavigation';
 import { localNpcMediaUrl } from '../../utils/npcCyclopedia';
@@ -311,19 +312,13 @@ async function loadRemoteSuggestions(
     );
 
     return rows.map((row) => {
-      const imageId = row.image_item_id ?? row.id;
-
       return {
         key: `item:${row.normalized_name}`,
         section,
         kind: 'item',
         label: row.item_name,
         to: `/items/${row.slug || row.normalized_name.split(' ').join('-')}`,
-        imageUrl:
-          imageId != null
-            ? `/api/v1/items/${imageId}/image` +
-              '?placeholder=false'
-            : undefined,
+        imageUrl: availableItemMediaUrl(row.media),
       };
     });
   }

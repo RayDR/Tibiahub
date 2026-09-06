@@ -71,7 +71,7 @@ def test_item_cached_media_returns_file_response(client, db, monkeypatch, tmp_pa
     )
     db.commit()
 
-    response = client.get(f"/api/v1/items/{loot.id}/image")
+    response = client.get(f"/api/v1/items/legacy-loot/{loot.id}/image")
 
     assert response.status_code == 200
     assert response.content == content
@@ -148,7 +148,7 @@ def test_item_missing_media_placeholder(client, db, monkeypatch):
     db.add(loot)
     db.commit()
 
-    placeholder_response = client.get(f"/api/v1/items/{loot.id}/image")
+    placeholder_response = client.get(f"/api/v1/items/legacy-loot/{loot.id}/image")
     assert placeholder_response.status_code == 200
     assert placeholder_response.headers["x-image-source"] == "placeholder"
     assert placeholder_response.headers["x-image-status"] == "missing"
@@ -162,7 +162,7 @@ def test_item_placeholder_false_returns_404(client, db, monkeypatch):
     db.add(loot)
     db.commit()
 
-    response = client.get(f"/api/v1/items/{loot.id}/image?placeholder=false")
+    response = client.get(f"/api/v1/items/legacy-loot/{loot.id}/image?placeholder=false")
 
     assert response.status_code == 404
     assert response.headers["x-image-source"] == "unavailable"
@@ -223,7 +223,7 @@ def test_item_media_etag_304_behavior(client, db, monkeypatch, tmp_path):
 
     expected_etag = sha256_hash[:20]
     response = client.get(
-        f"/api/v1/items/{loot.id}/image",
+        f"/api/v1/items/legacy-loot/{loot.id}/image",
         headers={"If-None-Match": expected_etag},
     )
 
@@ -261,7 +261,7 @@ def _tracking_factory(bind, state: dict[str, bool]):
 @pytest.mark.parametrize(
     ("module", "path"),
     [
-        (items_api, "/api/v1/items/{item_id}/image"),
+        (items_api, "/api/v1/items/legacy-loot/{item_id}/image"),
         (creatures_api, "/api/v1/creatures/{creature_id}/image"),
         (hunt_zones_api, "/api/v1/hunt-zones/{zone_id}/map-image"),
     ],
@@ -339,12 +339,12 @@ def test_database_pool_timeout_option_reaches_create_engine(monkeypatch):
 
 
 def test_sqlalchemy_pool_timeout_maps_to_database_busy(client, monkeypatch):
-    def _raise_timeout(_item_id: int):
+    def _raise_timeout(_canonical_id):
         raise SATimeoutError("pool exhausted")
 
     monkeypatch.setattr(items_api, "_resolve_item_media_descriptor", _raise_timeout)
 
-    response = client.get("/api/v1/items/12345/image")
+    response = client.get("/api/v1/items/00000000-0000-0000-0000-000000000001/image")
 
     assert response.status_code == 503
     assert response.headers["retry-after"] == "5"

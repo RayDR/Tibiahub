@@ -41,6 +41,7 @@ import {
 } from '../services/cyclopediaCache';
 import { checkAndInvalidateIfStale } from '../services/cyclopediaCache';
 import { CreatureSimple, HuntZone, ItemSearchResult, NpcDirectoryItem, QuestSearchResult } from '../types';
+import { availableItemMediaUrl } from '../utils/entityMedia';
 import PageHeader from '../components/ui/PageHeader';
 import AppTabs from '../components/ui/AppTabs';
 import AppCard from '../components/ui/AppCard';
@@ -393,18 +394,13 @@ const CreaturesPage: React.FC = () => {
 
     if (mode === 'items') {
       return items.slice(0, 20).map((item) => {
-        const imageId = item.image_item_id ?? item.id;
         return {
           key: `item:${item.normalized_name}`,
           section: mode,
           kind: 'item',
           label: item.item_name,
           to: `/items/${item.slug || item.normalized_name.split(' ').join('-')}`,
-          imageUrl:
-            imageId != null
-              ? `/api/v1/items/${imageId}/image` +
-                '?placeholder=false'
-              : undefined,
+          imageUrl: availableItemMediaUrl(item.media),
         };
       });
     }
@@ -734,16 +730,14 @@ const CreaturesPage: React.FC = () => {
               },
             ),
             to: `/items/${item.slug || item.normalized_name.split(' ').join('-')}`,
-            imageUrl:
-              `/api/v1/items/` +
-              `${item.image_item_id ?? item.id}/image`,
+            imageUrl: availableItemMediaUrl(item.media),
           }));
           setLootTrendingPreviewCards(trendingData.map((item) => ({
             id: `trending-item:${item.normalized_name}`,
             name: item.item_name,
             subtitle: t('cyclopedia.cards.drops', { count: item.drops?.length || 0 }),
             to: `/items/${item.slug || item.normalized_name.split(' ').join('-')}`,
-            imageUrl: `/api/v1/items/${item.image_item_id ?? item.id}/image`,
+            imageUrl: availableItemMediaUrl(item.media),
           })));
         } else if (mode === 'quests') {
           const data = await questsApi.getHighlights(5, controller.signal);
@@ -1054,7 +1048,7 @@ const CreaturesPage: React.FC = () => {
           name: i.item_name,
           subtitle: t('cyclopedia.cards.drops', { count: i.drops.length }),
           to: `/items/${i.slug || i.normalized_name.split(' ').join('-')}`,
-          imageUrl: i.image_item_id ? `/api/v1/items/${i.image_item_id}/image` : undefined,
+          imageUrl: availableItemMediaUrl(i.media),
         }));
         if (reset) _cacheResult = { creatures: [], items: data, quests: [], zones: [], npcs: [], npcTotal: 0, hasMore: data.length === PAGE_SIZE, usedHighlightsSource: false };
       } else if (mode === 'quests') {
@@ -2141,7 +2135,7 @@ const CreaturesPage: React.FC = () => {
               <AppCard key={`${item.normalized_name}-${index}`} data-cyclopedia-result className="ds-enter overflow-hidden p-0">
                 <div className="flex items-start gap-4 p-4 sm:p-5">
                   <ImageWithFallback
-                    src={item.image_item_id ? `/api/v1/items/${item.image_item_id}/image?placeholder=false` : item.item_image_url || null}
+                    src={availableItemMediaUrl(item.media)}
                     alt={item.item_name}
                     className="size-14 object-contain [image-rendering:pixelated]"
                     containerClassName="grid size-16 shrink-0 place-items-center rounded-xl border border-line bg-surface-base/60"

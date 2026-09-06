@@ -67,12 +67,17 @@ def resolve_local_media_descriptor(
     resolver: Callable[[Session], LocalMediaDescriptor],
     *,
     session_factory: Callable[[], Session] = SessionLocal,
+    bridge_legacy_item: bool = True,
 ) -> LocalMediaDescriptor:
     """Run DB lookups in a short-lived session and always release the pool slot."""
     db = session_factory()
     try:
         descriptor = resolver(db)
-        return _bridge_legacy_item_descriptor(db, descriptor)
+        return (
+            _bridge_legacy_item_descriptor(db, descriptor)
+            if bridge_legacy_item
+            else descriptor
+        )
     finally:
         try:
             # Public media lookups are read-only; ensure no idle transaction lingers.

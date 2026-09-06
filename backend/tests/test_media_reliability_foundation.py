@@ -124,7 +124,7 @@ def test_category_visual_can_reuse_exact_legacy_item_asset(client, db, tmp_path)
     response = client.get("/api/v1/catalog/category-visuals")
 
     assert response.status_code == 200
-    assert response.json()["items"] == f"/api/v1/items/{item.id}/image?placeholder=false"
+    assert response.json()["items"] == f"/api/v1/items/{item.knowledge_entity_id}/image?placeholder=false"
 
 
 def test_media_failure_taxonomy_is_specific_and_sanitized(db, monkeypatch):

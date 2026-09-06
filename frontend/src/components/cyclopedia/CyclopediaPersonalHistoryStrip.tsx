@@ -11,6 +11,8 @@ import {
   createCyclopediaRouteState,
   saveCyclopediaReturnTarget,
 } from '../../utils/cyclopediaNavigation';
+import type { ItemMedia } from '../../types';
+import { availableItemMediaUrl } from '../../utils/entityMedia';
 
 type PersonalHistoryMode = 'items' | 'zones';
 
@@ -19,7 +21,7 @@ interface VisitAggregate {
   latest: string;
   name: string;
   slug: string;
-  imageItemId?: string;
+  mediaUrl?: string;
 }
 
 function expectedActivity(mode: PersonalHistoryMode) {
@@ -38,7 +40,11 @@ function toCard(
       name: visit.name,
       subtitle: visitsLabel(visit.count),
       to: `/items/${visit.slug || entityId}`,
-      imageUrl: `/api/v1/items/${visit.imageItemId || entityId}/image?placeholder=false`,
+      imageUrl: availableItemMediaUrl(
+        visit.mediaUrl
+          ? { status: 'available', url: visit.mediaUrl } satisfies ItemMedia
+          : undefined,
+      ),
     };
   }
 
@@ -106,9 +112,9 @@ export default function CyclopediaPersonalHistoryStrip({
               String(entry.metadata?.slug || '').trim() ||
               current?.slug ||
               '',
-            imageItemId:
-              String(entry.metadata?.image_item_id || '').trim() ||
-              current?.imageItemId,
+            mediaUrl:
+              String(entry.metadata?.media_url || '').trim() ||
+              current?.mediaUrl,
           });
         }
 

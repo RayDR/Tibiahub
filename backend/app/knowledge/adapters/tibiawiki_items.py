@@ -29,7 +29,6 @@ from app.knowledge.services.failures import (
     ProviderResponseEnvelopeError,
 )
 from app.services.bestiary_source import (
-    _build_sprite_url,
     _build_wiki_page_url,
     _extract_infobox_param_map,
     _extract_links,
@@ -37,6 +36,7 @@ from app.services.bestiary_source import (
     _to_bool,
     _to_int,
 )
+from app.services.media_evidence_service import explicit_provider_media_reference
 from app.services.text_utils import slugify
 
 
@@ -221,6 +221,7 @@ def _item_parts(raw: dict[str, Any]) -> tuple[str, str, str, ItemKnowledgeDTO]:
         raise MalformedProviderPayloadError()
 
     params = _extract_infobox_param_map(wikitext)
+    media_evidence = explicit_provider_media_reference(wikitext, "item")
     canonical_raw, name_supplied = _text_param(params, "name", "actualname")
     canonical_name = canonical_raw or page_title
     game_item_id, game_item_id_supplied = _int_param(params, "itemid", "item id", "clientid", "client id")
@@ -290,7 +291,7 @@ def _item_parts(raw: dict[str, Any]) -> tuple[str, str, str, ItemKnowledgeDTO]:
         "required_for": required_supplied,
         "tradeable": trade_supplied,
         "stackable": stack_supplied,
-        "image_reference": True,
+        "image_reference": media_evidence.eligible,
         "source_reference": True,
         "slug": True,
     }
@@ -327,12 +328,14 @@ def _item_parts(raw: dict[str, Any]) -> tuple[str, str, str, ItemKnowledgeDTO]:
         required_for=required_for,
         tradeable=_to_bool(trade_raw) if trade_supplied else None,
         stackable=_to_bool(stack_raw) if stack_supplied else None,
-        image_reference=_build_sprite_url(canonical_name),
+        image_reference=media_evidence.source_url,
         source_reference=_build_wiki_page_url(page_title),
         provider_metadata={
             "page_title": page_title,
             "provider_category": category,
             "template_parameters": sorted(params),
+            "media_evidence_status": media_evidence.state,
+            "media_evidence_field": media_evidence.field_name,
         },
         supplied_fields=supplied_fields,
     )
