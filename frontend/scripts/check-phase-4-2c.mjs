@@ -17,6 +17,9 @@ assert.equal(availableItemMediaUrl({ status: 'unavailable', url: local }), undef
 assert.equal(availableItemMediaUrl({ status: 'available', url: 'https://tibia.fandom.com/item.gif' }), undefined);
 assert.equal(availableItemMediaUrl({ status: 'available', url: '/api/v1/items/id/image' }), undefined);
 
+const publicTypes = read('src/types/index.ts');
+assert.doesNotMatch(publicTypes, /item_image_url/, 'public Item/Loot types must not expose provider media metadata');
+
 const itemSurfaces = [
   'src/pages/ItemDetailPage.tsx',
   'src/pages/CreaturesPage.tsx',

@@ -17,7 +17,6 @@ export interface Loot {
   max_amount: number;
   item_value?: number;
   item_type?: string;
-  item_image_url?: string;
   source_url?: string;
   media: ItemMedia;
 }
@@ -280,7 +279,6 @@ export interface ItemSearchResult {
   item_name: string;
   normalized_name: string;
   slug?: string | null;
-  item_image_url?: string | null;
   media: ItemMedia;
   source_url?: string | null;
   knowledge_entity_id?: string | null;
@@ -303,7 +301,6 @@ export interface ItemDetail {
   item_name: string;
   normalized_name: string;
   slug?: string | null;
-  item_image_url?: string | null;
   media: ItemMedia;
   source_url?: string | null;
   rarity?: string | null;

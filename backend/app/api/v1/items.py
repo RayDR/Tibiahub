@@ -427,7 +427,6 @@ def _build_canonical_item_result(db: Session, item: ExternalItemModel) -> ItemSe
         item_name=item.name,
         normalized_name=item.normalized_name or normalize_search_text(item.name),
         slug=item.slug or normalize_search_text(item.name).replace(" ", "-"),
-        item_image_url=item.image_url,
         media=_item_media(
             descriptor,
             url=f"/api/v1/items/{item.knowledge_entity_id}/image?placeholder=false",
@@ -724,7 +723,6 @@ async def get_item_detail(
             item_name=canonical.name,
             normalized_name=canonical.normalized_name or normalize_search_text(canonical.name),
             slug=canonical_slug,
-            item_image_url=canonical.image_url,
             media=_item_media(
                 _canonical_item_descriptor(db, canonical),
                 url=f"/api/v1/items/{canonical.knowledge_entity_id}/image?placeholder=false",
@@ -822,7 +820,6 @@ async def get_item_detail(
             item_name=mapped.item_name,
             normalized_name=mapped.normalized_name,
             slug=legacy_slug,
-            item_image_url=mapped.item_image_url,
             media=mapped.media,
             source_url=mapped.source_url,
             rarity=rarity,
@@ -882,7 +879,6 @@ def _build_item_result(
         item_name=item_name,
         normalized_name=sample.normalized_name or normalize_search_text(item_name),
         slug=normalize_search_text(item_name).replace(" ", "-"),
-        item_image_url=sample.item_image_url,
         media=_item_media(
             descriptor,
             url=f"/api/v1/items/legacy-loot/{sample.id}/image?placeholder=false",

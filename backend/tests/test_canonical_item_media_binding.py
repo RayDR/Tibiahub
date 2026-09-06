@@ -49,7 +49,13 @@ def _loot(db, name: str, *, loot_id: int | None = None) -> Loot:
     )
     db.add(creature)
     db.flush()
-    row = Loot(id=loot_id, creature_id=creature.id, item_name=name, normalized_name=name.casefold())
+    row = Loot(
+        id=loot_id,
+        creature_id=creature.id,
+        item_name=name,
+        normalized_name=name.casefold(),
+        item_image_url="https://tibia.fandom.com/wiki/Special:FilePath/Legacy.gif",
+    )
     db.add(row)
     db.flush()
     return row
@@ -144,6 +150,50 @@ def test_public_media_descriptor_requires_verified_local_file(client, db, tmp_pa
     for row in [missing_file, *db.query(Item).filter(Item.name.in_(["Failed Item", "Missing Item", "Pending Item"])).all()]:
         media = client.get(f"/api/v1/items/{row.slug}").json()["media"]
         assert media == {"status": "unavailable", "url": None}
+
+
+def test_public_item_and_nested_loot_payloads_exclude_provider_media_metadata(
+    client, db, tmp_path,
+):
+    canonical = _item(db, "Public Canonical Item")
+    canonical_asset = _asset(db, tmp_path, "item:public-canonical", b"canonical")
+    canonical.image_asset_id = canonical_asset.id
+
+    legacy = _loot(db, "Public Legacy Item")
+    legacy_asset = _asset(db, tmp_path, "item:public_legacy_item", b"legacy")
+    legacy.image_asset_id = legacy_asset.id
+    db.flush()
+
+    assert canonical.image_url == "https://tibia.fandom.com/wiki/Special:FilePath/External.gif"
+    assert legacy.item_image_url == "https://tibia.fandom.com/wiki/Special:FilePath/Legacy.gif"
+
+    canonical_search = client.get(
+        "/api/v1/items/", params={"search": canonical.name},
+    ).json()
+    canonical_result = next(row for row in canonical_search if row["item_name"] == canonical.name)
+    canonical_detail = client.get(f"/api/v1/items/{canonical.slug}").json()
+    canonical_url = f"/api/v1/items/{canonical.knowledge_entity_id}/image?placeholder=false"
+    for payload in (canonical_result, canonical_detail):
+        assert "item_image_url" not in payload
+        assert payload["media"] == {"status": "available", "url": canonical_url}
+        assert "tibia.fandom.com" not in str(payload["media"])
+
+    legacy_search = client.get(
+        "/api/v1/items/", params={"search": legacy.item_name},
+    ).json()
+    legacy_result = next(row for row in legacy_search if row["item_name"] == legacy.item_name)
+    legacy_detail = client.get("/api/v1/items/public-legacy-item").json()
+    legacy_url = f"/api/v1/items/legacy-loot/{legacy.id}/image?placeholder=false"
+    for payload in (legacy_result, legacy_detail):
+        assert "item_image_url" not in payload
+        assert payload["media"] == {"status": "available", "url": legacy_url}
+        assert "tibia.fandom.com" not in str(payload["media"])
+
+    creature_payload = client.get(f"/api/v1/creatures/{legacy.creature.slug}").json()
+    nested_loot = next(row for row in creature_payload["loot_items"] if row["id"] == legacy.id)
+    assert "item_image_url" not in nested_loot
+    assert nested_loot["media"] == {"status": "available", "url": legacy_url}
+    assert "tibia.fandom.com" not in str(nested_loot["media"])
 
 
 def test_category_visual_excludes_cached_asset_without_file(client, db, tmp_path):
