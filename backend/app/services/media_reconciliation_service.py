@@ -107,6 +107,7 @@ class MediaReconciliationService:
     def report(db: Session, *, sample_limit: int = 10) -> dict[str, Any]:
         assets = db.query(MediaAsset).all()
         by_key = {asset.asset_key: asset for asset in assets}
+        by_id = {asset.id: asset for asset in assets}
         npc_rows = db.query(TibiaWikiNpc).order_by(TibiaWikiNpc.id).all()
         location_rows = db.query(TibiaWikiLocation).order_by(TibiaWikiLocation.id).all()
         npc_evidence = evidence_for_entities(db, "npc", npc_rows)
@@ -151,6 +152,10 @@ class MediaReconciliationService:
             for row in db.query(Item).order_by(Item.id).all():
                 if row.knowledge_entity_id is None:
                     yield str(row.id), row.name, "unresolved_canonical_binding", None
+                    continue
+                if row.image_asset_id is not None:
+                    status, error = asset_status(by_id.get(row.image_asset_id))
+                    yield str(row.knowledge_entity_id), row.name, status, error
                     continue
                 canonical_key = media_asset_service.build_canonical_item_asset_key(row.knowledge_entity_id)
                 canonical_asset = by_key.get(canonical_key)

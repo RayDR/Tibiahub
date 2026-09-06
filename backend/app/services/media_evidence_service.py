@@ -26,6 +26,7 @@ _ALLOWED_IMAGE_FIELDS = frozenset({"image", "imagefile", "image file", "sprite",
 _DISALLOWED_LOCATION_FIELDS = frozenset({"map", "map2", "map3", "minimap"})
 _ALLOWED_EXTENSIONS = frozenset({".gif", ".png", ".jpg", ".jpeg", ".webp"})
 _PRIMARY_TEMPLATE = {
+    "item": re.compile(r"^\s*\{\{\s*Infobox\s+Item\b", re.IGNORECASE),
     "npc": re.compile(r"^\s*\{\{\s*Infobox\s+NPC\b", re.IGNORECASE),
     "location": re.compile(r"^\s*\{\{\s*Infobox\s+(?:Geography|Location)\b", re.IGNORECASE),
 }

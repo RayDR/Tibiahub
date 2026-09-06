@@ -2,6 +2,7 @@
 from difflib import SequenceMatcher
 from datetime import UTC, datetime, timedelta
 from typing import List
+from uuid import UUID
 
 from fastapi import APIRouter, Depends, Query
 from fastapi import HTTPException, Request, Response
@@ -20,9 +21,11 @@ from app.models.external_data import (
 )
 from app.models.spawn_location import SpawnLocation
 from app.models.entity_metadata import EntityMetadata
-from app.schemas import ItemDetail, ItemDropCreature, ItemRelatedEntity, ItemSearchResult
+from app.models.media_asset import MediaAsset
+from app.schemas import ItemDetail, ItemDropCreature, ItemMedia, ItemRelatedEntity, ItemSearchResult
 from app.api.v1.local_media import (
     LocalMediaDescriptor,
+    _bridge_legacy_item_descriptor,
     build_local_media_file_response,
     resolve_local_media_descriptor,
 )
@@ -74,15 +77,67 @@ def _placeholder_svg(label: str) -> bytes:
     ).encode("utf-8")
 
 
-@router.get("/{item_id}/image")
-def get_item_image(
-    item_id: int,
-    request: Request,
-    include_placeholder: bool = Query(True, alias="placeholder"),
-):
-    """Serve loot/item image from local MediaAsset cache (local-first)."""
-    descriptor = _resolve_item_media_descriptor(item_id)
+def _descriptor_for_asset(
+    asset: MediaAsset | None,
+    *,
+    fallback_key: str,
+    label: str,
+) -> LocalMediaDescriptor:
+    if asset is None:
+        return LocalMediaDescriptor(None, None, None, None, fallback_key, "missing", label)
+    if asset.status == "cached" and not asset.file_exists():
+        return LocalMediaDescriptor(None, None, None, asset.sha256_hash, asset.asset_key, "local_file_missing", label)
+    return LocalMediaDescriptor(
+        local_path=str(asset.local_path) if asset.local_path else None,
+        content_type=asset.content_type,
+        size_bytes=asset.size_bytes,
+        asset_hash=asset.sha256_hash,
+        asset_key=asset.asset_key,
+        status=asset.status,
+        fallback_label=label,
+    )
 
+
+def _canonical_item_descriptor(db: Session, item: ExternalItemModel) -> LocalMediaDescriptor:
+    canonical_key = media_svc.build_canonical_item_asset_key(item.knowledge_entity_id)
+    if item.image_asset_id is not None:
+        return _descriptor_for_asset(
+            db.get(MediaAsset, item.image_asset_id),
+            fallback_key=canonical_key,
+            label=item.name,
+        )
+
+    descriptor = _descriptor_for_asset(
+        media_svc.get_asset(db, canonical_key),
+        fallback_key=canonical_key,
+        label=item.name,
+    )
+    return _bridge_legacy_item_descriptor(db, descriptor)
+
+
+def _legacy_loot_descriptor(db: Session, loot: LootModel) -> LocalMediaDescriptor:
+    legacy_key = media_svc.build_loot_asset_key(loot)
+    asset = (
+        db.get(MediaAsset, loot.image_asset_id)
+        if loot.image_asset_id is not None
+        else media_svc.get_asset(db, legacy_key)
+    )
+    return _descriptor_for_asset(asset, fallback_key=legacy_key, label=loot.item_name)
+
+
+def _item_media(descriptor: LocalMediaDescriptor, *, url: str) -> ItemMedia:
+    return ItemMedia(
+        status="available" if descriptor.status == "cached" else "unavailable",
+        url=url if descriptor.status == "cached" else None,
+    )
+
+
+def _serve_item_media(
+    request: Request,
+    descriptor: LocalMediaDescriptor,
+    *,
+    include_placeholder: bool,
+):
     if descriptor.status != "cached":
         return _unavailable_item_image(
             label=descriptor.fallback_label,
@@ -102,60 +157,70 @@ def get_item_image(
             "X-Asset-Key": descriptor.asset_key,
         },
     )
-
-    if response is None:
-        return _unavailable_item_image(
-            label=descriptor.fallback_label,
-            asset_key=descriptor.asset_key,
-            include_placeholder=include_placeholder,
-            status="missing",
-        )
-
-    return response
+    if response is not None:
+        return response
+    return _unavailable_item_image(
+        label=descriptor.fallback_label,
+        asset_key=descriptor.asset_key,
+        include_placeholder=include_placeholder,
+        status="local_file_missing",
+    )
 
 
-def _resolve_item_media_descriptor(item_id: int) -> LocalMediaDescriptor:
+@router.get("/legacy-loot/{loot_id}/image")
+def get_legacy_loot_image(
+    loot_id: int,
+    request: Request,
+    include_placeholder: bool = Query(True, alias="placeholder"),
+):
+    """Serve a legacy Loot image from its explicit, non-canonical namespace."""
+    descriptor = _resolve_legacy_loot_media_descriptor(loot_id)
+    return _serve_item_media(request, descriptor, include_placeholder=include_placeholder)
+
+
+@router.get("/{canonical_id}/image")
+def get_item_image(
+    canonical_id: UUID,
+    request: Request,
+    include_placeholder: bool = Query(True, alias="placeholder"),
+):
+    """Serve canonical Item media by stable Knowledge identity only."""
+    descriptor = _resolve_item_media_descriptor(canonical_id)
+    return _serve_item_media(request, descriptor, include_placeholder=include_placeholder)
+
+def _resolve_item_media_descriptor(canonical_id: UUID) -> LocalMediaDescriptor:
     """Resolve item media metadata in a short-lived DB session."""
 
     def _resolver(db: Session) -> LocalMediaDescriptor:
         item = (
             db.query(ExternalItemModel)
             .filter(
-                ExternalItemModel.id == item_id,
-                ExternalItemModel.knowledge_entity_id.isnot(None),
+                ExternalItemModel.knowledge_entity_id == canonical_id,
             )
             .first()
         )
-        loot = None if item else db.query(LootModel).filter(LootModel.id == item_id).first()
-        if not item and not loot:
-            loot = db.query(LootModel).filter(LootModel.external_id == str(item_id)).first()
-        if not item and not loot:
+        if item is None:
             raise HTTPException(status_code=404, detail="Item not found")
-
-        label = item.name if item else (loot.item_name or "Unknown Item")
-        asset_key = (
-            media_svc.build_canonical_item_asset_key(item.knowledge_entity_id)
-            if item
-            else media_svc.build_loot_asset_key(loot)
-        )
-
-        # Public requests must never perform provider downloads.
-        # Missing assets are populated exclusively by sync/admin workers.
-        asset = media_svc.get_asset(db, asset_key)
-
-        return LocalMediaDescriptor(
-            local_path=(str(asset.local_path) if asset and asset.local_path else None),
-            content_type=(asset.content_type if asset else None),
-            size_bytes=(asset.size_bytes if asset else None),
-            asset_hash=(asset.sha256_hash if asset else None),
-            asset_key=asset_key,
-            status=(getattr(asset, "status", "missing") if asset else "missing"),
-            fallback_label=label,
-        )
+        return _canonical_item_descriptor(db, item)
 
     return resolve_local_media_descriptor(
         _resolver,
         session_factory=SessionLocal,
+        bridge_legacy_item=False,
+    )
+
+
+def _resolve_legacy_loot_media_descriptor(loot_id: int) -> LocalMediaDescriptor:
+    def _resolver(db: Session) -> LocalMediaDescriptor:
+        loot = db.get(LootModel, loot_id)
+        if loot is None:
+            raise HTTPException(status_code=404, detail="Loot item not found")
+        return _legacy_loot_descriptor(db, loot)
+
+    return resolve_local_media_descriptor(
+        _resolver,
+        session_factory=SessionLocal,
+        bridge_legacy_item=False,
     )
 
 
@@ -355,6 +420,7 @@ def _item_related_entities(db: Session, item: ExternalItemModel) -> list[ItemRel
 
 
 def _build_canonical_item_result(db: Session, item: ExternalItemModel) -> ItemSearchResult:
+    descriptor = _canonical_item_descriptor(db, item)
     return ItemSearchResult(
         id=item.id,
         image_item_id=item.id,
@@ -362,6 +428,10 @@ def _build_canonical_item_result(db: Session, item: ExternalItemModel) -> ItemSe
         normalized_name=item.normalized_name or normalize_search_text(item.name),
         slug=item.slug or normalize_search_text(item.name).replace(" ", "-"),
         item_image_url=item.image_url,
+        media=_item_media(
+            descriptor,
+            url=f"/api/v1/items/{item.knowledge_entity_id}/image?placeholder=false",
+        ),
         source_url=item.source_url,
         knowledge_entity_id=item.knowledge_entity_id,
         **_item_provenance(item),
@@ -407,7 +477,7 @@ async def get_item_highlights(
             )
             if not drops:
                 continue
-            response.append(_build_item_result(drops[0].item_name, drops, include_hunt_zones=False, max_drops=8))
+            response.append(_build_item_result(db, drops[0].item_name, drops, include_hunt_zones=False, max_drops=8))
         return response
     except Exception:
         return []
@@ -559,7 +629,7 @@ async def search_items(
             grouped.setdefault(key, []).append(row)
         ranked_keys = sorted(grouped.keys(), key=lambda key: _rank_item(grouped[key][0].item_name, grouped[key][0].item_name))
         selected_keys = ranked_keys[skip: skip + limit]
-        return [_build_item_result(grouped[key][0].item_name, grouped[key]) for key in selected_keys]
+        return [_build_item_result(db, grouped[key][0].item_name, grouped[key]) for key in selected_keys]
 
     normalized_search = normalize_search_text(search)
     query = (
@@ -606,7 +676,7 @@ async def search_items(
         for result in canonical_results
     }
     for key in selected_keys:
-        result = _build_item_result(grouped[key][0].item_name, grouped[key])
+        result = _build_item_result(db, grouped[key][0].item_name, grouped[key])
         combined.setdefault(normalize_search_text(result.item_name), result)
     ranked_results = sorted(
         combined.values(),
@@ -655,6 +725,10 @@ async def get_item_detail(
             normalized_name=canonical.normalized_name or normalize_search_text(canonical.name),
             slug=canonical_slug,
             item_image_url=canonical.image_url,
+            media=_item_media(
+                _canonical_item_descriptor(db, canonical),
+                url=f"/api/v1/items/{canonical.knowledge_entity_id}/image?placeholder=false",
+            ),
             source_url=canonical.source_url,
             rarity=rarity,
             drop_chance=top_drop,
@@ -734,7 +808,7 @@ async def get_item_detail(
             .filter(LootModel.normalized_name == local_by_id.normalized_name)
             .all()
         )
-        mapped = _build_item_result(local_by_id.item_name, all_rows)
+        mapped = _build_item_result(db, local_by_id.item_name, all_rows)
         top_drop = max((drop.chance for drop in mapped.drops if drop.chance is not None), default=None)
         rarity = next((drop.rarity for drop in mapped.drops if drop.rarity), None)
         EntityMetadataService.record_searches(
@@ -749,6 +823,7 @@ async def get_item_detail(
             normalized_name=mapped.normalized_name,
             slug=legacy_slug,
             item_image_url=mapped.item_image_url,
+            media=mapped.media,
             source_url=mapped.source_url,
             rarity=rarity,
             drop_chance=top_drop,
@@ -759,6 +834,7 @@ async def get_item_detail(
 
 
 def _build_item_result(
+    db: Session,
     item_name: str,
     drops: list[LootModel],
     *,
@@ -799,6 +875,7 @@ def _build_item_result(
             hunt_zones=hunt_zones,
         ))
     sample = drops[0]
+    descriptor = _legacy_loot_descriptor(db, sample)
     return ItemSearchResult(
         id=sample.id,
         image_item_id=sample.id,
@@ -806,6 +883,10 @@ def _build_item_result(
         normalized_name=sample.normalized_name or normalize_search_text(item_name),
         slug=normalize_search_text(item_name).replace(" ", "-"),
         item_image_url=sample.item_image_url,
+        media=_item_media(
+            descriptor,
+            url=f"/api/v1/items/legacy-loot/{sample.id}/image?placeholder=false",
+        ),
         source_url=sample.source_url,
         item_type=sample.item_type,
         drops=related_drops,

@@ -6,6 +6,7 @@ import { useTranslation } from 'react-i18next';
 import '../../i18n/questEnhancements';
 import { itemsApi, questsApi } from '../../services/api';
 import type { ItemDetail, QuestDetail, QuestItemValue, QuestNamedValue, QuestRelationship } from '../../types';
+import { availableItemMediaUrl } from '../../utils/entityMedia';
 import { Dialog } from '../ui/Overlay';
 
 const normalizeName = (value: string) => value.trim().toLocaleLowerCase();
@@ -140,9 +141,7 @@ export default function QuestReference({
   const route = kind === 'item'
     ? itemIdentifier != null ? `/items/${itemIdentifier}` : null
     : questIdentifier != null ? `/quests/${questIdentifier}` : null;
-  const imageUrl = kind === 'item' && item?.id != null
-    ? `/api/v1/items/${item.id}/image?placeholder=false`
-    : null;
+  const imageUrl = kind === 'item' ? availableItemMediaUrl(item?.media) : undefined;
 
   const content = (
     <>
