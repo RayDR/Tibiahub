@@ -28,6 +28,7 @@ import {
   type TibiaMapBootstrap,
   type TibiaMapLayer,
   type TibiaMapResult,
+  type TibiaMapViewport,
 } from '../services/tibiaMap';
 import { formatDisplayFloor } from '../utils/tibiaFloors';
 import {
@@ -88,7 +89,7 @@ export default function TibiaMapPage() {
   const [floor, setFloor] = useState(() => initialFloor(params.get('floor')));
   const [bootstrap, setBootstrap] = useState<TibiaMapBootstrap | null>(null);
   const [query, setQuery] = useState(params.get('q') || params.get('slug')?.replace(/-/g, ' ') || '');
-  const [activeLayers, setActiveLayers] = useState<Set<TibiaMapLayer>>(new Set(['location']));
+  const [activeLayers, setActiveLayers] = useState<Set<TibiaMapLayer>>(new Set(layers));
   const [layerResults, setLayerResults] = useState<Partial<Record<TibiaMapLayer, TibiaMapResult[]>>>({});
   const [layerStates, setLayerStates] = useState<Partial<Record<TibiaMapLayer, 'loading' | 'ready' | 'error'>>>({});
   const [results, setResults] = useState<TibiaMapResult[]>([]);
@@ -101,7 +102,8 @@ export default function TibiaMapPage() {
   const [searchError, setSearchError] = useState(false);
   const [sidebarOpen, setSidebarOpen] = useState(true);
   const [showPathfinding, setShowPathfinding] = useState(false);
-  const requestedLayers = useRef<Set<TibiaMapLayer>>(new Set());
+  const [viewport, setViewport] = useState<TibiaMapViewport | null>(null);
+  const viewportRequestSequence = useRef(0);
   const internalParamsUpdate = useRef<string | null>(null);
   const [navigationRequestKey, setNavigationRequestKey] = useState(() => params.toString());
   const requestedSelection = useMemo(() => requestedMapSelection(params), [params]);
@@ -142,10 +144,6 @@ export default function TibiaMapPage() {
       .then((value) => {
         if (!current) return;
         setBootstrap(value);
-        if (value.default_results?.length) {
-          setLayerResults((existing) => existing.location ? existing : { ...existing, location: value.default_results });
-          setLayerStates((existing) => existing.location ? existing : { ...existing, location: 'ready' });
-        }
       })
       .catch(() => { if (current && !controller.signal.aborted) setBootstrap(null); })
       .finally(() => { if (current) setMapLoading(false); });
@@ -177,36 +175,33 @@ export default function TibiaMapPage() {
     }
   };
 
+  const activeLayersKey = [...activeLayers].sort().join(',');
   useEffect(() => {
-    if (!bootstrap) return undefined;
-    const layerRequests = requestedLayers.current;
-    const missing = [...activeLayers].filter((layer) => !layerRequests.has(layer) && !layerResults[layer]);
-    if (!missing.length) return undefined;
+    const isolated = Boolean(selected || requestedSelection || query.trim().length >= 2);
+    if (!bootstrap || !viewport || viewport.floor !== floor || isolated || !activeLayersKey) return undefined;
     const controller = new AbortController();
-    missing.forEach((layer) => layerRequests.add(layer));
-    setLayerStates((current) => ({
-      ...current,
-      ...Object.fromEntries(missing.map((layer) => [layer, 'loading'])),
-    }));
-    for (const layer of missing) {
-      void tibiaMapApi.layer(layer, controller.signal)
+    const sequence = ++viewportRequestSequence.current;
+    const requested = activeLayersKey.split(',') as TibiaMapLayer[];
+    const timer = window.setTimeout(() => {
+      setLayerStates(Object.fromEntries(requested.map((layer) => [layer, 'loading'])));
+      void tibiaMapApi.viewport(viewport, requested, controller.signal)
         .then((value) => {
-          if (controller.signal.aborted) return;
-          setLayerResults((current) => ({ ...current, [layer]: value.items }));
-          setLayerStates((current) => ({ ...current, [layer]: 'ready' }));
+          if (controller.signal.aborted || sequence !== viewportRequestSequence.current) return;
+          const grouped = Object.fromEntries(requested.map((layer) => [
+            layer,
+            value.items.filter((row) => row.entity_type === layer),
+          ])) as Partial<Record<TibiaMapLayer, TibiaMapResult[]>>;
+          setLayerResults(grouped);
+          setLayerStates(Object.fromEntries(requested.map((layer) => [layer, 'ready'])));
         })
         .catch(() => {
-          if (!controller.signal.aborted) {
-            layerRequests.delete(layer);
-            setLayerStates((current) => ({ ...current, [layer]: 'error' }));
+          if (!controller.signal.aborted && sequence === viewportRequestSequence.current) {
+            setLayerStates(Object.fromEntries(requested.map((layer) => [layer, 'error'])));
           }
         });
-    }
-    return () => {
-      controller.abort();
-      missing.forEach((layer) => layerRequests.delete(layer));
-    };
-  }, [activeLayers, bootstrap, layerResults]);
+    }, 275);
+    return () => { window.clearTimeout(timer); controller.abort(); };
+  }, [activeLayersKey, bootstrap, floor, query, requestedSelection, selected, viewport]);
 
   useEffect(() => {
     const normalized = query.trim();
@@ -304,13 +299,23 @@ export default function TibiaMapPage() {
     [entityMarkers, isolatedMarkerMode, layerMarkers],
   );
   const focus = focusedEvidence && (focusedEvidence.z == null || focusedEvidence.z === floor) ? focusedEvidence : null;
-  const regions = focus?.bounds ? [{
-    minX: focus.bounds.min_x,
-    minY: focus.bounds.min_y,
-    maxX: focus.bounds.max_x,
-    maxY: focus.bounds.max_y,
-    label: focus.label || selected?.name || '',
-  }] : [];
+  const regions = useMemo(() => {
+    if (focus?.bounds) return [{
+      minX: focus.bounds.min_x, minY: focus.bounds.min_y,
+      maxX: focus.bounds.max_x, maxY: focus.bounds.max_y,
+      label: focus.label || selected?.name || '',
+    }];
+    if (isolatedMarkerMode) return [];
+    return [...activeLayers].flatMap((layer) => (layerResults[layer] || []).flatMap((row) =>
+      (row.spatial_evidence || [])
+        .filter((evidence) => evidence.bounds && (evidence.z == null || evidence.z === floor))
+        .map((evidence) => ({
+          minX: evidence.bounds!.min_x, minY: evidence.bounds!.min_y,
+          maxX: evidence.bounds!.max_x, maxY: evidence.bounds!.max_y,
+          label: row.name,
+        })),
+    ));
+  }, [activeLayers, floor, focus, isolatedMarkerMode, layerResults, selected?.name]);
   const map = bootstrap?.world_map;
   const selectedOnAnotherFloor = focusedEvidence?.z != null && focusedEvidence.z !== floor;
   const defaultResults = bootstrap?.default_results?.length ? bootstrap.default_results : bootstrap?.towns || [];
@@ -411,6 +416,7 @@ export default function TibiaMapPage() {
         center={focus ? { x: focus.x, y: focus.y } : undefined}
         focusBounds={focus?.bounds ? { minX: focus.bounds.min_x, minY: focus.bounds.min_y, maxX: focus.bounds.max_x, maxY: focus.bounds.max_y } : undefined}
         markers={mapMarkers}
+        onViewportChange={setViewport}
         onMarkerSelect={(marker) => {
           if (!marker.resultId) return;
           const row = [...activeLayers].flatMap((layer) => layerResults[layer] || []).find((candidate) => candidate.id === marker.resultId);

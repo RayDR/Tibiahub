@@ -26,11 +26,13 @@ for (const state of ['resolved_point', 'resolved_area', 'knowledge_only', 'unres
   requireText(service, state, `canonical result contract is missing ${state}`);
 }
 requireText(service, 'canonical_entity_id', 'canonical map result identity is missing');
-requireText(service, 'async layer(layer:', 'lazy layer client is missing');
+requireText(service, 'async viewport(viewport:', 'bounded lazy viewport client is missing');
+requireText(service, "api.get('/map/viewport'", 'map client does not use the bounded viewport endpoint');
 requireText(service, 'buildMapEntityUrl', 'detail-to-map URL contract is missing');
 if (/\bapi\.(post|put|patch|delete)\b/.test(service)) fail('map client must remain a read-only Knowledge consumer');
 
-requireText(page, 'tibiaMapApi.layer(', 'map page does not lazy-load independent layers');
+requireText(page, 'tibiaMapApi.viewport(', 'map page does not lazy-load the active layers for the current viewport');
+requireText(page, 'controller.signal', 'lazy viewport requests are not cancellable');
 requireText(page, 'if (next.has(layer)) next.delete(layer)', 'layer toggles are not independent');
 requireText(page, 'setSearchError(true)', 'search failure is not distinct from no matches');
 requireText(page, 'focusBounds=', 'area selection does not request fit-bounds behavior');
@@ -65,5 +67,5 @@ for (const key of ['defaultLocations', 'spatialUnresolved', 'layerFailed', 'mark
 }
 
 if (!process.exitCode) {
-  console.log('Phase 3D checks passed: canonical results, exact spatial states, independent lazy layers, safe focus, read-only map behavior, accessibility, and semantic theme markers are present.');
+  console.log('Phase 3D checks passed: canonical results, exact spatial states, independent viewport layers, safe focus, read-only map behavior, accessibility, and semantic theme markers are present.');
 }

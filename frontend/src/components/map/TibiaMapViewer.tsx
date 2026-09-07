@@ -16,6 +16,7 @@ export interface TibiaMapViewerProps {
   coordinateMode?: 'legacy-image' | 'world'; emptyMessage?: string; resetLabel?: string;
   zoomInLabel?: string; zoomOutLabel?: string; floorLabel?: string; fill?: boolean;
   controlFooter?: ReactNode; showFloorBadge?: boolean; onMarkerSelect?: (marker: MapMarker) => void;
+  onViewportChange?: (viewport: { minX: number; minY: number; maxX: number; maxY: number; zoom: number; floor: number }) => void;
 }
 
 interface LoadedMap { objectUrl: string; width: number; height: number }
@@ -83,6 +84,33 @@ function MapLifecycle() {
   return null;
 }
 
+function ViewportReporter({
+  loaded, bounds, floor, enabled, onChange,
+}: {
+  loaded: LoadedMap; bounds: { minX: number; minY: number; maxX: number; maxY: number };
+  floor: number | null | undefined; enabled: boolean;
+  onChange?: TibiaMapViewerProps['onViewportChange'];
+}) {
+  const map = useMap();
+  useEffect(() => {
+    if (!enabled || floor == null || !onChange) return undefined;
+    const report = () => {
+      const visible = map.getBounds();
+      const toX = (pixel: number) => bounds.minX + (pixel / loaded.width) * (bounds.maxX - bounds.minX);
+      const toY = (pixel: number) => bounds.minY + (pixel / loaded.height) * (bounds.maxY - bounds.minY);
+      const minX = Math.max(bounds.minX, Math.floor(toX(visible.getWest())));
+      const minY = Math.max(bounds.minY, Math.floor(toY(visible.getSouth())));
+      const maxX = Math.min(bounds.maxX, Math.ceil(toX(visible.getEast())));
+      const maxY = Math.min(bounds.maxY, Math.ceil(toY(visible.getNorth())));
+      if (minX < maxX && minY < maxY) onChange({ minX, minY, maxX, maxY, zoom: map.getZoom(), floor });
+    };
+    map.on('moveend zoomend', report);
+    const frame = window.requestAnimationFrame(report);
+    return () => { map.off('moveend zoomend', report); window.cancelAnimationFrame(frame); };
+  }, [bounds, enabled, floor, loaded, map, onChange]);
+  return null;
+}
+
 function markerIcon(marker: MapMarker): L.DivIcon {
   const markerKind = marker.kind || 'location';
   const content = marker.imageUrl && marker.imageUrl.startsWith('/')
@@ -96,7 +124,7 @@ function townLabelIcon(label: string): L.DivIcon {
   return L.divIcon({ className: 'tibia-map-town-label', html: `<span>${safeLabel}</span>`, iconSize: [0, 0], iconAnchor: [0, 0] });
 }
 
-export default function TibiaMapViewer({ imageUrl, pathfindingUrl, showPathfinding = false, label = '', floor, mapBounds, center, focusBounds, markers = [], paths = [], regions = [], coordinateMode = 'legacy-image', emptyMessage = '', resetLabel = '', zoomInLabel = '', zoomOutLabel = '', floorLabel, fill = false, controlFooter, showFloorBadge = true, onMarkerSelect }: TibiaMapViewerProps) {
+export default function TibiaMapViewer({ imageUrl, pathfindingUrl, showPathfinding = false, label = '', floor, mapBounds, center, focusBounds, markers = [], paths = [], regions = [], coordinateMode = 'legacy-image', emptyMessage = '', resetLabel = '', zoomInLabel = '', zoomOutLabel = '', floorLabel, fill = false, controlFooter, showFloorBadge = true, onMarkerSelect, onViewportChange }: TibiaMapViewerProps) {
   const [loaded, setLoaded] = useState<LoadedMap | null>(null); const [loading, setLoading] = useState(Boolean(imageUrl)); const [map, setMap] = useState<L.Map | null>(null);
   useEffect(() => {
     const controller = new AbortController(); let objectUrl: string | null = null; setLoaded(null);
@@ -146,6 +174,7 @@ export default function TibiaMapViewer({ imageUrl, pathfindingUrl, showPathfindi
       {renderedMarkers.map((marker) => <Marker key={`${marker.kind || 'entity'}:${marker.x}:${marker.y}:${marker.label}`} position={marker.position} icon={marker.kind === 'town' ? townLabelIcon(marker.label) : markerIcon(marker)} interactive={marker.kind !== 'town'} eventHandlers={marker.resultId && onMarkerSelect ? { click: () => onMarkerSelect(marker) } : undefined}>{marker.kind !== 'town' ? <Popup><strong>{marker.label}</strong>{marker.subtitle ? <small className="block">{marker.subtitle}</small> : null}</Popup> : null}</Marker>)}
       <InitialViewport bounds={imageBounds} enabled={!center} />
       <FocusViewport position={renderedCenter} bounds={renderedFocusBounds} zoom={coordinateMode === 'world' ? 2 : 0} />
+      {tibiaBounds ? <ViewportReporter loaded={loaded} bounds={tibiaBounds} floor={floor} enabled={coordinateMode === 'world'} onChange={onViewportChange} /> : null}
       <MapLifecycle />
     </MapContainer>
     <Controls map={map} bounds={imageBounds} labels={[zoomInLabel, zoomOutLabel, resetLabel]}>{controlFooter}</Controls>
