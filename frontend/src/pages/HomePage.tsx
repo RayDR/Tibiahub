@@ -3,6 +3,7 @@ import {
   ArrowRight,
   BookOpen,
   Clock3,
+  Flame,
   Sparkles,
 } from 'lucide-react';
 import { Link } from 'react-router-dom';
@@ -15,6 +16,8 @@ import { activityApi, type UserActivityEntry } from '../services/activity';
 import { useAuth } from '../context/AuthContext';
 import { assistantHeroSessionSeed, selectAssistantHeroCopy } from '../utils/assistantHeroCopy';
 import KnowledgeCategoryIcon from '../components/knowledge/KnowledgeCategoryIcon';
+import { tibiaApi } from '../services/api';
+import type { BoostedCreatureProjection, TibiaBoostedResponse } from '../types';
 
 interface QuestHistoryEntry {
   id: number;
@@ -41,6 +44,18 @@ export default function HomePage() {
 
   const [activity, setActivity] = useState<UserActivityEntry[]>([]);
   const [clearingHistory, setClearingHistory] = useState(false);
+  const [boosted, setBoosted] = useState<TibiaBoostedResponse | null>(null);
+
+  useEffect(() => {
+    const controller = new AbortController();
+    void tibiaApi
+      .getBoosted(controller.signal)
+      .then(setBoosted)
+      .catch(() => {
+        // Current-data enrichment is optional; generic Home cards stay intact.
+      });
+    return () => controller.abort();
+  }, []);
 
   useEffect(() => {
     if (!isAuthenticated) {
@@ -262,6 +277,13 @@ export default function HomePage() {
             <HomeCapabilityCard
               key={option.key}
               option={option}
+              boosted={
+                option.key === 'creatures'
+                  ? boosted?.creature
+                  : option.key === 'bosses'
+                    ? boosted?.boss
+                    : undefined
+              }
             />
           ))}
         </div>
@@ -272,28 +294,68 @@ export default function HomePage() {
 
 function HomeCapabilityCard({
   option,
+  boosted,
 }: {
   option: HomeSearchOption;
+  boosted?: BoostedCreatureProjection;
 }) {
+  const { t } = useTranslation();
+  const [imageFailed, setImageFailed] = useState(false);
+  const current = boosted?.resolution_state === 'unavailable' ? undefined : boosted;
+  const currentName = current?.resolution_state === 'resolved'
+    ? current.name
+    : current?.source_name;
+  const imageUrl = current?.resolution_state === 'resolved'
+    && current.media.status === 'available'
+    && !imageFailed
+    ? current.media.url
+    : null;
+
+  useEffect(() => setImageFailed(false), [current?.media.url]);
+
   return (
     <Link
       to={option.to}
       title={option.help}
-      aria-label={`${option.title}: ${option.help}`}
+      aria-label={`${option.title}: ${currentName ? t('home.boosted.today', { name: currentName }) : option.help}`}
       className="group block h-full"
     >
-      <Card className="relative h-full min-h-44 overflow-hidden p-0 transition duration-300 hover:-translate-y-1 hover:border-primary/60 hover:shadow-lg motion-reduce:transform-none motion-reduce:transition-none">
-        <KnowledgeCategoryIcon category={option.key} label={option.title} className="absolute -right-3 -top-2 size-28 rounded-3xl bg-primary/[0.07] opacity-90 transition duration-300 group-hover:scale-110 group-hover:opacity-100 motion-reduce:transform-none" mediaClassName="size-24 p-1" />
+      <Card className={`relative h-full min-h-44 overflow-hidden p-0 transition duration-300 hover:-translate-y-1 hover:shadow-lg motion-reduce:transform-none motion-reduce:transition-none ${current ? 'border-accent/50 hover:border-accent/70' : 'hover:border-primary/60'}`}>
+        {imageUrl ? (
+          <span className="absolute -right-3 -top-2 grid size-28 place-items-center overflow-hidden rounded-3xl bg-accent/10">
+            <img
+              src={imageUrl}
+              alt=""
+              loading="lazy"
+              decoding="async"
+              onError={() => setImageFailed(true)}
+              className="size-24 object-contain p-1 [image-rendering:pixelated]"
+            />
+          </span>
+        ) : (
+          <KnowledgeCategoryIcon category={option.key} label={option.title} className="absolute -right-3 -top-2 size-28 rounded-3xl bg-primary/[0.07] opacity-90 transition duration-300 group-hover:scale-110 group-hover:opacity-100 motion-reduce:transform-none" mediaClassName="size-24 p-1" />
+        )}
         <div className="relative z-10 flex h-full max-w-[72%] flex-col p-4">
-
           <div>
+            {current ? (
+              <span className="inline-flex items-center gap-1 rounded-full bg-accent/15 px-2 py-1 text-[0.65rem] font-bold tracking-wide text-accent ring-1 ring-accent/40">
+                <Flame className="size-3" aria-hidden="true" />
+                {t('home.boosted.badge')}
+              </span>
+            ) : null}
             <h3 className="mt-1 font-semibold">
               {option.title}
             </h3>
 
-            <p className="mt-1 text-sm text-content-secondary">
-              {option.help}
-            </p>
+            {currentName ? (
+              <p className="mt-1 line-clamp-2 text-sm font-semibold text-content-primary">
+                {t('home.boosted.today', { name: currentName })}
+              </p>
+            ) : (
+              <p className="mt-1 text-sm text-content-secondary">
+                {option.help}
+              </p>
+            )}
           </div>
 
           <ArrowRight className="mt-auto size-4 translate-y-2 self-end text-primary opacity-0 transition duration-300 group-hover:translate-x-1 group-hover:translate-y-0 group-hover:opacity-100 motion-reduce:transform-none" />

@@ -8,6 +8,8 @@ from app.api.v1.endpoints.auth import get_current_active_user, get_current_admin
 from app.db.database import get_db
 from app.knowledge.models import KnowledgeDocument, KnowledgeEntity, KnowledgeExternalMapping
 from app.models.user import User
+from app.schemas import TibiaBoostedResponse
+from app.services.boosted_creatures_service import get_boosted_projection
 from app.services.tibia_sync_service import try_sync_user_character_snapshot
 
 router = APIRouter(prefix="/tibia", tags=["tibia-api"])
@@ -69,6 +71,12 @@ def _canonical_provider_payload(db: Session, entity_type: str, identifier: str) 
         "data_version": metadata.get("data_version", 1),
         "last_synced_at": document.retrieved_at if document else mapping.updated_at,
     }
+
+
+@router.get("/boosted", response_model=TibiaBoostedResponse)
+async def get_boosted(db: Session = Depends(get_db)):
+    """Return current TibiaData boosted names with exact local projections."""
+    return await get_boosted_projection(db)
 
 
 @router.get("/character/{character_name}")
