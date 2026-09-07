@@ -355,7 +355,15 @@ export default function CompactEntityStrip({
                   : 'size-6 shrink-0'
               }
               fallbackLabel={item.name}
-              fallbackKind={item.id.startsWith('item:') ? 'item' : 'image'}
+              fallbackKind={
+                item.id.startsWith('item:')
+                  ? 'item'
+                  : item.id.startsWith('boss:')
+                    ? 'boss'
+                    : item.id.startsWith('creature:')
+                      ? 'creature'
+                      : 'image'
+              }
             />
 
             <span className="min-w-0">

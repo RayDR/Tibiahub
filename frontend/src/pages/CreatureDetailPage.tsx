@@ -205,7 +205,8 @@ const CreatureDetailPage: React.FC = () => {
                 alt={creature.name}
                 className="h-full w-full object-contain drop-shadow-lg"
                 containerClassName="h-full w-full"
-                fallbackLabel={t("creatureDetail.creature")}
+                fallbackLabel={`${creature.is_boss ? 'Boss' : 'Creature'} image unavailable: ${creature.name}`}
+                fallbackKind={creature.is_boss ? 'boss' : 'creature'}
               />
             </motion.div>
 
