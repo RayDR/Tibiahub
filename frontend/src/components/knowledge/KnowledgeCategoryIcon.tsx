@@ -14,6 +14,17 @@ export type KnowledgeCategory =
 
 type CategoryVisuals = Partial<Record<KnowledgeCategory, string>>;
 
+type NpcVisualDirectoryPage = {
+  items: Array<{
+    canonical_id: string;
+    media?: {
+      status?: string;
+      url?: string | null;
+    };
+  }>;
+  total: number;
+};
+
 const fallbackIcons: Record<KnowledgeCategory, LucideIcon> = {
   creatures: Swords,
   bosses: Crown,
@@ -26,17 +37,46 @@ const fallbackIcons: Record<KnowledgeCategory, LucideIcon> = {
 let visualCache: CategoryVisuals | null = null;
 let visualRequest: Promise<CategoryVisuals> | null = null;
 
+async function loadRandomNpcVisual(): Promise<string | undefined> {
+  try {
+    const { data: firstPage } = await api.get<NpcVisualDirectoryPage>('/npcs/directory', {
+      params: { skip: 0, limit: 1 },
+    });
+    const total = Math.max(0, firstPage.total || 0);
+    if (!total) return undefined;
+
+    const sampleSize = Math.min(25, total);
+    const maxSkip = Math.max(0, total - sampleSize);
+    const skip = Math.floor(Math.random() * (maxSkip + 1));
+    const { data: sample } = await api.get<NpcVisualDirectoryPage>('/npcs/directory', {
+      params: { skip, limit: sampleSize },
+    });
+    const available = sample.items.filter(
+      (npc) => npc.media?.status === 'cached' && npc.media.url,
+    );
+    if (!available.length) return undefined;
+
+    const selected = available[Math.floor(Math.random() * available.length)];
+    return selected.media?.url || undefined;
+  } catch {
+    return undefined;
+  }
+}
+
 function loadCategoryVisuals(): Promise<CategoryVisuals> {
   if (visualCache) return Promise.resolve(visualCache);
   if (!visualRequest) {
-    visualRequest = api
-      .get<CategoryVisuals>('/catalog/category-visuals')
-      .then(({ data }) => {
-        visualCache = data || {};
-        return visualCache;
-      })
-      .catch(() => {
-        visualCache = {};
+    visualRequest = Promise.all([
+      api
+        .get<CategoryVisuals>('/catalog/category-visuals')
+        .then(({ data }) => data || {})
+        .catch(() => ({})),
+      loadRandomNpcVisual(),
+    ])
+      .then(([visuals, npcVisual]) => {
+        visualCache = npcVisual
+          ? { ...visuals, npcs: npcVisual }
+          : visuals;
         return visualCache;
       })
       .finally(() => {
