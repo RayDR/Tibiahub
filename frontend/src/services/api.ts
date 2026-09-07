@@ -1,5 +1,5 @@
 import axios, { type AxiosRequestConfig } from 'axios';
-import type { Creature, CreatureSimple, HuntZone, ItemDetail, ItemSearchResult, LocationKnowledgeDetail, NpcDirectoryPage, NpcKnowledgeDetail, QuestDetail, QuestSearchResult, SpatialRouteMetadata, Vocation } from '../types';
+import type { Creature, CreatureSimple, HuntZone, ItemDetail, ItemSearchResult, LocationKnowledgeDetail, NpcDirectoryPage, NpcKnowledgeDetail, QuestDetail, QuestSearchResult, SpatialRouteMetadata, TibiaBoostedResponse, Vocation } from '../types';
 import { cachedKnowledgeRead, knowledgeCacheKey } from './knowledgeRequestCache';
 
 const API_BASE_URL = import.meta.env.VITE_API_URL || '/api/v1';
@@ -116,6 +116,13 @@ export const creaturesApi = {
   getByName: async (name: string): Promise<Creature> => (
     cachedGet<Creature>(`/creatures/name/${name}`)
   ),
+};
+
+export const tibiaApi = {
+  getBoosted: async (signal?: AbortSignal): Promise<TibiaBoostedResponse> => {
+    const response = await api.get<TibiaBoostedResponse>('/tibia/boosted', { signal });
+    return response.data;
+  },
 };
 
 export const huntZonesApi = {

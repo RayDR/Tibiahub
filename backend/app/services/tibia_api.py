@@ -37,6 +37,27 @@ async def _get_json(url: str) -> Dict[str, Any]:
     return data
 
 
+def _boosted_name(data: Dict[str, Any], collection: str) -> str:
+    payload = data.get(collection) or {}
+    boosted = payload.get("boosted") if isinstance(payload, dict) else None
+    name = boosted.get("name") if isinstance(boosted, dict) else None
+    if not isinstance(name, str) or not name.strip():
+        raise TibiaAPIError(f"TibiaData {collection} response has no boosted name")
+    return name.strip()
+
+
+async def get_boosted_creature_name() -> str:
+    """Return the authoritative current creature name, without provider media."""
+    data = await _get_json(f"{settings.TIBIADATA_BASE_URL}/creatures")
+    return _boosted_name(data, "creatures")
+
+
+async def get_boosted_boss_name() -> str:
+    """Return the authoritative current boss name, without provider media."""
+    data = await _get_json(f"{settings.TIBIADATA_BASE_URL}/boostablebosses")
+    return _boosted_name(data, "boostable_bosses")
+
+
 async def get_character_info(character_name: str) -> Optional[Dict[str, Any]]:
     if settings.USE_MOCK_DATA:
         payload = dict(MOCK_CHARACTER)

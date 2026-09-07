@@ -114,6 +114,7 @@ i18n
                         "route": { "endpoints": "{{start}} → {{end}}", "unresolvedStep": "This route step is not available yet.", "noSteps": "Route steps are not available yet." }
                     },
                     "home": {
+                        "boosted": { "badge": "BOOSTED", "today": "Today: {{name}}" },
                         "assistantPreview": {
                             "identity": "Guide Thaisano",
                             "section": "Search section",
@@ -1039,6 +1040,7 @@ i18n
                         "route": { "endpoints": "{{start}} → {{end}}", "unresolvedStep": "Este paso de la ruta aún no está disponible.", "noSteps": "Los pasos de la ruta aún no están disponibles." }
                     },
                     "home": {
+                        "boosted": { "badge": "BOOSTED", "today": "Hoy: {{name}}" },
                         "assistantPreview": {
                             "identity": "Guide Thaisano",
                             "section": "Sección de búsqueda",

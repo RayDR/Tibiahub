@@ -112,6 +112,29 @@ export interface Creature {
   resistances: Element[];
 }
 
+export interface BoostedCreatureMedia {
+  status: 'available' | 'unavailable';
+  url: string | null;
+}
+
+export interface BoostedCreatureProjection {
+  source_name: string | null;
+  resolution_state: 'resolved' | 'unresolved' | 'unavailable';
+  id: number | null;
+  canonical_id: string | null;
+  slug: string | null;
+  name: string | null;
+  media: BoostedCreatureMedia;
+}
+
+export interface TibiaBoostedResponse {
+  status: 'available' | 'partial' | 'unavailable';
+  source: 'tibiadata';
+  observed_at: string | null;
+  creature: BoostedCreatureProjection;
+  boss: BoostedCreatureProjection;
+}
+
 export interface HuntZone {
   id: number;
   canonical_id?: string | null;

@@ -55,6 +55,29 @@ class ItemMedia(BaseModel):
     url: Optional[str] = None
 
 
+class BoostedCreatureMedia(BaseModel):
+    status: Literal["available", "unavailable"] = "unavailable"
+    url: Optional[str] = None
+
+
+class BoostedCreatureProjection(BaseModel):
+    source_name: Optional[str] = None
+    resolution_state: Literal["resolved", "unresolved", "unavailable"]
+    id: Optional[int] = None
+    canonical_id: Optional[UUID] = None
+    slug: Optional[str] = None
+    name: Optional[str] = None
+    media: BoostedCreatureMedia = Field(default_factory=BoostedCreatureMedia)
+
+
+class TibiaBoostedResponse(BaseModel):
+    status: Literal["available", "partial", "unavailable"]
+    source: Literal["tibiadata"] = "tibiadata"
+    observed_at: Optional[datetime] = None
+    creature: BoostedCreatureProjection
+    boss: BoostedCreatureProjection
+
+
 
 class Loot(LootBase):
     id: int
