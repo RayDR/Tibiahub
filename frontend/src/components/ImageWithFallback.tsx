@@ -1,10 +1,11 @@
 import React, { useEffect, useState } from 'react';
-import { ImageOff } from 'lucide-react';
+import { ImageOff, Package } from 'lucide-react';
 
 interface ImageWithFallbackProps {
   src?: string | null;
   alt: string;
   fallbackLabel?: string;
+  fallbackKind?: 'image' | 'item';
   className?: string;
   containerClassName?: string;
 }
@@ -15,6 +16,7 @@ const ImageWithFallback: React.FC<ImageWithFallbackProps> = ({
   src,
   alt,
   fallbackLabel = 'No image',
+  fallbackKind,
   className = '',
   containerClassName = '',
 }) => {
@@ -25,12 +27,16 @@ const ImageWithFallback: React.FC<ImageWithFallbackProps> = ({
   }, [src]);
 
   if (!src || failed) {
+    const resolvedFallbackKind = fallbackKind || (fallbackLabel === alt ? 'item' : 'image');
+    const FallbackIcon = resolvedFallbackKind === 'item' ? Package : ImageOff;
+
     return (
-      <div className={`flex items-center justify-center rounded-lg bg-surface text-content-secondary ${containerClassName}`}>
-        <div className="flex flex-col items-center gap-1">
-          <ImageOff size={18} />
-          <span className="text-[10px] uppercase tracking-wide">{fallbackLabel}</span>
-        </div>
+      <div
+        className={`flex items-center justify-center rounded-lg bg-surface text-content-secondary ${containerClassName}`}
+        role="img"
+        aria-label={fallbackLabel}
+      >
+        <FallbackIcon size={20} aria-hidden="true" />
       </div>
     );
   }
