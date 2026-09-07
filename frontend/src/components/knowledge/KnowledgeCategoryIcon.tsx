@@ -1,7 +1,9 @@
 import type { LucideIcon } from 'lucide-react';
 import { BookOpenCheck, Crown, Gem, MapPinned, Swords, UserRound } from 'lucide-react';
 import { useEffect, useState } from 'react';
+import { useTranslation } from 'react-i18next';
 
+import { cyclopediaSections } from '../../config/cyclopediaSections';
 import api from '../../services/api';
 
 export type KnowledgeCategory =
@@ -101,10 +103,14 @@ export function KnowledgeCategoryMedia({
   className?: string;
   mediaClassName?: string;
 }) {
+  const { t } = useTranslation();
   const [visuals, setVisuals] = useState<CategoryVisuals>(visualCache || {});
   const [failed, setFailed] = useState(false);
   const FallbackIcon = fallbackIcons[category];
-  const imageUrl = visuals[category];
+  const categorySection = cyclopediaSections.find((section) => section.mode === category);
+  const categoryLabel = categorySection ? t(categorySection.i18nLabel) : label;
+  const useCategoryVisual = category !== 'npcs' || label === categoryLabel;
+  const imageUrl = useCategoryVisual ? visuals[category] : undefined;
 
   useEffect(() => {
     let active = true;
