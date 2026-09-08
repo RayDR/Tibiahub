@@ -30,15 +30,15 @@ All themes define RGB channel tokens (`--ds-*`) so Tailwind opacity modifiers su
 
 Tailwind equivalents are `bg-surface[-raised|-hover]`, `text-content-primary`, `text-content-secondary`, `text-content-muted`, `border-line[-strong]`, `ring-line-focus`, and the `primary`, `success`, `warning`, `danger`, `info`, and `accent` families. Opacity modifiers are supported.
 
-The curated themes are `default`, `medieval`, `tibia-stone`, `midnight-arcana`, `blood-moon`, and `high-contrast`. Every theme supplies all 39 color and state channels. Compatibility palette aliases have been retired; application code must use semantic names.
+The current curated themes are `medieval`, `tibia-stone`, `midnight-arcana`, `blood-moon`, and `high-contrast`. `tibia-stone` is the canonical/default appearance and shares the root token block. The former stored value `default` is migrated to `tibia-stone` for compatibility. Application code must use semantic names rather than theme-specific palette values.
 
 ## Appearance preferences
 
-`AppearanceProvider` owns one versioned preference record, `tibiahub.appearance.v1`, and applies it as `data-theme`, `data-motion`, and `data-density` attributes before React renders. It safely migrates the former standalone `theme` key and synchronizes changes from other tabs.
+`AppearanceProvider` owns one versioned preference record, `tibiahub.appearance.v1`, and applies it as `data-theme`, `data-motion`, and `data-density` attributes before React renders. It safely migrates the former standalone `theme` key and the legacy `default` theme value, and synchronizes changes from other tabs.
 
 - Motion: `system` uses the operating-system preference, `reduced` explicitly removes nonessential motion, and `enhanced` enables subtle section, card, tab, dropdown, button, and dialog feedback. Operating-system reduced motion remains authoritative in every mode.
 - Density: `comfortable` is the default; `compact` reduces control heights, component gaps, state padding, and table cell padding without shrinking touch targets below the compact contract.
-- Theme: all six themes can be selected globally or inspected in isolation in Admin → Theme Playground.
+- Theme: all five current themes can be selected globally or inspected in isolation in Admin → Theme Playground.
 
 Run `npm run check:appearance` to validate sanitization, DOM attributes, versioned persistence, and legacy migration.
 
