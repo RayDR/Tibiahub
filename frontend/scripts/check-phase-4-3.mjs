@@ -50,42 +50,66 @@ assert.equal(localNpcMediaUrl({ status: 'unavailable', url: '/api/v1/npcs/npc-a/
 assert.equal(localNpcMediaUrl({ status: 'available', url: 'https://provider.example/npc.gif' }), null, 'provider media URLs must never render');
 
 assert.equal(buildLegacyNpcBrowseRedirect(''), '/cyclopedia?tab=npcs');
-assert.equal(buildLegacyNpcBrowseRedirect('?q=banker&location=Thais&page=4'), '/cyclopedia?tab=npcs&q=banker&location=Thais', 'legacy q/location must survive while numbered page is dropped');
+assert.equal(
+  buildLegacyNpcBrowseRedirect('?q=banker&location=Thais&page=4'),
+  '/cyclopedia?tab=npcs&q=banker&location=Thais',
+  'legacy q/location must survive the redirect so Cyclopedia can fold location into the unified search',
+);
 assert.equal(
   buildCyclopediaPath({ tab: 'npcs', q: 'banker', location: 'Thais' }),
   '/cyclopedia?tab=npcs&q=banker&location=Thais',
-  'NPC query and location must round-trip through Cyclopedia URL state',
+  'legacy-compatible URL helpers must still preserve incoming NPC location state',
 );
 assert.equal(buildCyclopediaPath({ tab: 'creatures', q: 'dragon' }), '/cyclopedia?tab=creatures&q=dragon', 'unrelated tabs must not acquire an NPC location filter');
 
 const page = read('src/pages/CreaturesPage.tsx');
 assert.match(page, /tabToMode\(tabParam\).*\|\| 'creatures'/s, 'direct /cyclopedia?tab=npcs must initialize through the central tab contract');
-assert.match(page, /namedKnowledgeApi\.listNpcs\([\s\S]*?search: normalized \|\| undefined,[\s\S]*?location: cacheLocation \|\| undefined,[\s\S]*?skip: nextSkip,[\s\S]*?limit: PAGE_SIZE/, 'NPC browse/search/location must use one bounded backend request');
+assert.match(
+  page,
+  /namedKnowledgeApi\.listNpcs\([\s\S]*?search: normalized \|\| undefined,[\s\S]*?category: npcCategory \|\| undefined,[\s\S]*?skip: nextSkip,[\s\S]*?limit: PAGE_SIZE/,
+  'NPC browse/search/category filtering must use one bounded backend request',
+);
+assert.doesNotMatch(
+  page,
+  /namedKnowledgeApi\.listNpcs\([\s\S]{0,300}?location:/,
+  'the active NPC request must not maintain a second location-search channel',
+);
 assert.match(page, /mode === 'npcs'[\s\S]*?\? true[\s\S]*?: mode === 'quests'/, 'NPC no-query browse must still fetch its first page');
-assert.match(page, /setTimeout\(\(\) => \{\s*void performSearch\(true\);\s*\}, 450\)/, 'NPC query/location changes must use the Cyclopedia debounce');
+assert.match(page, /setTimeout\(\(\) => \{\s*void performSearch\(true\);\s*\}, 450\)/, 'NPC query/category changes must use the Cyclopedia debounce');
 assert.match(page, /activeRequestRef\.current\?\.abort\(\)/, 'changed queries must cancel stale requests');
 assert.match(page, /controller\.signal\.aborted \|\| activeRequestRef\.current !== controller/, 'stale responses must not overwrite current state');
 assert.match(page, /loadMoreLockRef\.current = true/, 'infinite loading must lock duplicate active requests');
 assert.match(page, /setSkip\(page\.skip \+ page\.items\.length\)/, 'the next NPC cursor must advance by the returned count');
 assert.match(page, /mergeNpcRows\(npcs, page\.items\)/, 'subsequent NPC pages must use canonical deduplication');
-assert.match(page, /mode === 'npcs' \? npcLocation\.trim\(\) : ''/, 'location must be isolated to NPC mode');
-assert.match(page, /setNpcLocation\(nextNpcLocation\)/, 'browser navigation must restore the NPC location filter');
-assert.match(page, /setNpcLocation\(''\)/, 'clearing/switching tabs must clear the NPC location filter');
-assert.match(page, /location: mode === 'npcs' \? npcLocation : ''/, 'URL and snapshot state must include location only for NPC mode');
+assert.match(
+  page,
+  /const nextQuery = searchParams\.get\('q'\) \|\| \(nextMode === 'npcs' \? searchParams\.get\('location'\) \|\| '' : ''\)/,
+  'legacy location URLs must be absorbed by the unified NPC search input',
+);
+assert.match(page, /currentParams\.delete\('location'\)/, 'Cyclopedia must normalize legacy location state out of the active URL');
+assert.match(page, /location: ''/, 'active Cyclopedia URL/snapshot state must not persist a separate NPC location filter');
+assert.match(page, /setNpcCategory\(nextNpcCategory\)/, 'browser navigation must restore the NPC service filter');
+assert.match(page, /setNpcCategory\(''\)/, 'switching tabs/resetting filters must clear the NPC service filter');
+assert.match(page, /NPC_CATEGORY_FILTERS:[\s\S]*?'buys'[\s\S]*?'sells'[\s\S]*?'quests'[\s\S]*?'travel'[\s\S]*?'other'/, 'NPC service filter contract must include buy, sell, quest, travel, and other');
+assert.match(page, /npcFilterOptions\.map\(\(option\) =>/, 'NPC service filters must render from one shared filter definition');
+assert.match(page, /aria-pressed=\{npcCategory === option\.value\}/, 'NPC service filter state must be exposed accessibly');
+assert.match(page, /onClick=\{\(\) => setNpcCategory\(option\.value\)\}/, 'NPC service filters must update the active directory query');
 assert.match(page, /cacheGet<CyclopediaCachedResults>/, 'NPC results must participate in the existing cache restore flow');
 assert.match(page, /npcs: merged/, 'loaded NPC pages must be saved together for detail-return restoration');
 assert.match(page, /loadMoreSentinelRef/, 'NPC results must reuse the shared IntersectionObserver sentinel');
 assert.match(page, /externalSuggestions=\{\s*searchSuggestions\s*\}/, 'NPC suggestions must be built from currently loaded rows');
 assert.doesNotMatch(page, /popularNPC|popularNpc|trendingNPC|trendingNpc/, 'default NPC rows must not be presented as popularity data');
+assert.doesNotMatch(page, /npcLocation|setNpcLocation/, 'the retired second NPC location input/state must not return');
 
 const card = read('src/components/NpcCard.tsx');
 assert.match(card, /`\/npcs\/\$\{npc\.canonical_id\}`/, 'NPC cards must retain canonical detail links');
-assert.match(card, /buildMapEntityUrl\(\{[\s\S]*?entityType: 'npc',[\s\S]*?canonicalEntityId: npc\.canonical_id,[\s\S]*?name: npc\.name,[\s\S]*?slug: npc\.slug/, 'NPC cards must retain exact map-link inputs');
+assert.match(card, /data-npc-card/, 'NPC directory must retain its compact card contract');
 assert.match(card, /loading="lazy"/, 'local NPC media must be lazy-loaded');
 assert.match(card, /decoding="async"/, 'local NPC media must decode asynchronously');
 assert.match(card, /\[image-rendering:pixelated\]/, 'NPC sprites must retain pixel rendering');
 assert.match(card, /onError=\{\(\) => setFailed\(true\)\}/, 'a missing local file must degrade to the placeholder');
 assert.doesNotMatch(card, /source_url|fandom|https?:\/\//i, 'NPC cards must not use provider media or guessed URLs');
+assert.doesNotMatch(card, /buildMapEntityUrl|openMapFor/, 'compact NPC cards must not restore a redundant secondary map action');
 
 const app = read('src/App.tsx');
 assert.match(app, /path="\/npcs" element=\{<Navigate to=\{buildLegacyNpcBrowseRedirect\(location\.search\)\} replace \/>\}/, 'legacy NPC browse must redirect compatibly');
@@ -93,7 +117,7 @@ assert.match(app, /path="\/npcs\/:identifier" element=\{<NpcDetailPage \/>\}/, '
 assert.doesNotMatch(app, /NpcDirectoryPage/, 'the retired directory must not remain a routed browse surface');
 
 const cache = read('src/services/cyclopediaCache.ts');
-assert.match(cache, /location\?: string/, 'cache/snapshot contracts must support NPC location');
-assert.match(cache, /params\.location \|\| ''/, 'cache identity must separate NPC location filters');
+assert.match(cache, /location\?: string/, 'cache/snapshot contracts must remain backward-compatible with legacy NPC location state');
+assert.match(cache, /params\.location \|\| ''/, 'legacy cache keys must remain deterministic while active NPC state uses unified search');
 
-console.log('Phase 4.3 checks passed: native NPC tab, bounded browse/search, safe pagination, local media, compatibility redirects, and cache/location restoration.');
+console.log('Phase 4.3 checks passed: native NPC tab, unified bounded search, service filters, safe pagination, local media, compatibility redirects, and cache restoration.');
