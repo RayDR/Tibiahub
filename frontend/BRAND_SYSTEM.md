@@ -34,9 +34,9 @@ The product should feel:
 
 The TibiaHub brand and user-selectable themes are separate concepts.
 
-The canonical TibiaHub identity is represented by the `default` theme and by the official logo, typography, icon language, spacing, shapes, motion, and composition rules in this document.
+The canonical TibiaHub identity is represented by the `tibia-stone` theme and by the official logo, typography, icon language, spacing, shapes, motion, and composition rules in this document. `tibia-stone` is also the current default appearance and root palette. The legacy stored theme value `default` migrates to `tibia-stone`; it is not a separate current theme.
 
-Other themes (`medieval`, `tibia-stone`, `midnight-arcana`, `blood-moon`, `high-contrast`) are skins. They may alter semantic token values, but they must not redefine component geometry, iconography, typography hierarchy, interaction patterns, or the TibiaHub logo.
+Other themes (`medieval`, `midnight-arcana`, `blood-moon`, `high-contrast`) are skins. They may alter semantic token values, but they must not redefine component geometry, iconography, typography hierarchy, interaction patterns, or the TibiaHub logo.
 
 Marketing material, documentation screenshots, Open Graph imagery, app-store-style imagery, and official TibiaHub announcements use the canonical identity unless a specific themed example is being demonstrated.
 
@@ -67,7 +67,7 @@ Feature code must use semantic roles such as:
 
 Literal colors and Tailwind palette utilities remain forbidden.
 
-The canonical brand palette is the `default` theme. Other themes must remain complete semantic substitutions and may not introduce feature-specific color contracts.
+The canonical brand palette is `tibia-stone`. Other themes must remain complete semantic substitutions and may not introduce feature-specific color contracts.
 
 ## Shape and elevation
 
