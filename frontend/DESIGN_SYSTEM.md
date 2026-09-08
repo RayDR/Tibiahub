@@ -1,5 +1,7 @@
 # TibiaHub Design System
 
+> Product identity authority: [`BRAND_SYSTEM.md`](./BRAND_SYSTEM.md). This document defines implementation mechanics below that brand contract. If a local UI pattern conflicts with the brand system, the brand system wins.
+
 Stage 3.0.1 established a single visual language for every TibiaHub screen. Stage 3.1 separates the complete palette contract into `src/styles/themes.css`; semantic component behavior remains in `src/styles/design-system.css`, Tailwind exposes the same tokens through `tailwind.config.js`, and reusable React primitives live in `src/components/ui`.
 
 ## Principles
@@ -9,6 +11,7 @@ Stage 3.0.1 established a single visual language for every TibiaHub screen. Stag
 - Controls are keyboard accessible, mobile-first, and share focus, disabled, hover, and active states.
 - Product or guild-specific styling may compose tokens, but must not introduce colors or theme selectors.
 - `npm run check:design-system` rejects hardcoded colors, legacy palette utilities, theme rules outside the theme layer, incomplete themes, insufficient contrast, invalid stacking, and missing appearance behavior.
+- `npm run check:brand-system` validates the higher-level TibiaHub identity contract and prevents new icon-system drift.
 
 ## Color tokens
 
@@ -102,4 +105,4 @@ The breakpoints are mobile-first: base styles support phones, container gutters 
 2. Use semantic utilities such as `bg-surface`, `text-content-secondary`, and `border-danger/40`; never use Tailwind palette names or literal color values.
 3. Use the spacing scale and standard radii. Preserve a custom size only when it represents content geometry rather than visual styling.
 4. Keep visible strings translated in both English and Spanish.
-5. Verify new work with `npm run check:design-system`, `npm run check:appearance`, `npm run check:i18n`, TypeScript, and the production build.
+5. Verify new work with `npm run check:brand-system`, `npm run check:design-system`, `npm run check:appearance`, `npm run check:i18n`, TypeScript, and the production build.
