@@ -6,10 +6,12 @@
   "scripts": {
     "dev": "vite",
     "build": "vite build",
+    "check:brand-system": "node scripts/check-brand-system.mjs",
     "check:design-system": "node scripts/check-design-system.mjs",
     "check:appearance": "node scripts/check-appearance-persistence.mjs",
     "check:layouts": "node scripts/check-layouts.mjs",
     "check:i18n": "node scripts/check-i18n.mjs",
+    "check:ui": "npm run check:brand-system && npm run check:design-system && npm run check:appearance && npm run check:layouts && npm run check:i18n",
     "lint": "eslint . --ext ts,tsx --report-unused-disable-directives --max-warnings 0",
     "preview": "vite preview"
   },
@@ -37,8 +39,6 @@
     "@types/react-dom": "^18.2.17",
     "@typescript-eslint/eslint-plugin": "^6.14.0",
     "@typescript-eslint/parser": "^6.14.0",
-    "@vitejs/plugin-react": "^4.2.1",
-    "autoprefixer": "^10.4.16",
     "eslint": "^8.55.0",
     "eslint-plugin-react-hooks": "^4.6.0",
     "eslint-plugin-react-refresh": "^0.4.5",
