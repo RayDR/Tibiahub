@@ -1,10 +1,15 @@
 # TibiaHub Reference Surface
 
-Cyclopedia is the first TibiaHub reference surface. Its purpose is not only to serve game data; it is the product area used to prove that the brand system can produce real screens consistently.
+TibiaHub uses two complementary living references:
+
+1. `/admin/theme-playground` is the primitive/theme laboratory. It proves shared components, semantic tokens, states, motion, density, overlays, and theme substitution in real application code.
+2. Cyclopedia is the first complete product reference surface. It proves that those primitives compose into coherent real screens with game media, search, filters, entity relationships, maps, coordinates, and responsive browsing.
+
+The manual is expected to document these real implementations rather than maintain a separate idealized mockup.
 
 ## Reference requirements
 
-The completed reference surface must demonstrate:
+The completed Cyclopedia reference surface must demonstrate:
 
 - application navigation,
 - page header,
