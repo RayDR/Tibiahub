@@ -45,7 +45,11 @@ for (const contract of [
   if (!designCss.includes(contract)) failures.push(`styles/design-system.css: missing brand foundation contract ${contract}`);
 }
 
-if (!themes.includes('[data-theme="default"]')) failures.push('styles/themes.css: canonical default theme is missing');
+// Current develop uses tibia-stone as the canonical/default appearance. The
+// root token block and explicit tibia-stone selector intentionally share it.
+if (!themes.includes(':root,') || !themes.includes('[data-theme="tibia-stone"]')) {
+  failures.push('styles/themes.css: canonical tibia-stone/root theme contract is missing');
+}
 if (!designSystem.includes('BRAND_SYSTEM.md')) failures.push('DESIGN_SYSTEM.md: must reference BRAND_SYSTEM.md as the higher-level visual contract');
 
 const files = [];
@@ -60,16 +64,13 @@ walk(sourceRoot);
 
 const sourceFiles = files.filter((path) => ['.ts', '.tsx', '.js', '.jsx'].includes(extname(path)));
 
-// Baseline inherited from the existing application. CI will expose any current
-// develop-only Font Awesome usage not represented here before this foundation
-// is merged. The allowlist can only shrink after integration.
+// Exact Font Awesome debt found on the current develop baseline. Any new usage
+// outside this list fails validation. Stale entries also fail so this list can
+// only shrink as migration work lands.
 const fontAwesomeBaseline = new Set([
   'src/components/LanguageSwitcher.tsx',
-  'src/components/Navigation.tsx',
   'src/components/ui/AppInput.tsx',
   'src/components/ui/PageHeader.tsx',
-  'src/config/cyclopediaSections.ts',
-  'src/pages/Admin/APIMonitor.tsx',
   'src/pages/CreaturesPage.tsx',
   'src/pages/HuntRecommendationsPage.tsx',
   'src/pages/RafflePublicPage.tsx',
@@ -115,4 +116,4 @@ if (failures.length) {
   process.exit(1);
 }
 
-console.log(`Brand-system validation passed: ${sourceFiles.length} source files checked, canonical identity present, typography/shape/motion contracts present, icon policy enforced.`);
+console.log(`Brand-system validation passed: ${sourceFiles.length} source files checked, tibia-stone canonical identity present, typography/shape/motion contracts present, icon policy enforced.`);
