@@ -93,8 +93,13 @@ function markerInitial(kind: MapMarkerKind): string {
 function markerIcon(marker: MapMarker): L.DivIcon {
   const markerKind = marker.kind || 'location';
   const initial = markerInitial(markerKind);
-  const localImage = marker.imageUrl && marker.imageUrl.startsWith('/')
-    ? encodeURI(marker.imageUrl)
+  const requestedImage = marker.imageUrl?.startsWith('/')
+    ? marker.imageUrl
+    : markerKind === 'npc'
+      ? `/api/v1/npcs/${encodeURIComponent(marker.label)}/image`
+      : null;
+  const localImage = requestedImage
+    ? encodeURI(requestedImage)
         .replace(/'/g, '%27')
         .replace(/"/g, '%22')
         .replace(/\(/g, '%28')
