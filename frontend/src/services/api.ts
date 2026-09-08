@@ -232,8 +232,10 @@ export const questsApi = {
   ),
 };
 
+export type NpcDirectoryCategory = 'buys' | 'sells' | 'quests' | 'travel' | 'other';
+
 export const namedKnowledgeApi = {
-  listNpcs: async (params: { search?: string; location?: string; skip?: number; limit?: number } = {}, signal?: AbortSignal): Promise<NpcDirectoryPage> => (
+  listNpcs: async (params: { search?: string; location?: string; category?: NpcDirectoryCategory; skip?: number; limit?: number } = {}, signal?: AbortSignal): Promise<NpcDirectoryPage> => (
     cachedGet<NpcDirectoryPage>('/npcs/directory', { params, signal })
   ),
 
