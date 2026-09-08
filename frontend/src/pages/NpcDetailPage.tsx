@@ -91,7 +91,7 @@ export default function NpcDetailPage() {
   return <Page variant="focused">
     <button onClick={() => navigate(backTarget)} className="mb-4 flex min-h-11 items-center gap-2 text-content-secondary hover:text-content-primary"><ArrowLeft className="size-4" />{t('npcDetail.back')}</button>
     <article>
-      <PageHeader eyebrow={t('npcDetail.eyebrow')} title={npc.name} subtitle={npc.title || npc.occupation || undefined} iconElement={<UserRound className="size-7" />} breadcrumbs={[{ label: t('nav.npcs'), to: '/cyclopedia?tab=npcs' }, { label: npc.name }]} />
+      <PageHeader eyebrow={t('nav.npcs')} title={npc.name} subtitle={npc.title || npc.occupation || undefined} iconElement={<UserRound className="size-7" />} breadcrumbs={[{ label: t('nav.npcs'), to: '/cyclopedia?tab=npcs' }, { label: npc.name }]} />
 
       <div className="grid gap-6 lg:grid-cols-[minmax(0,1fr)_18rem]">
         <div className="min-w-0 space-y-6">
