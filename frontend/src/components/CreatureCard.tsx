@@ -44,7 +44,8 @@ const CreatureCard: React.FC<CreatureCardProps> = ({
           alt={creature.name}
           className="w-32 h-32 object-contain filter drop-shadow-lg group-hover:scale-110 transition-transform duration-500"
           containerClassName="w-32 h-32"
-          fallbackLabel="Creature"
+          fallbackLabel={`${creature.is_boss ? 'Boss' : 'Creature'} image unavailable: ${creature.name}`}
+          fallbackKind={creature.is_boss ? 'boss' : 'creature'}
         />
 
         {/* Difficulty Badge */}

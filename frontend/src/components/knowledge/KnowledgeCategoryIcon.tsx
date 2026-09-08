@@ -3,6 +3,9 @@ import { BookOpenCheck, Crown, Gem, MapPinned, Swords, UserRound } from 'lucide-
 import { useEffect, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 
+import bossPlaceholder from '../../assets/placeholders/boss.svg';
+import creaturePlaceholder from '../../assets/placeholders/creature.svg';
+import lootItemPlaceholder from '../../assets/placeholders/loot-item.svg';
 import { cyclopediaSections } from '../../config/cyclopediaSections';
 import api from '../../services/api';
 
@@ -34,6 +37,12 @@ const fallbackIcons: Record<KnowledgeCategory, LucideIcon> = {
   quests: BookOpenCheck,
   zones: MapPinned,
   npcs: UserRound,
+};
+
+const themedFallbacks: Partial<Record<KnowledgeCategory, string>> = {
+  creatures: creaturePlaceholder,
+  bosses: bossPlaceholder,
+  items: lootItemPlaceholder,
 };
 
 let visualCache: CategoryVisuals | null = null;
@@ -107,9 +116,10 @@ export function KnowledgeCategoryMedia({
   const [visuals, setVisuals] = useState<CategoryVisuals>(visualCache || {});
   const [failed, setFailed] = useState(false);
   const FallbackIcon = fallbackIcons[category];
+  const themedFallback = themedFallbacks[category];
   const categorySection = cyclopediaSections.find((section) => section.mode === category);
   const categoryLabel = categorySection ? t(categorySection.i18nLabel) : label;
-  const useCategoryVisual = category !== 'npcs' || label === categoryLabel;
+  const useCategoryVisual = label === categoryLabel;
   const imageUrl = useCategoryVisual ? visuals[category] : undefined;
 
   useEffect(() => {
@@ -138,6 +148,13 @@ export function KnowledgeCategoryMedia({
           decoding="async"
           onError={() => setFailed(true)}
           className={`object-contain [image-rendering:pixelated] ${mediaClassName}`}
+        />
+      ) : themedFallback ? (
+        <img
+          src={themedFallback}
+          alt=""
+          draggable={false}
+          className={`object-contain ${mediaClassName}`}
         />
       ) : (
         <FallbackIcon className="size-1/2" aria-hidden="true" />

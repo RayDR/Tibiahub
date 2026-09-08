@@ -28,14 +28,23 @@ requireText(app, 'buildLegacyNpcBrowseRedirect(location.search)', 'legacy NPC br
 requireText(app, 'path="/npcs/:identifier"', 'legacy-compatible NPC detail route is missing');
 requireText(navigation, 'cyclopediaSections.map', 'NPC browse navigation is not driven by the Cyclopedia section contract');
 requireText(apiClient, "'/npcs/directory'", 'frontend does not use the paginated NPC API');
+requireText(apiClient, 'NpcDirectoryCategory', 'NPC service filters are not typed');
 requireText(types, 'interface NpcDirectoryPage', 'paginated directory contract is untyped');
 requireText(cyclopedia, 'window.setTimeout', 'Cyclopedia NPC search is not debounced');
 requireText(cyclopedia, 'controller.abort()', 'stale Cyclopedia NPC requests are not cancelled');
 requireText(cyclopedia, 'namedKnowledgeApi.listNpcs', 'Cyclopedia does not use the bounded NPC directory API');
-requireText(cyclopedia, 'location: cacheLocation || undefined', 'supported location filtering is not sent to the server');
+requireText(cyclopedia, 'category: npcCategory || undefined', 'NPC service filtering is not sent to the server');
+requireText(cyclopedia, 'NPC_CATEGORY_FILTERS', 'NPC category filter contract is missing from Cyclopedia');
+if (cyclopedia.includes('npcLocation')) fail('redundant NPC location search state is still present');
+requireText(endpoint, 'TibiaWikiNpc.location_name.ilike', 'the unified NPC search no longer covers documented locations');
+requireText(endpoint, 'category: NpcDirectoryCategory | None', 'backend NPC category filter contract is missing');
+requireText(endpoint, '_npc_matches_category', 'backend NPC category filtering is missing');
 requireText(card, 'npc.canonical_id', 'new detail navigation does not prefer canonical identity');
-requireText(card, 'npc.map_available', 'cards do not distinguish verified map coverage');
-requireText(card, "value == null", 'cards do not distinguish unknown from known-empty counts');
+requireText(card, 'data-npc-card', 'compact NPC directory card contract is missing');
+requireText(types, 'map_available: boolean', 'directory contract no longer preserves map coverage');
+for (const countField of ['buys_count?: number | null', 'sells_count?: number | null', 'quest_count?: number | null', 'destination_count?: number | null']) {
+  requireText(types, countField, `directory contract no longer preserves nullable ${countField.split('?:')[0]} state`);
+}
 requireText(types, 'npc_buys_from_player', 'NPC-buy semantics are not represented in the detail contract');
 requireText(detail, "t('npcDetail.buysHelp')", 'player-facing NPC-buy semantics are not explained');
 requireText(detail, "t('npcDetail.sellsHelp')", 'player-facing NPC-sell semantics are not explained');
@@ -60,5 +69,5 @@ if (/#[0-9a-f]{3,8}\b|rgba?\(/i.test(card + detail)) fail('NPC UI contains raw c
 if (/fuzzy|levenshtein|similarity/i.test(projection)) fail('NPC reference projection contains a fuzzy fallback');
 
 if (!process.exitCode) {
-  console.log('Phase 3G checks passed: canonical routing, paginated discovery, honest coverage states, exact reference links, safe media, and trusted map reuse are present.');
+  console.log('Phase 3G checks passed: canonical routing, unified paginated search, service filters, compact cards, preserved coverage states, safe media, and trusted map reuse are present.');
 }

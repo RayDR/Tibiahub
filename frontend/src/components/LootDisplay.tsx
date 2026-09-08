@@ -50,7 +50,8 @@ const LootDisplay: React.FC<LootDisplayProps> = ({ items }) => {
                 alt={loot.item_name}
                 className="h-12 w-12 rounded-lg object-contain bg-surface"
                 containerClassName="h-12 w-12"
-                fallbackLabel="Item"
+                fallbackLabel={`Item image unavailable: ${loot.item_name}`}
+                fallbackKind="item"
               />
               <div className="min-w-0">
                 <div className="truncate font-semibold text-content-primary">{loot.item_name}</div>
