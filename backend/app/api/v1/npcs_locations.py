@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 from datetime import datetime
-from typing import Any
+from typing import Any, Literal
 from uuid import UUID
 
 from fastapi import APIRouter, Depends, HTTPException, Query, Request
@@ -27,6 +27,8 @@ from app.services.text_utils import normalize_search_text
 
 
 router = APIRouter(tags=["knowledge reference catalogs"])
+NpcDirectoryCategory = Literal["buys", "sells", "quests", "travel", "other"]
+_REFERENCE_PLACEHOLDERS = {"-", "--", "n/a", "none", "unknown"}
 
 
 class NamedReferenceSummary(BaseModel):
@@ -281,15 +283,52 @@ def _npc_search_query(db: Session, search: str | None, location: str | None):
     return query
 
 
+def _has_reference_rows(value: Any) -> bool:
+    if not isinstance(value, list):
+        return False
+    for item in value:
+        name = ""
+        if isinstance(item, dict):
+            name = str(item.get("name") or "").strip()
+        elif isinstance(item, str):
+            name = item.strip()
+        if name and name.casefold() not in _REFERENCE_PLACEHOLDERS:
+            return True
+    return False
+
+
+def _npc_matches_category(row: TibiaWikiNpc, category: NpcDirectoryCategory) -> bool:
+    categories = {
+        "buys": _has_reference_rows(row.buys),
+        "sells": _has_reference_rows(row.sells),
+        "quests": _has_reference_rows(row.related_quests),
+        "travel": _has_reference_rows(row.destinations),
+    }
+    if category == "other":
+        return not any(categories.values())
+    return categories[category]
+
+
+def _npc_directory_rows(query, category: NpcDirectoryCategory | None, skip: int, limit: int):
+    ordered = query.order_by(TibiaWikiNpc.normalized_name.asc(), TibiaWikiNpc.id.asc())
+    if category is None:
+        total = query.order_by(None).count()
+        return total, ordered.offset(skip).limit(limit).all()
+
+    matches = [row for row in ordered.all() if _npc_matches_category(row, category)]
+    return len(matches), matches[skip:skip + limit]
+
+
 @router.get("/npcs/", response_model=list[NamedReferenceSummary])
 def search_npcs(
     search: str | None = Query(None, min_length=2),
     location: str | None = Query(None, min_length=1, max_length=255),
+    category: NpcDirectoryCategory | None = Query(None),
     skip: int = Query(0, ge=0), limit: int = Query(50, ge=1, le=100),
     db: Session = Depends(get_db),
 ):
     query = _npc_search_query(db, search, location)
-    rows = query.order_by(TibiaWikiNpc.normalized_name.asc(), TibiaWikiNpc.id.asc()).offset(skip).limit(limit).all()
+    _, rows = _npc_directory_rows(query, category, skip, limit)
     if rows and search:
         EntityMetadataService.record_searches(db, entity_type="npc", matches=[
             (row.normalized_name, row.name, row.id) for row in rows[:5]
@@ -306,19 +345,14 @@ def search_npcs(
 def npc_directory(
     search: str | None = Query(None, min_length=2, max_length=255),
     location: str | None = Query(None, min_length=1, max_length=255),
+    category: NpcDirectoryCategory | None = Query(None),
     skip: int = Query(0, ge=0),
     limit: int = Query(24, ge=1, le=100),
     db: Session = Depends(get_db),
 ):
-    """Return an authoritative total and a lightweight canonical NPC page."""
+    """Return the NPC count and a lightweight directory page."""
     query = _npc_search_query(db, search, location)
-    total = query.order_by(None).count()
-    rows = (
-        query.order_by(TibiaWikiNpc.normalized_name.asc(), TibiaWikiNpc.id.asc())
-        .offset(skip)
-        .limit(limit)
-        .all()
-    )
+    total, rows = _npc_directory_rows(query, category, skip, limit)
     projected = directory_rows(db, rows)
     if rows and search:
         EntityMetadataService.record_searches(db, entity_type="npc", matches=[
