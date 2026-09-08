@@ -8,7 +8,7 @@ export type MapMarkerKind = 'location' | 'npc' | 'creature' | 'boss' | 'quest' |
 export interface MapMarker { x: number; y: number; label: string; imageUrl?: string; subtitle?: string; kind?: MapMarkerKind; resultId?: string }
 export interface MapPath { id: string; label: string; points: Array<{ x: number; y: number; z?: number | null }> }
 export interface TibiaMapViewerProps {
-  imageUrl?: string; pathfindingUrl?: string | null; showPathfinding?: boolean;
+  imageUrl?: string;
   label?: string; floor?: number | null; mapBounds?: Record<string, unknown> | null;
   center?: { x: number; y: number }; markers?: MapMarker[]; paths?: MapPath[];
   focusBounds?: { minX: number; minY: number; maxX: number; maxY: number };
@@ -23,7 +23,7 @@ interface LoadedMap { objectUrl: string; width: number; height: number }
 function isLocalMapEndpoint(value: string): boolean {
   try {
     const url = new URL(value, window.location.origin);
-    return url.origin === window.location.origin && (/\/api\/v1\/hunt-zones\/\d+\/map-image$/.test(url.pathname) || /\/api\/v1\/map\/floors\/\d+\/(image|pathfinding)$/.test(url.pathname));
+    return url.origin === window.location.origin && (/\/api\/v1\/hunt-zones\/\d+\/map-image$/.test(url.pathname) || /\/api\/v1\/map\/floors\/\d+\/image$/.test(url.pathname));
   } catch { return false; }
 }
 
@@ -83,12 +83,34 @@ function MapLifecycle() {
   return null;
 }
 
+function markerInitial(kind: MapMarkerKind): string {
+  if (kind === 'group') return '+';
+  if (kind === 'hunt_zone') return 'H';
+  if (kind === 'location' || kind === 'town') return 'L';
+  return kind.slice(0, 1).toUpperCase();
+}
+
 function markerIcon(marker: MapMarker): L.DivIcon {
   const markerKind = marker.kind || 'location';
-  const content = marker.imageUrl && marker.imageUrl.startsWith('/')
-    ? `<img src="${marker.imageUrl.replace(/"/g, '&quot;')}" alt="" />`
-    : `<span aria-hidden="true">${markerKind === 'group' ? '+' : markerKind.slice(0, 1).toUpperCase()}</span>`;
-  return L.divIcon({ className: `tibia-map-entity-marker tibia-map-entity-marker--${markerKind}`, html: content, iconSize: [40, 40], iconAnchor: [20, 36], popupAnchor: [0, -34] });
+  const initial = markerInitial(markerKind);
+  const localImage = marker.imageUrl && marker.imageUrl.startsWith('/')
+    ? encodeURI(marker.imageUrl)
+        .replace(/'/g, '%27')
+        .replace(/"/g, '%22')
+        .replace(/\(/g, '%28')
+        .replace(/\)/g, '%29')
+    : null;
+  const imageLayer = localImage
+    ? `<span class="tibia-map-pin-image" style="background-image:url('${localImage}')" aria-hidden="true"></span>`
+    : '';
+  const html = `<span class="tibia-map-pin-head"><span class="tibia-map-pin-fallback" aria-hidden="true">${initial}</span>${imageLayer}</span><span class="tibia-map-pin-tip" aria-hidden="true"></span>`;
+  return L.divIcon({
+    className: `tibia-map-pin tibia-map-pin--${markerKind}`,
+    html,
+    iconSize: [42, 52],
+    iconAnchor: [21, 50],
+    popupAnchor: [0, -48],
+  });
 }
 
 function townLabelIcon(label: string): L.DivIcon {
@@ -96,7 +118,7 @@ function townLabelIcon(label: string): L.DivIcon {
   return L.divIcon({ className: 'tibia-map-town-label', html: `<span>${safeLabel}</span>`, iconSize: [0, 0], iconAnchor: [0, 0] });
 }
 
-export default function TibiaMapViewer({ imageUrl, pathfindingUrl, showPathfinding = false, label = '', floor, mapBounds, center, focusBounds, markers = [], paths = [], regions = [], coordinateMode = 'legacy-image', emptyMessage = '', resetLabel = '', zoomInLabel = '', zoomOutLabel = '', floorLabel, fill = false, controlFooter, showFloorBadge = true, onMarkerSelect }: TibiaMapViewerProps) {
+export default function TibiaMapViewer({ imageUrl, label = '', floor, mapBounds, center, focusBounds, markers = [], paths = [], regions = [], coordinateMode = 'legacy-image', emptyMessage = '', resetLabel = '', zoomInLabel = '', zoomOutLabel = '', floorLabel, fill = false, controlFooter, showFloorBadge = true, onMarkerSelect }: TibiaMapViewerProps) {
   const [loaded, setLoaded] = useState<LoadedMap | null>(null); const [loading, setLoading] = useState(Boolean(imageUrl)); const [map, setMap] = useState<L.Map | null>(null);
   useEffect(() => {
     const controller = new AbortController(); let objectUrl: string | null = null; setLoaded(null);
@@ -140,7 +162,6 @@ export default function TibiaMapViewer({ imageUrl, pathfindingUrl, showPathfindi
   return <div className={`relative isolate z-base w-full overflow-hidden bg-surface-base ${fill ? 'h-full min-h-0' : 'h-[clamp(17rem,50vw,30rem)] rounded-xl border border-line'}`} aria-label={label}>
     <MapContainer ref={setMap} crs={L.CRS.Simple} bounds={imageBounds} maxBounds={imageBounds} maxBoundsViscosity={0.85} minZoom={-4} maxZoom={5} zoomSnap={0.5} zoomDelta={0.5} wheelPxPerZoomLevel={90} zoomControl={false} scrollWheelZoom touchZoom="center" doubleClickZoom dragging attributionControl={false} className="relative isolate z-base h-full w-full">
       <ImageOverlay url={loaded.objectUrl} bounds={imageBounds} opacity={1} />
-      {showPathfinding && pathfindingUrl && isLocalMapEndpoint(pathfindingUrl) ? <ImageOverlay url={pathfindingUrl} bounds={imageBounds} opacity={0.22} /> : null}
       {renderedRegions.map((region) => <Rectangle key={`${region.label}:${region.minX}:${region.minY}`} bounds={region.position} pathOptions={{ color: 'var(--primary)', fillColor: 'var(--primary)', fillOpacity: 0.18, weight: 2 }}><Popup>{region.label}</Popup></Rectangle>)}
       {renderedPaths.map((path) => <Polyline key={path.id} positions={path.positions} pathOptions={{ color: 'var(--primary)', weight: 4, opacity: 0.9 }}><Popup>{path.label}</Popup></Polyline>)}
       {renderedMarkers.map((marker) => <Marker key={`${marker.kind || 'entity'}:${marker.x}:${marker.y}:${marker.label}`} position={marker.position} icon={marker.kind === 'town' ? townLabelIcon(marker.label) : markerIcon(marker)} interactive={marker.kind !== 'town'} eventHandlers={marker.resultId && onMarkerSelect ? { click: () => onMarkerSelect(marker) } : undefined}>{marker.kind !== 'town' ? <Popup><strong>{marker.label}</strong>{marker.subtitle ? <small className="block">{marker.subtitle}</small> : null}</Popup> : null}</Marker>)}
