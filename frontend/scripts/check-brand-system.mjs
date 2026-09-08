@@ -66,11 +66,20 @@ walk(sourceRoot);
 
 const sourceFiles = files.filter((path) => ['.ts', '.tsx', '.js', '.jsx'].includes(extname(path)));
 
-// Existing Font Awesome usage is migration debt. Keep this baseline explicit so
-// the check prevents new imports without forcing an unrelated rewrite today.
+// Existing Font Awesome usage is migration debt. Keep the complete current
+// baseline explicit so the validator prevents the debt from spreading while
+// allowing the migration to happen incrementally.
 const fontAwesomeBaseline = new Set([
-  'src/config/cyclopediaSections.ts',
+  'src/components/LanguageSwitcher.tsx',
   'src/components/Navigation.tsx',
+  'src/components/ui/AppInput.tsx',
+  'src/components/ui/PageHeader.tsx',
+  'src/config/cyclopediaSections.ts',
+  'src/pages/Admin/APIMonitor.tsx',
+  'src/pages/CreaturesPage.tsx',
+  'src/pages/HuntRecommendationsPage.tsx',
+  'src/pages/RafflePublicPage.tsx',
+  'src/pages/guild/Raffle.tsx',
 ]);
 
 for (const path of sourceFiles) {
@@ -86,8 +95,24 @@ for (const path of sourceFiles) {
   }
 }
 
+// Keep the baseline honest. When a legacy import is removed, this intentionally
+// fails until the obsolete allowlist entry is deleted too. The allowlist can
+// only shrink; stale entries cannot silently remain forever.
+for (const rel of fontAwesomeBaseline) {
+  const path = join(frontendRoot, rel);
+  try {
+    const source = readFileSync(path, 'utf8');
+    if (!/from ['"]@fortawesome\//.test(source)) {
+      failures.push(`${rel}: remove stale Font Awesome baseline entry; this file no longer imports Font Awesome`);
+    }
+  } catch {
+    failures.push(`${rel}: remove stale Font Awesome baseline entry; file no longer exists`);
+  }
+}
+
 // Domain SVGs are theme-safe: literal fill/stroke colors are not allowed in
-// TibiaHub-owned icon components. currentColor, none, and inherited values are fine.
+// TibiaHub-owned icon components. currentColor, none, inherited values, and
+// referenced paint servers remain allowed.
 for (const path of sourceFiles.filter((path) => relative(sourceRoot, path).replaceAll('\\', '/').startsWith('components/icons/'))) {
   const source = readFileSync(path, 'utf8');
   const rel = relative(frontendRoot, path).replaceAll('\\', '/');
