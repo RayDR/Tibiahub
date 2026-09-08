@@ -24,7 +24,7 @@
     border: 0;
     background: transparent;
     --map-pin-color: var(--primary);
-    filter: drop-shadow(0 4px 5px rgb(0 0 0 / 0.38));
+    filter: drop-shadow(0 4px 5px rgb(var(--ds-shadow) / 0.38));
   }
   .tibia-map-pin-head {
     position: absolute;
