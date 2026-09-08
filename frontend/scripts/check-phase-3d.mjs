@@ -53,7 +53,11 @@ requireText(huntDetail, 'canonicalEntityId: zone.knowledge_entity_id', 'Hunt det
 const markerStart = styles.indexOf('.tibia-map-pin');
 if (markerStart < 0) fail('semantic map pin styles are missing');
 const markerStyles = markerStart >= 0 ? styles.slice(markerStart) : '';
-if (/#[0-9a-f]{3,8}\b|rgba?\(/i.test(markerStyles)) fail('Phase 3D marker styles contain raw colors');
+// Theme-token RGB expressions such as rgb(var(--ds-shadow) / .38) are valid.
+// Reject only literal/raw color values in the semantic pin styles.
+if (/#[0-9a-f]{3,8}\b|rgba?\(\s*[0-9.]/i.test(markerStyles)) {
+  fail('Phase 3D marker styles contain raw colors');
+}
 for (const kind of ['location', 'npc', 'creature', 'boss', 'quest', 'hunt_zone', 'item', 'group', 'town']) {
   requireText(markerStyles, `.tibia-map-pin--${kind}`, `marker system does not distinguish ${kind}`);
 }
