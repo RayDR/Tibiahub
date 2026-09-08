@@ -8,9 +8,9 @@ This log records explicit product-level visual decisions so future work does not
 
 ## B-002 — Brand and themes are separate
 
-**Decision:** The `default` theme represents the canonical TibiaHub product identity. Other themes are user-selectable skins.
+**Decision:** `tibia-stone` represents the canonical/default TibiaHub product identity in the current appearance system. The other themes are user-selectable skins.
 
-**Consequences:** Themes may change semantic colors, but they do not redefine logo, typography roles, component geometry, icon language, information architecture, or interaction patterns.
+**Consequences:** Themes may change semantic colors, but they do not redefine logo, typography roles, component geometry, icon language, information architecture, or interaction patterns. The legacy stored value `default` migrates to `tibia-stone` and is not a separate theme.
 
 ## B-003 — Inter + Cinzel remain the initial typography contract
 
