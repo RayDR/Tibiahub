@@ -1,13 +1,7 @@
-import type { LucideIcon } from 'lucide-react';
-import { BookOpenCheck, Crown, Gem, MapPinned, Swords, UserRound } from 'lucide-react';
 import { useEffect, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 
-import { TIBIAHUB_CATEGORY_ICONS } from '../../assets/brand/brandCategoryIcons';
-import { TIBIAHUB_QUEST_ICON } from '../../assets/brand/brandQuestIcon';
-import bossPlaceholder from '../../assets/placeholders/boss.svg';
-import creaturePlaceholder from '../../assets/placeholders/creature.svg';
-import lootItemPlaceholder from '../../assets/placeholders/loot-item.svg';
+import BrandCategoryFallbackIcon from '../icons/BrandCategoryFallbackIcon';
 import { cyclopediaSections } from '../../config/cyclopediaSections';
 import api from '../../services/api';
 
@@ -20,91 +14,43 @@ export type KnowledgeCategory =
   | 'npcs';
 
 type CategoryVisuals = Partial<Record<KnowledgeCategory, string>>;
-
-type NpcVisualDirectoryPage = {
-  items: Array<{
-    canonical_id: string;
-    media?: {
-      status?: string;
-      url?: string | null;
-    };
-  }>;
-  total: number;
-};
-
-const fallbackIcons: Record<KnowledgeCategory, LucideIcon> = {
-  creatures: Swords,
-  bosses: Crown,
-  items: Gem,
-  quests: BookOpenCheck,
-  zones: MapPinned,
-  npcs: UserRound,
-};
-
-const canonicalBrandIcons: Record<KnowledgeCategory, string> = {
-  creatures: TIBIAHUB_CATEGORY_ICONS.creatures,
-  bosses: TIBIAHUB_CATEGORY_ICONS.bosses,
-  items: TIBIAHUB_CATEGORY_ICONS.items,
-  quests: TIBIAHUB_QUEST_ICON,
-  zones: TIBIAHUB_CATEGORY_ICONS.zones,
-  npcs: TIBIAHUB_CATEGORY_ICONS.npcs,
-};
-
-const themedFallbacks: Partial<Record<KnowledgeCategory, string>> = {
-  creatures: creaturePlaceholder,
-  bosses: bossPlaceholder,
-  items: lootItemPlaceholder,
-};
+type CategoryVisualResponse = CategoryVisuals & { visual_day?: string };
 
 let visualCache: CategoryVisuals | null = null;
+let visualCacheDay: string | null = null;
 let visualRequest: Promise<CategoryVisuals> | null = null;
 
-async function loadRandomNpcVisual(): Promise<string | undefined> {
-  try {
-    const { data: firstPage } = await api.get<NpcVisualDirectoryPage>('/npcs/directory', {
-      params: { skip: 0, limit: 1 },
-    });
-    const total = Math.max(0, firstPage.total || 0);
-    if (!total) return undefined;
-
-    const sampleSize = Math.min(25, total);
-    const maxSkip = Math.max(0, total - sampleSize);
-    const skip = Math.floor(Math.random() * (maxSkip + 1));
-    const { data: sample } = await api.get<NpcVisualDirectoryPage>('/npcs/directory', {
-      params: { skip, limit: sampleSize },
-    });
-    const available = sample.items.filter(
-      (npc) => npc.media?.status === 'cached' && npc.media.url,
-    );
-    if (!available.length) return undefined;
-
-    const selected = available[Math.floor(Math.random() * available.length)];
-    return selected.media?.url || undefined;
-  } catch {
-    return undefined;
-  }
-}
+const utcDay = () => new Date().toISOString().slice(0, 10);
 
 function loadCategoryVisuals(): Promise<CategoryVisuals> {
-  if (visualCache) return Promise.resolve(visualCache);
+  const today = utcDay();
+  if (visualCache && visualCacheDay === today) return Promise.resolve(visualCache);
+
   if (!visualRequest) {
-    visualRequest = Promise.all([
-      api
-        .get<CategoryVisuals>('/catalog/category-visuals')
-        .then(({ data }) => data || {})
-        .catch(() => ({})),
-      loadRandomNpcVisual(),
-    ])
-      .then(([visuals, npcVisual]) => {
-        visualCache = npcVisual
-          ? { ...visuals, npcs: npcVisual }
-          : visuals;
+    visualRequest = api
+      .get<CategoryVisualResponse>('/catalog/category-visuals/daily')
+      .then(({ data }) => {
+        visualCache = {
+          creatures: data?.creatures || undefined,
+          bosses: data?.bosses || undefined,
+          items: data?.items || undefined,
+          quests: data?.quests || undefined,
+          zones: data?.zones || undefined,
+          npcs: data?.npcs || undefined,
+        };
+        visualCacheDay = data?.visual_day || today;
+        return visualCache;
+      })
+      .catch(() => {
+        visualCache = {};
+        visualCacheDay = today;
         return visualCache;
       })
       .finally(() => {
         visualRequest = null;
       });
   }
+
   return visualRequest;
 }
 
@@ -124,14 +70,13 @@ export function KnowledgeCategoryMedia({
   mediaClassName?: string;
 }) {
   const { t } = useTranslation();
-  const [visuals, setVisuals] = useState<CategoryVisuals>(visualCache || {});
+  const [visuals, setVisuals] = useState<CategoryVisuals>(
+    visualCacheDay === utcDay() ? visualCache || {} : {},
+  );
   const [failed, setFailed] = useState(false);
-  const FallbackIcon = fallbackIcons[category];
-  const themedFallback = themedFallbacks[category];
   const categorySection = cyclopediaSections.find((section) => section.mode === category);
   const categoryLabel = categorySection ? t(categorySection.i18nLabel) : label;
   const useCategoryVisual = label === categoryLabel;
-  const brandIcon = useCategoryVisual ? canonicalBrandIcons[category] : undefined;
   const imageUrl = useCategoryVisual ? visuals[category] : undefined;
 
   useEffect(() => {
@@ -152,14 +97,7 @@ export function KnowledgeCategoryMedia({
       aria-hidden="true"
       className={`grid shrink-0 place-items-center overflow-hidden rounded-lg bg-primary/10 text-primary ${className}`}
     >
-      {brandIcon ? (
-        <img
-          src={brandIcon}
-          alt=""
-          draggable={false}
-          className={`object-contain drop-shadow-sm ${mediaClassName}`}
-        />
-      ) : imageUrl && !failed ? (
+      {imageUrl && !failed ? (
         <img
           src={imageUrl}
           alt=""
@@ -168,15 +106,8 @@ export function KnowledgeCategoryMedia({
           onError={() => setFailed(true)}
           className={`object-contain [image-rendering:pixelated] ${mediaClassName}`}
         />
-      ) : themedFallback ? (
-        <img
-          src={themedFallback}
-          alt=""
-          draggable={false}
-          className={`object-contain ${mediaClassName}`}
-        />
       ) : (
-        <FallbackIcon className="size-1/2" aria-hidden="true" />
+        <BrandCategoryFallbackIcon category={category} className="size-1/2" />
       )}
     </span>
   );
