@@ -1,4 +1,4 @@
-import type { ReactNode } from 'react';
+import { useEffect, type ReactNode } from 'react';
 import { useLocation } from 'react-router-dom';
 
 import { Container } from '../ui';
@@ -19,6 +19,10 @@ function CyclopediaCreatureWorkspaceInner({ children }: { children: ReactNode })
   const tab = new URLSearchParams(location.search).get('tab') || 'creatures';
   const supportsPreview = tab === 'creatures';
   const showPreview = supportsPreview && browser?.selectedCreatureId != null;
+
+  useEffect(() => {
+    if (supportsPreview) browser?.selectCreature(null);
+  }, [browser, location.search, supportsPreview]);
 
   return (
     <div className="cyclopedia-reference-frame" data-preview-open={showPreview ? 'true' : 'false'}>
