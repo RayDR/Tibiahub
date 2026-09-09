@@ -1,4 +1,4 @@
-import { ArrowUpRight, Map, Route } from 'lucide-react';
+import { ArrowUpRight, Crown, Map, Route, Skull, Users } from 'lucide-react';
 import { Link } from 'react-router-dom';
 import { useTranslation } from 'react-i18next';
 
@@ -14,9 +14,22 @@ interface HuntZoneCardProps {
   rawExperience?: number;
   score?: number;
   onInspectMap?: () => void;
+  variant?: 'default' | 'cyclopedia';
+  selected?: boolean;
+  onSelect?: (zone: HuntZone) => void;
 }
 
-export default function HuntZoneCard({ zone, linkState, onNavigate, rawExperience, score, onInspectMap }: HuntZoneCardProps) {
+export default function HuntZoneCard({
+  zone,
+  linkState,
+  onNavigate,
+  rawExperience,
+  score,
+  onInspectMap,
+  variant = 'default',
+  selected = false,
+  onSelect,
+}: HuntZoneCardProps) {
   const { t } = useTranslation();
   const identifier = zone.slug || zone.id;
   const mapped = zone.spatial?.geometry_status === 'mapped' && Boolean(zone.spatial.world_map);
@@ -24,6 +37,90 @@ export default function HuntZoneCard({ zone, linkState, onNavigate, rawExperienc
   const profit = zone.avg_profit_hour ? `${zone.avg_profit_hour.toLocaleString()} gp/h` : zone.profit_rating;
   const experience = zone.avg_exp_hour ? `${zone.avg_exp_hour.toLocaleString()}/h` : rawExperience ? rawExperience.toLocaleString() : zone.exp_rating;
   const place = zone.region || zone.city;
+  const isCyclopedia = variant === 'cyclopedia';
+  const accessRestricted = zone.access?.status === 'restricted' || zone.access_required === true || zone.requires_quest === true || zone.requires_premium === true;
+
+  const handleCardClick = (event: React.MouseEvent<HTMLElement>) => {
+    if (!isCyclopedia || !onSelect) return;
+    const target = event.target;
+    if (target instanceof Element && target.closest('a, button, input, select, textarea')) return;
+    onSelect(zone);
+  };
+
+  const handleCardKeyDown = (event: React.KeyboardEvent<HTMLElement>) => {
+    if (!isCyclopedia || !onSelect || (event.key !== 'Enter' && event.key !== ' ')) return;
+    const target = event.target;
+    if (target instanceof Element && target.closest('a, button, input, select, textarea')) return;
+    event.preventDefault();
+    onSelect(zone);
+  };
+
+  if (isCyclopedia) {
+    return (
+      <article
+        data-hunt-zone-card
+        data-cyclopedia-zone-card="true"
+        data-zone-identifier={String(identifier)}
+        data-selected={selected ? 'true' : 'false'}
+        role="button"
+        tabIndex={0}
+        aria-pressed={selected}
+        onClick={handleCardClick}
+        onKeyDown={handleCardKeyDown}
+        className="cyclopedia-zone-card group"
+      >
+        <div className="cyclopedia-zone-card-media">
+          {mapped ? (
+            <LocalizedMapPreview
+              spatial={zone.spatial}
+              label={t('huntZoneDetail.mapAlt', { name: zone.name })}
+              className="absolute inset-0 size-full transition duration-500 group-hover:scale-[1.025] motion-reduce:transform-none"
+            />
+          ) : (
+            <div className="grid size-full place-items-center text-primary" aria-hidden="true">
+              <BrandCategoryFallbackIcon category="zones" className="size-14 opacity-80" />
+            </div>
+          )}
+          <div className="cyclopedia-zone-card-media-scrim" aria-hidden="true" />
+          {score != null ? <span className="cyclopedia-zone-score">{Math.round(score)}%</span> : null}
+          <Link
+            to={`/hunt-zones/${identifier}`}
+            state={linkState}
+            onClick={onNavigate}
+            className="cyclopedia-zone-detail-link"
+            aria-label={t('plannerRecovery.details')}
+            title={t('plannerRecovery.details')}
+          >
+            <ArrowUpRight className="size-4" />
+          </Link>
+        </div>
+
+        <div className="cyclopedia-zone-card-body">
+          <div className="min-w-0">
+            <h3 className="cyclopedia-zone-card-title">{zone.name}</h3>
+            <p className="cyclopedia-zone-card-place">
+              {[place, zone.spatial?.z != null ? t('map.floor', { floor: formatDisplayFloor(zone.spatial.z) }) : null]
+                .filter(Boolean)
+                .join(' · ') || t('cyclopedia.zones.notRecorded')}
+            </p>
+          </div>
+
+          <dl className="cyclopedia-zone-card-stats">
+            <div><dt>{t('cyclopedia.zones.suggested')}</dt><dd>{suggestedLevel ? t('cyclopedia.zones.level', { level: suggestedLevel }) : '—'}</dd></div>
+            <div><dt>EXP</dt><dd>{experience || '—'}</dd></div>
+            <div><dt>{t('cyclopedia.zones.profit')}</dt><dd>{profit || '—'}</dd></div>
+            <div><dt>{t('cyclopedia.zones.danger')}</dt><dd>{zone.danger_rating || zone.difficulty || '—'}</dd></div>
+          </dl>
+
+          <div className="cyclopedia-zone-card-footer">
+            <span><Users className="size-3.5" />{zone.creature_count ?? zone.creature_preview?.length ?? zone.creatures?.length ?? 0}</span>
+            <span><Skull className="size-3.5" />{zone.boss_count ?? 0}</span>
+            {accessRestricted ? <span className="cyclopedia-zone-access"><Crown className="size-3.5" />{t('huntZoneDetail.access')}</span> : null}
+          </div>
+        </div>
+      </article>
+    );
+  }
 
   return <article data-hunt-zone-card className="group flex min-h-[22rem] flex-col overflow-hidden rounded-2xl border border-line bg-surface-raised shadow-sm transition hover:-translate-y-0.5 hover:border-primary/50 hover:shadow-xl motion-reduce:transform-none">
     {mapped ? (
