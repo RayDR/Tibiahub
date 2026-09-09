@@ -39,7 +39,7 @@ const CreatureCard: React.FC<CreatureCardProps> = ({
   }, [browser, creature.id]);
 
   useEffect(() => {
-    if (index === 0 && browser?.selectedCreatureId == null && !creature.is_boss) {
+    if (index === 0 && browser && browser.selectedCreatureId == null && !creature.is_boss) {
       browser.selectCreature(creature.id);
     }
   }, [browser, creature.id, creature.is_boss, index]);
