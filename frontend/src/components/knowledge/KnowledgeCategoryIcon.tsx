@@ -3,6 +3,8 @@ import { BookOpenCheck, Crown, Gem, MapPinned, Swords, UserRound } from 'lucide-
 import { useEffect, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 
+import { TIBIAHUB_CATEGORY_ICONS } from '../../assets/brand/brandCategoryIcons';
+import { TIBIAHUB_QUEST_ICON } from '../../assets/brand/brandQuestIcon';
 import bossPlaceholder from '../../assets/placeholders/boss.svg';
 import creaturePlaceholder from '../../assets/placeholders/creature.svg';
 import lootItemPlaceholder from '../../assets/placeholders/loot-item.svg';
@@ -37,6 +39,15 @@ const fallbackIcons: Record<KnowledgeCategory, LucideIcon> = {
   quests: BookOpenCheck,
   zones: MapPinned,
   npcs: UserRound,
+};
+
+const canonicalBrandIcons: Record<KnowledgeCategory, string> = {
+  creatures: TIBIAHUB_CATEGORY_ICONS.creatures,
+  bosses: TIBIAHUB_CATEGORY_ICONS.bosses,
+  items: TIBIAHUB_CATEGORY_ICONS.items,
+  quests: TIBIAHUB_QUEST_ICON,
+  zones: TIBIAHUB_CATEGORY_ICONS.zones,
+  npcs: TIBIAHUB_CATEGORY_ICONS.npcs,
 };
 
 const themedFallbacks: Partial<Record<KnowledgeCategory, string>> = {
@@ -120,6 +131,7 @@ export function KnowledgeCategoryMedia({
   const categorySection = cyclopediaSections.find((section) => section.mode === category);
   const categoryLabel = categorySection ? t(categorySection.i18nLabel) : label;
   const useCategoryVisual = label === categoryLabel;
+  const brandIcon = useCategoryVisual ? canonicalBrandIcons[category] : undefined;
   const imageUrl = useCategoryVisual ? visuals[category] : undefined;
 
   useEffect(() => {
@@ -140,7 +152,14 @@ export function KnowledgeCategoryMedia({
       aria-hidden="true"
       className={`grid shrink-0 place-items-center overflow-hidden rounded-lg bg-primary/10 text-primary ${className}`}
     >
-      {imageUrl && !failed ? (
+      {brandIcon ? (
+        <img
+          src={brandIcon}
+          alt=""
+          draggable={false}
+          className={`object-contain drop-shadow-sm ${mediaClassName}`}
+        />
+      ) : imageUrl && !failed ? (
         <img
           src={imageUrl}
           alt=""
