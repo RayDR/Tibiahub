@@ -3,6 +3,7 @@ import React, { createContext, useCallback, useContext, useMemo, useState } from
 export type CyclopediaPreviewSelection =
   | { kind: 'item'; identifier: string }
   | { kind: 'quest'; identifier: string }
+  | { kind: 'zone'; identifier: string }
   | null;
 
 interface CyclopediaPreviewSelectionContextValue {
