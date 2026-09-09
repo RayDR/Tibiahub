@@ -25,6 +25,7 @@ const questEnhancement = {
     progressLoadError: 'Character progress could not be loaded. Session progress is still available.',
     progressSaveError: 'Quest progress could not be saved.',
     itemAmount: '×{{amount}}',
+    solo: 'Solo',
   },
   es: {
     duration: 'Duración',
@@ -50,6 +51,7 @@ const questEnhancement = {
     progressLoadError: 'No se pudo cargar el progreso del personaje. El progreso de sesión sigue disponible.',
     progressSaveError: 'No se pudo guardar el progreso de la quest.',
     itemAmount: '×{{amount}}',
+    solo: 'Solo',
   },
 } as const;
 
