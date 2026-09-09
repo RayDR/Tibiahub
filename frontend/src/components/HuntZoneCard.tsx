@@ -1,3 +1,4 @@
+import type { KeyboardEvent, MouseEvent } from 'react';
 import { ArrowUpRight, Crown, Map, Route, Skull, Users } from 'lucide-react';
 import { Link } from 'react-router-dom';
 import { useTranslation } from 'react-i18next';
@@ -40,14 +41,14 @@ export default function HuntZoneCard({
   const isCyclopedia = variant === 'cyclopedia';
   const accessRestricted = zone.access?.status === 'restricted' || zone.access_required === true || zone.requires_quest === true || zone.requires_premium === true;
 
-  const handleCardClick = (event: React.MouseEvent<HTMLElement>) => {
+  const handleCardClick = (event: MouseEvent<HTMLElement>) => {
     if (!isCyclopedia || !onSelect) return;
     const target = event.target;
     if (target instanceof Element && target.closest('a, button, input, select, textarea')) return;
     onSelect(zone);
   };
 
-  const handleCardKeyDown = (event: React.KeyboardEvent<HTMLElement>) => {
+  const handleCardKeyDown = (event: KeyboardEvent<HTMLElement>) => {
     if (!isCyclopedia || !onSelect || (event.key !== 'Enter' && event.key !== ' ')) return;
     const target = event.target;
     if (target instanceof Element && target.closest('a, button, input, select, textarea')) return;
