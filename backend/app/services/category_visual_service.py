@@ -66,11 +66,7 @@ def _creature_pool(db: Session, *, bosses: bool) -> list[str]:
         .limit(_QUERY_LIMIT)
         .all()
     )
-    available = [
-        (row, asset)
-        for row, asset in rows
-        if _existing(asset)
-    ]
+    available = [(row, asset) for row, asset in rows if _existing(asset)]
     available.sort(key=lambda pair: (_gif_first(pair[1]), pair[0].id))
     return [
         f"/api/v1/creatures/{row.id}/image?placeholder=false"
@@ -181,7 +177,7 @@ def _item_pool(db: Session, *, quest_like: bool) -> list[str]:
         )
 
     return [
-        f"/api/v1/items/{row.knowledge_entity_id}/image?placeholder=false"
+        f"/api/v1/items/{row.id}/image"
         for row, _asset in resolved[:POOL_SIZE]
     ]
 
@@ -229,7 +225,7 @@ def _zone_pool(db: Session) -> list[str]:
     )
     available = [(row, asset) for row, asset in rows if _existing(asset)]
     return [
-        f"/api/v1/hunt-zones/{row.id}/map-image?placeholder=false"
+        f"/api/v1/hunt-zones/{row.id}/map-image"
         for row, _asset in available[:POOL_SIZE]
     ]
 
