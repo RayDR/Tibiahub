@@ -4,6 +4,7 @@ export type CyclopediaPreviewSelection =
   | { kind: 'item'; identifier: string }
   | { kind: 'quest'; identifier: string }
   | { kind: 'zone'; identifier: string }
+  | { kind: 'npc'; identifier: string }
   | null;
 
 interface CyclopediaPreviewSelectionContextValue {
