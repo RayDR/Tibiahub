@@ -27,8 +27,12 @@ export function CyclopediaPreviewSelectionProvider({ children }: { children: Rea
   );
 }
 
+export function useOptionalCyclopediaPreviewSelection(): CyclopediaPreviewSelectionContextValue | null {
+  return useContext(CyclopediaPreviewSelectionContext);
+}
+
 export function useCyclopediaPreviewSelection(): CyclopediaPreviewSelectionContextValue {
-  const context = useContext(CyclopediaPreviewSelectionContext);
+  const context = useOptionalCyclopediaPreviewSelection();
   if (!context) throw new Error('useCyclopediaPreviewSelection must be used within CyclopediaPreviewSelectionProvider');
   return context;
 }
