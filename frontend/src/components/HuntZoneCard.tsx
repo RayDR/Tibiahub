@@ -6,6 +6,7 @@ import { useTranslation } from 'react-i18next';
 import type { HuntZone } from '../types';
 import BrandCategoryFallbackIcon from './icons/BrandCategoryFallbackIcon';
 import LocalizedMapPreview from './map/LocalizedMapPreview';
+import { useOptionalCyclopediaPreviewSelection } from './cyclopedia/CyclopediaPreviewSelectionContext';
 import { formatDisplayFloor } from '../utils/tibiaFloors';
 
 interface HuntZoneCardProps {
@@ -32,28 +33,37 @@ export default function HuntZoneCard({
   onSelect,
 }: HuntZoneCardProps) {
   const { t } = useTranslation();
+  const previewSelection = useOptionalCyclopediaPreviewSelection();
   const identifier = zone.slug || zone.id;
+  const identifierString = String(identifier);
   const mapped = zone.spatial?.geometry_status === 'mapped' && Boolean(zone.spatial.world_map);
   const suggestedLevel = zone.recommended_level ?? zone.min_level;
   const profit = zone.avg_profit_hour ? `${zone.avg_profit_hour.toLocaleString()} gp/h` : zone.profit_rating;
   const experience = zone.avg_exp_hour ? `${zone.avg_exp_hour.toLocaleString()}/h` : rawExperience ? rawExperience.toLocaleString() : zone.exp_rating;
   const place = zone.region || zone.city;
-  const isCyclopedia = variant === 'cyclopedia';
+  const isCyclopedia = variant === 'cyclopedia' || Boolean(previewSelection);
+  const isSelected = selected || (
+    previewSelection?.selection?.kind === 'zone'
+    && previewSelection.selection.identifier === identifierString
+  );
   const accessRestricted = zone.access?.status === 'restricted' || zone.access_required === true || zone.requires_quest === true || zone.requires_premium === true;
+  const selectZone = onSelect || (previewSelection
+    ? (candidate: HuntZone) => previewSelection.select({ kind: 'zone', identifier: String(candidate.slug || candidate.id) })
+    : undefined);
 
   const handleCardClick = (event: MouseEvent<HTMLElement>) => {
-    if (!isCyclopedia || !onSelect) return;
+    if (!isCyclopedia || !selectZone) return;
     const target = event.target;
     if (target instanceof Element && target.closest('a, button, input, select, textarea')) return;
-    onSelect(zone);
+    selectZone(zone);
   };
 
   const handleCardKeyDown = (event: KeyboardEvent<HTMLElement>) => {
-    if (!isCyclopedia || !onSelect || (event.key !== 'Enter' && event.key !== ' ')) return;
+    if (!isCyclopedia || !selectZone || (event.key !== 'Enter' && event.key !== ' ')) return;
     const target = event.target;
     if (target instanceof Element && target.closest('a, button, input, select, textarea')) return;
     event.preventDefault();
-    onSelect(zone);
+    selectZone(zone);
   };
 
   if (isCyclopedia) {
@@ -61,11 +71,11 @@ export default function HuntZoneCard({
       <article
         data-hunt-zone-card
         data-cyclopedia-zone-card="true"
-        data-zone-identifier={String(identifier)}
-        data-selected={selected ? 'true' : 'false'}
+        data-zone-identifier={identifierString}
+        data-selected={isSelected ? 'true' : 'false'}
         role="button"
         tabIndex={0}
-        aria-pressed={selected}
+        aria-pressed={isSelected}
         onClick={handleCardClick}
         onKeyDown={handleCardKeyDown}
         className="cyclopedia-zone-card group"
