@@ -3,7 +3,7 @@ import { useEffect, useMemo, useState } from 'react';
 import { Link, useLocation } from 'react-router-dom';
 import { useTranslation } from 'react-i18next';
 
-import BrandCategoryFallbackIcon from '../icons/BrandCategoryFallbackIcon';
+import ImageWithFallback from '../ImageWithFallback';
 import { namedKnowledgeApi } from '../../services/api';
 import { buildMapEntityUrl } from '../../services/tibiaMap';
 import type { NpcKnowledgeDetail, NpcNamedReference } from '../../types';
@@ -104,16 +104,14 @@ export default function NpcPreviewPanel({ identifier }: { identifier: string }) 
     <article className="creature-preview-panel npc-preview-panel" data-npc-preview-panel>
       <section className="creature-preview-identity npc-preview-identity">
         <div className="creature-preview-sprite npc-preview-sprite">
-          {mediaUrl ? (
-            <img
-              src={mediaUrl}
-              alt=""
-              aria-hidden="true"
-              className="size-full object-contain [image-rendering:pixelated]"
-            />
-          ) : (
-            <BrandCategoryFallbackIcon category="npcs" className="size-20 opacity-85" />
-          )}
+          <ImageWithFallback
+            src={mediaUrl}
+            alt={npc.name}
+            className="size-full object-contain [image-rendering:pixelated]"
+            containerClassName="size-full"
+            fallbackKind="npc"
+            fallbackLabel={npc.name}
+          />
         </div>
         <div className="min-w-0">
           <p className="mb-1 text-[10px] font-semibold uppercase tracking-[0.14em] text-primary">{t('nav.npcs')}</p>
