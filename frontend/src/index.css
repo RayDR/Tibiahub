@@ -1,5 +1,6 @@
 @import './styles/themes.css';
 @import './styles/design-system.css';
+@import './styles/brand-system.css';
 @import './styles/background.css';
 @import './styles/scrollbar.css';
 @import './styles/hunt-zone-cards.css';
