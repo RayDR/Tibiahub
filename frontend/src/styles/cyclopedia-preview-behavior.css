@@ -2,21 +2,11 @@
  * Cyclopedia selection-preview behavior.
  *
  * The header, hero, tabs, search and discovery controls keep a stable width.
- * Only the result region yields horizontal space to the preview in Wide desktop
- * mode. Compact and smaller viewports use a dismissible overlay instead.
+ * Only the dynamic results region yields horizontal space to the preview in
+ * Wide desktop mode. Compact and smaller viewports use a non-modal overlay.
  */
 [data-cyclopedia-preview-host='true'] {
   position: relative;
-}
-
-.cyclopedia-creature-preview-backdrop {
-  position: fixed;
-  z-index: var(--z-overlay);
-  inset: 0;
-  border: 0;
-  background: rgb(var(--ds-surface-base) / 0.46);
-  backdrop-filter: blur(2px);
-  cursor: default;
 }
 
 .cyclopedia-creature-preview-dock {
@@ -70,18 +60,54 @@
 }
 
 /*
+ * Creature/Boss result density.
+ * The existing page markup intentionally stays generic; :has() lets the shared
+ * monster grid scale without duplicating a Creature-only or Boss-only layout.
+ */
+.app-shell-cyclopedia .grid:has(> [data-cyclopedia-result] > .creature-browser-card) {
+  grid-template-columns: minmax(0, 1fr) !important;
+}
+
+@media (min-width: 768px) {
+  .app-shell-cyclopedia .grid:has(> [data-cyclopedia-result] > .creature-browser-card) {
+    grid-template-columns: repeat(2, minmax(0, 1fr)) !important;
+  }
+}
+
+@media (min-width: 1024px) {
+  .app-shell-cyclopedia .grid:has(> [data-cyclopedia-result] > .creature-browser-card) {
+    grid-template-columns: repeat(3, minmax(0, 1fr)) !important;
+  }
+}
+
+@media (min-width: 1280px) {
+  .app-shell-cyclopedia .grid:has(> [data-cyclopedia-result] > .creature-browser-card) {
+    grid-template-columns: repeat(4, minmax(0, 1fr)) !important;
+  }
+}
+
+/* Wide monitors use the available viewport instead of stopping at laptop density. */
+@media (min-width: 1600px) {
+  html[data-layout='wide'] .app-shell-cyclopedia .grid:has(> [data-cyclopedia-result] > .creature-browser-card) {
+    grid-template-columns: repeat(5, minmax(0, 1fr)) !important;
+  }
+}
+
+@media (min-width: 1920px) {
+  html[data-layout='wide'] .app-shell-cyclopedia .grid:has(> [data-cyclopedia-result] > .creature-browser-card) {
+    grid-template-columns: repeat(6, minmax(0, 1fr)) !important;
+  }
+}
+
+/*
  * Wide desktop is the only mode that reserves horizontal result space.
- * The portal is hosted inside the result region, so no upper-page control can
+ * The portal is hosted inside the results region, so hero/tabs/search never
  * resize when the preview opens or closes.
  */
 @media (min-width: 1440px) {
   html[data-layout='wide'] [data-cyclopedia-preview-host='true'] {
     padding-right: calc(29rem + clamp(1rem, 1.6vw, 1.75rem));
     transition: padding-right var(--duration-base) var(--ease-standard);
-  }
-
-  html[data-layout='wide'] .cyclopedia-creature-preview-backdrop {
-    display: none;
   }
 
   html[data-layout='wide'] .cyclopedia-creature-preview-dock {
@@ -106,6 +132,11 @@
     border-radius: var(--radius-lg);
     scrollbar-width: thin;
   }
+
+  /* Keep a predictable four-card working set beside the preview. */
+  html[data-layout='wide'] [data-cyclopedia-preview-host='true'] .grid:has(> [data-cyclopedia-result] > .creature-browser-card) {
+    grid-template-columns: repeat(4, minmax(0, 1fr)) !important;
+  }
 }
 
 /* Laptop/tablet: keep the list width stable and overlay from the right. */
@@ -117,7 +148,7 @@
   }
 }
 
-/* Compact desktop is also an overlay, regardless of available width. */
+/* Compact desktop is always an overlay, regardless of available viewport. */
 @media (min-width: 1440px) {
   html[data-layout='compact'] .cyclopedia-creature-preview-dock {
     right: max(var(--space-4), calc((100vw - var(--app-content-max-width)) / 2 + var(--space-4)));
