@@ -24,7 +24,7 @@ This registry prevents the asset library from becoming a collection of unowned d
 | `src/assets/brand/brandCategoryIcons.ts` → `creatures` | Cyclopedia Creatures emblem | canonical | Gold paw emblem used by top-level category navigation. |
 | `src/assets/brand/brandCategoryIcons.ts` → `bosses` | Cyclopedia Bosses emblem | canonical | Gold skull emblem used by top-level category navigation. |
 | `src/assets/brand/brandCategoryIcons.ts` → `items` | Cyclopedia Loot emblem | canonical | Loot pouch emblem used by top-level category navigation. |
-| `src/assets/brand/brandCategoryIcons.ts` → `quests` | Cyclopedia Quests emblem | canonical | Quest scroll emblem used by top-level category navigation. |
+| `src/assets/brand/brandQuestIcon.ts` | Cyclopedia Quests emblem | canonical | Quest scroll emblem used by top-level category navigation. |
 | `src/assets/brand/brandCategoryIcons.ts` → `zones` | Cyclopedia Hunt Zones emblem | canonical | Route/compass emblem used by top-level category navigation. |
 | `src/assets/brand/brandCategoryIcons.ts` → `npcs` | Cyclopedia NPCs emblem | canonical | NPC medallion used by top-level category navigation. |
 
