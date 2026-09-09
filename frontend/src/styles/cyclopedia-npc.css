@@ -1,0 +1,56 @@
+/* Cyclopedia > NPC reference surface. */
+
+.npc-preview-panel {
+  min-width: 0;
+}
+
+.npc-preview-identity {
+  align-items: center;
+}
+
+.npc-preview-sprite {
+  height: 8.5rem;
+  background:
+    radial-gradient(circle at 50% 58%, rgb(var(--ds-primary) / 0.08), transparent 45%),
+    rgb(var(--ds-surface-base) / 0.28);
+}
+
+.npc-preview-location,
+.npc-preview-aliases {
+  padding: var(--space-4);
+  border-bottom: 1px solid rgb(var(--ds-border) / 0.48);
+}
+
+.npc-preview-columns {
+  align-items: start;
+}
+
+.npc-preview-actions {
+  display: grid;
+  gap: var(--space-2);
+  padding: var(--space-4);
+}
+
+.npc-preview-actions > a {
+  min-width: 0;
+}
+
+.npc-preview-actions .creature-preview-full-link {
+  margin: 0;
+}
+
+@media (min-width: 480px) {
+  .npc-preview-actions {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+}
+
+@media (max-width: 639px) {
+  .npc-preview-identity {
+    align-items: start;
+  }
+
+  .npc-preview-sprite {
+    height: 7rem;
+  }
+}

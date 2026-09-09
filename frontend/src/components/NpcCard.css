@@ -4,3 +4,203 @@
     gap: 0.75rem;
   }
 }
+
+.npc-cyclopedia-card {
+  position: relative;
+  display: flex;
+  min-width: 0;
+  min-height: 18.5rem;
+  flex-direction: column;
+  overflow: hidden;
+  border: 1px solid rgb(var(--ds-border) / 0.62);
+  border-radius: 0.45rem;
+  background: linear-gradient(180deg, rgb(var(--ds-surface-raised) / 0.9), rgb(var(--ds-surface) / 0.82));
+  box-shadow: 0 0.8rem 1.8rem rgb(var(--ds-shadow) / 0.15), inset 0 1px 0 rgb(var(--ds-text-primary) / 0.025);
+  transition: border-color var(--duration-base), box-shadow var(--duration-base), transform var(--duration-base);
+}
+
+.npc-cyclopedia-card:hover,
+.npc-cyclopedia-card:focus-within {
+  border-color: rgb(var(--ds-primary) / 0.55);
+  box-shadow: 0 1rem 2.3rem rgb(var(--ds-shadow) / 0.22), 0 0 0 1px rgb(var(--ds-primary) / 0.1);
+  transform: translateY(-2px);
+}
+
+.npc-cyclopedia-card[data-selected='true'] {
+  border-color: rgb(var(--ds-primary) / 0.9);
+  box-shadow: 0 1rem 2.5rem rgb(var(--ds-shadow) / 0.24), 0 0 0 1px rgb(var(--ds-primary) / 0.34), inset 0 0 1.6rem rgb(var(--ds-primary) / 0.035);
+}
+
+.npc-cyclopedia-card[data-selected='true']::before {
+  content: '';
+  position: absolute;
+  z-index: 2;
+  inset: -1px;
+  pointer-events: none;
+  border-radius: inherit;
+  box-shadow: inset 0 2px 0 rgb(var(--ds-primary) / 0.72), inset 0 -2px 0 rgb(var(--ds-primary) / 0.46);
+}
+
+.npc-cyclopedia-card__select {
+  display: flex;
+  min-width: 0;
+  flex: 1;
+  flex-direction: column;
+  align-items: stretch;
+  padding: var(--space-4);
+  text-align: left;
+}
+
+.npc-card-portrait {
+  display: grid;
+  place-items: center;
+  overflow: hidden;
+  color: var(--primary);
+  background: radial-gradient(circle at 50% 58%, rgb(var(--ds-primary) / 0.08), transparent 45%), rgb(var(--ds-surface-base) / 0.26);
+}
+
+.npc-card-portrait--large {
+  width: 100%;
+  height: 8rem;
+  border-bottom: 1px solid rgb(var(--ds-border) / 0.28);
+}
+
+.npc-cyclopedia-card__identity {
+  display: flex;
+  min-width: 0;
+  flex-direction: column;
+  gap: var(--space-1);
+  padding-top: var(--space-3);
+}
+
+.npc-cyclopedia-card__name {
+  overflow: hidden;
+  color: var(--text-primary);
+  font-family: var(--font-heading);
+  font-size: var(--font-size-lg);
+  font-weight: var(--font-weight-semibold);
+  line-height: var(--line-height-tight);
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.npc-cyclopedia-card__subtitle {
+  overflow: hidden;
+  min-height: 1.2rem;
+  color: var(--text-secondary);
+  font-size: var(--font-size-xs);
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.npc-cyclopedia-card__facts {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: var(--space-2);
+  margin-top: var(--space-3);
+  border-top: 1px solid rgb(var(--ds-border) / 0.28);
+  padding-top: var(--space-3);
+}
+
+.npc-cyclopedia-card__facts > span {
+  display: grid;
+  min-width: 0;
+  place-items: center;
+  gap: 0.2rem;
+  color: var(--text-muted);
+  font-size: 0.62rem;
+  text-align: center;
+}
+
+.npc-cyclopedia-card__facts strong {
+  color: var(--text-primary);
+  font-size: var(--font-size-sm);
+}
+
+.npc-cyclopedia-card__location {
+  display: flex;
+  min-width: 0;
+  align-items: center;
+  gap: var(--space-2);
+  margin-top: var(--space-3);
+  color: var(--text-secondary);
+  font-size: var(--font-size-xs);
+}
+
+.npc-cyclopedia-card__mapped {
+  margin-left: auto;
+  flex: 0 0 auto;
+  border: 1px solid rgb(var(--ds-primary) / 0.28);
+  border-radius: 999px;
+  padding: 0.15rem 0.4rem;
+  color: var(--primary);
+  font-size: 0.58rem;
+  font-weight: var(--font-weight-semibold);
+}
+
+.npc-cyclopedia-card__details {
+  display: inline-flex;
+  min-height: 2.5rem;
+  align-items: center;
+  justify-content: flex-end;
+  gap: var(--space-1);
+  border-top: 1px solid rgb(var(--ds-border) / 0.35);
+  padding: 0 var(--space-4);
+  color: var(--primary);
+  font-size: var(--font-size-xs);
+  font-weight: var(--font-weight-semibold);
+}
+
+@supports selector(:has(*)) {
+  .app-shell-cyclopedia .grid:has(> [data-cyclopedia-result] > .npc-cyclopedia-card) {
+    grid-template-columns: minmax(0, 1fr) !important;
+    gap: var(--space-3) !important;
+  }
+
+  @media (min-width: 768px) {
+    .app-shell-cyclopedia .grid:has(> [data-cyclopedia-result] > .npc-cyclopedia-card) {
+      grid-template-columns: repeat(2, minmax(0, 1fr)) !important;
+    }
+  }
+
+  @media (min-width: 1024px) {
+    .app-shell-cyclopedia .grid:has(> [data-cyclopedia-result] > .npc-cyclopedia-card) {
+      grid-template-columns: repeat(3, minmax(0, 1fr)) !important;
+    }
+  }
+
+  @media (min-width: 1280px) {
+    .app-shell-cyclopedia .grid:has(> [data-cyclopedia-result] > .npc-cyclopedia-card) {
+      grid-template-columns: repeat(4, minmax(0, 1fr)) !important;
+    }
+  }
+
+  @media (min-width: 1600px) {
+    html[data-layout='wide'] .app-shell-cyclopedia .grid:has(> [data-cyclopedia-result] > .npc-cyclopedia-card) {
+      grid-template-columns: repeat(5, minmax(0, 1fr)) !important;
+    }
+  }
+
+  @media (min-width: 1920px) {
+    html[data-layout='wide'] .app-shell-cyclopedia .grid:has(> [data-cyclopedia-result] > .npc-cyclopedia-card) {
+      grid-template-columns: repeat(6, minmax(0, 1fr)) !important;
+    }
+  }
+
+  @media (min-width: 1440px) {
+    html[data-layout='wide'] [data-cyclopedia-preview-host='true'][data-cyclopedia-preview-kind='npc']
+      .grid:has(> [data-cyclopedia-result] > .npc-cyclopedia-card) {
+      grid-template-columns: repeat(4, minmax(0, 1fr)) !important;
+    }
+  }
+}
+
+@media (max-width: 639px) {
+  .npc-cyclopedia-card {
+    min-height: 16rem;
+  }
+
+  .npc-card-portrait--large {
+    height: 6.5rem;
+  }
+}
