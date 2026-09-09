@@ -33,16 +33,17 @@ export default function AppShell({ children, dataVersion }: { children: ReactNod
   const { pathname } = useLocation();
   const context = currentContext(pathname, t);
   const isMapWorkspace = pathname === '/map';
+  const isCyclopediaWorkspace = pathname === '/cyclopedia';
   const showWorldAmbience = !pathname.startsWith('/admin');
 
-  return <div className="app-shell relative flex min-h-screen flex-col text-content-primary">
+  return <div className={`app-shell relative flex min-h-screen flex-col text-content-primary ${isCyclopediaWorkspace ? 'app-shell-cyclopedia' : ''}`} data-workspace={isCyclopediaWorkspace ? 'cyclopedia' : undefined}>
     {showWorldAmbience ? <>
       <div
         aria-hidden="true"
-        className="pointer-events-none fixed inset-0 bg-cover bg-center bg-no-repeat opacity-30"
+        className="app-world-background pointer-events-none fixed inset-0 bg-cover bg-center bg-no-repeat opacity-30"
         style={{ backgroundImage: `url(${TIBIAHUB_WORLD_BACKGROUND})` }}
       />
-      <div aria-hidden="true" className="pointer-events-none fixed inset-0 bg-surface-base/80" />
+      <div aria-hidden="true" className="app-world-scrim pointer-events-none fixed inset-0 bg-surface-base/80" />
     </> : null}
     <Navigation />
     <div className={`app-shell-main relative flex min-h-0 flex-1 flex-col ${isMapWorkspace ? 'app-shell-main-map' : ''}`}>
@@ -50,13 +51,13 @@ export default function AppShell({ children, dataVersion }: { children: ReactNod
         <img src={TIBIAHUB_TITLE_ICONS.maps} alt="" draggable={false} className="size-9 object-contain drop-shadow-lg" />
         <span className="font-serif text-lg font-bold tracking-wide text-content-primary">{t('map.title')}</span>
       </div> : null}
-      {context && !isMapWorkspace ? <Container><nav className="app-context-bar gap-1 text-xs text-content-muted" aria-label={t('shell.breadcrumbs')}>
+      {context && !isMapWorkspace && !isCyclopediaWorkspace ? <Container><nav className="app-context-bar gap-1 text-xs text-content-muted" aria-label={t('shell.breadcrumbs')}>
         <Link to="/" className="inline-flex min-h-9 items-center gap-1 rounded px-1 hover:text-content-primary"><Home className="size-3.5" /><span className="sr-only">{t('nav.home')}</span></Link>
         <ChevronRight className="size-3.5" aria-hidden="true" />
         {context.parent ? <><Link to={context.parent.to} className="rounded px-1 hover:text-content-primary">{context.parent.label}</Link><ChevronRight className="size-3.5" aria-hidden="true" /></> : null}
         <span className="truncate text-content-secondary" aria-current="page">{context.label}</span>
       </nav></Container> : null}
-      <main className="relative min-h-0 flex-1">
+      <main className="relative min-h-0 flex-1" data-workspace-main={isCyclopediaWorkspace ? 'cyclopedia' : undefined}>
         {isMapWorkspace ? children : <Container>{children}</Container>}
       </main>
       {!isMapWorkspace ? <footer className="relative mt-16 border-t border-line py-8 text-center">

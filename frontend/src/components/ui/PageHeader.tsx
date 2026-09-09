@@ -51,13 +51,16 @@ const PageHeader: React.FC<PageHeaderProps> = ({
       alt=""
       aria-hidden="true"
       draggable={false}
-      className="size-14 shrink-0 object-contain drop-shadow-lg sm:size-16"
+      className="app-page-brand-icon size-14 shrink-0 object-contain drop-shadow-lg sm:size-16"
     />
   ) : null;
   const resolvedIcon = iconElement || routeIcon;
 
   return (
-    <header className={cn('app-page-header', contained && 'app-page-header-contained', alignClass, className)}>
+    <header
+      className={cn('app-page-header', contained && 'app-page-header-contained', alignClass, className)}
+      data-brand-header={brandIconKey || undefined}
+    >
       {breadcrumbs?.length ? (
         <nav aria-label={eyebrow || title} className="mb-3 flex min-w-0 flex-wrap items-center gap-1 text-xs text-content-muted">
           {breadcrumbs.map((item, index) => (

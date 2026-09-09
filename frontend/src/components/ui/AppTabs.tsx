@@ -54,6 +54,8 @@ const AppTabs: React.FC<AppTabsProps> = ({
           compact && 'gap-1 p-1',
           className,
         )}
+        data-variant={isCyclopediaTabs ? 'cyclopedia' : undefined}
+        data-compact={compact ? 'true' : 'false'}
         role="tablist"
       >
         {items.map((item) => (
@@ -69,6 +71,7 @@ const AppTabs: React.FC<AppTabsProps> = ({
             title={item.label}
             aria-label={item.label}
             data-active={item.key === activeKey}
+            data-tab-key={item.key}
             role="tab"
             aria-selected={item.key === activeKey}
             type="button"
