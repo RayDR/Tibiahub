@@ -234,7 +234,7 @@ export default function QuestLibraryShelves({ linkState, onNavigate }: Props) {
             {quests.map((quest) => {
               const identifier = questIdentifier(quest);
               const active = selectedIdentifier === identifier;
-              const type = quest.quest_type || quest.category || quest.group_name || 'Quest';
+              const type = quest.quest_type || quest.category || quest.group_name || t('cyclopedia.cards.quest');
               const location = quest.location;
               const npc = quest.npc;
               return (
@@ -284,7 +284,7 @@ export default function QuestLibraryShelves({ linkState, onNavigate }: Props) {
                     <div className="quest-card-stats">
                       <QuestStat label={t('questDetail.minimumLevel')} value={quest.min_level?.toLocaleString() || '—'} />
                       <QuestStat label={t('questDetail.experience')} value={quest.experience_reward?.toLocaleString() || '—'} />
-                      <QuestStat label="Type" value={type} />
+                      <QuestStat label={t('themePlayground.forms.category')} value={type} />
                     </div>
 
                     <div className="quest-card-meta">
