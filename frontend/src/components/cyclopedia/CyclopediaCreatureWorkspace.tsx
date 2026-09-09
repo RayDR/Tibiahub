@@ -1,4 +1,4 @@
-import { useEffect, useLayoutEffect, useRef, useState, type ReactNode } from 'react';
+import { useEffect, useLayoutEffect, useState, type ReactNode } from 'react';
 import { X } from 'lucide-react';
 import { createPortal } from 'react-dom';
 import { useLocation } from 'react-router-dom';
@@ -53,7 +53,6 @@ function CyclopediaPreviewPortal({
   onClose: () => void;
 }) {
   const [host, setHost] = useState<HTMLElement | null>(null);
-  const dockRef = useRef<HTMLElement | null>(null);
 
   useLayoutEffect(() => {
     const selectedCard = document.querySelector<HTMLElement>('[data-creature-card][data-selected="true"]');
@@ -79,20 +78,8 @@ function CyclopediaPreviewPortal({
       if (event.key === 'Escape') onClose();
     };
 
-    const onPointerDown = (event: PointerEvent) => {
-      const target = event.target;
-      if (!(target instanceof Element)) return;
-      if (dockRef.current?.contains(target)) return;
-      if (target.closest('[data-creature-card]')) return;
-      onClose();
-    };
-
     document.addEventListener('keydown', onKeyDown);
-    document.addEventListener('pointerdown', onPointerDown);
-    return () => {
-      document.removeEventListener('keydown', onKeyDown);
-      document.removeEventListener('pointerdown', onPointerDown);
-    };
+    return () => document.removeEventListener('keydown', onKeyDown);
   }, [onClose]);
 
   if (!host) return null;
@@ -100,33 +87,24 @@ function CyclopediaPreviewPortal({
   const label = kind === 'boss' ? 'boss' : 'creature';
 
   return createPortal(
-    <>
-      <button
-        type="button"
-        className="cyclopedia-creature-preview-backdrop"
-        onClick={onClose}
-        aria-label={`Close selected ${label} preview`}
-      />
-      <aside
-        ref={dockRef}
-        className="cyclopedia-creature-preview-dock"
-        aria-label={`Selected ${label} preview`}
-        data-preview-kind={kind}
-      >
-        <div className="cyclopedia-creature-preview-sticky">
-          <button
-            type="button"
-            className="cyclopedia-creature-preview-close"
-            onClick={onClose}
-            aria-label={`Close selected ${label} preview`}
-            title="Close preview"
-          >
-            <X className="size-4" aria-hidden="true" />
-          </button>
-          <CreaturePreviewPanel creatureId={creatureId} kind={kind} />
-        </div>
-      </aside>
-    </>,
+    <aside
+      className="cyclopedia-creature-preview-dock"
+      aria-label={`Selected ${label} preview`}
+      data-preview-kind={kind}
+    >
+      <div className="cyclopedia-creature-preview-sticky">
+        <button
+          type="button"
+          className="cyclopedia-creature-preview-close"
+          onClick={onClose}
+          aria-label={`Close selected ${label} preview`}
+          title="Close preview"
+        >
+          <X className="size-4" aria-hidden="true" />
+        </button>
+        <CreaturePreviewPanel creatureId={creatureId} kind={kind} />
+      </div>
+    </aside>,
     host,
   );
 }
