@@ -12,17 +12,24 @@ import { useLocation } from 'react-router-dom';
 
 import { Container } from '../ui';
 import { CreatureBrowserProvider, useCreatureBrowser } from './CreatureBrowserContext';
+import {
+  CyclopediaPreviewSelectionProvider,
+  useCyclopediaPreviewSelection,
+} from './CyclopediaPreviewSelectionContext';
 import CreaturePreviewPanel from './CreaturePreviewPanel';
 import ItemPreviewPanel from './ItemPreviewPanel';
+import QuestPreviewPanel from './QuestPreviewPanel';
 
 type PreviewSelection =
   | { kind: 'creature' | 'boss'; creatureId: number }
-  | { kind: 'item'; identifier: string };
+  | { kind: 'item' | 'quest'; identifier: string };
 
 export default function CyclopediaCreatureWorkspace({ children }: { children: ReactNode }) {
   return (
     <CreatureBrowserProvider>
-      <CyclopediaCreatureWorkspaceInner>{children}</CyclopediaCreatureWorkspaceInner>
+      <CyclopediaPreviewSelectionProvider>
+        <CyclopediaCreatureWorkspaceInner>{children}</CyclopediaCreatureWorkspaceInner>
+      </CyclopediaPreviewSelectionProvider>
     </CreatureBrowserProvider>
   );
 }
@@ -30,15 +37,22 @@ export default function CyclopediaCreatureWorkspace({ children }: { children: Re
 function CyclopediaCreatureWorkspaceInner({ children }: { children: ReactNode }) {
   const location = useLocation();
   const browser = useCreatureBrowser();
+  const genericPreview = useCyclopediaPreviewSelection();
   const resetCreatureSelection = browser?.selectCreature;
-  const [selectedItemIdentifier, setSelectedItemIdentifier] = useState<string | null>(null);
+  const clearGenericPreview = genericPreview.clear;
+  const selectGenericPreview = genericPreview.select;
+  const genericSelection = genericPreview.selection;
   const tab = new URLSearchParams(location.search).get('tab') || 'creatures';
 
   useEffect(() => {
     resetCreatureSelection?.(null);
-    setSelectedItemIdentifier(null);
-  }, [location.search, resetCreatureSelection]);
+    clearGenericPreview();
+  }, [clearGenericPreview, location.search, resetCreatureSelection]);
 
+  // Loot still uses the legacy generic AppCard markup. Decorate those cards at
+  // the workspace boundary until the page is split into entity-specific
+  // browser components. Quests already opt into the shared selection context
+  // directly and Zones/NPCs can follow that path next.
   useEffect(() => {
     if (tab !== 'items') return undefined;
 
@@ -67,7 +81,7 @@ function CyclopediaCreatureWorkspaceInner({ children }: { children: ReactNode })
 
     const selectCard = (card: HTMLElement) => {
       const identifier = card.dataset.itemIdentifier;
-      if (identifier) setSelectedItemIdentifier(identifier);
+      if (identifier) selectGenericPreview({ kind: 'item', identifier });
     };
 
     const onClick = (event: MouseEvent) => {
@@ -104,16 +118,18 @@ function CyclopediaCreatureWorkspaceInner({ children }: { children: ReactNode })
         card.removeAttribute('tabindex');
       });
     };
-  }, [tab]);
+  }, [selectGenericPreview, tab]);
 
   useLayoutEffect(() => {
     const cards = document.querySelectorAll<HTMLElement>('article[data-cyclopedia-item-card="true"]');
     cards.forEach((card) => {
-      const selected = tab === 'items' && selectedItemIdentifier != null && card.dataset.itemIdentifier === selectedItemIdentifier;
+      const selected = tab === 'items'
+        && genericSelection?.kind === 'item'
+        && card.dataset.itemIdentifier === genericSelection.identifier;
       card.dataset.selected = selected ? 'true' : 'false';
       card.setAttribute('aria-pressed', selected ? 'true' : 'false');
     });
-  }, [selectedItemIdentifier, tab]);
+  }, [genericSelection, tab]);
 
   let selection: PreviewSelection | null = null;
   if ((tab === 'creatures' || tab === 'bosses') && browser?.selectedCreatureId != null) {
@@ -121,13 +137,15 @@ function CyclopediaCreatureWorkspaceInner({ children }: { children: ReactNode })
       kind: tab === 'bosses' ? 'boss' : 'creature',
       creatureId: browser.selectedCreatureId,
     };
-  } else if (tab === 'items' && selectedItemIdentifier) {
-    selection = { kind: 'item', identifier: selectedItemIdentifier };
+  } else if (tab === 'items' && genericSelection?.kind === 'item') {
+    selection = genericSelection;
+  } else if (tab === 'quests' && genericSelection?.kind === 'quest') {
+    selection = genericSelection;
   }
 
   const closePreview = () => {
     browser?.selectCreature(null);
-    setSelectedItemIdentifier(null);
+    clearGenericPreview();
   };
 
   return (
@@ -159,6 +177,12 @@ function selectedCardFor(selection: PreviewSelection): HTMLElement | null {
     ).find((card) => card.dataset.itemIdentifier === selection.identifier) || null;
   }
 
+  if (selection.kind === 'quest') {
+    return Array.from(
+      document.querySelectorAll<HTMLElement>('article[data-cyclopedia-quest-card="true"]'),
+    ).find((card) => card.dataset.questIdentifier === selection.identifier) || null;
+  }
+
   return document.querySelector<HTMLElement>(
     '[data-creature-card][data-selected="true"]',
   );
@@ -174,9 +198,9 @@ function CyclopediaPreviewPortal({
   const dockRef = useRef<HTMLElement | null>(null);
   const [resultsRegion, setResultsRegion] = useState<HTMLElement | null>(null);
   const [insets, setInsets] = useState<PreviewInsets>({ top: 0, bottom: PREVIEW_EDGE_GAP });
-  const selectionKey = selection.kind === 'item'
-    ? `item:${selection.identifier}`
-    : `${selection.kind}:${selection.creatureId}`;
+  const selectionKey = selection.kind === 'creature' || selection.kind === 'boss'
+    ? `${selection.kind}:${selection.creatureId}`
+    : `${selection.kind}:${selection.identifier}`;
 
   useLayoutEffect(() => {
     const selectedCard = selectedCardFor(selection);
@@ -197,7 +221,7 @@ function CyclopediaPreviewPortal({
       delete region.dataset.cyclopediaPreviewHost;
       delete region.dataset.cyclopediaPreviewKind;
     };
-  }, [selectionKey]);
+  }, [selectionKey]); // eslint-disable-line react-hooks/exhaustive-deps
 
   useLayoutEffect(() => {
     if (!resultsRegion) return undefined;
@@ -288,7 +312,13 @@ function CyclopediaPreviewPortal({
 
   if (!resultsRegion) return null;
 
-  const label = selection.kind === 'boss' ? 'boss' : selection.kind === 'item' ? 'item' : 'creature';
+  const label = selection.kind === 'boss'
+    ? 'boss'
+    : selection.kind === 'item'
+      ? 'item'
+      : selection.kind === 'quest'
+        ? 'quest'
+        : 'creature';
   const dockStyle = {
     '--cyclopedia-preview-top': `${insets.top}px`,
     '--cyclopedia-preview-bottom': `${insets.bottom}px`,
@@ -314,6 +344,8 @@ function CyclopediaPreviewPortal({
         </button>
         {selection.kind === 'item' ? (
           <ItemPreviewPanel identifier={selection.identifier} />
+        ) : selection.kind === 'quest' ? (
+          <QuestPreviewPanel identifier={selection.identifier} />
         ) : (
           <CreaturePreviewPanel creatureId={selection.creatureId} kind={selection.kind} />
         )}
