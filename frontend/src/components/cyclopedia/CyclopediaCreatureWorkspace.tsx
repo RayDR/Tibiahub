@@ -19,6 +19,7 @@ import {
 import CreaturePreviewPanel from './CreaturePreviewPanel';
 import HuntZonePreviewPanel from './HuntZonePreviewPanel';
 import ItemPreviewPanel from './ItemPreviewPanel';
+import NpcPreviewPanel from './NpcPreviewPanel';
 import QuestPreviewPanel from './QuestPreviewPanel';
 
 type PreviewSelection =
@@ -26,7 +27,8 @@ type PreviewSelection =
   | { kind: 'boss'; creatureId: number }
   | { kind: 'item'; identifier: string }
   | { kind: 'quest'; identifier: string }
-  | { kind: 'zone'; identifier: string };
+  | { kind: 'zone'; identifier: string }
+  | { kind: 'npc'; identifier: string };
 
 export default function CyclopediaCreatureWorkspace({ children }: { children: ReactNode }) {
   return (
@@ -55,8 +57,8 @@ function CyclopediaCreatureWorkspaceInner({ children }: { children: ReactNode })
 
   // Loot still uses the legacy generic AppCard markup. Decorate those cards at
   // the workspace boundary until the page is split into entity-specific
-  // browser components. Quests and Zones opt into the shared selection context
-  // directly; NPCs can follow the same path next.
+  // browser components. Quests, Zones and NPCs opt into the shared selection
+  // context directly.
   useEffect(() => {
     if (tab !== 'items') return undefined;
 
@@ -146,6 +148,8 @@ function CyclopediaCreatureWorkspaceInner({ children }: { children: ReactNode })
     selection = genericSelection;
   } else if (tab === 'zones' && genericSelection?.kind === 'zone') {
     selection = genericSelection;
+  } else if (tab === 'npcs' && genericSelection?.kind === 'npc') {
+    selection = genericSelection;
   }
 
   const closePreview = () => {
@@ -192,6 +196,12 @@ function selectedCardFor(selection: PreviewSelection): HTMLElement | null {
     return Array.from(
       document.querySelectorAll<HTMLElement>('article[data-cyclopedia-zone-card="true"]'),
     ).find((card) => card.dataset.zoneIdentifier === selection.identifier) || null;
+  }
+
+  if (selection.kind === 'npc') {
+    return Array.from(
+      document.querySelectorAll<HTMLElement>('article[data-cyclopedia-npc-card="true"]'),
+    ).find((card) => card.dataset.npcIdentifier === selection.identifier) || null;
   }
 
   return document.querySelector<HTMLElement>(
@@ -331,7 +341,9 @@ function CyclopediaPreviewPortal({
         ? 'quest'
         : selection.kind === 'zone'
           ? 'hunt zone'
-          : 'creature';
+          : selection.kind === 'npc'
+            ? 'npc'
+            : 'creature';
   const dockStyle = {
     '--cyclopedia-preview-top': `${insets.top}px`,
     '--cyclopedia-preview-bottom': `${insets.bottom}px`,
@@ -361,6 +373,8 @@ function CyclopediaPreviewPortal({
           <QuestPreviewPanel identifier={selection.identifier} />
         ) : selection.kind === 'zone' ? (
           <HuntZonePreviewPanel identifier={selection.identifier} />
+        ) : selection.kind === 'npc' ? (
+          <NpcPreviewPanel identifier={selection.identifier} />
         ) : (
           <CreaturePreviewPanel creatureId={selection.creatureId} kind={selection.kind} />
         )}
