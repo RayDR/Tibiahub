@@ -38,14 +38,8 @@ const CreatureCard: React.FC<CreatureCardProps> = ({
     browser?.registerCreature(creature.id);
   }, [browser, creature.id]);
 
-  useEffect(() => {
-    if (index === 0 && browser && browser.selectedCreatureId == null && !creature.is_boss) {
-      browser.selectCreature(creature.id);
-    }
-  }, [browser, creature.id, creature.is_boss, index]);
-
   const select = () => {
-    if (browser && !creature.is_boss) browser.selectCreature(creature.id);
+    browser?.selectCreature(creature.id);
   };
 
   const activate = (event: React.KeyboardEvent<HTMLElement>) => {
@@ -65,9 +59,10 @@ const CreatureCard: React.FC<CreatureCardProps> = ({
       className="creature-browser-card group"
       data-selected={selected ? 'true' : 'false'}
       data-creature-card
-      role={browser && !creature.is_boss ? 'button' : undefined}
-      tabIndex={browser && !creature.is_boss ? 0 : undefined}
-      aria-pressed={browser && !creature.is_boss ? selected : undefined}
+      data-entity-kind={creature.is_boss ? 'boss' : 'creature'}
+      role={browser ? 'button' : undefined}
+      tabIndex={browser ? 0 : undefined}
+      aria-pressed={browser ? selected : undefined}
       onClick={select}
       onKeyDown={activate}
       style={{ animationDelay: `${Math.min(index, 10) * 35}ms` }}
