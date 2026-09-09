@@ -21,8 +21,10 @@ import ItemPreviewPanel from './ItemPreviewPanel';
 import QuestPreviewPanel from './QuestPreviewPanel';
 
 type PreviewSelection =
-  | { kind: 'creature' | 'boss'; creatureId: number }
-  | { kind: 'item' | 'quest'; identifier: string };
+  | { kind: 'creature'; creatureId: number }
+  | { kind: 'boss'; creatureId: number }
+  | { kind: 'item'; identifier: string }
+  | { kind: 'quest'; identifier: string };
 
 export default function CyclopediaCreatureWorkspace({ children }: { children: ReactNode }) {
   return (
@@ -133,10 +135,9 @@ function CyclopediaCreatureWorkspaceInner({ children }: { children: ReactNode })
 
   let selection: PreviewSelection | null = null;
   if ((tab === 'creatures' || tab === 'bosses') && browser?.selectedCreatureId != null) {
-    selection = {
-      kind: tab === 'bosses' ? 'boss' : 'creature',
-      creatureId: browser.selectedCreatureId,
-    };
+    selection = tab === 'bosses'
+      ? { kind: 'boss', creatureId: browser.selectedCreatureId }
+      : { kind: 'creature', creatureId: browser.selectedCreatureId };
   } else if (tab === 'items' && genericSelection?.kind === 'item') {
     selection = genericSelection;
   } else if (tab === 'quests' && genericSelection?.kind === 'quest') {
