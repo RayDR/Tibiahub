@@ -35,11 +35,14 @@ jobs:
           cache: pip
           cache-dependency-path: backend/requirements-dev.txt
 
+      - name: Create backend virtualenv
+        run: python -m venv backend/venv
+
       - name: Install dependencies
-        run: python -m pip install -r backend/requirements-dev.txt
+        run: backend/venv/bin/python -m pip install -r backend/requirements-dev.txt
 
       - name: Compile backend
-        run: python -m compileall -q backend/app backend/main.py scripts
+        run: backend/venv/bin/python -m compileall -q backend/app backend/main.py scripts
 
       - name: Run backend tests
-        run: python -m pytest backend/tests -q
+        run: backend/venv/bin/python -m pytest backend/tests -q
