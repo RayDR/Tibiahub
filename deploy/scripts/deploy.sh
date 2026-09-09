@@ -24,6 +24,10 @@ FRONTEND_DEPS_STAMP="$FRONTEND_DIR/node_modules/.tibiahub-dependency-inputs.sha2
 candidate_runtime=""
 previous_runtime=""
 runtime_is_ephemeral=0
+target_branch=""
+deploy_environment=""
+default_branch=""
+branch_policy_approved=0
 SERVICES=(
   tibiahub-api
   tibiahub-frontend
@@ -51,19 +55,27 @@ PUBLIC_URLS=(
 
 usage() {
   cat >&2 <<'USAGE'
-Usage: deploy/scripts/deploy.sh --confirm-deploy-tibiahub [--previous-commit COMMIT]
-       deploy/scripts/deploy.sh --dry-run [--previous-commit COMMIT]
+Usage: deploy/scripts/deploy.sh [--confirm-deploy] [--previous-commit COMMIT]
+       deploy/scripts/deploy.sh --dry-run [--confirm-deploy] [--previous-commit COMMIT]
+
+--confirm-deploy is only needed to bypass the branch policy for a non-standard
+branch. Normal deploys from an allowed branch do not need a confirmation flag.
 USAGE
   exit 2
 }
 
-confirm=0
+confirm_branch=0
 dry_run=0
 provided_previous_commit=""
 while (($#)); do
   case "$1" in
+    --confirm-deploy)
+      confirm_branch=1
+      shift
+      ;;
     --confirm-deploy-tibiahub)
-      confirm=1
+      ops_warn "--confirm-deploy-tibiahub is deprecated; use --confirm-deploy only for non-standard branch approval."
+      confirm_branch=1
       shift
       ;;
     --previous-commit)
@@ -80,9 +92,6 @@ while (($#)); do
       ;;
   esac
 done
-if [[ "$dry_run" -ne 1 && "$confirm" -ne 1 ]]; then
-  usage
-fi
 
 ops_require_commands flock git pg_dump pg_restore sha256sum jq curl pm2 npm node bash awk sed find stat realpath python3 || exit $?
 
@@ -165,27 +174,119 @@ sanitize_step_suffix() {
   printf '%s' "$1" | sed -E 's#[^A-Za-z0-9._-]#_#g'
 }
 
-preflight_git_state() {
-  if [[ "$dry_run" == 1 ]]; then
-    target_commit="$(git rev-parse HEAD)"
-    remote_commit="$target_commit"
+resolve_deploy_environment() {
+  deploy_environment="${TIBIAHUB_DEPLOY_ENV:-${APP_ENV:-development}}"
+  deploy_environment="$(printf '%s' "$deploy_environment" | tr '[:upper:]' '[:lower:]')"
+  case "$deploy_environment" in
+    prod|production)
+      deploy_environment="production"
+      ;;
+    dev|development|test|testing|staging|stage|local)
+      deploy_environment="development"
+      ;;
+    *)
+      ops_warn "Unknown deploy environment '$deploy_environment'; applying development branch policy."
+      deploy_environment="development"
+      ;;
+  esac
+}
+
+resolve_default_branch() {
+  default_branch="$(git symbolic-ref --quiet --short refs/remotes/origin/HEAD 2>/dev/null || true)"
+  default_branch="${default_branch#origin/}"
+  if [[ -z "$default_branch" ]]; then
+    default_branch="$(git ls-remote --symref origin HEAD 2>/dev/null | awk '/^ref:/ {sub("refs/heads/", "", $2); print $2; exit}')"
+  fi
+  if [[ -z "$default_branch" ]]; then
+    if [[ "$deploy_environment" == production ]]; then
+      default_branch="main"
+    else
+      default_branch="develop"
+    fi
+  fi
+}
+
+branch_is_standard() {
+  local branch="$1"
+  if [[ "$branch" == "$default_branch" ]]; then
     return 0
   fi
-  [[ "$(git branch --show-current)" == "develop" ]] || {
-    echo "Deployment requires the local develop branch." >&2
+  if [[ "$deploy_environment" == production ]]; then
+    [[ "$branch" == main || "$branch" == master ]]
+  else
+    [[ "$branch" == develop ]]
+  fi
+}
+
+approve_nonstandard_branch() {
+  local answer=""
+  [[ "$branch_policy_approved" == 0 ]] || return 0
+
+  if branch_is_standard "$target_branch"; then
+    branch_policy_approved=1
+    return 0
+  fi
+
+  ops_warn "Branch '$target_branch' is not a standard deployment branch for '$deploy_environment'."
+  if [[ "$deploy_environment" == production ]]; then
+    ops_warn "Production normally deploys '$default_branch', 'main', or 'master'."
+  else
+    ops_warn "Development normally deploys '$default_branch' or 'develop'."
+  fi
+
+  if [[ "$dry_run" == 1 ]]; then
+    ops_warn "Dry-run will continue. A real deploy requires interactive approval or --confirm-deploy."
+    branch_policy_approved=1
+    return 0
+  fi
+
+  if [[ "$confirm_branch" == 1 ]]; then
+    ops_warn "Non-standard branch guard bypassed with --confirm-deploy."
+    branch_policy_approved=1
+    return 0
+  fi
+
+  if [[ -t 0 && -t 1 ]]; then
+    read -r -p "Deploy branch '$target_branch' to '$deploy_environment'? [y/N] " answer
+    case "$answer" in
+      y|Y|yes|YES)
+        branch_policy_approved=1
+        return 0
+        ;;
+      *)
+        ops_warn "Deployment cancelled."
+        return 1
+        ;;
+    esac
+  fi
+
+  ops_error "Non-standard branch deploy requires interactive approval or --confirm-deploy."
+  return 2
+}
+
+preflight_git_state() {
+  target_branch="$(git branch --show-current)"
+  [[ -n "$target_branch" ]] || {
+    echo "Deployment requires a named local branch; detached HEAD is not deployable." >&2
     return 1
   }
   [[ -z "$(git status --porcelain --untracked-files=all)" ]] || {
     echo "Deployment requires a completely clean working tree." >&2
     return 1
   }
-  git fetch --quiet origin develop
+
+  resolve_deploy_environment
+  git fetch --quiet origin "$target_branch"
   target_commit="$(git rev-parse HEAD)"
-  remote_commit="$(git rev-parse refs/remotes/origin/develop)"
+  remote_commit="$(git rev-parse "refs/remotes/origin/$target_branch")"
   [[ "$target_commit" == "$remote_commit" ]] || {
-    echo "Deployment requires local develop to equal origin/develop exactly." >&2
+    echo "Deployment requires local '$target_branch' to equal origin/$target_branch exactly." >&2
     return 1
   }
+
+  resolve_default_branch
+  approve_nonstandard_branch
+  ops_info "Deploy target: branch=$target_branch commit=$target_commit environment=$deploy_environment default_branch=$default_branch"
 }
 
 prepare_candidate_runtime() {
@@ -257,7 +358,6 @@ PY_RUNTIME
   export TIBIAHUB_PYTHON_RUNTIME="$candidate_runtime"
 }
 
-
 capture_previous_runtime() {
   if [[ -L "$RUNTIME_LINK" ]]; then
     previous_runtime="$(realpath -e "$RUNTIME_LINK")"
@@ -283,7 +383,6 @@ capture_previous_runtime() {
   }
 }
 
-
 activate_candidate_runtime() {
   local temporary_link="$ROOT/backend/.runtime-current.$$"
 
@@ -308,7 +407,6 @@ activate_candidate_runtime() {
 
   export TIBIAHUB_PYTHON_RUNTIME="$candidate_runtime"
 }
-
 
 preflight_alembic_head() {
   mapfile -t migration_heads < <(
@@ -348,10 +446,8 @@ preflight_production_revision_readable() {
   [[ "$production_revision" =~ ^[A-Za-z0-9_]+$ ]]
 }
 
-
 preflight_alembic_upgrade_path() {
   if [[ "$production_revision" == "$EXPECTED_REVISION" ]]; then
-    # If production is already at HEAD, Alembic check is valid here.
     run_alembic_read_only check
     return 0
   fi
@@ -546,9 +642,6 @@ stop_services() {
 pm2_start_service() {
   local service="$1"
 
-  # PM2 reloads an existing process using its previously registered
-  # executable path. Recreate the bounded TibiaHub service so changes
-  # such as venv/bin/python -> runtime-current/bin/python take effect.
   if pm2 describe "$service" >/dev/null 2>&1; then
     pm2 delete "$service"
   fi
@@ -713,12 +806,14 @@ fi
 
 state_file="$DEPLOY_ROOT/current.env"
 state_previous_commit=""
+state_previous_branch=""
 if [[ -f "$state_file" ]]; then
   [[ ! -L "$state_file" ]] || {
     ops_error "Deployment state file must not be a symlink."
     exit 2
   }
   state_previous_commit="$(awk -F= '$1 == "deployed_commit" {print $2}' "$state_file")"
+  state_previous_branch="$(awk -F= '$1 == "deployed_branch" {print $2}' "$state_file")"
 fi
 
 previous_commit_source="recorded"
@@ -732,8 +827,21 @@ else
   previous_commit="$state_previous_commit"
 fi
 
+if [[ -z "$previous_commit" ]]; then
+  while IFS= read -r prior_dir; do
+    [[ -f "$prior_dir/SUCCEEDED" && -f "$prior_dir/metadata.env" ]] || continue
+    candidate_previous="$(awk -F= '$1 == "target_commit" {print $2}' "$prior_dir/metadata.env")"
+    if [[ "$candidate_previous" =~ ^[0-9a-fA-F]{40}$ ]]; then
+      previous_commit="$candidate_previous"
+      previous_commit_source="evidence"
+      state_previous_branch="$(awk -F= '$1 == "target_branch" {print $2}' "$prior_dir/metadata.env")"
+      break
+    fi
+  done < <(find "$DEPLOY_ROOT" -mindepth 1 -maxdepth 1 -type d -name '20*' | sort -r)
+fi
+
 [[ "$previous_commit" =~ ^[0-9a-fA-F]{40}$ ]] || {
-  ops_error "No valid recorded deployment commit exists; pass --previous-commit with the deployed 40-character commit."
+  ops_error "No valid recorded deployment commit exists. Use --previous-commit only for bootstrap/recovery."
   exit 2
 }
 git cat-file -e "$previous_commit^{commit}"
@@ -746,10 +854,17 @@ previous_revision="$production_revision"
   exit 2
 }
 
+commit_snapshot_ref="refs/tibiahub/deploy-snapshots/$(basename "$evidence_dir")"
+
 {
+  printf 'target_branch=%s\n' "$target_branch"
   printf 'target_commit=%s\n' "$target_commit"
+  printf 'deploy_environment=%s\n' "$deploy_environment"
+  printf 'default_branch=%s\n' "$default_branch"
+  printf 'previous_branch=%s\n' "$state_previous_branch"
   printf 'previous_commit=%s\n' "$previous_commit"
   printf 'previous_commit_source=%s\n' "$previous_commit_source"
+  printf 'previous_commit_ref=%s\n' "$commit_snapshot_ref"
   printf 'recorded_previous_commit=%s\n' "$state_previous_commit"
   printf 'target_revision=%s\n' "$EXPECTED_REVISION"
   printf 'previous_revision=%s\n' "$previous_revision"
@@ -758,6 +873,10 @@ previous_revision="$production_revision"
   printf 'started_at=%s\n' "$(ops_now_utc)"
 } >"$metadata"
 chmod 600 "$metadata"
+
+run_step "145-snapshot-previous-commit" git update-ref "$commit_snapshot_ref" "$previous_commit"
+git rev-parse "$commit_snapshot_ref" >"$evidence_dir/previous-commit.snapshot"
+chmod 600 "$evidence_dir/previous-commit.snapshot"
 
 snapshot="$evidence_dir/tibiahub.dump"
 run_step "150-backup-snapshot" postgres_exec pg_dump --format=custom --no-owner --no-acl --file="$snapshot"
@@ -821,9 +940,12 @@ run_step "260-worker-heartbeats" wait_for_worker_readiness
 completed_at="$(ops_now_utc)"
 state_tmp="$DEPLOY_ROOT/.current.env.$$"
 {
+  printf 'deployed_branch=%s\n' "$target_branch"
   printf 'deployed_commit=%s\n' "$target_commit"
+  printf 'deploy_environment=%s\n' "$deploy_environment"
   printf 'alembic_revision=%s\n' "$EXPECTED_REVISION"
   printf 'snapshot_dir=%s\n' "$evidence_dir"
+  printf 'previous_commit_ref=%s\n' "$commit_snapshot_ref"
   printf 'runtime_target=%s\n' "$candidate_runtime"
   printf 'deployed_at=%s\n' "$completed_at"
 } >"$state_tmp"
@@ -836,9 +958,11 @@ trap - ERR
 snapshot_sha256="$(awk '{print $1}' "$evidence_dir/tibiahub.dump.sha256")"
 
 echo "Deployment succeeded."
+echo "Target branch: $target_branch"
 echo "Target commit: $target_commit"
 echo "Previous commit: $previous_commit"
 echo "Previous Alembic revision: $previous_revision"
 echo "Resulting Alembic revision: $resulting_revision"
 echo "Snapshot directory: $evidence_dir"
+echo "Previous commit snapshot ref: $commit_snapshot_ref"
 echo "Snapshot SHA-256: $snapshot_sha256"
