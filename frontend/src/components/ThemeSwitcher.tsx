@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import { Check, Contrast, Crown, Droplets, MoonStar, Mountain, Sparkles } from 'lucide-react';
 import { useTranslation } from 'react-i18next';
 import {
@@ -27,6 +27,15 @@ export default function ThemeSwitcher() {
   const { theme, motion, density, layout, setTheme, setMotion, setDensity, setLayout } = useAppearance();
   const [isOpen, setIsOpen] = useState(false);
   const CurrentIcon = themeIcons[theme];
+
+  useEffect(() => {
+    if (!isOpen) return undefined;
+    const closeOnEscape = (event: KeyboardEvent) => {
+      if (event.key === 'Escape') setIsOpen(false);
+    };
+    document.addEventListener('keydown', closeOnEscape);
+    return () => document.removeEventListener('keydown', closeOnEscape);
+  }, [isOpen]);
 
   const selectTheme = (value: ThemeId) => {
     setTheme(value);
