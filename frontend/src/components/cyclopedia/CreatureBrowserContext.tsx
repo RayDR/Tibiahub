@@ -4,7 +4,7 @@ import { creatureBrowserApi, type CreatureBrowseItem } from '../../services/crea
 
 interface CreatureBrowserContextValue {
   selectedCreatureId: number | null;
-  selectCreature: (id: number) => void;
+  selectCreature: (id: number | null) => void;
   registerCreature: (id: number) => void;
   browseItem: (id: number) => CreatureBrowseItem | undefined;
 }
