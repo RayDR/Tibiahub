@@ -1,20 +1,36 @@
 /*
  * Cyclopedia selection-preview behavior.
  *
- * The header, hero, tabs, search and discovery controls keep a stable width.
- * Only the dynamic results region yields horizontal space to the preview in
- * Wide desktop mode. Compact and smaller viewports use a non-modal overlay.
+ * Wide owns the real viewport width. The preview is a viewport dock visually
+ * anchored to the result region: at page top it begins with the results, then
+ * follows scroll until it reaches the bottom edge of the sticky application
+ * controls. It never participates in hero/tabs/search layout.
  */
+
+/* The legacy Cyclopedia composition used a 96rem page cap. Wide must override
+ * that page-specific rule, not only the generic ds-container rule. */
+.app-shell-cyclopedia .cyclopedia-reference-frame,
+.app-shell-cyclopedia .cyclopedia-reference-frame > main[data-workspace-main='cyclopedia'] {
+  width: 100%;
+  max-width: none;
+}
+
+html[data-layout='wide'] .app-shell-cyclopedia main[data-workspace-main='cyclopedia'] > .ds-container {
+  width: 100%;
+  max-width: none !important;
+  margin-inline: 0;
+}
+
 [data-cyclopedia-preview-host='true'] {
   position: relative;
 }
 
 .cyclopedia-creature-preview-dock {
   position: fixed;
-  z-index: calc(var(--z-overlay) + 1);
-  top: calc(var(--app-sticky-offset) + var(--space-4));
+  z-index: var(--z-map-overlay);
+  top: var(--cyclopedia-preview-top, calc(var(--app-sticky-offset) + var(--space-4)));
   right: var(--space-4);
-  bottom: var(--space-4);
+  bottom: var(--cyclopedia-preview-bottom, var(--space-4));
   left: auto;
   width: min(29rem, calc(100vw - 2rem));
   min-width: 0;
@@ -29,6 +45,7 @@
 .cyclopedia-creature-preview-sticky {
   position: relative;
   min-width: 0;
+  min-height: 100%;
 }
 
 .cyclopedia-creature-preview-close {
@@ -59,11 +76,7 @@
   padding-right: 3.35rem;
 }
 
-/*
- * Creature/Boss result density.
- * The existing page markup intentionally stays generic; :has() lets the shared
- * monster grid scale without duplicating a Creature-only or Boss-only layout.
- */
+/* Creature/Boss result density. */
 .app-shell-cyclopedia .grid:has(> [data-cyclopedia-result] > .creature-browser-card) {
   grid-template-columns: minmax(0, 1fr) !important;
 }
@@ -100,9 +113,10 @@
 }
 
 /*
- * Wide desktop is the only mode that reserves horizontal result space.
- * The portal is hosted inside the results region, so hero/tabs/search never
- * resize when the preview opens or closes.
+ * Wide desktop reserves only result-space for the fixed side dock. The preview
+ * itself is portaled to document.body, so no ancestor clipping, transformed
+ * container, or changing sticky height can make it float underneath the app
+ * chrome. Navbar and sticky search remain above it in the stacking order.
  */
 @media (min-width: 1440px) {
   html[data-layout='wide'] [data-cyclopedia-preview-host='true'] {
@@ -111,26 +125,8 @@
   }
 
   html[data-layout='wide'] .cyclopedia-creature-preview-dock {
-    position: absolute;
-    z-index: var(--z-sticky);
-    top: 0;
-    right: 0;
-    bottom: 0;
-    left: auto;
+    right: clamp(1.5rem, 2vw, 3rem);
     width: 29rem;
-    max-height: none;
-    overflow: visible;
-    border-radius: 0;
-    box-shadow: none;
-  }
-
-  html[data-layout='wide'] .cyclopedia-creature-preview-sticky {
-    position: sticky;
-    top: calc(var(--app-sticky-offset) + var(--space-4));
-    max-height: calc(100dvh - var(--app-sticky-offset) - var(--space-8));
-    overflow-y: auto;
-    border-radius: var(--radius-lg);
-    scrollbar-width: thin;
   }
 
   /* Keep a predictable four-card working set beside the preview. */
@@ -143,7 +139,6 @@
 @media (min-width: 1024px) and (max-width: 1439px) {
   .cyclopedia-creature-preview-dock {
     right: var(--space-4);
-    bottom: var(--space-4);
     width: min(29rem, calc(100vw - 2rem));
   }
 }
