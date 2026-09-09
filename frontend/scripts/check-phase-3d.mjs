@@ -44,7 +44,8 @@ requireText(page, 'h-[calc(100dvh', 'map does not retain the bounded mobile view
 requireText(viewer, 'FocusViewport', 'point/area focus controller is missing');
 requireText(viewer, 'maxZoom: 3', 'fit-bounds lacks a large-area zoom guard');
 requireText(viewer, 'MapMarkerKind', 'semantic marker kinds are missing');
-requireText(viewer, 'markerInitial', 'semantic marker fallback initials are missing');
+requireText(viewer, 'markerFallbackSvg', 'semantic marker SVG fallback renderer is missing');
+requireText(viewer, 'stroke="currentColor"', 'semantic marker SVG fallbacks must inherit theme color');
 requireText(viewer, 'markerIcon', 'semantic map pin renderer is missing');
 requireText(metadataPanel, 'buildMapEntityUrl', 'Creature/NPC/Location detail-to-map contract is missing');
 requireText(questInsets, 'canonicalEntityId: entityId', 'Quest detail-to-map link omits canonical identity');

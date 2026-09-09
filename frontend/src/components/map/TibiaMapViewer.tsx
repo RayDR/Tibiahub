@@ -83,16 +83,20 @@ function MapLifecycle() {
   return null;
 }
 
-function markerInitial(kind: MapMarkerKind): string {
-  if (kind === 'group') return '+';
-  if (kind === 'hunt_zone') return 'H';
-  if (kind === 'location' || kind === 'town') return 'L';
-  return kind.slice(0, 1).toUpperCase();
+function markerFallbackSvg(kind: MapMarkerKind): string {
+  const attrs = 'viewBox="0 0 24 24" width="19" height="19" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"';
+  if (kind === 'creature') return `<svg ${attrs}><circle cx="8" cy="7" r="2"/><circle cx="16" cy="7" r="2"/><circle cx="5.5" cy="12.5" r="1.7"/><circle cx="18.5" cy="12.5" r="1.7"/><path d="M12 11c-4 0-7 3.5-7 7 0 1.7 1.2 2.7 2.8 2.7 1.3 0 2.3-1.2 4.2-1.2s2.9 1.2 4.2 1.2c1.6 0 2.8-1 2.8-2.7 0-3.5-3-7-7-7Z"/></svg>`;
+  if (kind === 'boss') return `<svg ${attrs}><path d="M5.5 9.5C5.5 4.8 8.2 2 12 2s6.5 2.8 6.5 7.5c0 2.8-1.2 4.8-3.2 6.2V21l-2.1-1.8L12 22l-1.2-2.8L8.7 21v-5.3c-2-1.4-3.2-3.4-3.2-6.2Z"/><circle cx="9.5" cy="9" r="1.2"/><circle cx="14.5" cy="9" r="1.2"/><path d="m10.5 13 1.5-1.5 1.5 1.5M8.5 15.5h7"/></svg>`;
+  if (kind === 'item') return `<svg ${attrs}><path d="M9 3c1 1.8 2 2.5 3 2.5S14 4.8 15 3l2 2.5-2 2.5H9L7 5.5 9 3Z"/><path d="M9 8c-3.5 3.5-5 6.8-5 9.5C4 21 7 22 12 22s8-1 8-4.5c0-2.7-1.5-6-5-9.5"/><path d="M9.5 15.5c1.6 1 3.4 1 5 0"/></svg>`;
+  if (kind === 'quest') return `<svg ${attrs}><path d="M6 3h12v17H6a3 3 0 0 1-3-3V6a3 3 0 0 1 3-3Z"/><path d="M6 3v17M9 8h6M9 12h5"/><path d="m14 16 1.5 1 1.5-1v5l-1.5-1-1.5 1v-5Z"/></svg>`;
+  if (kind === 'hunt_zone') return `<svg ${attrs}><circle cx="12" cy="12" r="9"/><path d="m15 7-2.3 5.7L7 15l2.3-5.7L15 7Z"/><path d="M12 1v3M12 20v3M1 12h3M20 12h3"/></svg>`;
+  if (kind === 'npc') return `<svg ${attrs}><circle cx="9" cy="8" r="3"/><circle cx="16.5" cy="8.5" r="2.5"/><path d="M3 20c.6-4.5 2.6-7 6-7s5.4 2.5 6 7M14 14c1-.8 2-1.2 3.2-1.2 2.8 0 4.3 2.3 4.8 5.7"/></svg>`;
+  if (kind === 'group') return `<svg ${attrs}><path d="M12 5v14M5 12h14"/></svg>`;
+  return `<svg ${attrs}><path d="M12 22s7-6.2 7-13a7 7 0 1 0-14 0c0 6.8 7 13 7 13Z"/><circle cx="12" cy="9" r="2.5"/></svg>`;
 }
 
 function markerIcon(marker: MapMarker): L.DivIcon {
   const markerKind = marker.kind || 'location';
-  const initial = markerInitial(markerKind);
   const requestedImage = marker.imageUrl?.startsWith('/')
     ? marker.imageUrl
     : markerKind === 'npc'
@@ -108,7 +112,7 @@ function markerIcon(marker: MapMarker): L.DivIcon {
   const imageLayer = localImage
     ? `<span class="tibia-map-pin-image" style="background-image:url('${localImage}')" aria-hidden="true"></span>`
     : '';
-  const html = `<span class="tibia-map-pin-head"><span class="tibia-map-pin-fallback" aria-hidden="true">${initial}</span>${imageLayer}</span><span class="tibia-map-pin-tip" aria-hidden="true"></span>`;
+  const html = `<span class="tibia-map-pin-head"><span class="tibia-map-pin-fallback" aria-hidden="true">${markerFallbackSvg(markerKind)}</span>${imageLayer}</span><span class="tibia-map-pin-tip" aria-hidden="true"></span>`;
   return L.divIcon({
     className: `tibia-map-pin tibia-map-pin--${markerKind}`,
     html,

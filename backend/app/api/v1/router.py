@@ -3,7 +3,7 @@ API v1 Router - Combines all API endpoints
 """
 from fastapi import APIRouter, Depends
 
-from app.api.v1 import assistant, creatures, hunt_zones, admin as admin_old, recommendations, items, item_browser, quests, quest_browser, knowledge_graph, npcs_locations, seo, spatial, tibia_map, hunt_analyzer
+from app.api.v1 import assistant, creatures, hunt_zones, admin as admin_old, recommendations, items, item_browser, quests, quest_browser, knowledge_graph, npcs_locations, seo, spatial, tibia_map, hunt_analyzer, category_visuals
 from app.api.v1.endpoints import auth, guild, profile, admin, hunts, events, catalog, sync, password_reset, email_verification, character_ownership, tibia, sync_admin, raffles, raffle_participants, health, me_activity, notifications, workspaces, leadership, knowledge_admin, maintenance, maintenance_mode, admin_assistance, guild_permissions, quest_progress
 
 api_router = APIRouter()
@@ -21,6 +21,7 @@ api_router.include_router(character_ownership.admin_router, prefix="/admin", tag
 api_router.include_router(admin.router, prefix="/guild-management", tags=["Guild Management"])
 api_router.include_router(guild_permissions.router, prefix="/guild-management", tags=["Guild Permissions"])
 api_router.include_router(hunts.router, prefix="/hunts", tags=["Hunt Catalog"])
+api_router.include_router(category_visuals.router)
 api_router.include_router(catalog.router, prefix="/catalog", tags=["Catalog"])
 api_router.include_router(events.router, prefix="/events", tags=["Events & Raffles"])
 api_router.include_router(raffle_participants.router, prefix="/raffles", tags=["Raffle Participants"])

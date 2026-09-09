@@ -1,0 +1,48 @@
+name: Backend Quality
+
+on:
+  pull_request:
+    branches: [develop]
+    paths:
+      - 'backend/**'
+      - 'scripts/**'
+      - '.github/workflows/backend-quality.yml'
+  push:
+    branches: [develop]
+    paths:
+      - 'backend/**'
+      - 'scripts/**'
+      - '.github/workflows/backend-quality.yml'
+
+permissions:
+  contents: read
+
+concurrency:
+  group: backend-quality-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+          cache: pip
+          cache-dependency-path: backend/requirements-dev.txt
+
+      - name: Create backend virtualenv
+        run: python -m venv backend/venv
+
+      - name: Install dependencies
+        run: backend/venv/bin/python -m pip install -r backend/requirements-dev.txt
+
+      - name: Compile backend
+        run: backend/venv/bin/python -m compileall -q backend/app backend/main.py scripts
+
+      - name: Run backend tests
+        run: backend/venv/bin/python -m pytest backend/tests -q

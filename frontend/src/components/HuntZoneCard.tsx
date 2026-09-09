@@ -3,6 +3,7 @@ import { Link } from 'react-router-dom';
 import { useTranslation } from 'react-i18next';
 
 import type { HuntZone } from '../types';
+import BrandCategoryFallbackIcon from './icons/BrandCategoryFallbackIcon';
 import LocalizedMapPreview from './map/LocalizedMapPreview';
 import { formatDisplayFloor } from '../utils/tibiaFloors';
 
@@ -34,7 +35,11 @@ export default function HuntZoneCard({ zone, linkState, onNavigate, rawExperienc
         />
         <div className="pointer-events-none absolute inset-0 bg-gradient-to-b from-transparent via-transparent to-surface-raised/35" />
       </div>
-    ) : null}
+    ) : (
+      <div className="grid h-28 w-full shrink-0 place-items-center border-b border-line bg-surface-base/55 text-primary" aria-hidden="true">
+        <BrandCategoryFallbackIcon category="zones" className="size-12 opacity-80" />
+      </div>
+    )}
 
     <div className="flex min-w-0 flex-1 flex-col p-4 text-content-primary sm:p-5">
       {score != null ? (
