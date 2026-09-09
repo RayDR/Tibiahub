@@ -24,7 +24,9 @@ interface AppTabsProps {
   iconOnly?: boolean;
 }
 
-const CYCLOPEDIA_TAB_KEYS = new Set([
+type CyclopediaMode = CyclopediaPersonalHistoryMode & CyclopediaPopularMode;
+
+const CYCLOPEDIA_TAB_KEYS = new Set<CyclopediaMode>([
   'creatures',
   'bosses',
   'items',
@@ -46,11 +48,13 @@ const AppTabs: React.FC<AppTabsProps> = ({
 
   const isCyclopediaTabs =
     items.length === CYCLOPEDIA_TAB_KEYS.size &&
-    items.every((item) => CYCLOPEDIA_TAB_KEYS.has(item.key));
+    items.every((item) => CYCLOPEDIA_TAB_KEYS.has(item.key as CyclopediaMode));
   const hasCanonicalCyclopediaChrome =
-    isCyclopediaTabs && !compact && CYCLOPEDIA_TAB_KEYS.has(activeKey);
+    isCyclopediaTabs &&
+    !compact &&
+    CYCLOPEDIA_TAB_KEYS.has(activeKey as CyclopediaMode);
   const cyclopediaMode = hasCanonicalCyclopediaChrome
-    ? activeKey as CyclopediaPersonalHistoryMode & CyclopediaPopularMode
+    ? activeKey as CyclopediaMode
     : null;
 
   useLayoutEffect(() => {
