@@ -50,10 +50,16 @@ Secrets:
   secrets generate --confirm-generate-secrets
 
 Deploy:
-  deploy preflight --dry-run
+  deploy [--confirm-deploy] [--previous-commit <sha40>]
+  deploy dry-run [--confirm-deploy]
   deploy status
-  deploy run --confirm-deploy-tibiahub [--previous-commit <sha40>]
-  deploy rollback --confirm-rollback-tibiahub <evidence_dir>
+  deploy history
+  deploy rollback [<deployment-dir>] [--confirm-rollback]
+
+Notes:
+  --confirm-deploy only bypasses the non-standard branch approval guard.
+  Normal deploys from an allowed branch do not require a confirmation flag.
+  Rollback without a deployment directory uses the snapshot for the current deployment.
 
 Media:
   media test --item-id <id> [--concurrency <n>] [--base-url <url>]
@@ -300,44 +306,178 @@ cmd_secrets() {
   esac
 }
 
+deploy_root_dir() {
+  printf '%s' "${TIBIAHUB_DEPLOY_ROOT:-/forge/tibiahub-backups/deployments}"
+}
+
+deploy_status() {
+  local root_dir
+  root_dir="$(deploy_root_dir)"
+  [[ -d "$root_dir" ]] || { ops_error "Deploy root missing: $root_dir"; return 1; }
+  echo "Deploy root: $root_dir"
+  echo "Recent deployment evidence:"
+  find "$root_dir" -mindepth 1 -maxdepth 1 -type d -name '20*' | sort | tail -n 5
+  if [[ -f "$root_dir/current.env" ]]; then
+    echo
+    echo "Current deployment:"
+    sed -n '1,100p' "$root_dir/current.env"
+  fi
+}
+
+deploy_history() {
+  local root_dir dir status target branch previous started
+  root_dir="$(deploy_root_dir)"
+  [[ -d "$root_dir" ]] || { ops_error "Deploy root missing: $root_dir"; return 1; }
+  printf '%-36s %-10s %-14s %-12s %s\n' "DEPLOYMENT" "STATUS" "BRANCH" "COMMIT" "PREVIOUS"
+  while IFS= read -r dir; do
+    status="unknown"
+    [[ -f "$dir/SUCCEEDED" ]] && status="succeeded"
+    [[ -f "$dir/FAILED" ]] && status="failed"
+    [[ -f "$dir/ROLLBACK_SUCCEEDED" || -f "$dir/rollback.env" ]] && status="rolledback"
+    target="$(awk -F= '$1 == "target_commit" {print $2}' "$dir/metadata.env" 2>/dev/null || true)"
+    branch="$(awk -F= '$1 == "target_branch" {print $2}' "$dir/metadata.env" 2>/dev/null || true)"
+    previous="$(awk -F= '$1 == "previous_commit" {print $2}' "$dir/metadata.env" 2>/dev/null || true)"
+    started="$(basename "$dir")"
+    printf '%-36s %-10s %-14s %-12s %s\n' "$started" "$status" "${branch:-unknown}" "${target:0:12}" "${previous:0:12}"
+  done < <(find "$root_dir" -mindepth 1 -maxdepth 1 -type d -name '20*' | sort -r | head -n 20)
+}
+
+deploy_run() {
+  local dry_run="$1"
+  shift
+  local args=()
+  local confirm_branch=0
+  local previous_commit=""
+
+  while (($#)); do
+    case "$1" in
+      --confirm-deploy)
+        confirm_branch=1
+        shift
+        ;;
+      --confirm-deploy-tibiahub)
+        ops_warn "--confirm-deploy-tibiahub is deprecated; use --confirm-deploy only for non-standard branch approval."
+        confirm_branch=1
+        shift
+        ;;
+      --previous-commit)
+        [[ $# -ge 2 ]] || { ops_error "--previous-commit requires a 40-character commit."; return 2; }
+        previous_commit="$2"
+        shift 2
+        ;;
+      --dry-run)
+        dry_run=1
+        shift
+        ;;
+      *)
+        ops_error "Unknown deploy option: $1"
+        return 2
+        ;;
+    esac
+  done
+
+  [[ "$dry_run" == 1 ]] && args+=(--dry-run)
+  [[ "$confirm_branch" == 1 ]] && args+=(--confirm-deploy)
+  [[ -n "$previous_commit" ]] && args+=(--previous-commit "$previous_commit")
+  bash "$ROOT/deploy/scripts/deploy.sh" "${args[@]}"
+}
+
+deploy_rollback() {
+  local root_dir evidence="" confirm=0 answer
+  root_dir="$(deploy_root_dir)"
+
+  while (($#)); do
+    case "$1" in
+      --confirm-rollback)
+        confirm=1
+        shift
+        ;;
+      --confirm-rollback-tibiahub)
+        ops_warn "--confirm-rollback-tibiahub is deprecated; use --confirm-rollback."
+        confirm=1
+        shift
+        ;;
+      -* )
+        ops_error "Unknown rollback option: $1"
+        return 2
+        ;;
+      *)
+        [[ -z "$evidence" ]] || { ops_error "Rollback accepts at most one deployment directory."; return 2; }
+        evidence="$1"
+        shift
+        ;;
+    esac
+  done
+
+  if [[ -z "$evidence" ]]; then
+    [[ -f "$root_dir/current.env" ]] || {
+      ops_error "No current deployment state exists. Pass a deployment directory from 'deploy history'."
+      return 2
+    }
+    evidence="$(awk -F= '$1 == "snapshot_dir" {print $2}' "$root_dir/current.env")"
+  elif [[ "$evidence" != /* ]]; then
+    evidence="$root_dir/$evidence"
+  fi
+
+  [[ -n "$evidence" && -d "$evidence" ]] || {
+    ops_error "Rollback deployment evidence not found: ${evidence:-unknown}"
+    return 2
+  }
+
+  if [[ "$confirm" != 1 ]]; then
+    if [[ -t 0 && -t 1 ]]; then
+      ops_warn "Rollback will restore database, frontend, runtime and PM2 state from: $evidence"
+      read -r -p "Continue with rollback? [y/N] " answer
+      case "$answer" in
+        y|Y|yes|YES) ;;
+        *) ops_warn "Rollback cancelled."; return 1 ;;
+      esac
+    else
+      ops_error "Rollback requires interactive approval or --confirm-rollback."
+      return 2
+    fi
+  fi
+
+  bash "$ROOT/deploy/scripts/rollback.sh" --confirm-rollback-tibiahub "$evidence"
+}
+
 cmd_deploy() {
-  local sub="${1:-}"
-  shift || true
-  case "$sub" in
-    preflight)
-      [[ "${1:-}" == "--dry-run" ]] || { ops_error "Usage: deploy preflight --dry-run"; return 2; }
-      bash "$ROOT/deploy/scripts/deploy.sh" --dry-run
+  local action="${1:-}"
+  case "$action" in
+    "")
+      deploy_run 0
+      ;;
+    dry-run)
+      shift
+      deploy_run 1 "$@"
       ;;
     status)
-      local root_dir="${TIBIAHUB_DEPLOY_ROOT:-/forge/tibiahub-backups/deployments}"
-      [[ -d "$root_dir" ]] || { ops_error "Deploy root missing: $root_dir"; return 1; }
-      echo "Deploy root: $root_dir"
-      find "$root_dir" -mindepth 1 -maxdepth 1 -type d -name '20*' | sort | tail -n 5
-      if [[ -f "$root_dir/current.env" ]]; then
-        echo
-        sed -n '1,80p' "$root_dir/current.env"
-      fi
+      shift
+      [[ $# -eq 0 ]] || { ops_error "Usage: deploy status"; return 2; }
+      deploy_status
       ;;
-    run)
-      [[ "${1:-}" == "--confirm-deploy-tibiahub" ]] || { ops_error "Usage: deploy run --confirm-deploy-tibiahub [--previous-commit <sha40>]"; return 2; }
-      if [[ "${2:-}" == "--previous-commit" ]]; then
-        [[ $# -eq 3 ]] || { ops_error "Usage: deploy run --confirm-deploy-tibiahub [--previous-commit <sha40>]"; return 2; }
-        bash "$ROOT/deploy/scripts/deploy.sh" --confirm-deploy-tibiahub --previous-commit "$3"
-      else
-        [[ $# -eq 1 ]] || { ops_error "Usage: deploy run --confirm-deploy-tibiahub [--previous-commit <sha40>]"; return 2; }
-        bash "$ROOT/deploy/scripts/deploy.sh" --confirm-deploy-tibiahub
-      fi
+    history)
+      shift
+      [[ $# -eq 0 ]] || { ops_error "Usage: deploy history"; return 2; }
+      deploy_history
       ;;
     rollback)
-      [[ "${1:-}" == "--confirm-rollback-tibiahub" && $# -eq 2 ]] || {
-        ops_error "Usage: deploy rollback --confirm-rollback-tibiahub <evidence_dir>"
-        return 2
-      }
-      bash "$ROOT/deploy/scripts/rollback.sh" --confirm-rollback-tibiahub "$2"
+      shift
+      deploy_rollback "$@"
+      ;;
+    preflight)
+      shift
+      [[ "${1:-}" == "--dry-run" ]] && shift
+      ops_warn "'deploy preflight --dry-run' is deprecated; use 'deploy dry-run'."
+      deploy_run 1 "$@"
+      ;;
+    run)
+      shift
+      ops_warn "'deploy run' is deprecated; use 'deploy'."
+      deploy_run 0 "$@"
       ;;
     *)
-      ops_error "Unknown deploy subcommand: $sub"
-      return 2
+      deploy_run 0 "$@"
       ;;
   esac
 }
@@ -394,6 +534,7 @@ main() {
     admin) cmd_admin "$@" ;;
     secrets) cmd_secrets "$@" ;;
     deploy) cmd_deploy "$@" ;;
+    rollback) cmd_deploy rollback "$@" ;;
     media) cmd_media "$@" ;;
     *)
       ops_error "Unknown command: $command"
