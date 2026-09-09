@@ -14,58 +14,133 @@ import {
 import type { ItemMedia } from '../../types';
 import { availableItemMediaUrl } from '../../utils/entityMedia';
 
-type PersonalHistoryMode = 'items' | 'zones';
+export type CyclopediaPersonalHistoryMode =
+  | 'creatures'
+  | 'bosses'
+  | 'items'
+  | 'quests'
+  | 'zones'
+  | 'npcs';
 
 interface VisitAggregate {
-  count: number;
   latest: string;
   name: string;
   slug: string;
   mediaUrl?: string;
 }
 
-function expectedActivity(mode: PersonalHistoryMode) {
-  return mode === 'items' ? 'view_item' : 'view_zone';
+interface StoredRecentCard {
+  id?: string;
+  name?: string;
+  to?: string;
+  imageUrl?: string;
+  subtitle?: string;
+  createdAt?: string;
+}
+
+const activityByMode: Record<CyclopediaPersonalHistoryMode, string> = {
+  creatures: 'view_creature',
+  bosses: 'view_boss',
+  items: 'view_item',
+  quests: 'view_quest',
+  zones: 'view_zone',
+  npcs: 'view_npc',
+};
+
+function itemMedia(mediaUrl?: string): string | undefined {
+  return availableItemMediaUrl(
+    mediaUrl
+      ? { status: 'available', url: mediaUrl } satisfies ItemMedia
+      : undefined,
+  );
 }
 
 function toCard(
-  mode: PersonalHistoryMode,
+  mode: CyclopediaPersonalHistoryMode,
   entityId: string,
   visit: VisitAggregate,
-  visitsLabel: (count: number) => string,
 ): CompactEntityStripItem {
+  if (mode === 'creatures' || mode === 'bosses') {
+    return {
+      id: `recent:${mode}:${entityId}`,
+      name: visit.name,
+      to: `/creatures/${visit.slug || entityId}`,
+      imageUrl: `/api/v1/creatures/${entityId}/image?placeholder=false`,
+    };
+  }
+
   if (mode === 'items') {
     return {
-      id: `visited:items:${entityId}`,
+      id: `recent:items:${entityId}`,
       name: visit.name,
-      subtitle: visitsLabel(visit.count),
       to: `/items/${visit.slug || entityId}`,
-      imageUrl: availableItemMediaUrl(
-        visit.mediaUrl
-          ? { status: 'available', url: visit.mediaUrl } satisfies ItemMedia
-          : undefined,
-      ),
+      imageUrl: itemMedia(visit.mediaUrl),
+    };
+  }
+
+  if (mode === 'quests') {
+    return {
+      id: `recent:quests:${entityId}`,
+      name: visit.name,
+      to: `/quests/${visit.slug || entityId}`,
+    };
+  }
+
+  if (mode === 'zones') {
+    return {
+      id: `recent:zones:${entityId}`,
+      name: visit.name,
+      to: `/hunt-zones/${visit.slug || entityId}`,
+      imageUrl: `/api/v1/hunt-zones/${entityId}/map-image?placeholder=false`,
     };
   }
 
   return {
-    id: `visited:zones:${entityId}`,
+    id: `recent:npcs:${entityId}`,
     name: visit.name,
-    subtitle: visitsLabel(visit.count),
-    to: `/hunt-zones/${visit.slug || entityId}`,
-    imageUrl: `/api/v1/hunt-zones/${entityId}/map-image?placeholder=false`,
+    to: `/npcs/${visit.slug || entityId}`,
+    imageUrl: visit.mediaUrl,
   };
+}
+
+function loadLocalRecent(
+  mode: CyclopediaPersonalHistoryMode,
+): CompactEntityStripItem[] {
+  try {
+    const raw = window.localStorage.getItem(`cyclopedia_recent_${mode}`);
+    if (!raw) return [];
+
+    const parsed = JSON.parse(raw) as StoredRecentCard[];
+    if (!Array.isArray(parsed)) return [];
+
+    return parsed
+      .filter((item) => item?.name && item?.to)
+      .sort((left, right) =>
+        String(right.createdAt || '').localeCompare(String(left.createdAt || '')),
+      )
+      .slice(0, 6)
+      .map((item, index) => ({
+        id: item.id || `local:${mode}:${index}:${item.name}`,
+        name: String(item.name),
+        to: String(item.to),
+        imageUrl: item.imageUrl ? String(item.imageUrl) : undefined,
+      }));
+  } catch {
+    return [];
+  }
 }
 
 export default function CyclopediaPersonalHistoryStrip({
   mode,
 }: {
-  mode: PersonalHistoryMode;
+  mode: CyclopediaPersonalHistoryMode;
 }) {
-  const { t } = useTranslation();
+  const { t, i18n } = useTranslation();
   const { isAuthenticated } = useAuth();
   const location = useLocation();
-  const [items, setItems] = useState<CompactEntityStripItem[]>([]);
+  const [items, setItems] = useState<CompactEntityStripItem[]>(() =>
+    loadLocalRecent(mode),
+  );
 
   const returnPath = useMemo(
     () => `${location.pathname}${location.search}`,
@@ -77,16 +152,16 @@ export default function CyclopediaPersonalHistoryStrip({
   );
 
   useEffect(() => {
-    if (!isAuthenticated) {
-      setItems([]);
-      return undefined;
-    }
+    const localFallback = loadLocalRecent(mode);
+    setItems(localFallback);
+
+    if (!isAuthenticated) return undefined;
 
     const controller = new AbortController();
-    const activityType = expectedActivity(mode);
+    const activityType = activityByMode[mode];
 
     void activityApi
-      .getMine(100, controller.signal)
+      .getMine(120, controller.signal)
       .then((activity) => {
         if (controller.signal.aborted) return;
 
@@ -99,54 +174,48 @@ export default function CyclopediaPersonalHistoryStrip({
           if (!entityId || !name) continue;
 
           const current = visits.get(entityId);
-          const latest =
-            current && current.latest > entry.created_at
-              ? current.latest
-              : entry.created_at;
+          const newest = !current || entry.created_at > current.latest;
+          if (!newest) continue;
 
           visits.set(entityId, {
-            count: (current?.count || 0) + 1,
-            latest,
+            latest: entry.created_at,
             name,
-            slug:
-              String(entry.metadata?.slug || '').trim() ||
-              current?.slug ||
-              '',
-            mediaUrl:
-              String(entry.metadata?.media_url || '').trim() ||
-              current?.mediaUrl,
+            slug: String(entry.metadata?.slug || '').trim(),
+            mediaUrl: String(entry.metadata?.media_url || '').trim() || undefined,
           });
         }
 
         const cards = [...visits.entries()]
-          .sort(
-            ([, left], [, right]) =>
-              right.count - left.count ||
-              right.latest.localeCompare(left.latest),
-          )
-          .slice(0, 5)
-          .map(([entityId, visit]) =>
-            toCard(mode, entityId, visit, (count) =>
-              t('cyclopedia.cards.visits', { count }),
-            ),
-          );
+          .sort(([, left], [, right]) => right.latest.localeCompare(left.latest))
+          .slice(0, 6)
+          .map(([entityId, visit]) => toCard(mode, entityId, visit));
 
-        setItems(cards);
+        setItems(cards.length ? cards : localFallback);
       })
       .catch(() => {
-        if (!controller.signal.aborted) setItems([]);
+        if (!controller.signal.aborted) setItems(localFallback);
       });
 
     return () => controller.abort();
-  }, [isAuthenticated, mode, t]);
+  }, [isAuthenticated, mode]);
+
+  if (items.length === 0) return null;
+
+  const title = t('cyclopedia.cards.recentlyViewed', {
+    defaultValue: i18n.resolvedLanguage?.startsWith('es')
+      ? 'Vistos recientemente'
+      : 'Recently viewed',
+  });
 
   return (
-    <CompactEntityStrip
-      title={t('cyclopedia.cards.mostVisited')}
-      items={items}
-      variant="chips"
-      linkState={routeState}
-      onNavigate={() => saveCyclopediaReturnTarget(returnPath)}
-    />
+    <div data-cyclopedia-context="recent">
+      <CompactEntityStrip
+        title={title}
+        items={items}
+        variant="chips"
+        linkState={routeState}
+        onNavigate={() => saveCyclopediaReturnTarget(returnPath)}
+      />
+    </div>
   );
 }
