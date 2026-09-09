@@ -16,13 +16,14 @@ export default function CyclopediaCreatureWorkspace({ children }: { children: Re
 function CyclopediaCreatureWorkspaceInner({ children }: { children: ReactNode }) {
   const location = useLocation();
   const browser = useCreatureBrowser();
+  const resetCreatureSelection = browser?.selectCreature;
   const tab = new URLSearchParams(location.search).get('tab') || 'creatures';
   const supportsPreview = tab === 'creatures';
   const showPreview = supportsPreview && browser?.selectedCreatureId != null;
 
   useEffect(() => {
-    if (supportsPreview) browser?.selectCreature(null);
-  }, [browser, location.search, supportsPreview]);
+    if (supportsPreview) resetCreatureSelection?.(null);
+  }, [location.search, resetCreatureSelection, supportsPreview]);
 
   return (
     <div className="cyclopedia-reference-frame" data-preview-open={showPreview ? 'true' : 'false'}>
