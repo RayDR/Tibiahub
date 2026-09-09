@@ -15,8 +15,6 @@ import { CreatureBrowserProvider, useCreatureBrowser } from './CreatureBrowserCo
 import CreaturePreviewPanel from './CreaturePreviewPanel';
 import ItemPreviewPanel from './ItemPreviewPanel';
 
-type PreviewKind = 'creature' | 'boss' | 'item';
-
 type PreviewSelection =
   | { kind: 'creature' | 'boss'; creatureId: number }
   | { kind: 'item'; identifier: string };
