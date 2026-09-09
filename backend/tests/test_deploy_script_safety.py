@@ -23,27 +23,57 @@ def _text(path: Path) -> str:
     return path.read_text(encoding="utf-8")
 
 
-def test_deployment_scripts_are_valid_bash_and_require_exact_confirmation():
-    for script in (DEPLOY, ROLLBACK):
+def test_deployment_scripts_are_valid_bash_and_expose_guarded_operator_cli():
+    for script in (DEPLOY, ROLLBACK, OPS):
         assert script.stat().st_mode & 0o111
         assert subprocess.run(["bash", "-n", str(script)], check=False).returncode == 0
 
-    deploy_result = subprocess.run([str(DEPLOY)], cwd=ROOT, capture_output=True, text=True)
-    rollback_result = subprocess.run([str(ROLLBACK)], cwd=ROOT, capture_output=True, text=True)
-    assert deploy_result.returncode == 2
+    help_result = subprocess.run(
+        [str(OPS), "help"],
+        cwd=ROOT,
+        capture_output=True,
+        text=True,
+        check=False,
+    )
+    rollback_result = subprocess.run(
+        [str(ROLLBACK)],
+        cwd=ROOT,
+        capture_output=True,
+        text=True,
+        check=False,
+    )
+
+    assert help_result.returncode == 0
+    assert "deploy [--confirm-deploy]" in help_result.stdout
+    assert "deploy dry-run" in help_result.stdout
+    assert "deploy status" in help_result.stdout
+    assert "deploy history" in help_result.stdout
+    assert "deploy rollback" in help_result.stdout
+    assert "only bypasses the non-standard branch approval guard" in help_result.stdout
+    assert "deploy run --confirm-deploy-tibiahub" not in help_result.stdout
+
+    # The low-level rollback remains intentionally confirmation-gated because
+    # it restores the database as well as runtime/frontend state. The operator
+    # wrapper provides either an interactive prompt or --confirm-rollback.
     assert rollback_result.returncode == 2
-    assert "--confirm-deploy-tibiahub" in deploy_result.stderr
-    assert "--confirm-rollback-tibiahub" in rollback_result.stderr
+    assert "--confirm-rollback" in rollback_result.stderr
 
 
-def test_deploy_requires_lock_clean_exact_develop_and_expected_head():
+def test_deploy_requires_lock_clean_remote_parity_branch_policy_and_expected_head():
     script = _text(DEPLOY)
     for required in (
         "flock -n",
-        'git branch --show-current)" == "develop"',
+        'target_branch="$(git branch --show-current)"',
         "git status --porcelain --untracked-files=all",
-        "refs/remotes/origin/develop",
+        'git fetch --quiet origin "$target_branch"',
+        'refs/remotes/origin/$target_branch',
         'target_commit" == "$remote_commit',
+        "resolve_default_branch",
+        "branch_is_standard",
+        "approve_nonstandard_branch",
+        '[[ "$branch" == develop ]]',
+        '[[ "$branch" == main || "$branch" == master ]]',
+        "--confirm-deploy",
         'EXPECTED_REVISION=""',
         "migration_heads",
         'EXPECTED_REVISION="${migration_heads[0]}"',
@@ -52,13 +82,21 @@ def test_deploy_requires_lock_clean_exact_develop_and_expected_head():
         "run_alembic_read_only check",
     ):
         assert required in script
-    assert "master" not in script.lower()
+
+    # --confirm-deploy is deliberately narrow: it only approves a
+    # non-standard branch. It must not disable the clean-tree, remote-parity,
+    # database, migration, or health checks above.
+    assert "Non-standard branch guard bypassed with --confirm-deploy" in script
+    assert "detached HEAD is not deployable" in script
 
 
 def test_snapshot_frontend_pm2_health_and_rollback_guards_are_present():
     deploy = _text(DEPLOY)
     rollback = _text(ROLLBACK)
     for required in (
+        "refs/tibiahub/deploy-snapshots/",
+        'git update-ref "$commit_snapshot_ref" "$previous_commit"',
+        "previous-commit.snapshot",
         "pg_dump --format=custom",
         'chmod 600 "$snapshot"',
         'pg_restore --list "$snapshot"',
@@ -78,6 +116,9 @@ def test_snapshot_frontend_pm2_health_and_rollback_guards_are_present():
         "knowledge_worker_heartbeats",
         "raffle_scheduler_state",
         "sync_worker_heartbeats",
+        "target_branch",
+        "previous_branch",
+        "previous_commit_ref",
     ):
         assert required in deploy
     for required in (
@@ -86,6 +127,9 @@ def test_snapshot_frontend_pm2_health_and_rollback_guards_are_present():
         "--clean --if-exists --single-transaction --exit-on-error --no-owner --no-acl",
         '--dbname="$database_name"',
         '--use-list="$restore_list"',
+        "previous_commit_ref",
+        'git rev-parse --verify "$previous_commit_ref^{commit}"',
+        "checkout_previous_commit",
         'git switch --detach "$previous_commit"',
         "frontend-dist-previous",
         "pm2-state.tsv",
@@ -94,6 +138,23 @@ def test_snapshot_frontend_pm2_health_and_rollback_guards_are_present():
     assert "alembic downgrade" not in rollback.lower()
     assert "postgres_admin_dropdb" not in rollback
     assert "postgres_admin_createdb" not in rollback
+
+
+def test_operator_rollback_resolves_current_snapshot_and_keeps_explicit_history_option():
+    ops = _text(OPS)
+    readme = _text(README)
+
+    assert "deploy_rollback" in ops
+    assert 'snapshot_dir" {print $2}' in ops
+    assert 'evidence="$root_dir/$evidence"' in ops
+    assert "--confirm-rollback" in ops
+    assert "Continue with rollback? [y/N]" in ops
+    assert "deploy history" in ops
+
+    assert "scripts/tibiahub-ops.sh deploy rollback" in readme
+    assert "protected Git ref" in readme
+    assert "--previous-commit <sha40>" in readme
+    assert "bootstrap/recovery" in readme
 
 
 def test_pm2_operations_are_bounded_to_the_declared_tibiahub_services():
@@ -137,7 +198,6 @@ def test_scripts_do_not_embed_or_print_database_credentials():
     assert "PGPASSWORD=" not in combined
     assert "cat $TIBIAHUB" not in combined
     assert "/forge/tibiahub-secrets/runtime.env" not in combined
-
 
 
 def test_backend_runtime_is_versioned_activated_and_rollback_safe():
