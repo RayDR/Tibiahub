@@ -1,11 +1,9 @@
 import React, { useEffect, useState } from 'react';
 import { ImageOff } from 'lucide-react';
 
-import bossPlaceholder from '../assets/placeholders/boss.svg';
-import creaturePlaceholder from '../assets/placeholders/creature.svg';
-import lootItemPlaceholder from '../assets/placeholders/loot-item.svg';
+import BrandCategoryFallbackIcon, { type BrandCategoryKey } from './icons/BrandCategoryFallbackIcon';
 
-export type MediaFallbackKind = 'image' | 'item' | 'creature' | 'boss';
+export type MediaFallbackKind = 'image' | 'item' | 'creature' | 'boss' | 'npc' | 'quest' | 'zone';
 
 interface ImageWithFallbackProps {
   src?: string | null;
@@ -18,10 +16,13 @@ interface ImageWithFallbackProps {
 
 const failedMediaUrls = new Set<string>();
 
-const themedFallbacks: Partial<Record<MediaFallbackKind, string>> = {
-  item: lootItemPlaceholder,
-  creature: creaturePlaceholder,
-  boss: bossPlaceholder,
+const brandCategoryForFallback: Partial<Record<MediaFallbackKind, BrandCategoryKey>> = {
+  item: 'items',
+  creature: 'creatures',
+  boss: 'bosses',
+  npc: 'npcs',
+  quest: 'quests',
+  zone: 'zones',
 };
 
 const ImageWithFallback: React.FC<ImageWithFallbackProps> = ({
@@ -40,24 +41,18 @@ const ImageWithFallback: React.FC<ImageWithFallbackProps> = ({
 
   if (!src || failed) {
     const resolvedFallbackKind = fallbackKind || (fallbackLabel === alt ? 'item' : 'image');
-    const themedFallback = themedFallbacks[resolvedFallbackKind];
+    const brandCategory = brandCategoryForFallback[resolvedFallbackKind];
 
     return (
       <div
-        className={`relative flex items-center justify-center overflow-hidden rounded-lg bg-surface text-content-secondary ${containerClassName}`}
+        className={`relative flex items-center justify-center overflow-hidden rounded-lg bg-surface text-primary ${containerClassName}`}
         role="img"
         aria-label={fallbackLabel || alt}
       >
-        {themedFallback ? (
-          <img
-            src={themedFallback}
-            alt=""
-            aria-hidden="true"
-            draggable={false}
-            className="size-full object-contain p-1"
-          />
+        {brandCategory ? (
+          <BrandCategoryFallbackIcon category={brandCategory} className="size-1/2 max-h-12 max-w-12" />
         ) : (
-          <ImageOff size={20} aria-hidden="true" />
+          <ImageOff size={20} className="text-content-secondary" aria-hidden="true" />
         )}
       </div>
     );

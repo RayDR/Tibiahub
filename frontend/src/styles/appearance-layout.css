@@ -1,0 +1,16 @@
+/* User-selectable content-width modes. Keep density and theme independent. */
+[data-layout="compact"] {
+  --app-content-max-width: 90rem;
+  --content-max-width: 90rem;
+}
+
+[data-layout="wide"] {
+  --app-content-max-width: 112rem;
+  --content-max-width: 112rem;
+}
+
+@media (min-width: 1440px) {
+  [data-layout="wide"] .ds-container {
+    padding-inline: clamp(1.5rem, 2vw, 2.75rem);
+  }
+}

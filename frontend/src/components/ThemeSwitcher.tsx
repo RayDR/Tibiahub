@@ -3,9 +3,11 @@ import { Check, Contrast, Crown, Droplets, MoonStar, Mountain, Sparkles } from '
 import { useTranslation } from 'react-i18next';
 import {
   DENSITY_MODES,
+  LAYOUT_MODES,
   MOTION_MODES,
   THEME_IDS,
   type DensityMode,
+  type LayoutMode,
   type MotionMode,
   type ThemeId,
   useAppearance,
@@ -22,7 +24,7 @@ const themeIcons = {
 
 export default function ThemeSwitcher() {
   const { t } = useTranslation();
-  const { theme, motion, density, setTheme, setMotion, setDensity } = useAppearance();
+  const { theme, motion, density, layout, setTheme, setMotion, setDensity, setLayout } = useAppearance();
   const [isOpen, setIsOpen] = useState(false);
   const CurrentIcon = themeIcons[theme];
 
@@ -99,6 +101,13 @@ export default function ThemeSwitcher() {
               onChange={setDensity}
               getLabel={(value) => t(`appearance.densityOptions.${value}`)}
             />
+            <PreferenceGroup
+              label={t('appearance.layout', { defaultValue: 'Content width' })}
+              values={LAYOUT_MODES}
+              selected={layout}
+              onChange={setLayout}
+              getLabel={(value) => t(`appearance.layoutOptions.${value}`, { defaultValue: value === 'compact' ? 'Compact' : 'Wide' })}
+            />
           </Dropdown>
         </>
       ) : null}
@@ -106,7 +115,7 @@ export default function ThemeSwitcher() {
   );
 }
 
-interface PreferenceGroupProps<T extends MotionMode | DensityMode> {
+interface PreferenceGroupProps<T extends MotionMode | DensityMode | LayoutMode> {
   label: string;
   values: readonly T[];
   selected: T;
@@ -114,7 +123,7 @@ interface PreferenceGroupProps<T extends MotionMode | DensityMode> {
   getLabel: (value: T) => string;
 }
 
-function PreferenceGroup<T extends MotionMode | DensityMode>({ label, values, selected, onChange, getLabel }: PreferenceGroupProps<T>) {
+function PreferenceGroup<T extends MotionMode | DensityMode | LayoutMode>({ label, values, selected, onChange, getLabel }: PreferenceGroupProps<T>) {
   return (
     <fieldset className="mt-4">
       <legend className="mb-2 text-xs font-semibold uppercase tracking-wide text-content-secondary">{label}</legend>

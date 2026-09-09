@@ -1,0 +1,55 @@
+/* Public shell presentation controls. */
+.app-nav-grid {
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr) auto;
+  align-items: center;
+  gap: var(--space-3);
+}
+
+.app-nav-center[data-alignment='left'] .app-nav-links {
+  margin-right: auto;
+}
+
+.app-nav-center[data-alignment='center'] .app-nav-links {
+  margin-inline: auto;
+}
+
+.app-nav-center[data-alignment='right'] .app-nav-links {
+  margin-left: auto;
+}
+
+.app-navbar-global-search {
+  position: relative;
+  z-index: var(--z-dropdown);
+}
+
+.app-global-search-field {
+  border-color: rgb(var(--ds-border) / 0.62);
+  background: rgb(var(--ds-surface-base) / 0.62);
+  box-shadow: inset 0 1px 0 rgb(var(--ds-text-primary) / 0.025);
+}
+
+.app-global-search-field:focus-within {
+  border-color: rgb(var(--ds-primary) / 0.58);
+  box-shadow: 0 0 0 2px rgb(var(--ds-primary) / 0.08);
+}
+
+.app-global-search-results {
+  min-width: min(30rem, calc(100vw - 2rem));
+}
+
+@media (min-width: 1024px) {
+  .app-nav-shell {
+    min-height: 3.75rem;
+  }
+
+  .app-nav-link {
+    font-size: var(--font-size-sm);
+  }
+}
+
+@media (max-width: 1279px) {
+  .app-navbar-global-search {
+    width: min(16rem, 24vw);
+  }
+}
