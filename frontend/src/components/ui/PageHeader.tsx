@@ -1,8 +1,9 @@
 import React from 'react';
 import { ChevronRight } from 'lucide-react';
-import { Link } from 'react-router-dom';
+import { Link, useLocation } from 'react-router-dom';
 import { FontAwesomeIcon } from '@fortawesome/react-fontawesome';
 import { IconDefinition } from '@fortawesome/fontawesome-svg-core';
+import { TIBIAHUB_TITLE_ICONS, type TibiaHubTitleIconKey } from '../../assets/brand/brandTitleIcons';
 import { cn } from './cn';
 
 interface PageHeaderProps {
@@ -20,6 +21,12 @@ interface PageHeaderProps {
   className?: string;
 }
 
+const routeTitleIcon = (pathname: string): TibiaHubTitleIconKey | null => {
+  if (pathname === '/cyclopedia') return 'cyclopedia';
+  if (pathname === '/planner') return 'huntPlanner';
+  return null;
+};
+
 const PageHeader: React.FC<PageHeaderProps> = ({
   title,
   subtitle,
@@ -34,8 +41,20 @@ const PageHeader: React.FC<PageHeaderProps> = ({
   contained = false,
   className,
 }) => {
+  const { pathname } = useLocation();
   const alignClass = align === 'left' ? 'text-left' : 'text-center';
   const titleSizeClass = size === 'md' ? 'app-page-title-md' : '';
+  const brandIconKey = routeTitleIcon(pathname);
+  const routeIcon = brandIconKey ? (
+    <img
+      src={TIBIAHUB_TITLE_ICONS[brandIconKey]}
+      alt=""
+      aria-hidden="true"
+      draggable={false}
+      className="size-14 shrink-0 object-contain drop-shadow-lg sm:size-16"
+    />
+  ) : null;
+  const resolvedIcon = iconElement || routeIcon;
 
   return (
     <header className={cn('app-page-header', contained && 'app-page-header-contained', alignClass, className)}>
@@ -53,7 +72,7 @@ const PageHeader: React.FC<PageHeaderProps> = ({
         <div className="min-w-0">
           {eyebrow ? <p className="mb-1 text-xs font-semibold uppercase tracking-[0.14em] text-primary">{eyebrow}</p> : null}
           <h1 className={cn('app-page-title', titleSizeClass, 'inline-flex items-center gap-3')}>
-            {icon ? <FontAwesomeIcon icon={icon} className="text-primary" /> : iconElement ? <span className="text-primary">{iconElement}</span> : null}
+            {resolvedIcon ? <span className="inline-grid shrink-0 place-items-center text-primary">{resolvedIcon}</span> : icon ? <FontAwesomeIcon icon={icon} className="text-primary" /> : null}
             <span className="min-w-0">{title}</span>
           </h1>
           {subtitle ? <p className={cn('app-page-subtitle', align === 'left' && 'mx-0')}>{subtitle}</p> : null}
