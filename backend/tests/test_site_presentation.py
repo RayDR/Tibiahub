@@ -1,8 +1,24 @@
-from app.core.security import create_access_token
+from app.core.security import create_access_token, get_password_hash
+from app.models.user import User
 
 
 def auth(user):
     return {"Authorization": f"Bearer {create_access_token(user.username)}"}
+
+
+def make_user(db, *, username: str, is_superuser: bool):
+    user = User(
+        username=username,
+        email=f"{username}@test.com",
+        hashed_password=get_password_hash("password"),
+        guild_rank="Member",
+        guild_name="TEST GUILD",
+        is_active=True,
+        is_superuser=is_superuser,
+    )
+    db.add(user)
+    db.flush()
+    return user
 
 
 def test_site_presentation_defaults_are_public(client):
@@ -16,8 +32,6 @@ def test_site_presentation_defaults_are_public(client):
 
 
 def test_admin_can_update_public_site_presentation(client, db):
-    from tests.conftest import make_user
-
     admin = make_user(db, username="presentation-admin", is_superuser=True)
     response = client.put(
         "/api/v1/admin/site-presentation",
@@ -37,8 +51,6 @@ def test_admin_can_update_public_site_presentation(client, db):
 
 
 def test_non_admin_cannot_update_site_presentation(client, db):
-    from tests.conftest import make_user
-
     user = make_user(db, username="presentation-user", is_superuser=False)
     response = client.put(
         "/api/v1/admin/site-presentation",
