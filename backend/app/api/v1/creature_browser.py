@@ -160,10 +160,31 @@ def _load_enriched(db: Session, ids: list[int]) -> dict[int, CreatureModel]:
             selectinload(CreatureModel.loot_items).selectinload(LootModel.image_asset),
             selectinload(CreatureModel.spawn_locations).selectinload(SpawnLocation.hunt_zone),
         )
-        .filter(CreatureModel.id.in_(ids))
+        .filter(CreatureModel.id.in_(ids), CreatureModel.is_hidden.is_(False))
         .all()
     )
     return {row.id: row for row in rows}
+
+
+def _browse_item(row: CreatureModel) -> CreatureBrowseItem:
+    locations = [candidate for spawn in row.spawn_locations if (candidate := _location(spawn))]
+    locations.sort(key=lambda value: value.name.lower())
+    return CreatureBrowseItem(
+        id=row.id,
+        slug=row.slug,
+        name=row.name,
+        hitpoints=row.hitpoints,
+        experience=row.experience,
+        is_boss=row.is_boss,
+        difficulty=row.difficulty,
+        classification=row.classification,
+        bestiary_level=row.bestiary_level,
+        bestiary_class=row.bestiary_class,
+        creature_class=row.creature_class,
+        primary_type=row.primary_type,
+        location_preview=locations[0] if locations else None,
+        loot_preview=_rank_loot(row.loot_items, 2),
+    )
 
 
 @router.get("/browser", response_model=CreatureBrowsePage)
@@ -191,38 +212,35 @@ def browse_creatures(
     )
     ids = [row.id for row in base_rows]
     enriched = _load_enriched(db, ids)
-    items: list[CreatureBrowseItem] = []
-    for creature_id in ids:
-        row = enriched.get(creature_id)
-        if row is None:
-            continue
-        locations = [candidate for spawn in row.spawn_locations if (candidate := _location(spawn))]
-        locations.sort(key=lambda value: value.name.lower())
-        items.append(
-            CreatureBrowseItem(
-                id=row.id,
-                slug=row.slug,
-                name=row.name,
-                hitpoints=row.hitpoints,
-                experience=row.experience,
-                is_boss=row.is_boss,
-                difficulty=row.difficulty,
-                classification=row.classification,
-                bestiary_level=row.bestiary_level,
-                bestiary_class=row.bestiary_class,
-                creature_class=row.creature_class,
-                primary_type=row.primary_type,
-                location_preview=locations[0] if locations else None,
-                loot_preview=_rank_loot(row.loot_items, 2),
-            )
-        )
     response.headers["Cache-Control"] = "public, max-age=120, stale-while-revalidate=300"
     return CreatureBrowsePage(
-        items=items,
+        items=[_browse_item(enriched[row_id]) for row_id in ids if row_id in enriched],
         total=_total(db, search=search, category=category, is_boss=is_boss),
         skip=skip,
         limit=limit,
     )
+
+
+@router.get("/browser-items", response_model=list[CreatureBrowseItem])
+def browse_creature_items(
+    ids: str = Query(..., min_length=1),
+    response: Response = None,
+    db: Session = Depends(get_db),
+) -> list[CreatureBrowseItem]:
+    parsed: list[int] = []
+    for token in ids.split(","):
+        token = token.strip()
+        if not token.isdigit():
+            continue
+        value = int(token)
+        if value not in parsed:
+            parsed.append(value)
+        if len(parsed) >= 60:
+            break
+    enriched = _load_enriched(db, parsed)
+    if response is not None:
+        response.headers["Cache-Control"] = "public, max-age=120, stale-while-revalidate=300"
+    return [_browse_item(enriched[row_id]) for row_id in parsed if row_id in enriched]
 
 
 def _modifier_rows(db: Session, creature_id: int) -> list[CreatureCombatModifier]:
