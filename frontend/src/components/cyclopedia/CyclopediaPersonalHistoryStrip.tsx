@@ -34,7 +34,6 @@ interface StoredRecentCard {
   name?: string;
   to?: string;
   imageUrl?: string;
-  subtitle?: string;
   createdAt?: string;
 }
 
@@ -138,9 +137,7 @@ export default function CyclopediaPersonalHistoryStrip({
   const { t, i18n } = useTranslation();
   const { isAuthenticated } = useAuth();
   const location = useLocation();
-  const [items, setItems] = useState<CompactEntityStripItem[]>(() =>
-    loadLocalRecent(mode),
-  );
+  const [items, setItems] = useState<CompactEntityStripItem[]>([]);
 
   const returnPath = useMemo(
     () => `${location.pathname}${location.search}`,
