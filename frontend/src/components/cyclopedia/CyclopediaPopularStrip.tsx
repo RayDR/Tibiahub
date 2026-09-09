@@ -29,6 +29,7 @@ export type CyclopediaPopularMode =
 async function loadPopular(
   mode: CyclopediaPopularMode,
   signal: AbortSignal,
+  dropsLabel: (count: number) => string,
 ): Promise<CompactEntityStripItem[]> {
   if (mode === 'creatures') {
     const rows = await creaturesApi.getPopular(12, signal);
@@ -57,7 +58,7 @@ async function loadPopular(
     return rows.map((row) => ({
       id: `popular:item:${row.normalized_name}`,
       name: row.item_name,
-      subtitle: row.drops?.length != null ? `${row.drops.length} drops` : undefined,
+      subtitle: dropsLabel(row.drops?.length || 0),
       to: `/items/${row.slug || row.normalized_name.split(' ').join('-')}`,
       imageUrl: availableItemMediaUrl(row.media),
     }));
@@ -128,7 +129,11 @@ export default function CyclopediaPopularStrip({
     const controller = new AbortController();
     setItems([]);
 
-    void loadPopular(mode, controller.signal)
+    void loadPopular(
+      mode,
+      controller.signal,
+      (count) => t('cyclopedia.cards.drops', { count }),
+    )
       .then((rows) => {
         if (!controller.signal.aborted) setItems(rows);
       })
@@ -137,7 +142,7 @@ export default function CyclopediaPopularStrip({
       });
 
     return () => controller.abort();
-  }, [mode]);
+  }, [mode, t]);
 
   if (items.length === 0) return null;
 
