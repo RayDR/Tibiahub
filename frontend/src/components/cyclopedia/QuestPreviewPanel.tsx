@@ -14,6 +14,7 @@ import {
 import { Link, useLocation } from 'react-router-dom';
 import { useTranslation } from 'react-i18next';
 
+import '../../i18n/questEnhancements';
 import ImageWithFallback from '../ImageWithFallback';
 import { questsApi } from '../../services/api';
 import type { QuestDetail } from '../../types';
@@ -121,7 +122,7 @@ export default function QuestPreviewPanel({ identifier }: { identifier: string }
       <div className="quest-preview-flags">
         <span><Crown className="size-4 text-primary" />{t('questDetail.premium')}: {booleanLabel(quest.premium_required, t('questDetail.yes'), t('questDetail.no'), t('questDetail.unknown'))}</span>
         <span><BookOpen className="size-4 text-primary" />{t('questDetail.repeatable')}: {booleanLabel(quest.repeatable, t('questDetail.yes'), t('questDetail.no'), t('questDetail.unknown'))}</span>
-        {quest.solo_possible != null ? <span><ShieldCheck className="size-4 text-primary" />Solo: {quest.solo_possible ? t('questDetail.yes') : t('questDetail.no')}</span> : null}
+        {quest.solo_possible != null ? <span><ShieldCheck className="size-4 text-primary" />{t('questEnhancement.solo', { defaultValue: 'Solo' })}: {quest.solo_possible ? t('questDetail.yes') : t('questDetail.no')}</span> : null}
         {quest.duration ? <span><ListOrdered className="size-4 text-primary" />{quest.duration}</span> : null}
       </div>
 
