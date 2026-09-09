@@ -63,11 +63,13 @@ export function KnowledgeCategoryMedia({
   label,
   className = 'size-9',
   mediaClassName = 'size-8',
+  preferCategoryVisual,
 }: {
   category: KnowledgeCategory;
   label: string;
   className?: string;
   mediaClassName?: string;
+  preferCategoryVisual?: boolean;
 }) {
   const { t } = useTranslation();
   const [visuals, setVisuals] = useState<CategoryVisuals>(
@@ -76,7 +78,7 @@ export function KnowledgeCategoryMedia({
   const [failed, setFailed] = useState(false);
   const categorySection = cyclopediaSections.find((section) => section.mode === category);
   const categoryLabel = categorySection ? t(categorySection.i18nLabel) : label;
-  const useCategoryVisual = label === categoryLabel;
+  const useCategoryVisual = preferCategoryVisual ?? label === categoryLabel;
   const imageUrl = useCategoryVisual ? visuals[category] : undefined;
 
   useEffect(() => {
