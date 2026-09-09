@@ -20,13 +20,14 @@ This registry prevents the asset library from becoming a collection of unowned d
 | `src/assets/brand/brandBackground.ts` | Canonical product-world background | canonical | Generated moonlit citadel landscape; optimized WebP data URI used by the shared app shell. Admin intentionally does not use this ambience. |
 | `src/assets/brand/brandTitleIcons.ts` → `cyclopedia` | Cyclopedia page-title illustration | canonical | Open grimoire. Used automatically by the shared `PageHeader` on `/cyclopedia`. |
 | `src/assets/brand/brandTitleIcons.ts` → `huntPlanner` | Hunt Planner page-title illustration | canonical | Route/planner scroll. Used automatically by the shared `PageHeader` on `/planner`. |
-| `src/assets/brand/brandTitleIcons.ts` → `maps` | Maps page-title illustration | canonical | Atlas/map artwork. Registered for the map workspace; placement must respect the full-screen map controls. |
+| `src/assets/brand/brandTitleIcons.ts` → `maps` | Maps page-title illustration | canonical | Atlas/map artwork. Used as the desktop workspace identity marker without displacing map controls. |
 | `src/assets/brand/brandCategoryIcons.ts` → `creatures` | Cyclopedia Creatures emblem | canonical | Gold paw emblem used by top-level category navigation. |
 | `src/assets/brand/brandCategoryIcons.ts` → `bosses` | Cyclopedia Bosses emblem | canonical | Gold skull emblem used by top-level category navigation. |
 | `src/assets/brand/brandCategoryIcons.ts` → `items` | Cyclopedia Loot emblem | canonical | Loot pouch emblem used by top-level category navigation. |
 | `src/assets/brand/brandQuestIcon.ts` | Cyclopedia Quests emblem | canonical | Quest scroll emblem used by top-level category navigation. |
 | `src/assets/brand/brandCategoryIcons.ts` → `zones` | Cyclopedia Hunt Zones emblem | canonical | Route/compass emblem used by top-level category navigation. |
 | `src/assets/brand/brandCategoryIcons.ts` → `npcs` | Cyclopedia NPCs emblem | canonical | NPC medallion used by top-level category navigation. |
+| `src/styles/brand-system.css` | Canonical product surface treatment | canonical | Shared navigation, page-header, dropdown and stone-panel treatment layered on semantic design-system tokens. |
 
 The first production assets are stored as optimized WebP data URIs because the connected repository write path is text-only. Their visual source is the approved generated TibiaHub artwork. Future asset-pipeline work may move the same assets to binary files without changing their semantic roles.
 
