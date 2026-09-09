@@ -1,0 +1,254 @@
+/*
+ * Cyclopedia > Loot reference surface.
+ *
+ * The underlying ItemSearchResult remains the lightweight browse read model.
+ * Cards use media/category/drop data already present in that model, while the
+ * shared selection dock fetches one ItemDetail only for the selected item.
+ */
+
+.app-shell-cyclopedia article[data-cyclopedia-item-card='true'] {
+  position: relative;
+  display: flex;
+  min-width: 0;
+  min-height: 20rem;
+  cursor: pointer;
+  flex-direction: column;
+  overflow: hidden;
+  border-color: rgb(var(--ds-border) / 0.62);
+  border-radius: 0.45rem;
+  background:
+    linear-gradient(180deg, rgb(var(--ds-surface-raised) / 0.88), rgb(var(--ds-surface) / 0.82));
+  box-shadow:
+    0 0.8rem 1.8rem rgb(var(--ds-shadow) / 0.15),
+    inset 0 1px 0 rgb(var(--ds-text-primary) / 0.025);
+  transition:
+    border-color var(--duration-base) var(--ease-standard),
+    box-shadow var(--duration-base) var(--ease-standard),
+    transform var(--duration-base) var(--ease-standard);
+}
+
+.app-shell-cyclopedia article[data-cyclopedia-item-card='true']:hover,
+.app-shell-cyclopedia article[data-cyclopedia-item-card='true']:focus-visible {
+  border-color: rgb(var(--ds-primary) / 0.55);
+  box-shadow:
+    0 1rem 2.3rem rgb(var(--ds-shadow) / 0.22),
+    0 0 0 1px rgb(var(--ds-primary) / 0.1);
+}
+
+.app-shell-cyclopedia article[data-cyclopedia-item-card='true'][data-selected='true'] {
+  border-color: rgb(var(--ds-primary) / 0.9);
+  box-shadow:
+    0 1rem 2.5rem rgb(var(--ds-shadow) / 0.24),
+    0 0 0 1px rgb(var(--ds-primary) / 0.34),
+    inset 0 0 1.6rem rgb(var(--ds-primary) / 0.035);
+}
+
+.app-shell-cyclopedia article[data-cyclopedia-item-card='true'][data-selected='true']::before {
+  content: '';
+  position: absolute;
+  z-index: 2;
+  inset: -1px;
+  pointer-events: none;
+  border-radius: inherit;
+  box-shadow:
+    inset 0 2px 0 rgb(var(--ds-primary) / 0.72),
+    inset 0 -2px 0 rgb(var(--ds-primary) / 0.46);
+}
+
+/* Identity/media region -------------------------------------------------- */
+.app-shell-cyclopedia article[data-cyclopedia-item-card='true'] > div:first-child {
+  display: flex;
+  min-height: 13.5rem;
+  flex: 1 0 auto;
+  flex-direction: column;
+  align-items: stretch;
+  gap: var(--space-3);
+  padding: var(--space-4);
+}
+
+.app-shell-cyclopedia article[data-cyclopedia-item-card='true'] > div:first-child > img,
+.app-shell-cyclopedia article[data-cyclopedia-item-card='true'] > div:first-child > [role='img'] {
+  width: 100% !important;
+  height: 8.25rem !important;
+  flex: 0 0 8.25rem;
+  align-self: center;
+  border: 0 !important;
+  border-radius: 0 !important;
+  padding: var(--space-3) !important;
+  object-fit: contain;
+  background:
+    radial-gradient(circle at 50% 58%, rgb(var(--ds-primary) / 0.07), transparent 42%),
+    linear-gradient(180deg, rgb(var(--ds-surface-base) / 0.26), transparent) !important;
+  image-rendering: pixelated;
+}
+
+.app-shell-cyclopedia article[data-cyclopedia-item-card='true'] > div:first-child > div:last-child {
+  display: flex;
+  min-width: 0;
+  flex-direction: column;
+  gap: var(--space-2);
+}
+
+.app-shell-cyclopedia article[data-cyclopedia-item-card='true'] > div:first-child a[href^='/items/'] {
+  overflow: hidden;
+  color: var(--text-primary);
+  font-family: var(--font-heading);
+  font-size: var(--font-size-lg);
+  font-weight: var(--font-weight-semibold);
+  line-height: var(--line-height-tight);
+  text-decoration: none;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.app-shell-cyclopedia article[data-cyclopedia-item-card='true'] > div:first-child a[href^='/items/']:hover,
+.app-shell-cyclopedia article[data-cyclopedia-item-card='true'] > div:first-child a[href^='/items/']:focus-visible {
+  color: var(--primary);
+  text-decoration: underline;
+  text-underline-offset: 0.18rem;
+}
+
+.app-shell-cyclopedia article[data-cyclopedia-item-card='true'] > div:first-child > div:last-child > div {
+  display: flex;
+  min-width: 0;
+  flex-wrap: wrap;
+  gap: var(--space-1);
+  padding-top: var(--space-2);
+  border-top: 1px solid rgb(var(--ds-border) / 0.28);
+}
+
+/* Drop-source region ----------------------------------------------------- */
+.app-shell-cyclopedia article[data-cyclopedia-item-card='true'] > div:first-child + div {
+  display: grid;
+  min-height: 6.5rem;
+  gap: var(--space-1);
+  margin-top: auto;
+  border-top: 1px solid rgb(var(--ds-border) / 0.38);
+  padding: var(--space-3) var(--space-4) var(--space-4);
+  background: rgb(var(--ds-surface-base) / 0.22);
+}
+
+.app-shell-cyclopedia article[data-cyclopedia-item-card='true'] > div:first-child + div > div {
+  display: flex;
+  min-width: 0;
+  min-height: 1.75rem;
+  align-items: center;
+  gap: var(--space-2);
+  overflow: hidden;
+  border-bottom: 1px solid rgb(var(--ds-border) / 0.18);
+  font-size: var(--font-size-xs);
+}
+
+.app-shell-cyclopedia article[data-cyclopedia-item-card='true'] > div:first-child + div > div:last-child {
+  border-bottom: 0;
+}
+
+.app-shell-cyclopedia article[data-cyclopedia-item-card='true'] > div:first-child + div a[href^='/creatures/'] {
+  min-width: 0;
+  overflow: hidden;
+  color: var(--text-secondary);
+  font-weight: var(--font-weight-medium);
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.app-shell-cyclopedia article[data-cyclopedia-item-card='true'] > div:first-child + div a[href^='/creatures/']:hover {
+  color: var(--primary);
+}
+
+/* Wide result density mirrors the monster browser. ---------------------- */
+.app-shell-cyclopedia .grid:has(> article[data-cyclopedia-item-card='true']) {
+  grid-template-columns: minmax(0, 1fr) !important;
+  gap: var(--space-3) !important;
+}
+
+@media (min-width: 768px) {
+  .app-shell-cyclopedia .grid:has(> article[data-cyclopedia-item-card='true']) {
+    grid-template-columns: repeat(2, minmax(0, 1fr)) !important;
+  }
+}
+
+@media (min-width: 1024px) {
+  .app-shell-cyclopedia .grid:has(> article[data-cyclopedia-item-card='true']) {
+    grid-template-columns: repeat(3, minmax(0, 1fr)) !important;
+  }
+}
+
+@media (min-width: 1280px) {
+  .app-shell-cyclopedia .grid:has(> article[data-cyclopedia-item-card='true']) {
+    grid-template-columns: repeat(4, minmax(0, 1fr)) !important;
+  }
+}
+
+@media (min-width: 1600px) {
+  html[data-layout='wide'] .app-shell-cyclopedia .grid:has(> article[data-cyclopedia-item-card='true']) {
+    grid-template-columns: repeat(5, minmax(0, 1fr)) !important;
+  }
+}
+
+@media (min-width: 1920px) {
+  html[data-layout='wide'] .app-shell-cyclopedia .grid:has(> article[data-cyclopedia-item-card='true']) {
+    grid-template-columns: repeat(6, minmax(0, 1fr)) !important;
+  }
+}
+
+@media (min-width: 1440px) {
+  html[data-layout='wide'] [data-cyclopedia-preview-host='true'][data-cyclopedia-preview-kind='item']
+    .grid:has(> article[data-cyclopedia-item-card='true']) {
+    grid-template-columns: repeat(4, minmax(0, 1fr)) !important;
+  }
+}
+
+/* Selected-item preview ------------------------------------------------- */
+.loot-preview-panel {
+  min-width: 0;
+}
+
+.loot-preview-identity {
+  align-items: center;
+}
+
+.loot-preview-sprite {
+  height: 8.5rem;
+}
+
+.loot-preview-columns {
+  align-items: start;
+}
+
+.loot-preview-acquisition {
+  padding: var(--space-4);
+  border-bottom: 1px solid rgb(var(--ds-border) / 0.48);
+}
+
+.loot-preview-drop-row {
+  display: flex;
+  min-width: 0;
+  align-items: center;
+  gap: var(--space-3);
+  border: 1px solid rgb(var(--ds-border) / 0.28);
+  border-radius: var(--radius-md);
+  padding: var(--space-2);
+  background: rgb(var(--ds-surface-base) / 0.28);
+}
+
+.loot-preview-drop-row:hover {
+  border-color: rgb(var(--ds-primary) / 0.28);
+  background: rgb(var(--ds-surface-hover) / 0.36);
+}
+
+@media (max-width: 639px) {
+  .app-shell-cyclopedia article[data-cyclopedia-item-card='true'] {
+    min-height: 18rem;
+  }
+
+  .app-shell-cyclopedia article[data-cyclopedia-item-card='true'] > div:first-child > img,
+  .app-shell-cyclopedia article[data-cyclopedia-item-card='true'] > div:first-child > [role='img'] {
+    height: 7rem !important;
+    flex-basis: 7rem;
+  }
+
+  .loot-preview-identity {
+    align-items: start;
+  }
+}
