@@ -18,13 +18,20 @@ const modifierValue = (modifier: CreatureCombatModifier) => {
   return `${value > 0 ? '+' : ''}${value}%`;
 };
 
-export default function CreaturePreviewPanel({ creatureId }: { creatureId: number }) {
+interface CreaturePreviewPanelProps {
+  creatureId: number;
+  kind?: 'creature' | 'boss';
+}
+
+export default function CreaturePreviewPanel({ creatureId, kind = 'creature' }: CreaturePreviewPanelProps) {
   const [preview, setPreview] = useState<CreaturePreview | null>(null);
   const [loading, setLoading] = useState(true);
   const [failed, setFailed] = useState(false);
+  const entityLabel = kind === 'boss' ? 'boss' : 'creature';
 
   useEffect(() => {
     const controller = new AbortController();
+    setPreview(null);
     setLoading(true);
     setFailed(false);
     void creatureBrowserApi.getPreview(creatureId, controller.signal)
@@ -47,14 +54,14 @@ export default function CreaturePreviewPanel({ creatureId }: { creatureId: numbe
   }
 
   if (failed || !preview) {
-    return <div className="creature-preview-panel grid min-h-64 place-items-center text-center text-sm text-content-muted">Creature preview unavailable.</div>;
+    return <div className="creature-preview-panel grid min-h-64 place-items-center text-center text-sm text-content-muted">{kind === 'boss' ? 'Boss' : 'Creature'} preview unavailable.</div>;
   }
 
   const mainLocation = preview.locations[0];
   const tags = [preview.classification, preview.bestiary_class, preview.creature_class, preview.primary_type].filter(Boolean).slice(0, 3) as string[];
 
   return (
-    <article className="creature-preview-panel" aria-label={`${preview.name} preview`}>
+    <article className="creature-preview-panel" aria-label={`${preview.name} ${entityLabel} preview`}>
       <div className="creature-preview-identity">
         <div className="creature-preview-sprite">
           <ImageWithFallback
@@ -62,7 +69,7 @@ export default function CreaturePreviewPanel({ creatureId }: { creatureId: numbe
             alt={preview.name}
             className="size-full object-contain [image-rendering:pixelated]"
             containerClassName="size-full"
-            fallbackKind="creature"
+            fallbackKind={kind}
             fallbackLabel={`${preview.name} image unavailable`}
           />
         </div>
@@ -131,7 +138,7 @@ export default function CreaturePreviewPanel({ creatureId }: { creatureId: numbe
         </section>
       ) : null}
 
-      <Link to={`/creatures/${preview.slug || preview.id}`} className="creature-preview-full-link">Open full creature entry <ArrowRight className="size-4" /></Link>
+      <Link to={`/creatures/${preview.slug || preview.id}`} className="creature-preview-full-link">Open full {entityLabel} entry <ArrowRight className="size-4" /></Link>
     </article>
   );
 }
