@@ -77,6 +77,13 @@ const fontAwesomeBaseline = new Set([
   'src/pages/guild/Raffle.tsx',
 ]);
 
+// Temporary text-only repository transport exceptions for the large generated
+// artwork. Category/domain fallbacks must never use raster data URIs again.
+const rasterDataUriAllowlist = new Set([
+  'src/assets/brand/brandBackground.ts',
+  'src/assets/brand/brandTitleIcons.ts',
+]);
+
 for (const path of sourceFiles) {
   const source = readFileSync(path, 'utf8');
   const rel = relative(frontendRoot, path).replaceAll('\\', '/');
@@ -86,6 +93,10 @@ for (const path of sourceFiles) {
     failures.push(`${rel}: Font Awesome usage is outside the legacy baseline; use Lucide for interface icons or TibiaHub SVG domain icons`);
   }
   if (usesFontAwesome && fontAwesomeBaseline.has(rel)) warnings.push(`${rel}: existing Font Awesome migration debt`);
+
+  if (/data:image\/(?:webp|png|jpe?g);base64,/i.test(source) && !rasterDataUriAllowlist.has(rel)) {
+    failures.push(`${rel}: raster data URI is not an approved brand exception; use validated local media with an SVG fallback`);
+  }
 }
 
 for (const rel of fontAwesomeBaseline) {
@@ -116,4 +127,4 @@ if (failures.length) {
   process.exit(1);
 }
 
-console.log(`Brand-system validation passed: ${sourceFiles.length} source files checked, tibia-stone canonical identity present, typography/shape/motion contracts present, icon policy enforced.`);
+console.log(`Brand-system validation passed: ${sourceFiles.length} source files checked, tibia-stone canonical identity present, typography/shape/motion contracts present, icon/media policy enforced.`);
