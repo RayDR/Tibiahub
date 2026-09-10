@@ -3,7 +3,8 @@ import { useTranslation } from 'react-i18next';
 
 import BrandCategoryFallbackIcon from '../icons/BrandCategoryFallbackIcon';
 import { cyclopediaSections } from '../../config/cyclopediaSections';
-import api from '../../services/api';
+import api, { tibiaApi } from '../../services/api';
+import type { BoostedCreatureProjection } from '../../types';
 
 export type KnowledgeCategory =
   | 'creatures'
@@ -22,28 +23,39 @@ let visualRequest: Promise<CategoryVisuals> | null = null;
 
 const utcDay = () => new Date().toISOString().slice(0, 10);
 
+function boostedMediaUrl(projection?: BoostedCreatureProjection | null): string | undefined {
+  if (!projection) return undefined;
+  if (projection.media?.status === 'available' && projection.media.url) {
+    return projection.media.url;
+  }
+  if (projection.resolution_state === 'resolved' && projection.id != null) {
+    return `/api/v1/creatures/${projection.id}/image?placeholder=false`;
+  }
+  return undefined;
+}
+
 function loadCategoryVisuals(): Promise<CategoryVisuals> {
   const today = utcDay();
   if (visualCache && visualCacheDay === today) return Promise.resolve(visualCache);
 
   if (!visualRequest) {
-    visualRequest = api
+    const categoryRequest = api
       .get<CategoryVisualResponse>('/catalog/category-visuals/daily')
-      .then(({ data }) => {
+      .then(({ data }) => data || {})
+      .catch(() => ({} as CategoryVisualResponse));
+    const boostedRequest = tibiaApi.getBoosted().catch(() => null);
+
+    visualRequest = Promise.all([categoryRequest, boostedRequest])
+      .then(([data, boosted]) => {
         visualCache = {
-          creatures: data?.creatures || undefined,
-          bosses: data?.bosses || undefined,
-          items: data?.items || undefined,
-          quests: data?.quests || undefined,
-          zones: data?.zones || undefined,
-          npcs: data?.npcs || undefined,
+          creatures: boostedMediaUrl(boosted?.creature) || data.creatures || undefined,
+          bosses: boostedMediaUrl(boosted?.boss) || data.bosses || undefined,
+          items: data.items || undefined,
+          quests: data.quests || undefined,
+          zones: data.zones || undefined,
+          npcs: data.npcs || undefined,
         };
-        visualCacheDay = data?.visual_day || today;
-        return visualCache;
-      })
-      .catch(() => {
-        visualCache = {};
-        visualCacheDay = today;
+        visualCacheDay = data.visual_day || today;
         return visualCache;
       })
       .finally(() => {

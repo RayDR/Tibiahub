@@ -12,6 +12,7 @@ import {
   type ThemeId,
   useAppearance,
 } from '../context/AppearanceContext';
+import { useViewportPopover } from '../hooks/useViewportPopover';
 import { Dropdown } from './ui';
 
 const themeIcons = {
@@ -27,6 +28,12 @@ export default function ThemeSwitcher() {
   const { theme, motion, density, layout, setTheme, setMotion, setDensity, setLayout } = useAppearance();
   const [isOpen, setIsOpen] = useState(false);
   const rootRef = useRef<HTMLDivElement | null>(null);
+  const buttonRef = useRef<HTMLButtonElement | null>(null);
+  const popoverStyle = useViewportPopover({
+    open: isOpen,
+    anchorRef: buttonRef,
+    preferredWidth: 352,
+  });
   const CurrentIcon = themeIcons[theme];
 
   useEffect(() => {
@@ -57,6 +64,7 @@ export default function ThemeSwitcher() {
   return (
     <div ref={rootRef} className="relative">
       <button
+        ref={buttonRef}
         type="button"
         onClick={() => setIsOpen((value) => !value)}
         aria-label={t('appearance.open')}
@@ -70,12 +78,16 @@ export default function ThemeSwitcher() {
       </button>
 
       {isOpen ? (
-        <Dropdown id="appearance-menu" className="absolute right-0 z-dropdown mt-2 max-h-[min(42rem,calc(100dvh-6rem))] w-[min(22rem,calc(100vw-1rem))] overflow-y-auto p-3">
+        <Dropdown
+          id="appearance-menu"
+          style={popoverStyle}
+          className="z-dropdown overflow-x-hidden overflow-y-auto p-3"
+        >
           <div className="mb-3 flex items-center gap-2 border-b border-line pb-3">
             <Sparkles className="size-4 text-primary" aria-hidden="true" />
-            <div>
-              <p className="text-sm font-semibold text-content-primary">{t('appearance.title')}</p>
-              <p className="text-xs text-content-muted">{t('appearance.persisted')}</p>
+            <div className="min-w-0">
+              <p className="truncate text-sm font-semibold text-content-primary">{t('appearance.title')}</p>
+              <p className="truncate text-xs text-content-muted">{t('appearance.persisted')}</p>
             </div>
           </div>
 

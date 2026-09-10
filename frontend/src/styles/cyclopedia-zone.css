@@ -4,14 +4,14 @@
   position: relative;
   display: flex;
   min-width: 0;
-  min-height: 20rem;
+  min-height: 18.75rem;
   cursor: pointer;
   flex-direction: column;
   overflow: hidden;
   border: 1px solid rgb(var(--ds-border) / 0.62);
   border-radius: 0.45rem;
-  background: linear-gradient(180deg, rgb(var(--ds-surface-raised) / 0.9), rgb(var(--ds-surface) / 0.84));
-  box-shadow: 0 0.8rem 1.8rem rgb(var(--ds-shadow) / 0.15), inset 0 1px 0 rgb(var(--ds-text-primary) / 0.025);
+  background: linear-gradient(180deg, rgb(var(--ds-surface-raised) / 0.92), rgb(var(--ds-surface) / 0.86));
+  box-shadow: 0 0.75rem 1.7rem rgb(var(--ds-shadow) / 0.15), inset 0 1px 0 rgb(var(--ds-text-primary) / 0.025);
   color: var(--text-primary);
   transition: border-color var(--duration-base), box-shadow var(--duration-base), transform var(--duration-base);
 }
@@ -21,11 +21,12 @@
   border-color: rgb(var(--ds-primary) / 0.58);
   box-shadow: 0 1rem 2.3rem rgb(var(--ds-shadow) / 0.22), 0 0 0 1px rgb(var(--ds-primary) / 0.1);
   outline: none;
+  transform: translateY(-1px);
 }
 
 .cyclopedia-zone-card[data-selected='true'] {
-  border-color: rgb(var(--ds-primary) / 0.92);
-  box-shadow: 0 1rem 2.5rem rgb(var(--ds-shadow) / 0.24), 0 0 0 1px rgb(var(--ds-primary) / 0.34), inset 0 0 1.6rem rgb(var(--ds-primary) / 0.035);
+  border-color: rgb(var(--ds-primary) / 0.96);
+  box-shadow: 0 1rem 2.5rem rgb(var(--ds-shadow) / 0.24), 0 0 0 1px rgb(var(--ds-primary) / 0.46), 0 0 1.2rem rgb(var(--ds-primary) / 0.13), inset 0 0 1.6rem rgb(var(--ds-primary) / 0.035);
 }
 
 .cyclopedia-zone-card[data-selected='true']::before {
@@ -35,15 +36,15 @@
   inset: -1px;
   pointer-events: none;
   border-radius: inherit;
-  box-shadow: inset 0 2px 0 rgb(var(--ds-primary) / 0.72), inset 0 -2px 0 rgb(var(--ds-primary) / 0.46);
+  box-shadow: inset 0 2px 0 rgb(var(--ds-primary) / 0.82), inset 0 -2px 0 rgb(var(--ds-primary) / 0.54);
 }
 
 .cyclopedia-zone-card-media {
   position: relative;
-  height: 9.5rem;
-  flex: 0 0 9.5rem;
+  height: 7.65rem;
+  flex: 0 0 7.65rem;
   overflow: hidden;
-  border-bottom: 1px solid rgb(var(--ds-border) / 0.38);
+  border-bottom: 1px solid rgb(var(--ds-border) / 0.42);
   background: rgb(var(--ds-surface-base) / 0.45);
 }
 
@@ -51,7 +52,7 @@
   position: absolute;
   inset: 0;
   pointer-events: none;
-  background: linear-gradient(180deg, transparent 42%, rgb(var(--ds-surface-raised) / 0.38));
+  background: linear-gradient(180deg, rgb(var(--ds-surface-base) / 0.04), transparent 52%, rgb(var(--ds-surface-raised) / 0.48));
 }
 
 .cyclopedia-zone-score,
@@ -75,18 +76,24 @@
 .cyclopedia-zone-detail-link {
   right: var(--space-2);
   display: grid;
-  width: 2rem;
-  height: 2rem;
+  width: 1.9rem;
+  height: 1.9rem;
   place-items: center;
-  border: 1px solid rgb(var(--ds-border) / 0.55);
+  border: 1px solid rgb(var(--ds-border) / 0.58);
   border-radius: var(--radius-sm);
   background: rgb(var(--ds-surface-overlay) / 0.9);
   color: var(--text-secondary);
+  opacity: 0.72;
+  transition: border-color var(--duration-fast), color var(--duration-fast), opacity var(--duration-fast), background var(--duration-fast);
 }
+
+.cyclopedia-zone-card:hover .cyclopedia-zone-detail-link,
+.cyclopedia-zone-detail-link:focus-visible { opacity: 1; }
 
 .cyclopedia-zone-detail-link:hover,
 .cyclopedia-zone-detail-link:focus-visible {
   border-color: rgb(var(--ds-primary) / 0.55);
+  background: rgb(var(--ds-surface-overlay) / 0.98);
   color: var(--primary);
 }
 
@@ -95,14 +102,23 @@
   min-width: 0;
   flex: 1;
   flex-direction: column;
-  gap: var(--space-3);
-  padding: var(--space-4);
+  gap: 0.6rem;
+  padding: 0.75rem 0.8rem 0.8rem;
+}
+
+.cyclopedia-zone-card-heading {
+  display: flex;
+  min-width: 0;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: var(--space-2);
 }
 
 .cyclopedia-zone-card-title {
   overflow: hidden;
+  color: var(--text-primary);
   font-family: var(--font-heading);
-  font-size: var(--font-size-lg);
+  font-size: 0.98rem;
   font-weight: var(--font-weight-semibold);
   line-height: var(--line-height-tight);
   text-overflow: ellipsis;
@@ -110,69 +126,141 @@
 }
 
 .cyclopedia-zone-card-place {
-  margin-top: var(--space-1);
+  margin-top: 0.18rem;
   overflow: hidden;
   color: var(--text-muted);
-  font-size: var(--font-size-xs);
+  font-size: 0.68rem;
   text-overflow: ellipsis;
   white-space: nowrap;
 }
 
-.cyclopedia-zone-card-stats {
-  display: grid;
-  grid-template-columns: repeat(2, minmax(0, 1fr));
-  border-top: 1px solid rgb(var(--ds-border) / 0.3);
-  border-bottom: 1px solid rgb(var(--ds-border) / 0.3);
-}
-
-.cyclopedia-zone-card-stats > div {
-  min-width: 0;
-  padding: var(--space-2);
-  border-right: 1px solid rgb(var(--ds-border) / 0.22);
-}
-
-.cyclopedia-zone-card-stats > div:nth-child(2n) { border-right: 0; }
-.cyclopedia-zone-card-stats > div:nth-child(-n + 2) { border-bottom: 1px solid rgb(var(--ds-border) / 0.22); }
-
-.cyclopedia-zone-card-stats dt {
+.cyclopedia-zone-rating {
+  display: inline-flex;
+  min-height: 1.35rem;
+  max-width: 6.5rem;
+  flex: 0 0 auto;
+  align-items: center;
   overflow: hidden;
-  color: var(--text-muted);
+  border: 1px solid rgb(var(--ds-border) / 0.55);
+  border-radius: 999px;
+  padding: 0 0.45rem;
+  background: rgb(var(--ds-surface-base) / 0.52);
+  color: var(--text-secondary);
   font-size: 0.62rem;
-  text-overflow: ellipsis;
-  text-transform: uppercase;
-  white-space: nowrap;
-}
-
-.cyclopedia-zone-card-stats dd {
-  margin-top: 0.2rem;
-  overflow: hidden;
-  color: var(--text-primary);
-  font-size: var(--font-size-xs);
   font-weight: 700;
   text-overflow: ellipsis;
   white-space: nowrap;
 }
 
+.cyclopedia-zone-rating[data-tone='success'] { border-color: rgb(var(--ds-success) / 0.48); background: rgb(var(--ds-success) / 0.09); color: var(--success); }
+.cyclopedia-zone-rating[data-tone='warning'] { border-color: rgb(var(--ds-warning) / 0.5); background: rgb(var(--ds-warning) / 0.09); color: var(--warning); }
+.cyclopedia-zone-rating[data-tone='danger'] { border-color: rgb(var(--ds-danger) / 0.5); background: rgb(var(--ds-danger) / 0.09); color: var(--danger); }
+
+.cyclopedia-zone-card-level-row {
+  display: flex;
+  min-width: 0;
+  align-items: baseline;
+  gap: var(--space-2);
+  color: var(--text-muted);
+  font-size: 0.64rem;
+}
+
+.cyclopedia-zone-card-level-row strong {
+  color: var(--text-primary);
+  font-family: var(--font-mono);
+  font-size: 0.9rem;
+  font-weight: 650;
+}
+
+.cyclopedia-zone-vocations {
+  display: flex;
+  min-width: 0;
+  flex-wrap: wrap;
+  gap: 0.28rem;
+}
+
+.cyclopedia-zone-vocations > span {
+  display: inline-flex;
+  min-height: 1.25rem;
+  max-width: 5.2rem;
+  align-items: center;
+  overflow: hidden;
+  border: 1px solid rgb(var(--ds-border) / 0.42);
+  border-radius: var(--radius-sm);
+  padding-inline: 0.38rem;
+  background: rgb(var(--ds-surface-base) / 0.38);
+  color: var(--text-secondary);
+  font-size: 0.58rem;
+  font-weight: 650;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.cyclopedia-zone-card-kpis {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  border-top: 1px solid rgb(var(--ds-border) / 0.32);
+  border-bottom: 1px solid rgb(var(--ds-border) / 0.32);
+}
+
+.cyclopedia-zone-card-kpis > div {
+  min-width: 0;
+  padding: 0.45rem 0.35rem;
+}
+
+.cyclopedia-zone-card-kpis > div + div { border-left: 1px solid rgb(var(--ds-border) / 0.26); }
+
+.cyclopedia-zone-card-kpis dt {
+  overflow: hidden;
+  color: var(--text-muted);
+  font-size: 0.58rem;
+  text-overflow: ellipsis;
+  text-transform: uppercase;
+  white-space: nowrap;
+}
+
+.cyclopedia-zone-card-kpis dd {
+  margin-top: 0.12rem;
+  overflow: hidden;
+  color: var(--text-primary);
+  font-family: var(--font-mono);
+  font-size: 0.72rem;
+  font-weight: 650;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.cyclopedia-zone-card-description {
+  display: -webkit-box;
+  overflow: hidden;
+  color: var(--text-secondary);
+  font-size: 0.66rem;
+  line-height: 1.45;
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 2;
+}
+
 .cyclopedia-zone-card-footer {
   display: flex;
-  min-height: 2rem;
+  min-height: 1.35rem;
   flex-wrap: wrap;
   align-items: center;
-  gap: var(--space-3);
+  gap: 0.6rem;
   margin-top: auto;
-  color: var(--text-secondary);
-  font-size: var(--font-size-xs);
+  color: var(--text-muted);
+  font-size: 0.62rem;
 }
 
 .cyclopedia-zone-card-footer > span {
   display: inline-flex;
   align-items: center;
-  gap: var(--space-1);
+  gap: 0.2rem;
 }
 
 .cyclopedia-zone-card-footer .cyclopedia-zone-access { color: var(--primary); }
+.cyclopedia-zone-card-floor { margin-left: auto; }
 
-/* Responsive result density mirrors the other redesigned Cyclopedia tabs. */
+/* Responsive result density mirrors the approved Hunt Zone reference. */
 .app-shell-cyclopedia .grid:has(> [data-cyclopedia-result] > .cyclopedia-zone-card) {
   grid-template-columns: minmax(0, 1fr) !important;
   gap: var(--space-3) !important;
@@ -207,33 +295,130 @@
 /* Hunt Zone side preview. */
 .hunt-zone-preview-panel { min-width: 0; }
 
-.hunt-zone-preview-identity { align-items: center; }
+.hunt-zone-preview-identity {
+  grid-template-columns: 7.25rem minmax(0, 1fr);
+  align-items: center;
+  gap: var(--space-3);
+  padding: var(--space-4);
+}
 
-.hunt-zone-preview-map {
+.hunt-zone-preview-thumb {
   position: relative;
-  min-height: 9rem;
+  width: 7.25rem;
+  height: 6.8rem;
   overflow: hidden;
-  border: 1px solid rgb(var(--ds-border) / 0.48);
+  border: 1px solid rgb(var(--ds-border) / 0.52);
   border-radius: var(--radius-md);
-  background: rgb(var(--ds-surface-base) / 0.42);
+  background: rgb(var(--ds-surface-base) / 0.46);
+}
+
+.hunt-zone-preview-title-row {
+  display: flex;
+  min-width: 0;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: var(--space-2);
+}
+
+.hunt-zone-preview-id {
+  flex: 0 0 auto;
+  padding-top: 0.18rem;
+  color: var(--text-muted);
+  font-family: var(--font-mono);
+  font-size: 0.62rem;
+}
+
+.hunt-zone-preview-rating {
+  border-color: rgb(var(--ds-primary) / 0.35);
+  color: var(--primary);
+}
+
+.hunt-zone-preview-map-stage {
+  position: relative;
+  height: 11rem;
+  overflow: hidden;
+  border-bottom: 1px solid rgb(var(--ds-border) / 0.5);
+  background: rgb(var(--ds-surface-base) / 0.52);
+}
+
+.hunt-zone-preview-kpis .creature-preview-stat {
+  padding: 0.65rem 0.75rem;
+}
+
+.hunt-zone-preview-kpis .creature-preview-stat strong {
+  font-size: 0.94rem;
 }
 
 .hunt-zone-preview-columns { align-items: start; }
 
-.hunt-zone-preview-creatures,
-.hunt-zone-preview-tips {
+.hunt-zone-preview-profile-grid,
+.hunt-zone-preview-detail-grid {
+  gap: var(--space-4);
   padding: var(--space-4);
-  border-bottom: 1px solid rgb(var(--ds-border) / 0.48);
 }
+
+.hunt-zone-preview-vocations {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.4rem;
+  margin-top: var(--space-3);
+}
+
+.hunt-zone-preview-vocations > span {
+  display: inline-flex;
+  min-height: 1.75rem;
+  align-items: center;
+  border: 1px solid rgb(var(--ds-primary) / 0.24);
+  border-radius: var(--radius-sm);
+  padding-inline: 0.5rem;
+  background: rgb(var(--ds-primary) / 0.055);
+  color: var(--text-primary);
+  font-size: 0.68rem;
+  font-weight: 650;
+}
+
+.hunt-zone-preview-risk-list {
+  display: grid;
+  gap: 0.45rem;
+  margin-top: var(--space-3);
+}
+
+.hunt-zone-preview-risk-row {
+  display: grid;
+  min-width: 0;
+  gap: 0.3rem;
+  padding-bottom: 0.4rem;
+  border-bottom: 1px solid rgb(var(--ds-border) / 0.22);
+  color: var(--text-secondary);
+  font-size: 0.66rem;
+}
+
+.hunt-zone-preview-risk-row:last-child { border-bottom: 0; }
+.hunt-zone-preview-risk-row strong { color: var(--text-primary); font-size: 0.66rem; font-weight: 650; }
+
+.hunt-zone-preview-risk-meter {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 0.22rem;
+  width: 5.5rem;
+}
+
+.hunt-zone-preview-risk-meter > i {
+  height: 0.35rem;
+  border-radius: 0.12rem;
+  background: rgb(var(--ds-border) / 0.4);
+}
+
+.hunt-zone-preview-risk-meter > i[data-active='true'] { background: var(--danger); }
 
 .hunt-zone-preview-creature-row {
   display: flex;
   min-width: 0;
   align-items: center;
-  gap: var(--space-3);
+  gap: 0.45rem;
   border: 1px solid rgb(var(--ds-border) / 0.28);
-  border-radius: var(--radius-md);
-  padding: var(--space-2);
+  border-radius: var(--radius-sm);
+  padding: 0.38rem 0.45rem;
   background: rgb(var(--ds-surface-base) / 0.28);
 }
 
@@ -242,16 +427,77 @@
   background: rgb(var(--ds-surface-hover) / 0.36);
 }
 
-.hunt-zone-preview-actions {
-  display: grid;
-  gap: var(--space-2);
-  padding: var(--space-4);
+.hunt-zone-preview-location-list .creature-preview-row {
+  min-height: 1.8rem;
 }
 
-.hunt-zone-preview-actions .creature-preview-full-link { margin: 0; }
+.hunt-zone-preview-location-list .creature-preview-row strong {
+  max-width: 62%;
+  overflow: hidden;
+  color: var(--text-primary);
+  text-align: right;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.hunt-zone-preview-tips {
+  padding: var(--space-4);
+  border-bottom: 1px solid rgb(var(--ds-border) / 0.48);
+}
+
+.hunt-zone-preview-actions {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: var(--space-2);
+  padding: var(--space-3) var(--space-4) var(--space-4);
+}
+
+.hunt-zone-preview-primary-action,
+.hunt-zone-preview-secondary-action {
+  display: inline-flex;
+  min-height: 2.65rem;
+  min-width: 0;
+  align-items: center;
+  justify-content: center;
+  gap: 0.4rem;
+  border-radius: var(--radius-sm);
+  padding-inline: 0.6rem;
+  font-size: 0.72rem;
+  font-weight: 700;
+  text-align: center;
+  transition: border-color var(--duration-fast), background var(--duration-fast), color var(--duration-fast), box-shadow var(--duration-fast);
+}
+
+.hunt-zone-preview-primary-action {
+  border: 1px solid rgb(var(--ds-primary) / 0.68);
+  background: rgb(var(--ds-primary) / 0.15);
+  color: var(--primary);
+  box-shadow: inset 0 0 1rem rgb(var(--ds-primary) / 0.06);
+}
+
+.hunt-zone-preview-primary-action:hover,
+.hunt-zone-preview-primary-action:focus-visible {
+  background: rgb(var(--ds-primary) / 0.22);
+  box-shadow: 0 0 1rem rgb(var(--ds-primary) / 0.12);
+}
+
+.hunt-zone-preview-secondary-action {
+  border: 1px solid rgb(var(--ds-border) / 0.58);
+  background: rgb(var(--ds-surface-raised) / 0.72);
+  color: var(--text-secondary);
+}
+
+.hunt-zone-preview-secondary-action:hover,
+.hunt-zone-preview-secondary-action:focus-visible {
+  border-color: rgb(var(--ds-primary) / 0.36);
+  color: var(--text-primary);
+}
 
 @media (max-width: 639px) {
-  .cyclopedia-zone-card { min-height: 18rem; }
-  .cyclopedia-zone-card-media { height: 8rem; flex-basis: 8rem; }
-  .hunt-zone-preview-identity { align-items: start; }
+  .cyclopedia-zone-card { min-height: 17rem; }
+  .cyclopedia-zone-card-media { height: 7rem; flex-basis: 7rem; }
+  .hunt-zone-preview-identity { grid-template-columns: 5.75rem minmax(0, 1fr); align-items: start; padding: var(--space-3); }
+  .hunt-zone-preview-thumb { width: 5.75rem; height: 5.75rem; }
+  .hunt-zone-preview-map-stage { height: 9rem; }
+  .hunt-zone-preview-actions { grid-template-columns: 1fr; }
 }

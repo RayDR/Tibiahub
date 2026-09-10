@@ -1,12 +1,19 @@
+import { useRef, useState } from 'react';
 import { useTranslation } from 'react-i18next';
-
-import { useState } from 'react';
 import { FontAwesomeIcon } from '@fortawesome/react-fontawesome';
 import { faCheck, faLanguage } from '@fortawesome/free-solid-svg-icons';
+
+import { useViewportPopover } from '../hooks/useViewportPopover';
 
 export default function LanguageSwitcher() {
     const { i18n, t } = useTranslation();
     const [isOpen, setIsOpen] = useState(false);
+    const buttonRef = useRef<HTMLButtonElement | null>(null);
+    const popoverStyle = useViewportPopover({
+        open: isOpen,
+        anchorRef: buttonRef,
+        preferredWidth: 176,
+    });
 
     const languages = [
         { code: 'en', name: t('language.english'), short: 'EN', region: t('language.regionUS') },
@@ -24,8 +31,11 @@ export default function LanguageSwitcher() {
     return (
         <div className="relative">
             <button
+                ref={buttonRef}
                 onClick={() => setIsOpen(!isOpen)}
                 aria-label={t('a11y.languageSelector')}
+                aria-expanded={isOpen}
+                aria-haspopup="menu"
                 className="flex items-center gap-2 rounded-lg px-3 py-2 text-sm text-content-muted transition-all duration-300 hover:bg-surface-inverse/5 hover:text-primary"
             >
                 <FontAwesomeIcon icon={faLanguage} className="w-4" />
@@ -38,13 +48,19 @@ export default function LanguageSwitcher() {
                         className="fixed inset-0 z-base"
                         onClick={() => setIsOpen(false)}
                     />
-                    <div className="ds-dropdown absolute right-0 z-dropdown mt-2 w-44 overflow-hidden backdrop-blur-sm">
+                    <div
+                        role="menu"
+                        style={popoverStyle}
+                        className="ds-dropdown z-dropdown overflow-x-hidden overflow-y-auto backdrop-blur-sm"
+                    >
                         {languages.map((lang) => (
                             <button
                                 key={lang.code}
+                                role="menuitemradio"
+                                aria-checked={activeCode === lang.code}
                                 onClick={() => changeLanguage(lang.code)}
                                 aria-label={t('a11y.switchLanguageTo', { language: lang.name })}
-                                className={`w-full flex items-center gap-3 px-4 py-3 text-sm transition-all duration-300 ${
+                                className={`flex w-full items-center gap-3 px-4 py-3 text-sm transition-all duration-300 ${
                                     activeCode === lang.code
                                         ? 'bg-primary/20 text-primary font-semibold'
                                         : 'text-content-primary hover:bg-surface-inverse/5'
@@ -53,9 +69,9 @@ export default function LanguageSwitcher() {
                                 <span className="inline-flex w-8 items-center justify-center rounded border border-line px-1 py-0.5 text-[11px] font-semibold text-content-muted">
                                     {lang.short}
                                 </span>
-                                <div className="text-left">
-                                    <div className="text-xs font-medium">{lang.name}</div>
-                                    <div className="text-[10px] text-content-muted">{lang.region}</div>
+                                <div className="min-w-0 flex-1 text-left">
+                                    <div className="truncate text-xs font-medium">{lang.name}</div>
+                                    <div className="truncate text-[10px] text-content-muted">{lang.region}</div>
                                 </div>
                                 {activeCode === lang.code ? <FontAwesomeIcon icon={faCheck} className="ml-auto text-xs" /> : null}
                             </button>
