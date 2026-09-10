@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 from app.core.security import create_access_token
-from app.models.external_data import TibiaWikiQuest
+from app.models.external_data import QuestMission, TibiaWikiQuest
 from app.models.quest_progress import QuestCompletion
 from app.models.user_character import UserCharacter
 from tests.conftest import make_user
@@ -19,6 +19,23 @@ def _quest(db, *, name: str = "Progress Quest", slug: str = "progress-quest") ->
     db.add(quest)
     db.flush()
     return quest
+
+
+def _add_missions(db, quest: TibiaWikiQuest, count: int = 3) -> list[QuestMission]:
+    missions = []
+    for sequence in range(1, count + 1):
+        mission = QuestMission(
+            quest_id=quest.id,
+            provider_id="tibiawiki",
+            identity_key=f"mission-{sequence}",
+            title=f"Mission {sequence}",
+            normalized_title=f"mission {sequence}",
+            sequence=sequence,
+        )
+        db.add(mission)
+        missions.append(mission)
+    db.flush()
+    return missions
 
 
 def _verified_character(db, user, *, name: str = "Progress Knight") -> UserCharacter:
@@ -49,12 +66,13 @@ def test_quest_completion_round_trip_is_character_scoped_and_idempotent(client, 
         headers=_headers(user),
     )
     assert initial.status_code == 200
-    assert initial.json() == {
-        "quest_id": quest.id,
-        "character_id": character.id,
-        "completed": False,
-        "completed_at": None,
-    }
+    initial_payload = initial.json()
+    assert initial_payload["quest_id"] == quest.id
+    assert initial_payload["character_id"] == character.id
+    assert initial_payload["status"] == "not_started"
+    assert initial_payload["completed"] is False
+    assert initial_payload["completed_mission_ids"] == []
+    assert initial_payload["completed_at"] is None
 
     completed = client.put(
         f"/api/v1/quest-progress/{quest.slug}",
@@ -64,6 +82,7 @@ def test_quest_completion_round_trip_is_character_scoped_and_idempotent(client, 
     )
     assert completed.status_code == 200
     payload = completed.json()
+    assert payload["status"] == "completed"
     assert payload["completed"] is True
     assert payload["completed_at"]
     first_completed_at = payload["completed_at"]
@@ -86,8 +105,73 @@ def test_quest_completion_round_trip_is_character_scoped_and_idempotent(client, 
         json={"completed": False},
     )
     assert cleared.status_code == 200
+    assert cleared.json()["status"] == "not_started"
     assert cleared.json()["completed"] is False
     assert db.query(QuestCompletion).filter_by(character_id=character.id, quest_id=quest.id).count() == 0
+
+
+def test_partial_progress_tracks_ordered_missions_and_auto_completes(client, db):
+    user = make_user(db, username="quest-progress-partial")
+    character = _verified_character(db, user, name="Partial Paladin")
+    quest = _quest(db, name="Mission Quest", slug="mission-quest")
+    missions = _add_missions(db, quest, count=3)
+    db.commit()
+
+    partial = client.put(
+        f"/api/v1/quest-progress/{quest.slug}",
+        params={"character_id": character.id},
+        headers=_headers(user),
+        json={"completed_mission_ids": [str(missions[0].id), str(missions[1].id)]},
+    )
+    assert partial.status_code == 200
+    payload = partial.json()
+    assert payload["status"] == "in_progress"
+    assert payload["completed"] is False
+    assert payload["completed_steps"] == 2
+    assert payload["total_steps"] == 3
+    assert payload["completed_mission_ids"] == [str(missions[0].id), str(missions[1].id)]
+    assert payload["current_mission_id"] == str(missions[2].id)
+    assert payload["completed_at"] is None
+
+    listed = client.get(
+        "/api/v1/quest-progress",
+        params={"character_id": character.id},
+        headers=_headers(user),
+    )
+    assert listed.status_code == 200
+    assert len(listed.json()) == 1
+    assert listed.json()[0]["quest_id"] == quest.id
+    assert listed.json()[0]["status"] == "in_progress"
+
+    completed = client.put(
+        f"/api/v1/quest-progress/{quest.slug}",
+        params={"character_id": character.id},
+        headers=_headers(user),
+        json={"completed_mission_ids": [str(mission.id) for mission in missions]},
+    )
+    assert completed.status_code == 200
+    assert completed.json()["status"] == "completed"
+    assert completed.json()["completed_steps"] == 3
+    assert completed.json()["completed_at"]
+
+
+def test_quest_progress_rejects_foreign_missions(client, db):
+    user = make_user(db, username="quest-progress-mission-owner")
+    character = _verified_character(db, user, name="Mission Knight")
+    quest = _quest(db, name="Owned Mission Quest", slug="owned-mission-quest")
+    _add_missions(db, quest, count=1)
+    other_quest = _quest(db, name="Other Mission Quest", slug="other-mission-quest")
+    foreign_mission = _add_missions(db, other_quest, count=1)[0]
+    db.commit()
+
+    response = client.put(
+        f"/api/v1/quest-progress/{quest.slug}",
+        params={"character_id": character.id},
+        headers=_headers(user),
+        json={"completed_mission_ids": [str(foreign_mission.id)]},
+    )
+    assert response.status_code == 400
+    assert db.query(QuestCompletion).count() == 0
 
 
 def test_quest_progress_rejects_foreign_and_unverified_characters(client, db):
