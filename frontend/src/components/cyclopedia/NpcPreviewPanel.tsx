@@ -4,14 +4,11 @@ import { Link, useLocation } from 'react-router-dom';
 import { useTranslation } from 'react-i18next';
 
 import ImageWithFallback from '../ImageWithFallback';
+import LocalizedMapPreview from '../map/LocalizedMapPreview';
 import { namedKnowledgeApi } from '../../services/api';
-import { buildMapEntityUrl } from '../../services/tibiaMap';
+import { buildMapEntityUrl, tibiaMapApi, type WorldMapFloor } from '../../services/tibiaMap';
 import type { NpcKnowledgeDetail, NpcNamedReference } from '../../types';
 import { localNpcMediaUrl } from '../../utils/npcCyclopedia';
-
-function referenceLabel(value: NpcNamedReference): string {
-  return value.price != null ? `${value.name} · ${value.price} gp` : value.name;
-}
 
 function uniqueNames(values: Array<{ name: string }>, limit: number): string[] {
   const seen = new Set<string>();
@@ -26,16 +23,22 @@ function uniqueNames(values: Array<{ name: string }>, limit: number): string[] {
   return result;
 }
 
+function summarizeReferences(values: NpcNamedReference[], limit = 3): string {
+  return uniqueNames(values, limit).join(' · ');
+}
+
 export default function NpcPreviewPanel({ identifier }: { identifier: string }) {
   const { t } = useTranslation();
   const location = useLocation();
   const [npc, setNpc] = useState<NpcKnowledgeDetail | null>(null);
+  const [worldMap, setWorldMap] = useState<WorldMapFloor | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(false);
 
   useEffect(() => {
     const controller = new AbortController();
     setNpc(null);
+    setWorldMap(null);
     setLoading(true);
     setError(false);
 
@@ -54,13 +57,66 @@ export default function NpcPreviewPanel({ identifier }: { identifier: string }) 
     return () => controller.abort();
   }, [identifier]);
 
-  const questNames = useMemo(() => {
+  const mapFloorNumber = npc?.spatial.geometry_status === 'mapped' && npc.spatial.z != null
+    ? npc.spatial.z
+    : null;
+
+  useEffect(() => {
+    const controller = new AbortController();
+    setWorldMap(null);
+
+    if (mapFloorNumber == null) return () => controller.abort();
+
+    void tibiaMapApi
+      .bootstrap(mapFloorNumber, controller.signal)
+      .then((result) => {
+        if (!controller.signal.aborted) setWorldMap(result.world_map);
+      })
+      .catch(() => {
+        // The verified coordinates remain useful when the optional floor preview is unavailable.
+      });
+
+    return () => controller.abort();
+  }, [mapFloorNumber, npc?.canonical_id]);
+
+  const questRows = useMemo(() => {
     if (!npc) return [];
-    const graph = npc.relationships
+
+    const rows: Array<{ key: string; name: string; detail: string; to?: string }> = [];
+    const seen = new Set<string>();
+
+    npc.relationships
       .filter((relationship) => relationship.target_type === 'quest')
-      .map((relationship) => ({ name: relationship.target_name }));
-    return uniqueNames([...graph, ...npc.related_quests], 5);
-  }, [npc]);
+      .forEach((relationship) => {
+        const normalized = relationship.target_name.trim().toLowerCase();
+        if (!normalized || seen.has(normalized)) return;
+        seen.add(normalized);
+        rows.push({
+          key: relationship.canonical_id,
+          name: relationship.target_name,
+          detail: t(`npcDetail.questSemantics.${relationship.relationship_type}`, {
+            defaultValue: t('npcDetail.questSemantics.related'),
+          }),
+          to: relationship.resolution_state === 'resolved' && relationship.target_slug
+            ? `/quests/${relationship.target_slug}`
+            : undefined,
+        });
+      });
+
+    npc.related_quests.forEach((quest, index) => {
+      const normalized = quest.name.trim().toLowerCase();
+      if (!normalized || seen.has(normalized)) return;
+      seen.add(normalized);
+      rows.push({
+        key: quest.canonical_id || `${quest.name}:${index}`,
+        name: quest.name,
+        detail: t('npcDetail.questSemantics.related'),
+        to: quest.navigation_url || (quest.resolution_state === 'resolved' && quest.slug ? `/quests/${quest.slug}` : undefined),
+      });
+    });
+
+    return rows.slice(0, 4);
+  }, [npc, t]);
 
   if (loading) {
     return (
@@ -93,17 +149,64 @@ export default function NpcPreviewPanel({ identifier }: { identifier: string }) 
         entityType: 'npc',
         name: npc.name,
         slug: npc.slug,
+        floor: npc.spatial.z,
       })
     : null;
-  const aliases = npc.aliases.slice(0, 4);
-  const tradeKnown = npc.field_coverage.buys !== 'unknown' || npc.field_coverage.sells !== 'unknown';
-  const travelKnown = npc.field_coverage.destinations !== 'unknown';
-  const questsKnown = npc.field_coverage.related_quests !== 'unknown' || questNames.length > 0;
+  const aliases = npc.aliases.slice(0, 5);
+  const externalLabel = npc.external_id
+    ? `#${/^\d+$/.test(npc.external_id) ? npc.external_id.padStart(4, '0') : npc.external_id}`
+    : null;
+
+  const serviceChips: Array<{ key: string; label: string; tone: 'success' | 'info' | 'warning' | 'neutral' }> = [];
+  if (npc.buys.length || npc.sells.length) serviceChips.push({ key: 'trade', label: t('npcDetail.trade'), tone: 'success' });
+  if (npc.destinations.length) serviceChips.push({ key: 'travel', label: t('npcDetail.travel'), tone: 'info' });
+  if (questRows.length) serviceChips.push({ key: 'quests', label: t('npcDetail.quests'), tone: 'warning' });
+  if (!serviceChips.length && npc.occupation) serviceChips.push({ key: 'occupation', label: npc.occupation, tone: 'neutral' });
+
+  const serviceRows = [
+    npc.buys.length ? {
+      key: 'buys',
+      icon: <PackageOpen className="size-4" />,
+      label: t('npcDetail.buys'),
+      detail: summarizeReferences(npc.buys) || t('npcDetail.buysNone'),
+      count: npc.buys.length,
+    } : null,
+    npc.sells.length ? {
+      key: 'sells',
+      icon: <Coins className="size-4" />,
+      label: t('npcDetail.sells'),
+      detail: summarizeReferences(npc.sells) || t('npcDetail.sellsNone'),
+      count: npc.sells.length,
+    } : null,
+    npc.destinations.length ? {
+      key: 'travel',
+      icon: <Route className="size-4" />,
+      label: t('npcDetail.travel'),
+      detail: summarizeReferences(npc.destinations) || t('npcDetail.travelNone'),
+      count: npc.destinations.length,
+    } : null,
+  ].filter((row): row is NonNullable<typeof row> => Boolean(row));
+
+  const mapSpatial = worldMap && mapped && npc.spatial.x != null && npc.spatial.y != null
+    ? {
+        geometry_status: 'mapped' as const,
+        geometry_source: npc.spatial.geometry_source,
+        x: npc.spatial.x,
+        y: npc.spatial.y,
+        z: npc.spatial.z,
+        bounds: npc.spatial.bounds,
+        world_map: worldMap,
+      }
+    : null;
+
+  const coordinates = mapped && npc.spatial.x != null && npc.spatial.y != null
+    ? `(${npc.spatial.x}, ${npc.spatial.y}${npc.spatial.z != null ? `, ${npc.spatial.z}` : ''})`
+    : null;
 
   return (
     <article className="creature-preview-panel npc-preview-panel" data-npc-preview-panel>
-      <section className="creature-preview-identity npc-preview-identity">
-        <div className="creature-preview-sprite npc-preview-sprite">
+      <section className="npc-preview-hero">
+        <div className="npc-preview-portrait">
           <ImageWithFallback
             src={mediaUrl}
             alt={npc.name}
@@ -113,86 +216,143 @@ export default function NpcPreviewPanel({ identifier }: { identifier: string }) 
             fallbackLabel={npc.name}
           />
         </div>
-        <div className="min-w-0">
-          <p className="mb-1 text-[10px] font-semibold uppercase tracking-[0.14em] text-primary">{t('nav.npcs')}</p>
-          <h2 className="creature-preview-name break-words">{npc.name}</h2>
-          {npc.title || npc.occupation ? (
-            <p className="mt-1 text-sm font-medium text-content-secondary">{npc.title || npc.occupation}</p>
-          ) : null}
-          <div className="mt-2 flex flex-wrap gap-1.5">
-            {npc.occupation ? <span className="creature-preview-chip">{npc.occupation}</span> : null}
-            {npc.sex ? <span className="creature-preview-chip">{npc.sex}</span> : null}
-            {mapped ? <span className="creature-preview-chip">{t('npcDetail.openMap')}</span> : null}
+
+        <div className="npc-preview-hero-copy">
+          <div className="npc-preview-title-row">
+            <h2 className="npc-preview-name">{npc.name}</h2>
+            {externalLabel ? <span className="npc-preview-id">{externalLabel}</span> : null}
           </div>
-          {npc.description ? (
-            <p className="mt-3 line-clamp-4 text-sm leading-6 text-content-secondary">{npc.description}</p>
+
+          {serviceChips.length ? (
+            <div className="npc-preview-service-chips">
+              {serviceChips.slice(0, 3).map((service) => (
+                <span key={service.key} className="npc-preview-service-chip" data-tone={service.tone}>{service.label}</span>
+              ))}
+            </div>
+          ) : null}
+
+          <div className="npc-preview-inline-location">
+            <MapPin className="size-4 shrink-0 text-primary" />
+            <strong>{locationName || t('npcDetail.unknownLocation')}</strong>
+            {coordinates ? <span>{coordinates}</span> : null}
+            {mapPath ? (
+              <Link to={mapPath} className="npc-preview-map-link">
+                {t('npcDetail.openMap')} <ArrowRight className="size-3.5" />
+              </Link>
+            ) : null}
+          </div>
+
+          {npc.description ? <p className="npc-preview-description">{npc.description}</p> : null}
+        </div>
+      </section>
+
+      <section className="npc-preview-section npc-preview-services">
+        <h3 className="npc-preview-section-title">
+          <PackageOpen className="size-4 text-primary" />
+          {t('npcPreview.services', { defaultValue: 'Services' })}
+        </h3>
+
+        {serviceRows.length ? (
+          <div className="npc-preview-service-list">
+            {serviceRows.map((service) => (
+              <div key={service.key} className="npc-preview-service-row">
+                <span className="npc-preview-service-icon">{service.icon}</span>
+                <div className="min-w-0 flex-1">
+                  <div className="npc-preview-service-heading">
+                    <strong>{service.label}</strong>
+                    <span>{service.count}</span>
+                  </div>
+                  <p>{service.detail}</p>
+                </div>
+              </div>
+            ))}
+          </div>
+        ) : (
+          <div className="npc-preview-service-row npc-preview-service-row--muted">
+            <span className="npc-preview-service-icon"><UserRound className="size-4" /></span>
+            <div className="min-w-0 flex-1">
+              <strong>{npc.occupation || npc.title || t('npcDetail.overview')}</strong>
+              <p>{t('npcDetail.tradeUnknown')}</p>
+            </div>
+          </div>
+        )}
+      </section>
+
+      <section className="npc-preview-section npc-preview-location-section">
+        <h3 className="npc-preview-section-title">
+          <MapPin className="size-4 text-primary" />
+          {t('namedKnowledge.location')}
+        </h3>
+
+        <div className="npc-preview-location-grid">
+          <div className="npc-preview-location-copy">
+            <div className="npc-preview-location-name">
+              <MapPin className="size-5 shrink-0 text-primary" />
+              <div className="min-w-0">
+                <strong>{locationName || t('npcDetail.unknownLocation')}</strong>
+                {locationLabels.length > 1 ? <span>{locationLabels.slice(1).join(' · ')}</span> : null}
+                {coordinates ? <span>{coordinates}</span> : null}
+              </div>
+            </div>
+          </div>
+
+          {mapPath ? (
+            <Link to={mapPath} className="npc-preview-map-thumb" aria-label={t('npcDetail.openMap')}>
+              {mapSpatial ? (
+                <LocalizedMapPreview
+                  spatial={mapSpatial}
+                  label={t('npcDirectory.card.openMapFor', { name: npc.name })}
+                  className="absolute inset-0 size-full"
+                />
+              ) : (
+                <div className="grid size-full place-items-center bg-primary/10 text-primary">
+                  <MapPin className="size-7" />
+                </div>
+              )}
+              <span className="npc-preview-map-thumb-open"><ArrowRight className="size-3.5" /></span>
+            </Link>
           ) : null}
         </div>
       </section>
 
-      <section className="creature-preview-stats" aria-label={t('npcDetail.overview')}>
-        <PreviewStat icon={<PackageOpen className="size-3.5" />} label={t('npcDetail.buys')} value={String(npc.buys.length)} />
-        <PreviewStat icon={<Coins className="size-3.5" />} label={t('npcDetail.sells')} value={String(npc.sells.length)} />
-        <PreviewStat icon={<BookOpenCheck className="size-3.5" />} label={t('npcDetail.quests')} value={String(questNames.length)} />
-        <PreviewStat icon={<Route className="size-3.5" />} label={t('npcDetail.travel')} value={String(npc.destinations.length)} />
-      </section>
-
-      <section className="npc-preview-location">
-        <h3 className="creature-preview-section-title"><MapPin className="size-4 text-primary" />{t('namedKnowledge.location')}</h3>
-        <div className="mt-2 rounded-lg border border-line/60 bg-surface-base/35 p-3">
-          <p className="font-semibold text-content-primary">{locationName || t('npcDetail.unknownLocation')}</p>
-          {locationLabels.length > 1 ? <p className="mt-1 text-xs text-content-muted">{locationLabels.join(' · ')}</p> : null}
-          {mapped && npc.spatial.x != null && npc.spatial.y != null ? (
-            <p className="mt-2 text-[11px] text-content-muted">
-              X {npc.spatial.x} · Y {npc.spatial.y}{npc.spatial.z != null ? ` · Z ${npc.spatial.z}` : ''}
-            </p>
-          ) : null}
-        </div>
-      </section>
-
-      {tradeKnown ? (
-        <section className="creature-preview-columns npc-preview-columns">
-          <NpcReferenceColumn title={t('npcDetail.buys')} values={npc.buys.slice(0, 4)} />
-          <NpcReferenceColumn title={t('npcDetail.sells')} values={npc.sells.slice(0, 4)} />
-        </section>
-      ) : null}
-
-      {(questsKnown || travelKnown) ? (
-        <section className="creature-preview-columns npc-preview-columns">
-          <div className="min-w-0">
-            <h3 className="creature-preview-section-title"><BookOpenCheck className="size-4 text-primary" />{t('npcDetail.quests')}</h3>
-            {questNames.length ? (
-              <div className="creature-preview-list">
-                {questNames.map((name) => <div key={name} className="creature-preview-row"><span className="truncate">{name}</span></div>)}
-              </div>
-            ) : <p className="mt-2 text-xs text-content-muted">{t('npcDetail.questsNone')}</p>}
-          </div>
-          <div className="min-w-0">
-            <h3 className="creature-preview-section-title"><Route className="size-4 text-primary" />{t('npcDetail.travel')}</h3>
-            {npc.destinations.length ? (
-              <div className="creature-preview-list">
-                {npc.destinations.slice(0, 5).map((destination, index) => (
-                  <div key={`${destination.name}-${index}`} className="creature-preview-row"><span className="truncate">{referenceLabel(destination)}</span></div>
-                ))}
-              </div>
-            ) : <p className="mt-2 text-xs text-content-muted">{t('npcDetail.travelNone')}</p>}
+      {questRows.length ? (
+        <section className="npc-preview-section npc-preview-quests">
+          <h3 className="npc-preview-section-title">
+            <BookOpenCheck className="size-4 text-primary" />
+            {t('npcDetail.quests')} <span className="npc-preview-section-count">({questRows.length})</span>
+          </h3>
+          <div className="npc-preview-quest-list">
+            {questRows.map((quest) => {
+              const content = (
+                <>
+                  <BookOpenCheck className="size-4 shrink-0 text-primary" />
+                  <span className="min-w-0 flex-1">
+                    <strong>{quest.name}</strong>
+                    <small>{quest.detail}</small>
+                  </span>
+                  <ArrowRight className="size-3.5 shrink-0 text-content-muted" />
+                </>
+              );
+              return quest.to ? (
+                <Link key={quest.key} to={quest.to} className="npc-preview-quest-row">{content}</Link>
+              ) : (
+                <div key={quest.key} className="npc-preview-quest-row">{content}</div>
+              );
+            })}
           </div>
         </section>
       ) : null}
 
       {aliases.length ? (
-        <section className="npc-preview-aliases">
-          <span className="text-[10px] font-semibold uppercase tracking-wide text-content-muted">{t('npcDetail.aliases')}</span>
-          <div className="mt-2 flex flex-wrap gap-1.5">{aliases.map((alias) => <span key={alias} className="creature-preview-chip">{alias}</span>)}</div>
+        <section className="npc-preview-section npc-preview-aliases">
+          <h3 className="npc-preview-section-title"><UserRound className="size-4 text-primary" />{t('npcDetail.aliases')}</h3>
+          <div className="npc-preview-alias-list">
+            {aliases.map((alias) => <span key={alias}>{alias}</span>)}
+          </div>
         </section>
       ) : null}
 
       <div className="npc-preview-actions">
-        {mapPath ? (
-          <Link to={mapPath} className="app-button-secondary app-button-sm justify-center">
-            <MapPin className="size-4" />{t('npcDetail.openMap')}
-          </Link>
-        ) : null}
         <Link
           to={npcPath}
           state={{ from: `${location.pathname}${location.search}` }}
@@ -202,29 +362,5 @@ export default function NpcPreviewPanel({ identifier }: { identifier: string }) 
         </Link>
       </div>
     </article>
-  );
-}
-
-function PreviewStat({ icon, label, value }: { icon: React.ReactNode; label: string; value: string }) {
-  return (
-    <div className="creature-preview-stat">
-      <span className="flex items-center gap-1.5">{icon}{label}</span>
-      <strong>{value}</strong>
-    </div>
-  );
-}
-
-function NpcReferenceColumn({ title, values }: { title: string; values: NpcNamedReference[] }) {
-  return (
-    <div className="min-w-0">
-      <h3 className="creature-preview-section-title"><PackageOpen className="size-4 text-primary" />{title}</h3>
-      {values.length ? (
-        <div className="creature-preview-list">
-          {values.map((value, index) => (
-            <div key={`${value.name}-${index}`} className="creature-preview-row"><span className="truncate">{referenceLabel(value)}</span></div>
-          ))}
-        </div>
-      ) : <p className="mt-2 text-xs text-content-muted">—</p>}
-    </div>
   );
 }
