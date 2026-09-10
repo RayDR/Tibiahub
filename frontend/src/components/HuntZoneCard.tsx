@@ -1,5 +1,5 @@
 import type { KeyboardEvent, MouseEvent } from 'react';
-import { ArrowUpRight, Crown, Map, Route, Skull, Users } from 'lucide-react';
+import { ArrowUpRight, Crown, Gauge, Map, Route, Skull, Users } from 'lucide-react';
 import { Link } from 'react-router-dom';
 import { useTranslation } from 'react-i18next';
 
@@ -21,6 +21,49 @@ interface HuntZoneCardProps {
   onSelect?: (zone: HuntZone) => void;
 }
 
+const formatCompactMetric = (value?: number | null, suffix = ''): string | null => {
+  if (value == null) return null;
+  const compact = new Intl.NumberFormat('en', {
+    notation: 'compact',
+    maximumFractionDigits: value >= 1_000_000 ? 1 : 0,
+  }).format(value);
+  return `${compact}${suffix}`;
+};
+
+const levelRangeFor = (zone: HuntZone): string | null => {
+  const minimum = zone.min_level && zone.min_level > 0 ? zone.min_level : null;
+  const maximum = zone.max_level && zone.max_level > 0 ? zone.max_level : null;
+  if (minimum && maximum) return `${minimum}–${maximum}`;
+  if (minimum) return `${minimum}+`;
+  if (zone.recommended_level && zone.recommended_level > 0) return `${zone.recommended_level}+`;
+  return null;
+};
+
+const recommendedVocationsFor = (zone: HuntZone): string[] => {
+  if (zone.recommended_vocations?.length) return zone.recommended_vocations;
+  return [
+    zone.knights_recommended && 'Knight',
+    zone.paladins_recommended && 'Paladin',
+    zone.druids_recommended && 'Druid',
+    zone.sorcerers_recommended && 'Sorcerer',
+    zone.monks_recommended && 'Monk',
+  ].filter(Boolean) as string[];
+};
+
+const ratingToneFor = (value?: string | null): 'success' | 'warning' | 'danger' | 'neutral' => {
+  const normalized = String(value || '').toLowerCase();
+  if (/trivial|easy|low|safe|beginner|excellent/.test(normalized)) return 'success';
+  if (/medium|moderate|normal|good|average/.test(normalized)) return 'warning';
+  if (/hard|high|danger|extreme|challeng|expert|deadly/.test(normalized)) return 'danger';
+  return 'neutral';
+};
+
+const placeFor = (zone: HuntZone): string | null => {
+  const values = [zone.region, zone.city].filter((value): value is string => Boolean(value?.trim()));
+  const unique = values.filter((value, index) => values.findIndex((candidate) => candidate.toLowerCase() === value.toLowerCase()) === index);
+  return unique.length ? unique.join(', ') : null;
+};
+
 export default function HuntZoneCard({
   zone,
   linkState,
@@ -38,9 +81,18 @@ export default function HuntZoneCard({
   const identifierString = String(identifier);
   const mapped = zone.spatial?.geometry_status === 'mapped' && Boolean(zone.spatial.world_map);
   const suggestedLevel = zone.recommended_level ?? zone.min_level;
-  const profit = zone.avg_profit_hour ? `${zone.avg_profit_hour.toLocaleString()} gp/h` : zone.profit_rating;
-  const experience = zone.avg_exp_hour ? `${zone.avg_exp_hour.toLocaleString()}/h` : rawExperience ? rawExperience.toLocaleString() : zone.exp_rating;
-  const place = zone.region || zone.city;
+  const levelRange = levelRangeFor(zone);
+  const place = placeFor(zone);
+  const vocations = recommendedVocationsFor(zone);
+  const qualityLabel = zone.danger_rating || zone.difficulty || null;
+  const qualityTone = ratingToneFor(qualityLabel);
+  const averageExperience = formatCompactMetric(zone.avg_exp_hour, '/h');
+  const rawExperienceLabel = rawExperience ? formatCompactMetric(rawExperience) : null;
+  const experience = averageExperience || zone.exp_rating || rawExperienceLabel;
+  const experienceLabel = zone.avg_exp_hour ? 'XP/h' : 'EXP';
+  const averageProfit = formatCompactMetric(zone.avg_profit_hour, ' gp/h');
+  const profit = averageProfit || zone.profit_rating;
+  const profitLabel = zone.avg_profit_hour ? t('cyclopedia.zones.profitPerHour', { defaultValue: 'Profit/h' }) : t('cyclopedia.zones.profit');
   const isCyclopedia = variant === 'cyclopedia' || Boolean(previewSelection);
   const isSelected = selected || (
     previewSelection?.selection?.kind === 'zone'
@@ -107,25 +159,48 @@ export default function HuntZoneCard({
         </div>
 
         <div className="cyclopedia-zone-card-body">
-          <div className="min-w-0">
-            <h3 className="cyclopedia-zone-card-title">{zone.name}</h3>
-            <p className="cyclopedia-zone-card-place">
-              {[place, zone.spatial?.z != null ? t('map.floor', { floor: formatDisplayFloor(zone.spatial.z) }) : null]
-                .filter(Boolean)
-                .join(' · ') || t('cyclopedia.zones.notRecorded')}
-            </p>
+          <div className="cyclopedia-zone-card-heading">
+            <div className="min-w-0 flex-1">
+              <h3 className="cyclopedia-zone-card-title">{zone.name}</h3>
+              <p className="cyclopedia-zone-card-place">
+                {place || t('cyclopedia.zones.notRecorded')}
+              </p>
+            </div>
+            {qualityLabel ? (
+              <span className="cyclopedia-zone-rating" data-tone={qualityTone}>{qualityLabel}</span>
+            ) : null}
           </div>
 
-          <dl className="cyclopedia-zone-card-stats">
-            <div><dt>{t('cyclopedia.zones.suggested')}</dt><dd>{suggestedLevel ? t('cyclopedia.zones.level', { level: suggestedLevel }) : '—'}</dd></div>
-            <div><dt>EXP</dt><dd>{experience || '—'}</dd></div>
-            <div><dt>{t('cyclopedia.zones.profit')}</dt><dd>{profit || '—'}</dd></div>
-            <div><dt>{t('cyclopedia.zones.danger')}</dt><dd>{zone.danger_rating || zone.difficulty || '—'}</dd></div>
+          <div className="cyclopedia-zone-card-level-row">
+            <strong>{levelRange || '—'}</strong>
+            <span>{t('huntZoneDetail.levels')}</span>
+          </div>
+
+          {vocations.length ? (
+            <div className="cyclopedia-zone-vocations" aria-label={t('huntZoneDetail.vocations')}>
+              {vocations.slice(0, 5).map((vocation) => (
+                <span key={vocation} title={vocation}>{vocation}</span>
+              ))}
+            </div>
+          ) : null}
+
+          <dl className="cyclopedia-zone-card-kpis">
+            <div>
+              <dt>{experienceLabel}</dt>
+              <dd>{experience || '—'}</dd>
+            </div>
+            <div>
+              <dt>{profitLabel}</dt>
+              <dd>{profit || '—'}</dd>
+            </div>
           </dl>
+
+          {zone.description ? <p className="cyclopedia-zone-card-description">{zone.description}</p> : null}
 
           <div className="cyclopedia-zone-card-footer">
             <span><Users className="size-3.5" />{zone.creature_count ?? zone.creature_preview?.length ?? zone.creatures?.length ?? 0}</span>
-            <span><Skull className="size-3.5" />{zone.boss_count ?? 0}</span>
+            {zone.boss_count ? <span><Skull className="size-3.5" />{zone.boss_count}</span> : null}
+            {zone.spatial?.z != null ? <span className="cyclopedia-zone-card-floor">{t('map.floor', { floor: formatDisplayFloor(zone.spatial.z) })}</span> : null}
             {accessRestricted ? <span className="cyclopedia-zone-access"><Crown className="size-3.5" />{t('huntZoneDetail.access')}</span> : null}
           </div>
         </div>
