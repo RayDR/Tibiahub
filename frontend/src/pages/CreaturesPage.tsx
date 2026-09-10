@@ -58,7 +58,6 @@ import {
 import { iconByCategory } from '../components/icons/CategoryIcons';
 import { useAuth } from '../context/AuthContext';
 import { activityApi } from '../services/activity';
-import CyclopediaDiscovery from '../components/CyclopediaDiscovery';
 import QuestLibraryShelves from '../components/QuestLibraryShelves';
 import CompactEntityStrip from '../components/CompactEntityStrip';
 import KnowledgeCategoryIcon from '../components/knowledge/KnowledgeCategoryIcon';
@@ -82,19 +81,19 @@ import {
 type SearchMode = KnowledgeSearchSection;
 type CreatureSort = 'name' | 'experience' | 'hitpoints' | 'difficulty';
 type SortOrder = 'asc' | 'desc';
-type NpcCategoryFilter = '' | NpcDirectoryCategory;
+type NpcCategoryFilter = '' | 'service' | 'trade' | 'information' | 'quests' | 'travel';
 
-const NPC_CATEGORY_FILTERS: NpcDirectoryCategory[] = [
-  'buys',
-  'sells',
-  'quests',
+const NPC_CATEGORY_FILTERS: Exclude<NpcCategoryFilter, ''>[] = [
+  'service',
+  'trade',
+  'information',
   'travel',
-  'other',
+  'quests',
 ];
 
 const normalizeNpcCategory = (value: string | null): NpcCategoryFilter =>
-  value && NPC_CATEGORY_FILTERS.includes(value as NpcDirectoryCategory)
-    ? value as NpcDirectoryCategory
+  value && NPC_CATEGORY_FILTERS.includes(value as Exclude<NpcCategoryFilter, ''>)
+    ? value as NpcCategoryFilter
     : '';
 
 interface CyclopediaPreviewCard {
@@ -305,7 +304,7 @@ function CreatureCategoryMedia({
 
 const CreaturesPage: React.FC = () => {
   const PAGE_SIZE = NPC_CYCLOPEDIA_PAGE_SIZE;
-  const { t, i18n } = useTranslation();
+  const { t } = useTranslation();
   const navigate = useNavigate();
   const [searchParams, setSearchParams] = useSearchParams();
 
@@ -879,7 +878,7 @@ const CreaturesPage: React.FC = () => {
       } else {
         const page = await namedKnowledgeApi.listNpcs({
           search: normalized || undefined,
-          category: npcCategory || undefined,
+          category: npcCategory ? npcCategory as NpcDirectoryCategory : undefined,
           skip: nextSkip,
           limit: PAGE_SIZE,
         }, controller.signal);
@@ -1175,11 +1174,11 @@ const CreaturesPage: React.FC = () => {
 
   const npcFilterOptions: Array<{ value: NpcCategoryFilter; label: string }> = [
     { value: '', label: t('cyclopedia.categories.all') },
-    { value: 'buys', label: t('npcDetail.buys') },
-    { value: 'sells', label: t('npcDetail.sells') },
-    { value: 'quests', label: t('npcDetail.quests') },
-    { value: 'travel', label: t('npcDetail.travel') },
-    { value: 'other', label: i18n.resolvedLanguage?.startsWith('es') ? 'Otros' : 'Other' },
+    { value: 'service', label: t('npcCard.services.service', { defaultValue: 'Service' }) },
+    { value: 'trade', label: t('npcDetail.trade', { defaultValue: 'Trade' }) },
+    { value: 'information', label: t('npcCard.services.information', { defaultValue: 'Information' }) },
+    { value: 'travel', label: t('npcCard.services.travel', { defaultValue: 'Travel' }) },
+    { value: 'quests', label: t('npcCard.services.quests', { defaultValue: 'Quests' }) },
   ];
 
   return (
@@ -1307,8 +1306,7 @@ const CreaturesPage: React.FC = () => {
           mode === 'creatures' ? <CompactEntityStrip title={t('cyclopedia.discovery.mostPopularCreatures')} items={topPreviewCards} variant="rail" nudgeSessionKey="popular-creatures" linkState={cyclopediaRouteState} onNavigate={persistCyclopediaState} />
           : mode === 'bosses' ? <CompactEntityStrip title={t('cyclopedia.discovery.popularBosses')} items={topPreviewCards} variant="rail" nudgeSessionKey="popular-bosses" linkState={cyclopediaRouteState} onNavigate={persistCyclopediaState} />
           : mode === 'items' ? <div className="space-y-4 rounded-2xl border border-line bg-surface-raised/60 p-4"><CompactEntityStrip title={t('cyclopedia.discovery.popularLoot')} items={topPreviewCards} variant="rail" nudgeSessionKey="popular-loot" linkState={cyclopediaRouteState} onNavigate={persistCyclopediaState} /><CompactEntityStrip title={t('cyclopedia.discovery.trendingLoot')} items={lootTrendingPreviewCards} variant="rail" nudgeSessionKey="trending-loot" linkState={cyclopediaRouteState} onNavigate={persistCyclopediaState} /></div>
-          : mode === 'quests' || mode === 'npcs' ? null
-          : <CyclopediaDiscovery mode={mode} primaryItems={topPreviewCards} linkState={cyclopediaRouteState} onNavigate={persistCyclopediaState} />
+          : null
         ) : null}
       </div>
 
