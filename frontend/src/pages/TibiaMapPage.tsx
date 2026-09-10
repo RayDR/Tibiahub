@@ -84,7 +84,7 @@ function saveRecentTarget(row: TibiaMapResult, current: RecentMapTarget[]): Rece
 }
 
 export default function TibiaMapPage() {
-  const { t } = useTranslation();
+  const { t, i18n } = useTranslation();
   const [params, setParams] = useSearchParams();
   const [floor, setFloor] = useState(() => initialFloor(params.get('floor')));
   const [bootstrap, setBootstrap] = useState<TibiaMapBootstrap | null>(null);
@@ -100,14 +100,18 @@ export default function TibiaMapPage() {
   const [mapLoading, setMapLoading] = useState(true);
   const [searchLoading, setSearchLoading] = useState(false);
   const [searchError, setSearchError] = useState(false);
-  const [sidebarOpen, setSidebarOpen] = useState(true);
-  const [showPathfinding, setShowPathfinding] = useState(false);
+  const [sidebarOpen, setSidebarOpen] = useState(() =>
+    typeof window !== 'undefined' && window.matchMedia('(min-width: 1024px)').matches,
+  );
   const [viewport, setViewport] = useState<TibiaMapViewport | null>(null);
   const viewportRequestSequence = useRef(0);
   const internalParamsUpdate = useRef<string | null>(null);
   const [navigationRequestKey, setNavigationRequestKey] = useState(() => params.toString());
   const requestedSelection = useMemo(() => requestedMapSelection(params), [params]);
   const [searchRequestedSelection, setSearchRequestedSelection] = useState(() => requestedMapSelection(params));
+  const noResultsLabel = i18n.resolvedLanguage?.startsWith('es')
+    ? 'No se encontraron resultados.'
+    : 'No results found.';
 
   const replaceParams = (next: URLSearchParams) => {
     internalParamsUpdate.current = next.toString();
@@ -276,7 +280,7 @@ export default function TibiaMapPage() {
         label: row.name,
         subtitle: evidence.role ? t(`map.roles.${evidence.role}`, { defaultValue: evidence.relationship || evidence.role }) : undefined,
         imageUrl: row.image_url?.startsWith('/') ? row.image_url : undefined,
-        kind: row.entity_type === 'town' || row.entity_type === 'item' ? 'location' as const : row.entity_type,
+        kind: row.entity_type === 'town' ? 'location' as const : row.entity_type,
         resultId: row.id,
       })),
     ));
@@ -301,8 +305,10 @@ export default function TibiaMapPage() {
   const focus = focusedEvidence && (focusedEvidence.z == null || focusedEvidence.z === floor) ? focusedEvidence : null;
   const regions = useMemo(() => {
     if (focus?.bounds) return [{
-      minX: focus.bounds.min_x, minY: focus.bounds.min_y,
-      maxX: focus.bounds.max_x, maxY: focus.bounds.max_y,
+      minX: focus.bounds.min_x,
+      minY: focus.bounds.min_y,
+      maxX: focus.bounds.max_x,
+      maxY: focus.bounds.max_y,
       label: focus.label || selected?.name || '',
     }];
     if (isolatedMarkerMode) return [];
@@ -310,8 +316,10 @@ export default function TibiaMapPage() {
       (row.spatial_evidence || [])
         .filter((evidence) => evidence.bounds && (evidence.z == null || evidence.z === floor))
         .map((evidence) => ({
-          minX: evidence.bounds!.min_x, minY: evidence.bounds!.min_y,
-          maxX: evidence.bounds!.max_x, maxY: evidence.bounds!.max_y,
+          minX: evidence.bounds!.min_x,
+          minY: evidence.bounds!.min_y,
+          maxX: evidence.bounds!.max_x,
+          maxY: evidence.bounds!.max_y,
           label: row.name,
         })),
     ));
@@ -330,7 +338,6 @@ export default function TibiaMapPage() {
       else next.add(layer);
       return next;
     });
-    setSidebarOpen(true);
   };
 
   const openRecent = (target: RecentMapTarget) => {
@@ -403,12 +410,10 @@ export default function TibiaMapPage() {
     ><ChevronDown size={18} /></button>
   </div>;
 
-  return <div className="relative h-[calc(100dvh-var(--app-nav-clearance)-var(--app-mobile-nav-clearance))] min-h-0 w-full overflow-hidden bg-surface-base" aria-label={t('map.workspace')}>
+  return <div className="relative h-[calc(100dvh-var(--app-nav-clearance)-var(--app-mobile-nav-clearance))] min-h-0 w-full overflow-hidden bg-surface-base" aria-label={t('map.title')}>
     {map ? <Suspense fallback={<div className="grid h-full place-items-center text-content-muted">{t('map.loading')}</div>}>
       <TibiaMapViewer
         imageUrl={map.image_url}
-        pathfindingUrl={map.pathfinding_url}
-        showPathfinding={showPathfinding}
         label={selected?.name || t('map.title')}
         floor={floor}
         floorLabel={t('map.floor', { floor: formatDisplayFloor(floor) })}
@@ -484,10 +489,15 @@ export default function TibiaMapPage() {
       <div className="mx-auto mb-2 h-1 w-10 rounded-full bg-content-muted/30 lg:hidden" aria-hidden="true" />
       <div className="mb-2 flex items-center justify-between gap-2 border-b border-line pb-2">
         <div className="min-w-0">
-          <p className="truncate text-xs font-bold uppercase tracking-wide text-content-muted">{query.trim() ? t('map.searchResults') : t('map.localNavigation')}</p>
+          <p className="truncate text-xs font-bold uppercase tracking-wide text-content-muted">{query.trim() ? t('map.searchResults') : t('map.title')}</p>
           {query.trim() ? <p className="truncate text-xs text-content-secondary">{query.trim()}</p> : null}
         </div>
-        <label className="flex shrink-0 items-center gap-1.5 text-xs text-content-secondary"><input type="checkbox" checked={showPathfinding} onChange={(event) => setShowPathfinding(event.target.checked)} />{t('map.pathfinding')}</label>
+        <button
+          type="button"
+          onClick={() => setSidebarOpen(false)}
+          className="grid size-9 shrink-0 place-items-center rounded-lg text-content-muted hover:bg-surface-hover hover:text-content-primary lg:hidden"
+          aria-label={t('map.collapseSidebar')}
+        ><ChevronDown className="size-4" /></button>
       </div>
 
       <div className="min-h-0 flex-1 space-y-2 overflow-y-auto overscroll-contain pr-0.5" aria-live="polite">
@@ -496,28 +506,26 @@ export default function TibiaMapPage() {
           <div className="space-y-1.5">{recentTargets.map((target) => <button key={target.id} type="button" onClick={() => openRecent(target)} className="flex min-h-10 w-full items-center gap-2 rounded-lg px-2 text-left text-sm text-content-secondary hover:bg-surface-hover hover:text-content-primary"><Clock3 className="size-4 shrink-0" /><span className="truncate">{target.name}</span></button>)}</div>
         </section> : null}
         {!query.trim() ? <section className={recentTargets.length ? 'border-t border-line pt-3' : ''}>
-          <h2 className="mb-1.5 px-1 text-xs font-bold uppercase tracking-wide text-content-muted">{t('map.defaultLocations')}</h2>
+          <h2 className="mb-1.5 px-1 text-xs font-bold uppercase tracking-wide text-content-muted">{t('map.layers.location')}</h2>
           <div className="space-y-1.5">{defaultResults.map((row) => renderResult(row))}</div>
         </section> : null}
         {searchLoading ? <p className="p-3 text-sm text-content-muted">{t('map.loading')}</p> : null}
         {searchError ? <p className="flex gap-2 p-3 text-sm text-danger"><AlertTriangle className="size-4 shrink-0" />{t('map.searchError')}</p> : null}
-        {!searchLoading && !searchError && query.trim().length >= 2 && !visible.length ? <p className="p-3 text-sm text-content-muted">{t('map.noResults')}</p> : null}
+        {!searchLoading && !searchError && query.trim().length >= 2 && !visible.length ? <p className="p-3 text-sm text-content-muted">{noResultsLabel}</p> : null}
         {!searchLoading && query.trim().length >= 2 ? visible.map(renderResult) : null}
         {loadingLayers.length ? <p className="p-2 text-xs text-content-muted" role="status">{t('map.layerLoading', { count: loadingLayers.length })}</p> : null}
         {failedLayers.length ? <p className="flex gap-2 rounded-lg bg-danger-subtle p-2 text-xs text-danger"><AlertTriangle className="size-4 shrink-0" />{t('map.layerFailed', { layers: failedLayers.map((layer) => t(`map.layers.${layer}`)).join(', ') })}</p> : null}
       </div>
 
-      {selected ? <div className="mt-3 border-t border-line pt-3" aria-label={t('map.selectedEntity')}>
+      {selected ? <div className="mt-3 border-t border-line pt-3" aria-label={selected.name}>
         <div className="flex items-center gap-2">
           {selected.image_url ? <img src={selected.image_url} alt="" className="size-10 object-contain [image-rendering:pixelated]" /> : null}
           <div className="min-w-0"><h2 className="truncate font-bold">{selected.name}</h2><p className="text-[11px] uppercase tracking-wide text-content-muted">{t(`map.layers.${selected.entity_type}`, { defaultValue: selected.entity_type })}</p></div>
           <button type="button" onClick={clearSearch} aria-label={t('a11y.clearSearch')} className="ml-auto grid size-9 shrink-0 place-items-center rounded-lg text-content-muted hover:bg-surface-hover hover:text-content-primary"><X className="size-4" /></button>
         </div>
-        {selected.spatial_state === 'unresolved'
-          ? <p className="mt-2 flex gap-2 text-xs text-content-muted"><AlertTriangle className="size-4 shrink-0 text-warning" />{t('map.spatialUnresolved')}</p>
-          : selected.geometry_status === 'knowledge_only'
-            ? <p className="mt-2 flex gap-2 text-xs text-content-muted"><Info className="size-4 shrink-0" />{t('map.locationNotMapped')}</p>
-            : <p className="mt-2 text-xs text-content-muted">{t('map.coordinates', { x: focusedEvidence?.x, y: focusedEvidence?.y, z: focusedEvidence?.z != null ? formatDisplayFloor(focusedEvidence.z) : t('common.unknown') })}</p>}
+        {selected.spatial_state !== 'unresolved' && selected.geometry_status !== 'knowledge_only'
+          ? <p className="mt-2 text-xs text-content-muted">{t('map.coordinates', { x: focusedEvidence?.x, y: focusedEvidence?.y, z: focusedEvidence?.z != null ? formatDisplayFloor(focusedEvidence.z) : t('common.unknown') })}</p>
+          : null}
         {selected.subtitle ? <p className="mt-1 text-xs text-content-secondary">{selected.subtitle}</p> : null}
         {selectedOnAnotherFloor ? <button type="button" onClick={() => setFloor(focusedEvidence?.z as number)} className="app-button-secondary app-button-sm mt-2">{t('map.returnToFloor', { floor: formatDisplayFloor(focusedEvidence?.z as number) })}</button> : null}
         {selectedEvidence.length > 1 ? <div className="mt-2 flex flex-wrap gap-1">{selectedEvidence.map((value, index) => <button key={`${value.x}:${value.y}:${value.z}:${index}`} type="button" onClick={() => { setFocusedEvidence(value); if (value.z != null) setFloor(value.z); }} className={`rounded-full border px-2 py-1 text-[11px] ${focusedEvidence === value ? 'border-primary bg-primary/10 text-primary' : 'border-line'}`}>{value.label || t('map.mappedLocation', { index: index + 1 })}</button>)}</div> : null}
