@@ -117,15 +117,15 @@ function inferNpcServices(
   if (/weapon|blacksmith|smith/.test(context)) add('weapons', labels.weapons, labels.weaponsTip, Swords);
   if (/armor|armour/.test(context)) add('armor', labels.armor, labels.armorTip, Shield);
   if (/ammunition|ammo|bowyer/.test(context)) add('ammunition', labels.ammunition, labels.ammunitionTip, Swords);
-  if (/spy|inform|guide|scholar|teacher|trainer|librarian/.test(context)) {
+  if (/spy|inform|guide|scholar|teacher|trainer|librarian|advisor|adviser|sage|historian|oracle/.test(context)) {
     add('information', labels.information, labels.informationTip, Info);
   }
 
   if (!values.length && (npc.occupation || npc.title)) {
     add(
       'service',
-      npc.occupation || npc.title || labels.service,
-      labels.occupationTip,
+      labels.service,
+      npc.occupation || npc.title || labels.occupationTip,
       CircleEllipsis,
     );
   }
