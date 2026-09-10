@@ -1,0 +1,27 @@
+name: Ops Quality
+
+on:
+  pull_request:
+    paths:
+      - 'scripts/tibiahub-ops.sh'
+      - 'scripts/check-deploy-cli.sh'
+      - 'deploy/**'
+      - '.github/workflows/ops-quality.yml'
+  push:
+    branches:
+      - develop
+    paths:
+      - 'scripts/tibiahub-ops.sh'
+      - 'scripts/check-deploy-cli.sh'
+      - 'deploy/**'
+      - '.github/workflows/ops-quality.yml'
+
+jobs:
+  deploy-cli:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Validate deploy CLI and shell syntax
+        run: bash scripts/check-deploy-cli.sh

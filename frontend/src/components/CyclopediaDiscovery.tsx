@@ -95,17 +95,11 @@ function contextualImageUrl(
   const type = item.entity_type || '';
 
   if (type === 'creature' || type === 'boss') {
-    return buildLocalEntityMediaUrl(
-      type,
-      item.id,
-    );
+    return buildLocalEntityMediaUrl(type, item.id);
   }
 
   if (type === 'hunt_zone') {
-    return buildLocalEntityMediaUrl(
-      'zone',
-      item.id,
-    );
+    return buildLocalEntityMediaUrl('zone', item.id);
   }
 
   return undefined;
@@ -125,22 +119,13 @@ function contextualSubtitle(
   t: TFunction,
 ): string {
   if (item.search_count) {
-    return t('cyclopedia.discovery.searches', {
-      count: item.search_count,
-    });
+    return t('cyclopedia.discovery.searches', { count: item.search_count });
   }
 
-  if (item.summary) {
-    return item.summary;
-  }
+  if (item.summary) return item.summary;
 
-  if (
-    item.entity_type === 'hunt_zone' &&
-    item.recommended_level
-  ) {
-    const level = t('cyclopedia.zones.level', {
-      level: item.recommended_level,
-    });
+  if (item.entity_type === 'hunt_zone' && item.recommended_level) {
+    const level = t('cyclopedia.zones.level', { level: item.recommended_level });
     return item.city ? `${item.city} · ${level}` : level;
   }
 
@@ -161,56 +146,29 @@ function relatedCards(
     ...data.trending,
     ...data.latest_knowledge,
     ...(mode === 'quests'
-      ? data.recent_quests.map((item) => ({
-          ...item,
-          entity_type: 'quest',
-        }))
+      ? data.recent_quests.map((item) => ({ ...item, entity_type: 'quest' }))
       : []),
     ...(mode === 'zones'
-      ? data.popular_hunts.map((item) => ({
-          ...item,
-          entity_type: 'hunt_zone',
-        }))
+      ? data.popular_hunts.map((item) => ({ ...item, entity_type: 'hunt_zone' }))
       : []),
     ...(mode === 'bosses' && data.boosted_boss
-      ? [
-          {
-            ...data.boosted_boss,
-            entity_type: 'boss',
-          },
-        ]
+      ? [{ ...data.boosted_boss, entity_type: 'boss' }]
       : []),
   ];
 
-  const primaryNames = new Set(
-    primaryItems.map((item) => normalize(item.name)),
-  );
-
+  const primaryNames = new Set(primaryItems.map((item) => normalize(item.name)));
   const seen = new Set<string>();
   const cards: ContextCard[] = [];
 
   for (const item of candidates) {
     const entityType = item.entity_type || '';
-
-    if (!expectedTypes.has(entityType)) {
-      continue;
-    }
+    if (!expectedTypes.has(entityType)) continue;
 
     const normalizedName = normalize(item.name);
-
-    if (
-      !normalizedName ||
-      primaryNames.has(normalizedName)
-    ) {
-      continue;
-    }
+    if (!normalizedName || primaryNames.has(normalizedName)) continue;
 
     const key = `${entityType}:${normalizedName}`;
-
-    if (seen.has(key)) {
-      continue;
-    }
-
+    if (seen.has(key)) continue;
     seen.add(key);
 
     cards.push({
@@ -222,36 +180,17 @@ function relatedCards(
       kind: modeKinds[mode],
     });
 
-    if (cards.length >= 6) {
-      break;
-    }
+    if (cards.length >= 6) break;
   }
 
   return cards;
 }
 
-function primaryTitle(
-  mode: DiscoveryMode,
-  t: TFunction,
-): string {
-  if (mode === 'creatures') {
-    return t(
-      'cyclopedia.discovery.mostPopularCreatures',
-    );
-  }
-
-  if (mode === 'quests') {
-    return t('cyclopedia.discovery.recentQuests');
-  }
-
-  if (mode === 'zones') {
-    return t('cyclopedia.discovery.popularHunts');
-  }
-
-  if (mode === 'bosses') {
-    return t('nav.bosses');
-  }
-
+function primaryTitle(mode: DiscoveryMode, t: TFunction): string {
+  if (mode === 'creatures') return t('cyclopedia.discovery.mostPopularCreatures');
+  if (mode === 'quests') return t('cyclopedia.discovery.recentQuests');
+  if (mode === 'zones') return t('cyclopedia.discovery.popularHunts');
+  if (mode === 'bosses') return t('nav.bosses');
   return t('cyclopedia.discovery.popularLoot');
 }
 
@@ -259,14 +198,10 @@ function normalizePrimaryImage(
   imageUrl: string | undefined,
   mode: DiscoveryMode,
 ): string | undefined {
-  if (!imageUrl) {
-    return undefined;
-  }
+  if (!imageUrl) return undefined;
 
   if (
-    (mode === 'creatures' ||
-      mode === 'bosses' ||
-      mode === 'items') &&
+    (mode === 'creatures' || mode === 'bosses' || mode === 'items') &&
     !imageUrl.includes('placeholder=')
   ) {
     return `${imageUrl}?placeholder=false`;
@@ -289,8 +224,7 @@ export default function CyclopediaDiscovery({
   onNavigate,
 }: CyclopediaDiscoveryProps) {
   const { t } = useTranslation();
-  const [data, setData] =
-    useState<DiscoveryPayload | null>(null);
+  const [data, setData] = useState<DiscoveryPayload | null>(null);
 
   useEffect(() => {
     const controller = new AbortController();
@@ -299,14 +233,10 @@ export default function CyclopediaDiscovery({
     void discoveryApi
       .load(controller.signal)
       .then((value) => {
-        if (active) {
-          setData(value);
-        }
+        if (active) setData(value);
       })
       .catch(() => {
-        if (active) {
-          setData(null);
-        }
+        if (active) setData(null);
       });
 
     return () => {
@@ -322,43 +252,29 @@ export default function CyclopediaDiscovery({
         name: item.name,
         subtitle: item.subtitle,
         to: normalizePrimaryLink(item, mode),
-        imageUrl: normalizePrimaryImage(
-          item.imageUrl,
-          mode,
-        ),
+        imageUrl: normalizePrimaryImage(item.imageUrl, mode),
         kind: modeKinds[mode],
       })),
     [mode, primaryItems],
   );
 
   const related = useMemo(
-    () =>
-      data
-        ? relatedCards(data, mode, primaryItems, t)
-        : [],
+    () => data ? relatedCards(data, mode, primaryItems, t) : [],
     [data, mode, primaryItems, t],
   );
 
-  if (
-    primaryCards.length === 0 &&
-    related.length === 0
-  ) {
-    return null;
-  }
+  if (primaryCards.length === 0 && related.length === 0) return null;
 
   return (
     <section
       className="mx-auto max-w-6xl space-y-4"
       aria-label={t('cyclopedia.discovery.label')}
+      data-cyclopedia-legacy-discovery
     >
       <div className="flex items-center justify-between gap-3">
         <div>
           <p className="text-xs font-semibold uppercase tracking-[0.14em] text-primary">
-            {t(
-              mode === 'items'
-                ? 'nav.loot'
-                : `nav.${mode}`,
-            )}
+            {t(mode === 'items' ? 'nav.loot' : `nav.${mode}`)}
           </p>
           <h2 className="mt-1 text-xl font-semibold text-content-primary">
             {primaryTitle(mode, t)}
@@ -417,13 +333,7 @@ function ContextGroup({
         </h3>
       ) : null}
 
-      <div
-        className={
-          columns === 'wide'
-            ? 'grid gap-2 sm:grid-cols-2'
-            : 'grid gap-2'
-        }
-      >
+      <div className={columns === 'wide' ? 'grid gap-2 sm:grid-cols-2' : 'grid gap-2'}>
         {items.map((item) => (
           <Link
             key={item.id}
@@ -433,7 +343,6 @@ function ContextGroup({
             className="group flex min-w-0 items-center gap-3 rounded-xl bg-surface p-3 transition hover:bg-surface-active"
           >
             <ContextMedia item={item} />
-
             <span className="min-w-0">
               <strong className="block truncate text-sm text-content-primary">
                 {item.name}
@@ -449,11 +358,7 @@ function ContextGroup({
   );
 }
 
-function ContextMedia({
-  item,
-}: {
-  item: ContextCard;
-}) {
+function ContextMedia({ item }: { item: ContextCard }) {
   const Icon = fallbackIcons[item.kind];
   const [failed, setFailed] = useState(false);
 

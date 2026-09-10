@@ -1,6 +1,17 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import {
+  ArrowDownAZ,
+  ArrowRight,
+  ArrowUpAZ,
+  Crown,
+  Library,
+  Loader2,
+  MapPin,
+  Repeat2,
+  ShieldCheck,
+  UserRound,
+} from 'lucide-react';
 import { Link, useSearchParams } from 'react-router-dom';
-import { ArrowDownAZ, ArrowUpAZ, BookOpen, Library, Loader2, ShieldCheck } from 'lucide-react';
 import { useTranslation } from 'react-i18next';
 
 import {
@@ -9,10 +20,9 @@ import {
   type QuestBrowseSort,
   type QuestFacets,
 } from '../services/questBrowser';
-import { questsApi } from '../services/api';
-import type { QuestDetail } from '../types';
 import { hasDetailedQuestSummary } from '../utils/questPresentation';
-import QuestPreviewDialog from './quest/QuestPreviewDialog';
+import BrandCategoryFallbackIcon from './icons/BrandCategoryFallbackIcon';
+import { useCyclopediaPreviewSelection } from './cyclopedia/CyclopediaPreviewSelectionContext';
 
 interface Props {
   linkState?: unknown;
@@ -43,9 +53,14 @@ function questKey(quest: QuestBrowseResult): string {
   return String(quest.id || quest.slug || quest.external_id || quest.name);
 }
 
+function questIdentifier(quest: QuestBrowseResult): string {
+  return String(quest.slug || quest.id || quest.external_id || quest.name);
+}
+
 export default function QuestLibraryShelves({ linkState, onNavigate }: Props) {
   const { t } = useTranslation();
   const [searchParams] = useSearchParams();
+  const preview = useCyclopediaPreviewSelection();
   const query = (searchParams.get('q') || '').trim();
   const stored = useMemo(loadStoredFilters, []);
   const [accessOnly, setAccessOnly] = useState(Boolean(stored.accessOnly));
@@ -59,10 +74,6 @@ export default function QuestLibraryShelves({ linkState, onNavigate }: Props) {
     minimum_level_max: null,
   });
   const [quests, setQuests] = useState<QuestBrowseResult[]>([]);
-  const [selected, setSelected] = useState<QuestBrowseResult | null>(null);
-  const [previewDetail, setPreviewDetail] = useState<QuestDetail | null>(null);
-  const [previewLoading, setPreviewLoading] = useState(false);
-  const [previewError, setPreviewError] = useState(false);
   const [skip, setSkip] = useState(0);
   const [hasMore, setHasMore] = useState(false);
   const [loading, setLoading] = useState(true);
@@ -70,7 +81,6 @@ export default function QuestLibraryShelves({ linkState, onNavigate }: Props) {
   const [error, setError] = useState(false);
   const sentinelRef = useRef<HTMLDivElement | null>(null);
   const activeBrowseRef = useRef<AbortController | null>(null);
-  const activePreviewRef = useRef<AbortController | null>(null);
   const loadingMoreRef = useRef(false);
 
   useEffect(() => {
@@ -89,13 +99,12 @@ export default function QuestLibraryShelves({ linkState, onNavigate }: Props) {
     return () => controller.abort();
   }, []);
 
-  useEffect(() => () => { activeBrowseRef.current?.abort(); activePreviewRef.current?.abort(); }, []);
+  useEffect(() => () => activeBrowseRef.current?.abort(), []);
 
   const load = useCallback(async (reset: boolean) => {
     if (query.length === 1) {
       activeBrowseRef.current?.abort();
       setQuests([]);
-      setSelected(null);
       setSkip(0);
       setHasMore(false);
       setLoading(false);
@@ -137,9 +146,6 @@ export default function QuestLibraryShelves({ linkState, onNavigate }: Props) {
       });
       setSkip(nextSkip + rows.length);
       setHasMore(rows.length === PAGE_SIZE);
-      if (reset) {
-        setSelected((current) => current && rows.some((row) => questKey(row) === questKey(current)) ? current : null);
-      }
     } catch {
       if (controller.signal.aborted) return;
       if (reset) setQuests([]);
@@ -172,24 +178,11 @@ export default function QuestLibraryShelves({ linkState, onNavigate }: Props) {
     ? accessOnly ? facets.access_quests : facets.total
     : quests.length;
   const countIsPartial = Boolean(query && hasMore);
-
-  const selectQuest = (quest: QuestBrowseResult) => {
-    setSelected(quest);
-    setPreviewDetail(null);
-    setPreviewError(false);
-    setPreviewLoading(true);
-    activePreviewRef.current?.abort();
-    const controller = new AbortController();
-    activePreviewRef.current = controller;
-    void questsApi.getById(quest.slug || quest.id || quest.external_id || '', controller.signal)
-      .then((detail) => { if (!controller.signal.aborted) setPreviewDetail(detail); })
-      .catch(() => { if (!controller.signal.aborted) setPreviewError(true); })
-      .finally(() => { if (!controller.signal.aborted) setPreviewLoading(false); });
-  };
+  const selectedIdentifier = preview.selection?.kind === 'quest' ? preview.selection.identifier : null;
 
   return (
-    <section aria-label={t('cyclopedia.discovery.questLibrary')} className="space-y-4">
-      <div className="rounded-2xl border border-line bg-surface-raised/70 p-3 sm:p-4">
+    <section aria-label={t('cyclopedia.discovery.questLibrary')} className="cyclopedia-quest-browser space-y-4">
+      <div className="cyclopedia-quest-toolbar rounded-2xl border border-line bg-surface-raised/70 p-3 sm:p-4">
         <div className="flex flex-col gap-3 lg:flex-row lg:items-center lg:justify-between">
           <div className="flex min-w-0 items-center gap-3">
             <span className="grid size-9 shrink-0 place-items-center rounded-lg bg-primary/10 text-primary">
@@ -229,8 +222,6 @@ export default function QuestLibraryShelves({ linkState, onNavigate }: Props) {
         </div>
       </div>
 
-      <QuestPreviewDialog open={Boolean(selected)} quest={selected} detail={previewDetail} loading={previewLoading} error={previewError} linkState={linkState} onClose={() => setSelected(null)} onNavigate={onNavigate} />
-
       {loading ? (
         <div className="flex min-h-44 items-center justify-center text-primary"><Loader2 className="size-7 animate-spin" /></div>
       ) : error ? (
@@ -239,35 +230,78 @@ export default function QuestLibraryShelves({ linkState, onNavigate }: Props) {
         </div>
       ) : quests.length ? (
         <>
-          <div className="grid grid-cols-1 gap-2 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4">
+          <div className="cyclopedia-quest-grid grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4">
             {quests.map((quest) => {
-              const active = selected && questKey(selected) === questKey(quest);
+              const identifier = questIdentifier(quest);
+              const active = selectedIdentifier === identifier;
+              const type = quest.quest_type || quest.category || quest.group_name || t('cyclopedia.cards.quest');
+              const location = quest.location;
+              const npc = quest.npc;
               return (
                 <article
                   data-cyclopedia-result
+                  data-cyclopedia-quest-card="true"
+                  data-quest-identifier={identifier}
+                  data-selected={active ? 'true' : 'false'}
                   key={questKey(quest)}
-                  className={`group relative min-h-[5.25rem] overflow-hidden rounded-r-xl rounded-l-sm border border-line border-l-4 bg-surface-raised text-left shadow-sm transition hover:-translate-y-0.5 hover:border-primary/45 ${active ? 'border-l-primary ring-1 ring-primary/30' : quest.is_access_quest ? 'border-l-primary/70' : 'border-l-content-muted/35'}`}
+                  role="button"
+                  tabIndex={0}
+                  aria-pressed={active}
+                  onClick={() => preview.select({ kind: 'quest', identifier })}
+                  onKeyDown={(event) => {
+                    if (event.key === 'Enter' || event.key === ' ') {
+                      event.preventDefault();
+                      preview.select({ kind: 'quest', identifier });
+                    }
+                  }}
+                  className="cyclopedia-quest-card group"
                 >
-                  <button
-                    type="button"
-                    onClick={() => selectQuest(quest)}
-                    className="block w-full px-4 pb-2 pt-3 text-left focus-visible:outline-offset-[-2px]"
-                    aria-label={t('questDetail.previewTitle', { name: quest.name })}
+                  <span className="quest-card-corner"><BrandCategoryFallbackIcon category="quests" className="size-4" /></span>
+                  <Link
+                    to={`/quests/${identifier}`}
+                    state={linkState}
+                    onClick={(event) => {
+                      event.stopPropagation();
+                      onNavigate?.();
+                    }}
+                    className="quest-card-open"
+                    aria-label={t('questDetail.openQuest')}
+                    title={t('questDetail.openQuest')}
                   >
-                    <div className="flex items-start gap-3">
-                      <BookOpen className="mt-0.5 size-4 shrink-0 text-primary/80" />
-                      <div className="min-w-0 flex-1">
-                        <strong className="line-clamp-2 text-sm leading-5 text-content-primary">{quest.name}</strong>
-                        <div className="mt-2 flex flex-wrap items-center gap-x-2 gap-y-1 text-[11px] text-content-muted">
-                          <span>{t('questDetail.minimumLevel')}: {quest.min_level ?? '—'}</span>
-                          {quest.is_access_quest ? <span className="font-semibold text-primary">{t('questDetail.access')}</span> : null}
-                          {!hasDetailedQuestSummary(quest) ? <span>{t('questDetail.noDetailedData')}</span> : null}
-                        </div>
-                      </div>
+                    <ArrowRight className="size-4" />
+                  </Link>
+
+                  <div className="quest-card-art" aria-hidden="true">
+                    <BrandCategoryFallbackIcon category="quests" className="quest-card-art-icon" />
+                  </div>
+
+                  <div className="quest-card-body">
+                    <div className="flex min-w-0 items-start gap-2">
+                      <h3 className="min-w-0 flex-1 line-clamp-2 font-serif text-lg font-semibold text-content-primary">{quest.name}</h3>
+                      {quest.is_access_quest ? <span className="quest-card-badge quest-card-badge-access">{t('questDetail.access')}</span> : null}
                     </div>
-                  </button>
-                  <div className="flex justify-end px-4 pb-3">
-                    <Link to={`/quests/${quest.slug || quest.id}`} state={linkState} onClick={() => onNavigate?.()} className="app-button-secondary app-button-sm min-h-10">{t('questDetail.openQuest')}</Link>
+
+                    <div className="quest-card-stats">
+                      <QuestStat label={t('questDetail.minimumLevel')} value={quest.min_level?.toLocaleString() || '—'} />
+                      <QuestStat label={t('questDetail.experience')} value={quest.experience_reward?.toLocaleString() || '—'} />
+                      <QuestStat label={t('themePlayground.forms.category')} value={type} />
+                    </div>
+
+                    <div className="quest-card-meta">
+                      {location ? <span><MapPin className="size-4 shrink-0 text-primary" /><span className="truncate">{location}</span></span> : null}
+                      {npc ? <span><UserRound className="size-4 shrink-0 text-content-muted" /><span className="truncate">{npc}</span></span> : null}
+                    </div>
+
+                    <p className="quest-card-summary">
+                      {quest.description || (hasDetailedQuestSummary(quest) ? type : t('questDetail.noDetailedData'))}
+                    </p>
+
+                    <div className="quest-card-flags">
+                      {quest.premium_required ? <span><Crown className="size-3.5" />{t('questDetail.premium')}</span> : null}
+                      {quest.repeatable ? <span><Repeat2 className="size-3.5" />{t('questDetail.repeatable')}</span> : null}
+                      {quest.is_access_quest ? <span><ShieldCheck className="size-3.5" />{t('questDetail.access')}</span> : null}
+                      {!quest.premium_required && !quest.repeatable && !quest.is_access_quest ? <span className="text-content-muted">{type}</span> : null}
+                    </div>
                   </div>
                 </article>
               );
@@ -281,4 +315,8 @@ export default function QuestLibraryShelves({ linkState, onNavigate }: Props) {
       )}
     </section>
   );
+}
+
+function QuestStat({ label, value }: { label: string; value: string }) {
+  return <div className="quest-card-stat"><span>{label}</span><strong title={value}>{value}</strong></div>;
 }

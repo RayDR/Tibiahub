@@ -1,0 +1,74 @@
+/*
+ * Canonical Cyclopedia context rails.
+ *
+ * The Loot composition is the reference for every Cyclopedia section:
+ * recently viewed -> tabs/search -> popular -> result toolbar/content.
+ * Legacy per-section discovery rails remain in code while their data paths are
+ * migrated, but are hidden whenever the canonical shared rail is mounted.
+ */
+
+[data-cyclopedia-context='recent'] {
+  min-width: 0;
+  margin-bottom: 0.45rem;
+}
+
+.cyclopedia-popular-portal {
+  width: 100%;
+  min-width: 0;
+  margin-top: 1rem;
+}
+
+.cyclopedia-popular-portal:empty {
+  display: none;
+}
+
+.cyclopedia-context-rail {
+  width: 100%;
+  min-width: 0;
+  box-shadow:
+    inset 0 1px 0 rgb(var(--ds-text-primary) / 0.025),
+    0 0.65rem 1.5rem rgb(var(--ds-shadow) / 0.08);
+}
+
+/* Old Creature/Boss "most visited" row. The canonical row now lives in AppTabs. */
+.app-shell-cyclopedia article.ds-card > div:has(
+  > [data-compact-entity-strip][data-strip-variant='chips']
+) {
+  display: none;
+}
+
+/*
+ * Hide old per-mode landing rails only after the new shared Popular portal is
+ * present. This keeps the migration fail-safe if the shared chrome is ever not
+ * mounted for a non-standard Cyclopedia surface.
+ */
+.app-shell-cyclopedia .ds-page:has(
+  [data-cyclopedia-context-portal='popular']
+) > .contents > [data-compact-entity-strip][data-strip-variant='rail'] {
+  display: none;
+}
+
+.app-shell-cyclopedia .ds-page:has(
+  [data-cyclopedia-context-portal='popular']
+) > .contents > div:has(
+  > [data-compact-entity-strip][data-strip-variant='rail']
+) {
+  display: none;
+}
+
+.app-shell-cyclopedia .ds-page:has(
+  [data-cyclopedia-context-portal='popular']
+) > .contents > [data-cyclopedia-legacy-discovery] {
+  display: none;
+}
+
+@media (max-width: 639px) {
+  .cyclopedia-popular-portal {
+    margin-top: 0.75rem;
+  }
+
+  .cyclopedia-context-rail {
+    border-radius: var(--radius-lg);
+    padding: var(--space-3);
+  }
+}

@@ -1,0 +1,403 @@
+/* Cyclopedia > Quests reference composition. Shared chrome stays in cyclopedia.css. */
+
+.cyclopedia-quest-toolbar {
+  border-radius: var(--radius-xl);
+  background: rgb(var(--ds-surface-base) / 0.42);
+  box-shadow: none;
+}
+
+.cyclopedia-quest-grid {
+  align-items: stretch;
+}
+
+.cyclopedia-quest-card {
+  position: relative;
+  display: flex;
+  min-width: 0;
+  min-height: 22rem;
+  cursor: pointer;
+  flex-direction: column;
+  overflow: hidden;
+  border: 1px solid rgb(var(--ds-border) / 0.62);
+  border-radius: 0.45rem;
+  background:
+    linear-gradient(180deg, rgb(var(--ds-surface-raised) / 0.9), rgb(var(--ds-surface) / 0.84));
+  box-shadow:
+    0 0.8rem 1.8rem rgb(var(--ds-shadow) / 0.15),
+    inset 0 1px 0 rgb(var(--ds-text-primary) / 0.025);
+  transition:
+    border-color var(--duration-base) var(--ease-standard),
+    box-shadow var(--duration-base) var(--ease-standard),
+    transform var(--duration-base) var(--ease-standard);
+}
+
+.cyclopedia-quest-card:hover,
+.cyclopedia-quest-card:focus-visible {
+  border-color: rgb(var(--ds-primary) / 0.55);
+  box-shadow:
+    0 1rem 2.3rem rgb(var(--ds-shadow) / 0.22),
+    0 0 0 1px rgb(var(--ds-primary) / 0.1);
+}
+
+.cyclopedia-quest-card[data-selected='true'] {
+  border-color: rgb(var(--ds-primary) / 0.9);
+  box-shadow:
+    0 1rem 2.5rem rgb(var(--ds-shadow) / 0.24),
+    0 0 0 1px rgb(var(--ds-primary) / 0.34),
+    inset 0 0 1.6rem rgb(var(--ds-primary) / 0.035);
+}
+
+.cyclopedia-quest-card[data-selected='true']::before {
+  content: '';
+  position: absolute;
+  z-index: 2;
+  inset: -1px;
+  pointer-events: none;
+  border-radius: inherit;
+  box-shadow:
+    inset 0 2px 0 rgb(var(--ds-primary) / 0.72),
+    inset 0 -2px 0 rgb(var(--ds-primary) / 0.46);
+}
+
+.quest-card-corner {
+  position: absolute;
+  z-index: 3;
+  top: var(--space-3);
+  left: var(--space-3);
+  display: grid;
+  place-items: center;
+  color: rgb(var(--ds-text-muted) / 0.82);
+}
+
+.quest-card-open {
+  position: absolute;
+  z-index: 4;
+  top: var(--space-2);
+  right: var(--space-2);
+  display: grid;
+  width: 2rem;
+  height: 2rem;
+  place-items: center;
+  border: 1px solid transparent;
+  border-radius: var(--radius-sm);
+  color: var(--text-muted);
+  opacity: 0.24;
+  transition: opacity var(--duration-fast), color var(--duration-fast), border-color var(--duration-fast), background var(--duration-fast);
+}
+
+.cyclopedia-quest-card:hover .quest-card-open,
+.quest-card-open:focus-visible { opacity: 1; }
+.quest-card-open:hover { border-color: var(--border); background: var(--surface-hover); color: var(--primary); }
+
+.quest-card-art {
+  display: grid;
+  height: 7.75rem;
+  place-items: center;
+  padding: var(--space-5) var(--space-5) var(--space-2);
+  background:
+    radial-gradient(circle at 50% 58%, rgb(var(--ds-primary) / 0.075), transparent 42%),
+    linear-gradient(180deg, rgb(var(--ds-surface-base) / 0.28), transparent);
+}
+
+.quest-card-art-icon {
+  width: 5.75rem;
+  height: 5.75rem;
+  filter: drop-shadow(0 0.5rem 0.7rem rgb(var(--ds-shadow) / 0.3));
+}
+
+.quest-card-body {
+  display: flex;
+  min-height: 0;
+  flex: 1;
+  flex-direction: column;
+  gap: var(--space-3);
+  padding: var(--space-3) var(--space-4) var(--space-4);
+}
+
+.quest-card-badge {
+  display: inline-flex;
+  min-height: 1.45rem;
+  shrink: 0;
+  align-items: center;
+  border: 1px solid currentColor;
+  border-radius: var(--radius-full);
+  padding-inline: var(--space-2);
+  font-size: 0.66rem;
+  font-weight: var(--font-weight-semibold);
+  line-height: 1;
+}
+
+.quest-card-badge-access {
+  background: rgb(var(--ds-primary) / 0.12);
+  color: var(--primary);
+}
+
+.quest-card-stats {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  border-top: 1px solid rgb(var(--ds-border) / 0.34);
+  border-bottom: 1px solid rgb(var(--ds-border) / 0.34);
+}
+
+.quest-card-stat {
+  min-width: 0;
+  padding: var(--space-2);
+  border-right: 1px solid rgb(var(--ds-border) / 0.28);
+}
+
+.quest-card-stat:last-child { border-right: 0; }
+.quest-card-stat span { display: block; overflow: hidden; color: var(--text-muted); font-size: 0.68rem; text-overflow: ellipsis; white-space: nowrap; }
+.quest-card-stat strong { display: block; margin-top: 0.15rem; overflow: hidden; color: var(--text-primary); font-family: var(--font-mono); font-size: var(--font-size-xs); font-weight: var(--font-weight-medium); text-overflow: ellipsis; white-space: nowrap; }
+
+.quest-card-meta {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: var(--space-2);
+  color: var(--text-secondary);
+  font-size: var(--font-size-xs);
+}
+
+.quest-card-meta > span {
+  display: flex;
+  min-width: 0;
+  align-items: center;
+  gap: var(--space-2);
+}
+
+.quest-card-summary {
+  display: -webkit-box;
+  min-height: 3.35rem;
+  overflow: hidden;
+  color: var(--text-secondary);
+  font-size: var(--font-size-xs);
+  line-height: 1.55;
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 3;
+}
+
+.quest-card-flags {
+  display: flex;
+  min-height: 2rem;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--space-2);
+  margin-top: auto;
+  padding-top: var(--space-2);
+  border-top: 1px solid rgb(var(--ds-border) / 0.28);
+  color: var(--text-secondary);
+  font-size: 0.7rem;
+}
+
+.quest-card-flags > span {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-1);
+}
+
+/* Quest preview reuses the same viewport dock as Creature/Boss/Loot. */
+.quest-preview-panel {
+  overflow: hidden;
+  border: 1px solid rgb(var(--ds-border) / 0.72);
+  border-radius: 0.5rem;
+  background:
+    linear-gradient(180deg, rgb(var(--ds-surface-overlay) / 0.96), rgb(var(--ds-surface) / 0.95));
+  box-shadow: 0 1.25rem 3rem rgb(var(--ds-shadow) / 0.28);
+  backdrop-filter: blur(1rem);
+}
+
+.quest-preview-loading {
+  display: flex;
+  min-height: 10rem;
+  align-items: center;
+  justify-content: center;
+  gap: var(--space-3);
+  padding: var(--space-5);
+  color: var(--text-secondary);
+}
+
+.quest-preview-identity {
+  display: grid;
+  grid-template-columns: 7.5rem minmax(0, 1fr);
+  gap: var(--space-4);
+  padding: var(--space-5);
+  border-bottom: 1px solid rgb(var(--ds-border) / 0.48);
+}
+
+.quest-preview-art {
+  display: grid;
+  width: 7.5rem;
+  height: 7.5rem;
+  place-items: center;
+  padding: var(--space-3);
+  border: 1px solid rgb(var(--ds-border) / 0.55);
+  border-radius: 0.35rem;
+  background: radial-gradient(circle at 50% 60%, rgb(var(--ds-primary) / 0.08), rgb(var(--ds-surface-base) / 0.46));
+}
+
+.quest-preview-name {
+  margin: var(--space-1) 0 0;
+  padding-right: 2.6rem;
+  font-family: var(--font-heading);
+  font-size: clamp(1.45rem, 2vw, 1.95rem);
+  font-weight: var(--font-weight-semibold);
+  line-height: 1.15;
+}
+
+.quest-preview-chip {
+  display: inline-flex;
+  min-height: 1.4rem;
+  align-items: center;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  padding-inline: var(--space-2);
+  background: rgb(var(--ds-surface-raised) / 0.74);
+  color: var(--text-secondary);
+  font-size: 0.66rem;
+}
+
+.quest-preview-stats {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  border-bottom: 1px solid rgb(var(--ds-border) / 0.48);
+}
+
+.quest-preview-stat {
+  min-width: 0;
+  padding: var(--space-3) var(--space-4);
+  border-right: 1px solid rgb(var(--ds-border) / 0.42);
+}
+
+.quest-preview-stat:last-child { border-right: 0; }
+.quest-preview-stat span { display: block; color: var(--text-muted); font-size: var(--font-size-xs); }
+.quest-preview-stat strong { display: block; margin-top: var(--space-1); overflow: hidden; color: var(--text-primary); font-family: var(--font-heading); font-size: var(--font-size-lg); font-weight: var(--font-weight-semibold); text-overflow: ellipsis; white-space: nowrap; }
+
+.quest-preview-flags {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--space-2);
+  padding: var(--space-3) var(--space-4);
+  border-bottom: 1px solid rgb(var(--ds-border) / 0.48);
+  color: var(--text-secondary);
+  font-size: var(--font-size-xs);
+}
+
+.quest-preview-flags > span,
+.quest-preview-meta {
+  display: inline-flex;
+  min-width: 0;
+  align-items: center;
+  gap: var(--space-2);
+}
+
+.quest-preview-section {
+  padding: var(--space-4);
+  border-bottom: 1px solid rgb(var(--ds-border) / 0.48);
+}
+
+.quest-preview-section-title {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+  margin: 0;
+  color: var(--text-primary);
+  font-family: var(--font-heading);
+  font-size: var(--font-size-sm);
+  font-weight: var(--font-weight-semibold);
+}
+
+.quest-preview-columns {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: var(--space-4);
+  padding: var(--space-4);
+  border-bottom: 1px solid rgb(var(--ds-border) / 0.48);
+}
+
+.quest-preview-list { margin-top: var(--space-2); }
+.quest-preview-row {
+  display: flex;
+  min-width: 0;
+  min-height: 2rem;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--space-2);
+  border-bottom: 1px solid rgb(var(--ds-border) / 0.22);
+  color: var(--text-secondary);
+  font-size: var(--font-size-xs);
+}
+.quest-preview-row:last-child { border-bottom: 0; }
+
+.quest-preview-missions {
+  display: grid;
+  gap: var(--space-1);
+  margin: var(--space-3) 0 0;
+  padding: 0;
+  list-style: none;
+}
+
+.quest-preview-mission-link {
+  display: grid;
+  min-height: 2.35rem;
+  grid-template-columns: 1.5rem minmax(0, 1fr) auto;
+  align-items: center;
+  gap: var(--space-2);
+  border: 1px solid rgb(var(--ds-border) / 0.32);
+  border-radius: var(--radius-sm);
+  padding-inline: var(--space-2);
+  color: var(--text-secondary);
+  font-size: var(--font-size-xs);
+  transition: border-color var(--duration-fast), background var(--duration-fast), color var(--duration-fast);
+}
+
+.quest-preview-mission-link:hover {
+  border-color: rgb(var(--ds-primary) / 0.46);
+  background: rgb(var(--ds-primary) / 0.05);
+  color: var(--text-primary);
+}
+
+.quest-preview-mission-link > span {
+  color: var(--primary);
+  font-family: var(--font-heading);
+  font-weight: var(--font-weight-bold);
+}
+
+.quest-preview-full-link {
+  display: flex;
+  min-height: 3.25rem;
+  align-items: center;
+  justify-content: center;
+  gap: var(--space-2);
+  color: var(--primary);
+  font-size: var(--font-size-sm);
+  font-weight: var(--font-weight-semibold);
+  transition: background var(--duration-fast), color var(--duration-fast);
+}
+
+.quest-preview-full-link:hover { background: rgb(var(--ds-primary) / 0.06); color: var(--primary-hover); }
+
+@media (min-width: 1600px) {
+  html[data-layout='wide'] .cyclopedia-quest-grid {
+    grid-template-columns: repeat(5, minmax(0, 1fr)) !important;
+  }
+}
+
+@media (min-width: 1920px) {
+  html[data-layout='wide'] .cyclopedia-quest-grid {
+    grid-template-columns: repeat(6, minmax(0, 1fr)) !important;
+  }
+}
+
+@media (min-width: 1440px) {
+  html[data-layout='wide'] [data-cyclopedia-preview-host='true'][data-cyclopedia-preview-kind='quest'] .cyclopedia-quest-grid {
+    grid-template-columns: repeat(4, minmax(0, 1fr)) !important;
+  }
+}
+
+@media (max-width: 639px) {
+  .cyclopedia-quest-card { min-height: 19rem; }
+  .quest-card-art { height: 6.5rem; }
+  .quest-card-art-icon { width: 4.6rem; height: 4.6rem; }
+  .quest-preview-identity { grid-template-columns: 5.75rem minmax(0, 1fr); gap: var(--space-3); padding: var(--space-3); }
+  .quest-preview-art { width: 5.75rem; height: 5.75rem; }
+  .quest-preview-columns { grid-template-columns: 1fr; }
+}

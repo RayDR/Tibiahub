@@ -1,7 +1,8 @@
-import type { LucideIcon } from 'lucide-react';
-import { BookOpenCheck, Crown, Gem, MapPinned, Swords, UserRound } from 'lucide-react';
 import { useEffect, useState } from 'react';
+import { useTranslation } from 'react-i18next';
 
+import BrandCategoryFallbackIcon from '../icons/BrandCategoryFallbackIcon';
+import { cyclopediaSections } from '../../config/cyclopediaSections';
 import api from '../../services/api';
 
 export type KnowledgeCategory =
@@ -13,36 +14,43 @@ export type KnowledgeCategory =
   | 'npcs';
 
 type CategoryVisuals = Partial<Record<KnowledgeCategory, string>>;
-
-const fallbackIcons: Record<KnowledgeCategory, LucideIcon> = {
-  creatures: Swords,
-  bosses: Crown,
-  items: Gem,
-  quests: BookOpenCheck,
-  zones: MapPinned,
-  npcs: UserRound,
-};
+type CategoryVisualResponse = CategoryVisuals & { visual_day?: string };
 
 let visualCache: CategoryVisuals | null = null;
+let visualCacheDay: string | null = null;
 let visualRequest: Promise<CategoryVisuals> | null = null;
 
+const utcDay = () => new Date().toISOString().slice(0, 10);
+
 function loadCategoryVisuals(): Promise<CategoryVisuals> {
-  if (visualCache) return Promise.resolve(visualCache);
+  const today = utcDay();
+  if (visualCache && visualCacheDay === today) return Promise.resolve(visualCache);
+
   if (!visualRequest) {
     visualRequest = api
-      .get<CategoryVisuals>('/catalog/category-visuals')
+      .get<CategoryVisualResponse>('/catalog/category-visuals/daily')
       .then(({ data }) => {
-        visualCache = data || {};
+        visualCache = {
+          creatures: data?.creatures || undefined,
+          bosses: data?.bosses || undefined,
+          items: data?.items || undefined,
+          quests: data?.quests || undefined,
+          zones: data?.zones || undefined,
+          npcs: data?.npcs || undefined,
+        };
+        visualCacheDay = data?.visual_day || today;
         return visualCache;
       })
       .catch(() => {
         visualCache = {};
+        visualCacheDay = today;
         return visualCache;
       })
       .finally(() => {
         visualRequest = null;
       });
   }
+
   return visualRequest;
 }
 
@@ -55,16 +63,23 @@ export function KnowledgeCategoryMedia({
   label,
   className = 'size-9',
   mediaClassName = 'size-8',
+  preferCategoryVisual,
 }: {
   category: KnowledgeCategory;
   label: string;
   className?: string;
   mediaClassName?: string;
+  preferCategoryVisual?: boolean;
 }) {
-  const [visuals, setVisuals] = useState<CategoryVisuals>(visualCache || {});
+  const { t } = useTranslation();
+  const [visuals, setVisuals] = useState<CategoryVisuals>(
+    visualCacheDay === utcDay() ? visualCache || {} : {},
+  );
   const [failed, setFailed] = useState(false);
-  const FallbackIcon = fallbackIcons[category];
-  const imageUrl = visuals[category];
+  const categorySection = cyclopediaSections.find((section) => section.mode === category);
+  const categoryLabel = categorySection ? t(categorySection.i18nLabel) : label;
+  const useCategoryVisual = preferCategoryVisual ?? label === categoryLabel;
+  const imageUrl = useCategoryVisual ? visuals[category] : undefined;
 
   useEffect(() => {
     let active = true;
@@ -94,7 +109,7 @@ export function KnowledgeCategoryMedia({
           className={`object-contain [image-rendering:pixelated] ${mediaClassName}`}
         />
       ) : (
-        <FallbackIcon className="size-1/2" aria-hidden="true" />
+        <BrandCategoryFallbackIcon category={category} className="size-1/2" />
       )}
     </span>
   );

@@ -3,15 +3,18 @@ import React, { createContext, useCallback, useContext, useEffect, useMemo, useS
 export const THEME_IDS = ['medieval', 'tibia-stone', 'midnight-arcana', 'blood-moon', 'high-contrast'] as const;
 export const MOTION_MODES = ['system', 'reduced', 'enhanced'] as const;
 export const DENSITY_MODES = ['comfortable', 'compact'] as const;
+export const LAYOUT_MODES = ['compact', 'wide'] as const;
 
 export type ThemeId = (typeof THEME_IDS)[number];
 export type MotionMode = (typeof MOTION_MODES)[number];
 export type DensityMode = (typeof DENSITY_MODES)[number];
+export type LayoutMode = (typeof LAYOUT_MODES)[number];
 
 export interface AppearancePreferences {
   theme: ThemeId;
   motion: MotionMode;
   density: DensityMode;
+  layout: LayoutMode;
 }
 
 export const APPEARANCE_STORAGE_KEY = 'tibiahub.appearance.v1';
@@ -20,6 +23,7 @@ export const DEFAULT_APPEARANCE: AppearancePreferences = {
   theme: 'tibia-stone',
   motion: 'system',
   density: 'comfortable',
+  layout: 'wide',
 };
 
 const includes = <T extends string>(values: readonly T[], value: unknown): value is T => (
@@ -34,6 +38,7 @@ export const normalizeAppearancePreferences = (value: unknown): AppearancePrefer
     theme: includes(THEME_IDS, migratedTheme) ? migratedTheme : DEFAULT_APPEARANCE.theme,
     motion: includes(MOTION_MODES, candidate.motion) ? candidate.motion : DEFAULT_APPEARANCE.motion,
     density: includes(DENSITY_MODES, candidate.density) ? candidate.density : DEFAULT_APPEARANCE.density,
+    layout: includes(LAYOUT_MODES, candidate.layout) ? candidate.layout : DEFAULT_APPEARANCE.layout,
   };
 };
 
@@ -55,6 +60,7 @@ export const applyAppearancePreferences = (preferences: AppearancePreferences): 
   root.dataset.theme = preferences.theme;
   root.dataset.motion = preferences.motion;
   root.dataset.density = preferences.density;
+  root.dataset.layout = preferences.layout;
 };
 
 const persistAppearancePreferences = (preferences: AppearancePreferences): void => {
@@ -78,6 +84,7 @@ interface AppearanceContextValue extends AppearancePreferences {
   setTheme: (theme: ThemeId) => void;
   setMotion: (motion: MotionMode) => void;
   setDensity: (density: DensityMode) => void;
+  setLayout: (layout: LayoutMode) => void;
   resetAppearance: () => void;
 }
 
@@ -107,8 +114,12 @@ export const AppearanceProvider: React.FC<AppearanceProviderProps> = ({ children
   const setTheme = useCallback((theme: ThemeId) => setPreferences((current) => ({ ...current, theme })), []);
   const setMotion = useCallback((motion: MotionMode) => setPreferences((current) => ({ ...current, motion })), []);
   const setDensity = useCallback((density: DensityMode) => setPreferences((current) => ({ ...current, density })), []);
+  const setLayout = useCallback((layout: LayoutMode) => setPreferences((current) => ({ ...current, layout })), []);
   const resetAppearance = useCallback(() => setPreferences(DEFAULT_APPEARANCE), []);
-  const value = useMemo(() => ({ ...preferences, setTheme, setMotion, setDensity, resetAppearance }), [preferences, setTheme, setMotion, setDensity, resetAppearance]);
+  const value = useMemo(
+    () => ({ ...preferences, setTheme, setMotion, setDensity, setLayout, resetAppearance }),
+    [preferences, setTheme, setMotion, setDensity, setLayout, resetAppearance],
+  );
 
   return <AppearanceContext.Provider value={value}>{children}</AppearanceContext.Provider>;
 };

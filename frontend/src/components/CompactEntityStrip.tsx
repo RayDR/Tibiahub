@@ -34,6 +34,17 @@ interface DragState {
   suppressClick: boolean;
 }
 
+function fallbackKind(item: CompactEntityStripItem) {
+  const value = item.id.toLowerCase();
+  if (value.includes('item:')) return 'item' as const;
+  if (value.includes('boss:')) return 'boss' as const;
+  if (value.includes('creature:')) return 'creature' as const;
+  if (value.includes('quest:')) return 'quest' as const;
+  if (value.includes('zone:')) return 'zone' as const;
+  if (value.includes('npc:')) return 'npc' as const;
+  return 'image' as const;
+}
+
 export default function CompactEntityStrip({
   title,
   items,
@@ -42,8 +53,7 @@ export default function CompactEntityStrip({
   linkState,
   onNavigate,
 }: CompactEntityStripProps) {
-  const containerRef =
-    useRef<HTMLDivElement | null>(null);
+  const containerRef = useRef<HTMLDivElement | null>(null);
 
   const dragRef = useRef<DragState>({
     active: false,
@@ -56,75 +66,37 @@ export default function CompactEntityStrip({
   });
 
   useEffect(() => {
-    if (
-      variant !== 'rail' ||
-      !nudgeSessionKey ||
-      items.length < 2
-    ) {
+    if (variant !== 'rail' || !nudgeSessionKey || items.length < 2) {
       return undefined;
     }
 
     const container = containerRef.current;
-
-    if (!container) {
-      return undefined;
-    }
+    if (!container) return undefined;
 
     const timers: number[] = [];
-    const storageKey =
-      `tibiahub:strip-nudge:${nudgeSessionKey}`;
+    const storageKey = `tibiahub:strip-nudge:${nudgeSessionKey}`;
 
     const startTimer = window.setTimeout(() => {
-      if (
-        container.scrollWidth <=
-        container.clientWidth + 8
-      ) {
-        return;
-      }
+      if (container.scrollWidth <= container.clientWidth + 8) return;
 
       try {
-        if (
-          window.sessionStorage.getItem(
-            storageKey,
-          ) === '1'
-        ) {
-          return;
-        }
-
-        window.sessionStorage.setItem(
-          storageKey,
-          '1',
-        );
+        if (window.sessionStorage.getItem(storageKey) === '1') return;
+        window.sessionStorage.setItem(storageKey, '1');
       } catch {
         // Storage may be unavailable in restricted mode.
       }
 
-      if (
-        window.matchMedia(
-          '(prefers-reduced-motion: reduce)',
-        ).matches
-      ) {
-        return;
-      }
+      if (window.matchMedia('(prefers-reduced-motion: reduce)').matches) return;
 
       const distance = Math.min(
         120,
-        Math.max(
-          64,
-          container.clientWidth * 0.2,
-        ),
+        Math.max(64, container.clientWidth * 0.2),
       );
 
-      const move = (
-        delay: number,
-        left: number,
-      ) => {
+      const move = (delay: number, left: number) => {
         timers.push(
           window.setTimeout(() => {
-            container.scrollTo({
-              left,
-              behavior: 'smooth',
-            });
+            container.scrollTo({ left, behavior: 'smooth' });
           }, delay),
         );
       };
@@ -138,36 +110,18 @@ export default function CompactEntityStrip({
     timers.push(startTimer);
 
     return () => {
-      timers.forEach((timer) =>
-        window.clearTimeout(timer),
-      );
+      timers.forEach((timer) => window.clearTimeout(timer));
     };
-  }, [
-    items.length,
-    nudgeSessionKey,
-    variant,
-  ]);
+  }, [items.length, nudgeSessionKey, variant]);
 
-  if (items.length === 0) {
-    return null;
-  }
+  if (items.length === 0) return null;
 
-  const startDrag = (
-    event: ReactPointerEvent<HTMLDivElement>,
-  ) => {
-    if (variant !== 'rail') {
-      return;
-    }
-
-    if (
-      event.pointerType !== 'mouse' ||
-      event.button !== 0
-    ) {
+  const startDrag = (event: ReactPointerEvent<HTMLDivElement>) => {
+    if (variant !== 'rail' || event.pointerType !== 'mouse' || event.button !== 0) {
       return;
     }
 
     const target = event.currentTarget;
-
     dragRef.current = {
       active: true,
       pointerId: event.pointerId,
@@ -179,77 +133,44 @@ export default function CompactEntityStrip({
     };
   };
 
-  const moveDrag = (
-    event: ReactPointerEvent<HTMLDivElement>,
-  ) => {
-    if (variant !== 'rail') {
-      return;
-    }
+  const moveDrag = (event: ReactPointerEvent<HTMLDivElement>) => {
+    if (variant !== 'rail') return;
 
     const drag = dragRef.current;
-
-    if (
-      !drag.active ||
-      drag.pointerId !== event.pointerId
-    ) {
-      return;
-    }
+    if (!drag.active || drag.pointerId !== event.pointerId) return;
 
     const delta = event.clientX - drag.startX;
-
     if (Math.abs(delta) > 6) {
       drag.moved = true;
       if (!drag.captureStarted) {
         drag.captureStarted = true;
-        event.currentTarget.setPointerCapture(
-          event.pointerId,
-        );
+        event.currentTarget.setPointerCapture(event.pointerId);
       }
     }
 
     if (drag.moved) {
-      event.currentTarget.scrollLeft =
-        drag.scrollLeft - delta;
+      event.currentTarget.scrollLeft = drag.scrollLeft - delta;
     }
   };
 
-  const finishDrag = (
-    event: ReactPointerEvent<HTMLDivElement>,
-  ) => {
-    if (variant !== 'rail') {
-      return;
-    }
+  const finishDrag = (event: ReactPointerEvent<HTMLDivElement>) => {
+    if (variant !== 'rail') return;
 
     const drag = dragRef.current;
+    if (!drag.active || drag.pointerId !== event.pointerId) return;
 
-    if (
-      !drag.active ||
-      drag.pointerId !== event.pointerId
-    ) {
-      return;
-    }
-
-    if (drag.moved) {
-      drag.suppressClick = true;
-    }
-
+    if (drag.moved) drag.suppressClick = true;
     drag.active = false;
 
     if (
       drag.captureStarted &&
-      event.currentTarget.hasPointerCapture(
-        event.pointerId,
-      )
+      event.currentTarget.hasPointerCapture(event.pointerId)
     ) {
-      event.currentTarget.releasePointerCapture(
-        event.pointerId,
-      );
+      event.currentTarget.releasePointerCapture(event.pointerId);
     }
   };
 
-  const scrollWheelHorizontally = (
-    event: ReactWheelEvent<HTMLDivElement>,
-  ) => {
+  const scrollWheelHorizontally = (event: ReactWheelEvent<HTMLDivElement>) => {
     if (
       variant !== 'rail' ||
       Math.abs(event.deltaY) <= Math.abs(event.deltaX) ||
@@ -257,6 +178,7 @@ export default function CompactEntityStrip({
     ) {
       return;
     }
+
     event.preventDefault();
     event.currentTarget.scrollLeft += event.deltaY;
   };
@@ -264,11 +186,9 @@ export default function CompactEntityStrip({
   return (
     <section
       aria-label={title}
-      className={
-        variant === 'rail'
-          ? 'w-full'
-          : 'min-w-0'
-      }
+      data-compact-entity-strip
+      data-strip-variant={variant}
+      className={variant === 'rail' ? 'w-full' : 'min-w-0'}
     >
       <div
         className={
@@ -314,15 +234,9 @@ export default function CompactEntityStrip({
           <Link
             key={item.id}
             to={item.to}
-            state={
-              typeof linkState === 'function'
-                ? linkState(item)
-                : linkState
-            }
+            state={typeof linkState === 'function' ? linkState(item) : linkState}
             draggable={false}
-            onDragStart={(event) =>
-              event.preventDefault()
-            }
+            onDragStart={(event) => event.preventDefault()}
             onClick={() => onNavigate?.()}
             title={item.name}
             className={
@@ -355,13 +269,24 @@ export default function CompactEntityStrip({
                   : 'size-6 shrink-0'
               }
               fallbackLabel={item.name}
+              fallbackKind={fallbackKind(item)}
             />
 
             <span className="min-w-0">
-              <strong className={variant === 'rail' ? 'line-clamp-2 text-xs font-semibold leading-tight text-content-primary' : 'block truncate text-xs font-semibold text-content-primary'}>
+              <strong
+                className={
+                  variant === 'rail'
+                    ? 'line-clamp-2 text-xs font-semibold leading-tight text-content-primary'
+                    : 'block truncate text-xs font-semibold text-content-primary'
+                }
+              >
                 {item.name}
               </strong>
-              {variant === 'rail' && item.subtitle ? <small className="mt-0.5 block truncate text-[10px] text-content-muted">{item.subtitle}</small> : null}
+              {variant === 'rail' && item.subtitle ? (
+                <small className="mt-0.5 block truncate text-[10px] text-content-muted">
+                  {item.subtitle}
+                </small>
+              ) : null}
             </span>
           </Link>
         ))}

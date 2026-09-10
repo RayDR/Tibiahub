@@ -3,9 +3,12 @@ import { ChevronRight, Home } from 'lucide-react';
 import { Link, useLocation } from 'react-router-dom';
 import { useTranslation } from 'react-i18next';
 
+import { TIBIAHUB_WORLD_BACKGROUND } from '../../assets/brand/brandBackground';
+import { TIBIAHUB_TITLE_ICONS } from '../../assets/brand/brandTitleIcons';
 import Navigation from '../Navigation';
 import { Container } from '../ui';
 import { SuggestImprovementLink } from '../feedback/GitHubFeedbackLink';
+import CyclopediaCreatureWorkspace from '../cyclopedia/CyclopediaCreatureWorkspace';
 
 function currentContext(pathname: string, t: (key: string) => string): { parent?: { label: string; to: string }; label: string } | null {
   if (pathname === '/') return null;
@@ -31,20 +34,38 @@ export default function AppShell({ children, dataVersion }: { children: ReactNod
   const { pathname } = useLocation();
   const context = currentContext(pathname, t);
   const isMapWorkspace = pathname === '/map';
+  const isCyclopediaWorkspace = pathname === '/cyclopedia';
+  const showWorldAmbience = !pathname.startsWith('/admin');
 
-  return <div className="app-shell flex min-h-screen flex-col text-content-primary">
+  return <div className={`app-shell relative flex min-h-screen flex-col text-content-primary ${isCyclopediaWorkspace ? 'app-shell-cyclopedia' : ''}`} data-workspace={isCyclopediaWorkspace ? 'cyclopedia' : undefined}>
+    {showWorldAmbience ? <>
+      <div
+        aria-hidden="true"
+        className="app-world-background pointer-events-none fixed inset-0 bg-cover bg-center bg-no-repeat opacity-30"
+        style={{ backgroundImage: `url(${TIBIAHUB_WORLD_BACKGROUND})` }}
+      />
+      <div aria-hidden="true" className="app-world-scrim pointer-events-none fixed inset-0 bg-surface-base/80" />
+    </> : null}
     <Navigation />
-    <div className={`app-shell-main flex min-h-0 flex-1 flex-col ${isMapWorkspace ? 'app-shell-main-map' : ''}`}>
-      {context && !isMapWorkspace ? <Container><nav className="app-context-bar gap-1 text-xs text-content-muted" aria-label={t('shell.breadcrumbs')}>
+    <div className={`app-shell-main relative flex min-h-0 flex-1 flex-col ${isMapWorkspace ? 'app-shell-main-map' : ''}`}>
+      {isMapWorkspace ? <div aria-hidden="true" className="pointer-events-none absolute right-4 top-16 z-map-overlay hidden items-center gap-2 rounded-xl border border-line bg-surface-overlay/90 px-3 py-2 shadow-lg backdrop-blur-md lg:flex">
+        <img src={TIBIAHUB_TITLE_ICONS.maps} alt="" draggable={false} className="size-9 object-contain drop-shadow-lg" />
+        <span className="font-serif text-lg font-bold tracking-wide text-content-primary">{t('map.title')}</span>
+      </div> : null}
+      {context && !isMapWorkspace && !isCyclopediaWorkspace ? <Container><nav className="app-context-bar gap-1 text-xs text-content-muted" aria-label={t('shell.breadcrumbs')}>
         <Link to="/" className="inline-flex min-h-9 items-center gap-1 rounded px-1 hover:text-content-primary"><Home className="size-3.5" /><span className="sr-only">{t('nav.home')}</span></Link>
         <ChevronRight className="size-3.5" aria-hidden="true" />
         {context.parent ? <><Link to={context.parent.to} className="rounded px-1 hover:text-content-primary">{context.parent.label}</Link><ChevronRight className="size-3.5" aria-hidden="true" /></> : null}
         <span className="truncate text-content-secondary" aria-current="page">{context.label}</span>
       </nav></Container> : null}
-      <main className="min-h-0 flex-1">
-        {isMapWorkspace ? children : <Container>{children}</Container>}
-      </main>
-      {!isMapWorkspace ? <footer className="mt-16 border-t border-line py-8 text-center">
+      {isCyclopediaWorkspace ? (
+        <CyclopediaCreatureWorkspace>{children}</CyclopediaCreatureWorkspace>
+      ) : (
+        <main className="relative min-h-0 flex-1">
+          {isMapWorkspace ? children : <Container>{children}</Container>}
+        </main>
+      )}
+      {!isMapWorkspace ? <footer className="relative mt-16 border-t border-line py-8 text-center">
         <p className="text-sm text-content-secondary">{t('footer.project', { version: dataVersion || t('footer.unavailable') })}</p>
         <p className="mt-2 text-xs text-content-muted">{t('footer.trademark')}</p>
         <p className="mt-2 text-xs text-content-muted">{t('footer.dataSource')} <a href="https://tibia.fandom.com" target="_blank" rel="noopener noreferrer" className="text-primary hover:text-primary-hover">TibiaWiki</a></p>

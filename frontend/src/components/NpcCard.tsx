@@ -1,20 +1,13 @@
-import {
-  ArrowUpRight,
-  BookOpenCheck,
-  Coins,
-  Map,
-  MapPin,
-  UserRound,
-} from 'lucide-react';
+import { ArrowUpRight, BookOpenCheck, MapPin, PackageOpen, Route } from 'lucide-react';
 import { useEffect, useState } from 'react';
-import type { ReactNode } from 'react';
-import { useTranslation } from 'react-i18next';
 import { Link } from 'react-router-dom';
+import { useTranslation } from 'react-i18next';
 
-import { buildMapEntityUrl } from '../services/tibiaMap';
 import type { NpcDirectoryItem } from '../types';
 import { localNpcMediaUrl } from '../utils/npcCyclopedia';
-import { Badge } from './ui';
+import BrandCategoryFallbackIcon from './icons/BrandCategoryFallbackIcon';
+import { useOptionalCyclopediaPreviewSelection } from './cyclopedia/CyclopediaPreviewSelectionContext';
+import './NpcCard.css';
 
 interface NpcCardProps {
   npc: NpcDirectoryItem;
@@ -22,28 +15,14 @@ interface NpcCardProps {
   onNavigate?: () => void;
 }
 
-function Fact({ icon, children }: { icon: ReactNode; children: ReactNode }) {
-  return <span className="inline-flex min-h-7 items-center gap-1.5 text-xs text-content-secondary">{icon}{children}</span>;
-}
-
-function knownCount(
-  value: number | null | undefined,
-  none: string,
-  unknown: string,
-  count: (value: number) => string,
-) {
-  if (value == null) return unknown;
-  return value === 0 ? none : count(value);
-}
-
-function NpcPortrait({ npc }: { npc: NpcDirectoryItem }) {
+function NpcPortrait({ npc, large = false }: { npc: NpcDirectoryItem; large?: boolean }) {
   const mediaUrl = localNpcMediaUrl(npc.media);
   const [failed, setFailed] = useState(false);
 
   useEffect(() => setFailed(false), [mediaUrl]);
 
   return (
-    <div className="grid size-14 shrink-0 place-items-center overflow-hidden rounded-xl border border-line bg-primary/10 text-primary">
+    <span className={large ? 'npc-card-portrait npc-card-portrait--large' : 'grid size-20 shrink-0 place-items-center overflow-hidden rounded-xl bg-primary/[0.07] text-primary'}>
       {mediaUrl && !failed ? (
         <img
           src={mediaUrl}
@@ -52,55 +31,84 @@ function NpcPortrait({ npc }: { npc: NpcDirectoryItem }) {
           loading="lazy"
           decoding="async"
           onError={() => setFailed(true)}
-          className="size-full object-contain [image-rendering:pixelated]"
+          className={large ? 'size-full object-contain p-2 [image-rendering:pixelated]' : 'max-h-20 max-w-full object-contain p-1 [image-rendering:pixelated]'}
         />
       ) : (
-        <UserRound className="size-7" aria-hidden="true" />
+        <BrandCategoryFallbackIcon category="npcs" className={large ? 'size-14 opacity-80' : 'size-8'} />
       )}
-    </div>
+    </span>
   );
 }
 
 export default function NpcCard({ npc, linkState, onNavigate }: NpcCardProps) {
   const { t } = useTranslation();
-  const detailPath = `/npcs/${npc.canonical_id}`;
-  const mapPath = buildMapEntityUrl({
-    entityType: 'npc',
-    canonicalEntityId: npc.canonical_id,
-    name: npc.name,
-    slug: npc.slug,
-  });
+  const preview = useOptionalCyclopediaPreviewSelection();
+  const isCyclopedia = Boolean(preview);
+  const selected = preview?.selection?.kind === 'npc' && preview.selection.identifier === npc.canonical_id;
+
+  if (!isCyclopedia) {
+    return (
+      <Link
+        data-npc-card
+        to={`/npcs/${npc.canonical_id}`}
+        state={linkState}
+        onClick={onNavigate}
+        aria-label={npc.name}
+        className="group flex h-full min-h-40 flex-col items-center justify-center rounded-xl border border-line bg-surface-base/70 p-3 text-center shadow-sm transition hover:-translate-y-0.5 hover:border-primary/60 hover:bg-surface-raised hover:shadow-md focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary motion-reduce:transform-none"
+      >
+        <NpcPortrait npc={npc} />
+        <span className="mt-2 line-clamp-2 min-h-10 text-sm font-semibold leading-5 text-content-primary">
+          {npc.name}
+        </span>
+      </Link>
+    );
+  }
+
+  const tradeCount = (npc.buys_count || 0) + (npc.sells_count || 0);
+  const subtitle = npc.title || npc.occupation || npc.location_name;
 
   return (
-    <article className="group flex min-h-full flex-col rounded-2xl border border-line bg-surface-base/70 p-4 transition hover:border-primary/40 hover:bg-surface-raised">
-      <div className="flex min-w-0 items-start gap-3">
-        <NpcPortrait npc={npc} />
-        <div className="min-w-0 flex-1">
-          <p className="text-[11px] font-semibold uppercase tracking-[0.12em] text-content-muted">{t('npcDirectory.card.eyebrow')}</p>
-          <h2 className="truncate text-lg font-bold text-content-primary">{npc.name}</h2>
-          {(npc.title || npc.occupation) ? <p className="line-clamp-2 text-sm text-content-secondary">{npc.title || npc.occupation}</p> : null}
+    <article
+      data-npc-card
+      data-cyclopedia-npc-card="true"
+      data-npc-identifier={npc.canonical_id}
+      data-selected={selected ? 'true' : 'false'}
+      className="npc-cyclopedia-card"
+    >
+      <button
+        type="button"
+        className="npc-cyclopedia-card__select"
+        onClick={() => preview?.select({ kind: 'npc', identifier: npc.canonical_id })}
+        aria-pressed={selected}
+        aria-label={npc.name}
+      >
+        <NpcPortrait npc={npc} large />
+        <div className="npc-cyclopedia-card__identity">
+          <strong className="npc-cyclopedia-card__name">{npc.name}</strong>
+          {subtitle ? <span className="npc-cyclopedia-card__subtitle">{subtitle}</span> : null}
         </div>
-      </div>
 
-      <div className="mt-4 flex flex-col gap-1.5">
-        <Fact icon={<MapPin className="size-3.5 text-primary" />}><span className="line-clamp-1">{npc.location_name || t('npcDirectory.unknown.location')}</span></Fact>
-        <Fact icon={<Coins className="size-3.5 text-primary" />}>
-          {knownCount(npc.buys_count, t('npcDirectory.none.buys'), t('npcDirectory.unknown.buys'), (count) => t('npcDirectory.count.buys', { count }))}
-          <span aria-hidden="true">·</span>
-          {knownCount(npc.sells_count, t('npcDirectory.none.sells'), t('npcDirectory.unknown.sells'), (count) => t('npcDirectory.count.sells', { count }))}
-        </Fact>
-        <Fact icon={<BookOpenCheck className="size-3.5 text-primary" />}>{knownCount(npc.quest_count, t('npcDirectory.none.quests'), t('npcDirectory.unknown.quests'), (count) => t('npcDirectory.count.quests', { count }))}</Fact>
-      </div>
+        <div className="npc-cyclopedia-card__facts">
+          <span><PackageOpen className="size-3.5" />{t('npcDetail.trade')}<strong>{tradeCount}</strong></span>
+          <span><BookOpenCheck className="size-3.5" />{t('npcDetail.quests')}<strong>{npc.quest_count || 0}</strong></span>
+          <span><Route className="size-3.5" />{t('npcDetail.travel')}<strong>{npc.destination_count || 0}</strong></span>
+        </div>
 
-      <div className="mt-4 flex flex-wrap gap-2">
-        {npc.map_available ? <Badge tone="success"><Map className="size-3" />{t('npcDirectory.card.mapped')}</Badge> : <Badge>{t('npcDirectory.card.mapPending')}</Badge>}
-        {npc.destination_count != null && npc.destination_count > 0 ? <Badge tone="info">{t('npcDirectory.count.destinations', { count: npc.destination_count })}</Badge> : null}
-      </div>
+        <div className="npc-cyclopedia-card__location">
+          <MapPin className="size-3.5 shrink-0 text-primary" />
+          <span className="truncate">{npc.location_name || t('npcDetail.unknownLocation')}</span>
+          {npc.map_available ? <span className="npc-cyclopedia-card__mapped">{t('npcDetail.openMap')}</span> : null}
+        </div>
+      </button>
 
-      <div className="mt-auto flex flex-wrap gap-2 pt-5">
-        <Link to={detailPath} state={linkState} onClick={onNavigate} className="app-button-primary app-button-sm flex-1 justify-center">{t('npcDirectory.card.open')}<ArrowUpRight className="size-4" /></Link>
-        {npc.map_available ? <Link to={mapPath} state={linkState} onClick={onNavigate} className="app-button-secondary app-button-sm" aria-label={t('npcDirectory.card.openMapFor', { name: npc.name })}><Map className="size-4" /></Link> : null}
-      </div>
+      <Link
+        to={`/npcs/${npc.canonical_id}`}
+        state={linkState}
+        onClick={onNavigate}
+        className="npc-cyclopedia-card__details"
+      >
+        {t('plannerRecovery.details')} <ArrowUpRight className="size-3.5" />
+      </Link>
     </article>
   );
 }

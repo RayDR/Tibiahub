@@ -27,9 +27,12 @@ SERVICES=(
   tibiahub-sync-worker
 )
 
-if [[ "${1:-}" != "--confirm-rollback-tibiahub" || $# -ne 2 ]]; then
-  echo "Usage: deploy/scripts/rollback.sh --confirm-rollback-tibiahub /absolute/deployment/evidence-directory" >&2
+if [[ $# -ne 2 || ( "${1:-}" != "--confirm-rollback" && "${1:-}" != "--confirm-rollback-tibiahub" ) ]]; then
+  echo "Usage: deploy/scripts/rollback.sh --confirm-rollback /absolute/deployment/evidence-directory" >&2
   exit 2
+fi
+if [[ "$1" == "--confirm-rollback-tibiahub" ]]; then
+  ops_warn "--confirm-rollback-tibiahub is deprecated; use --confirm-rollback."
 fi
 requested_evidence="$2"
 
@@ -91,8 +94,11 @@ metadata_value() {
 }
 
 previous_commit="$(metadata_value previous_commit)"
+previous_branch="$(metadata_value previous_branch)"
 previous_revision="$(metadata_value previous_revision)"
 previous_runtime="$(metadata_value previous_runtime)"
+previous_commit_ref="$(metadata_value previous_commit_ref)"
+restore_checkout_mode="detached"
 
 if [[ -z "$previous_runtime" ]]; then
   previous_runtime="$ROOT/backend/venv"
@@ -109,6 +115,13 @@ cd "$ROOT"
   exit 2
 }
 git cat-file -e "$previous_commit^{commit}"
+if [[ -n "$previous_commit_ref" ]]; then
+  snapshotted_commit="$(git rev-parse --verify "$previous_commit_ref^{commit}" 2>/dev/null || true)"
+  [[ "$snapshotted_commit" == "$previous_commit" ]] || {
+    ops_error "The recorded previous-commit snapshot ref is missing or does not match rollback metadata."
+    exit 2
+  }
+fi
 
 CURRENT_STEP_NAME=""
 CURRENT_STEP_COMMAND=""
@@ -154,6 +167,20 @@ stop_services() {
   done
 }
 
+checkout_previous_commit() {
+  if [[ -n "$previous_branch" ]] && git show-ref --verify --quiet "refs/heads/$previous_branch"; then
+    local branch_commit
+    branch_commit="$(git rev-parse "refs/heads/$previous_branch")"
+    if [[ "$branch_commit" == "$previous_commit" ]]; then
+      git switch "$previous_branch"
+      restore_checkout_mode="$previous_branch"
+      return 0
+    fi
+  fi
+  git switch --detach "$previous_commit"
+  restore_checkout_mode="detached"
+}
+
 restore_runtime() {
   local temporary_link="$ROOT/backend/.runtime-current.rollback.$$"
 
@@ -182,7 +209,6 @@ restore_runtime() {
 
   export TIBIAHUB_PYTHON_RUNTIME="$previous_runtime"
 }
-
 
 restore_database() {
   local database_name
@@ -215,14 +241,9 @@ restore_frontend() {
 
 pm2_start_service() {
   local service="$1"
-
-  # PM2 reloads an existing process using its previously registered
-  # executable path. Recreate the bounded TibiaHub service so changes
-  # such as venv/bin/python -> runtime-current/bin/python take effect.
   if pm2 describe "$service" >/dev/null 2>&1; then
     pm2 delete "$service"
   fi
-
   env -i HOME="$HOME" USER="${USER:-}" PATH="$PATH" PM2_HOME="${PM2_HOME:-$HOME/.pm2}" \
     pm2 start "$ROOT/ecosystem.config.js" --only "$service"
 }
@@ -282,11 +303,12 @@ restore_pm2_states() {
 
 write_state() {
   rollback_at="$(ops_now_utc)"
-  printf 'rolled_back_at=%s\nrestored_commit=%s\nrestored_revision=%s\n' "$rollback_at" "$previous_commit" "$restored_revision" >"$evidence_dir/rollback.env"
+  printf 'rolled_back_at=%s\nrestored_branch=%s\nrestored_commit=%s\nrestored_revision=%s\n' "$rollback_at" "$restore_checkout_mode" "$previous_commit" "$restored_revision" >"$evidence_dir/rollback.env"
   chmod 600 "$evidence_dir/rollback.env"
 
   state_tmp="$DEPLOY_ROOT/.current.env.$$"
   {
+    printf 'deployed_branch=%s\n' "$restore_checkout_mode"
     printf 'deployed_commit=%s\n' "$previous_commit"
     printf 'alembic_revision=%s\n' "$previous_revision"
     printf 'snapshot_dir=%s\n' "$evidence_dir"
@@ -300,7 +322,7 @@ write_state() {
 run_step "010-validate-snapshot" validate_snapshot
 run_step "020-load-runtime-target" load_runtime_and_target
 run_step "030-stop-services" stop_services
-run_step "040-checkout-previous-commit" git switch --detach "$previous_commit"
+run_step "040-checkout-previous-commit" checkout_previous_commit
 run_step "045-restore-backend-runtime" restore_runtime
 run_step "050-restore-database" restore_database
 run_step "060-verify-revision" verify_revision
@@ -312,6 +334,8 @@ trap - ERR
 
 echo "Rollback restored commit $previous_commit and Alembic revision $restored_revision."
 echo "Rollback evidence remains at $evidence_dir"
-echo "Repository is detached at $previous_commit. To return to the deployment branch, run:"
-echo "  git switch develop"
-echo "  git pull --ff-only origin develop"
+if [[ "$restore_checkout_mode" == detached ]]; then
+  echo "Repository is detached at $previous_commit because the recorded previous branch no longer points to that exact commit."
+else
+  echo "Repository restored to branch $restore_checkout_mode at $previous_commit."
+fi

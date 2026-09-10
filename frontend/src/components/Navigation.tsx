@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState } from 'react';
 import { Link, useLocation, useNavigate } from 'react-router-dom';
-import { BookOpen, ChevronDown, Compass, Home, Map, Settings, Shield } from 'lucide-react';
+import { ChevronDown } from 'lucide-react';
 import { useTranslation } from 'react-i18next';
 
 import { useAuth } from '../context/AuthContext';
@@ -11,12 +11,19 @@ import ThemeSwitcher from './ThemeSwitcher';
 import AccountMenu from './account/AccountMenu';
 import { Container } from './ui';
 import KnowledgeCategoryIcon, { categoryForTab } from './knowledge/KnowledgeCategoryIcon';
+import BrandNavigationIcon, { type BrandNavigationIconKey } from './icons/BrandNavigationIcon';
+import GlobalCyclopediaSearch from './search/GlobalCyclopediaSearch';
+import {
+  DEFAULT_SITE_PRESENTATION,
+  sitePresentationApi,
+  type SitePresentationSettings,
+} from '../services/sitePresentation';
 
 interface NavigationItem {
   path: string;
   label: string;
   shortLabel?: string;
-  icon: typeof Home;
+  icon: BrandNavigationIconKey;
   iconOnly?: boolean;
 }
 
@@ -26,6 +33,7 @@ export default function Navigation() {
   const { t } = useTranslation();
   const { isAuthenticated, user } = useAuth();
   const [cyclopediaMenuOpen, setCyclopediaMenuOpen] = useState(false);
+  const [presentation, setPresentation] = useState<SitePresentationSettings>(DEFAULT_SITE_PRESENTATION);
   const menuRef = useRef<HTMLDivElement | null>(null);
 
   const isActive = (path: string) => {
@@ -35,13 +43,23 @@ export default function Navigation() {
   };
 
   const primaryItems: NavigationItem[] = [
-    { path: '/', label: t('nav.home'), icon: Home },
-    { path: '/cyclopedia', label: t('nav.search'), icon: BookOpen },
-    { path: '/planner', label: t('nav.planner'), shortLabel: t('nav.planner'), icon: Compass },
-    { path: '/map', label: t('nav.map'), shortLabel: t('nav.map'), icon: Map },
-    ...(isAuthenticated ? [{ path: '/guild', label: t('nav.guild'), icon: Shield }] : []),
-    ...(user?.is_superuser ? [{ path: '/admin', label: t('nav.admin'), icon: Settings, iconOnly: true }] : []),
+    { path: '/', label: t('nav.home'), icon: 'home' },
+    { path: '/cyclopedia', label: t('nav.search'), icon: 'cyclopedia' },
+    { path: '/planner', label: t('nav.planner'), shortLabel: t('nav.planner'), icon: 'planner' },
+    { path: '/map', label: t('nav.map'), shortLabel: t('nav.map'), icon: 'map' },
+    ...(isAuthenticated ? [{ path: '/guild', label: t('nav.guild'), icon: 'guild' as const }] : []),
+    ...(user?.is_superuser ? [{ path: '/admin', label: t('nav.admin'), icon: 'admin' as const, iconOnly: true }] : []),
   ];
+
+  useEffect(() => {
+    let active = true;
+    void sitePresentationApi.getPublic().then((next) => {
+      if (active) setPresentation(next);
+    });
+    return () => {
+      active = false;
+    };
+  }, []);
 
   useEffect(() => {
     if (!cyclopediaMenuOpen) return undefined;
@@ -65,29 +83,38 @@ export default function Navigation() {
     <>
       <header className="app-primary-nav fixed inset-x-0 top-0 z-navbar">
         <Container className="pt-2 sm:pt-3">
-          <div className="app-nav-shell flex items-center justify-between rounded-xl px-2 py-1.5 shadow-lg backdrop-blur-md sm:px-3">
-            <Link to="/" className="flex min-h-11 min-w-0 items-center gap-2 rounded-lg px-1.5" aria-label={t('shell.homeLabel')}>
+          <div className="app-nav-shell app-nav-grid rounded-xl px-2 py-1.5 shadow-lg backdrop-blur-md sm:px-3">
+            <Link to="/" className="app-nav-brand flex min-h-11 min-w-0 items-center gap-2 rounded-lg px-1.5" aria-label={t('shell.homeLabel')}>
               <img src="/assets/logo/tibiahub.png" alt="" className="size-8 shrink-0 rounded-lg sm:size-9" />
               <span className="hidden font-serif text-sm font-bold text-content-primary sm:inline"><span className="text-primary">Tibia</span>Hub</span>
             </Link>
 
-            <nav className="hidden min-w-0 items-center gap-1 lg:flex" aria-label={t('shell.primaryNavigation')}>
-              {primaryItems.map(item => {
-                const Icon = item.icon;
-                if (item.path === '/cyclopedia') {
-                  return <div ref={menuRef} key={item.path} className="relative flex">
-                    <Link to={item.path} className="app-nav-link flex min-h-11 items-center gap-2 rounded-l-lg px-3" data-active={isActive(item.path)}><Icon className="size-4" /><span>{item.label}</span></Link>
-                    <button type="button" className="app-nav-link min-h-11 rounded-r-lg px-2" aria-label={t('a11y.openCyclopediaMenu')} aria-expanded={cyclopediaMenuOpen} onClick={() => setCyclopediaMenuOpen(value => !value)}><ChevronDown className={`size-4 transition-transform ${cyclopediaMenuOpen ? 'rotate-180' : ''}`} /></button>
-                    {cyclopediaMenuOpen ? <div className="ds-dropdown absolute left-0 top-full mt-2 w-56">
-                      {cyclopediaSections.map(entry => <button key={entry.key} type="button" onClick={() => { setCyclopediaMenuOpen(false); navigate(`/cyclopedia?tab=${entry.key}`); }} className="flex min-h-11 w-full items-center gap-2 rounded-sm px-3 text-left text-sm text-content-secondary hover:bg-surface-hover hover:text-content-primary"><KnowledgeCategoryIcon category={categoryForTab(entry.key)} label={t(entry.i18nLabel)} className="size-8" mediaClassName="size-7" /><span>{t(entry.i18nLabel)}</span></button>)}
-                    </div> : null}
-                  </div>;
-                }
-                return <Link key={item.path} to={item.path} title={item.iconOnly ? item.label : undefined} aria-label={item.iconOnly ? item.label : undefined} className="app-nav-link flex min-h-11 items-center gap-2 rounded-lg px-3" data-active={isActive(item.path)}><Icon className="size-4" />{item.iconOnly ? <span className="sr-only">{item.label}</span> : <span><span className="xl:hidden">{item.shortLabel || item.label}</span><span className="hidden xl:inline">{item.label}</span></span>}</Link>;
-              })}
-            </nav>
+            <div className="app-nav-center hidden min-w-0 items-center gap-3 lg:flex" data-alignment={presentation.navbar_alignment}>
+              <nav className="app-nav-links flex min-w-0 items-center gap-1" aria-label={t('shell.primaryNavigation')} data-alignment={presentation.navbar_alignment}>
+                {primaryItems.map(item => {
+                  if (item.path === '/cyclopedia') {
+                    return <div ref={menuRef} key={item.path} className="relative flex">
+                      <Link to={item.path} className="app-nav-link flex min-h-11 items-center gap-2 rounded-l-lg px-3" data-active={isActive(item.path)}>
+                        {presentation.navbar_show_icons ? <BrandNavigationIcon icon={item.icon} className="size-4" /> : null}
+                        <span>{item.label}</span>
+                      </Link>
+                      <button type="button" className="app-nav-link min-h-11 rounded-r-lg px-2" aria-label={t('a11y.openCyclopediaMenu')} aria-expanded={cyclopediaMenuOpen} onClick={() => setCyclopediaMenuOpen(value => !value)}><ChevronDown className={`size-4 transition-transform ${cyclopediaMenuOpen ? 'rotate-180' : ''}`} /></button>
+                      {cyclopediaMenuOpen ? <div className="ds-dropdown absolute left-0 top-full mt-2 w-56">
+                        {cyclopediaSections.map(entry => <button key={entry.key} type="button" onClick={() => { setCyclopediaMenuOpen(false); navigate(`/cyclopedia?tab=${entry.key}`); }} className="flex min-h-11 w-full items-center gap-2 rounded-sm px-3 text-left text-sm text-content-secondary hover:bg-surface-hover hover:text-content-primary"><KnowledgeCategoryIcon category={categoryForTab(entry.key)} label={t(entry.i18nLabel)} className="size-8" mediaClassName="size-7" /><span>{t(entry.i18nLabel)}</span></button>)}
+                      </div> : null}
+                    </div>;
+                  }
+                  return <Link key={item.path} to={item.path} title={item.iconOnly ? item.label : undefined} aria-label={item.iconOnly ? item.label : undefined} className="app-nav-link flex min-h-11 items-center gap-2 rounded-lg px-3" data-active={isActive(item.path)}>
+                    {presentation.navbar_show_icons ? <BrandNavigationIcon icon={item.icon} className="size-4" /> : null}
+                    {item.iconOnly ? <span className="sr-only">{item.label}</span> : <span><span className="xl:hidden">{item.shortLabel || item.label}</span><span className="hidden xl:inline">{item.label}</span></span>}
+                  </Link>;
+                })}
+              </nav>
 
-            <div className="flex shrink-0 items-center gap-0.5">
+              {presentation.navbar_show_global_search ? <GlobalCyclopediaSearch className="app-navbar-global-search w-[min(22rem,28vw)] shrink-0" /> : null}
+            </div>
+
+            <div className="app-nav-utilities flex shrink-0 items-center gap-0.5">
               <LanguageSwitcher />
               {isAuthenticated ? <NotificationIndicator /> : null}
               <ThemeSwitcher />
@@ -99,7 +126,12 @@ export default function Navigation() {
 
       <nav className="app-primary-nav app-mobile-nav fixed inset-x-0 bottom-0 z-navbar border-t border-line bg-surface-overlay px-1 pt-1 backdrop-blur-md lg:hidden" aria-label={t('shell.mobileNavigation')}>
         <div className="app-mobile-nav-grid mx-auto max-w-xl" style={{ '--mobile-nav-count': primaryItems.length } as React.CSSProperties}>
-          {primaryItems.map(item => { const Icon = item.icon; return <Link key={item.path} to={item.path} className="app-mobile-nav-link" data-active={isActive(item.path)} aria-label={item.iconOnly ? item.label : undefined} aria-current={isActive(item.path) ? 'page' : undefined}><Icon className="size-5" /><span className={item.iconOnly ? 'sr-only' : 'max-w-full truncate px-1'}>{item.shortLabel || item.label}</span></Link>; })}
+          {primaryItems.map(item => (
+            <Link key={item.path} to={item.path} className="app-mobile-nav-link" data-active={isActive(item.path)} aria-label={item.iconOnly ? item.label : undefined} aria-current={isActive(item.path) ? 'page' : undefined}>
+              {presentation.navbar_show_icons ? <BrandNavigationIcon icon={item.icon} className="size-5" /> : null}
+              <span className={item.iconOnly ? 'sr-only' : 'max-w-full truncate px-1'}>{item.shortLabel || item.label}</span>
+            </Link>
+          ))}
         </div>
       </nav>
     </>
