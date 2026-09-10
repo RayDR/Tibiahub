@@ -95,12 +95,23 @@ def test_production_changing_commands_require_exact_confirmation_flags() -> None
         ["services", "restart", "tibiahub-api"],
         ["spatial", "rebuild", "--execute"],
         ["secrets", "generate"],
-        ["deploy", "run"],
         ["deploy", "rollback", "/tmp/evidence"],
     ]
     for args in cases:
         result = _run_ops(*args)
         assert result.returncode == 2
+
+
+def test_deploy_run_compatibility_alias_never_executes_real_deploy_in_test(tmp_path: Path) -> None:
+    env = _mocked_env(tmp_path)
+    result = _run_ops("deploy", "run", env=env)
+
+    assert result.returncode == 0
+    assert "deprecated; use 'deploy'" in result.stderr
+
+    log_lines = _mock_lines(Path(env["MOCK_LOG"]))
+    expected_deploy = f"bash {ROOT / 'deploy' / 'scripts' / 'deploy.sh'}"
+    assert any(line == expected_deploy for line in log_lines)
 
 
 def test_wrong_confirmation_flag_is_rejected() -> None:
