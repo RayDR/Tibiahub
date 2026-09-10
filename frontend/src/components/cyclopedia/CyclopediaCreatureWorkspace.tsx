@@ -46,103 +46,23 @@ function CyclopediaCreatureWorkspaceInner({ children }: { children: ReactNode })
   const genericPreview = useCyclopediaPreviewSelection();
   const resetCreatureSelection = browser?.selectCreature;
   const clearGenericPreview = genericPreview.clear;
-  const selectGenericPreview = genericPreview.select;
   const genericSelection = genericPreview.selection;
   const tab = new URLSearchParams(location.search).get('tab') || 'creatures';
+  // Canonical URL key is `loot`; keep `items` as a compatibility alias for
+  // older links while the page mode itself remains `items` internally.
+  const isLootTab = tab === 'loot' || tab === 'items';
 
   useEffect(() => {
     resetCreatureSelection?.(null);
     clearGenericPreview();
   }, [clearGenericPreview, location.search, resetCreatureSelection]);
 
-  // Loot still uses the legacy generic AppCard markup. Decorate those cards at
-  // the workspace boundary until the page is split into entity-specific
-  // browser components. Quests, Zones and NPCs opt into the shared selection
-  // context directly.
-  useEffect(() => {
-    if (tab !== 'items') return undefined;
-
-    const root = document.querySelector<HTMLElement>(
-      '.app-shell-cyclopedia main[data-workspace-main="cyclopedia"]',
-    );
-    if (!root) return undefined;
-
-    const markItemCards = () => {
-      const cards = root.querySelectorAll<HTMLElement>('article[data-cyclopedia-result]');
-      cards.forEach((card) => {
-        const itemLink = card.querySelector<HTMLAnchorElement>('a[href^="/items/"]');
-        if (!itemLink) return;
-        const identifier = decodeURIComponent(itemLink.pathname.replace(/^\/items\//, '').replace(/\/$/, ''));
-        if (!identifier) return;
-        card.dataset.cyclopediaItemCard = 'true';
-        card.dataset.itemIdentifier = identifier;
-        card.setAttribute('role', 'button');
-        card.tabIndex = 0;
-      });
-    };
-
-    const observer = new MutationObserver(markItemCards);
-    markItemCards();
-    observer.observe(root, { childList: true, subtree: true });
-
-    const selectCard = (card: HTMLElement) => {
-      const identifier = card.dataset.itemIdentifier;
-      if (identifier) selectGenericPreview({ kind: 'item', identifier });
-    };
-
-    const onClick = (event: MouseEvent) => {
-      const target = event.target;
-      if (!(target instanceof Element)) return;
-      const card = target.closest<HTMLElement>('article[data-cyclopedia-item-card="true"]');
-      if (!card || !root.contains(card)) return;
-      if (target.closest('a, button, input, select, textarea')) return;
-      selectCard(card);
-    };
-
-    const onKeyDown = (event: KeyboardEvent) => {
-      const target = event.target;
-      if (!(target instanceof HTMLElement)) return;
-      if (!target.matches('article[data-cyclopedia-item-card="true"]')) return;
-      if (event.key !== 'Enter' && event.key !== ' ') return;
-      event.preventDefault();
-      selectCard(target);
-    };
-
-    root.addEventListener('click', onClick);
-    root.addEventListener('keydown', onKeyDown);
-
-    return () => {
-      observer.disconnect();
-      root.removeEventListener('click', onClick);
-      root.removeEventListener('keydown', onKeyDown);
-      root.querySelectorAll<HTMLElement>('article[data-cyclopedia-item-card="true"]').forEach((card) => {
-        delete card.dataset.cyclopediaItemCard;
-        delete card.dataset.itemIdentifier;
-        delete card.dataset.selected;
-        card.removeAttribute('role');
-        card.removeAttribute('aria-pressed');
-        card.removeAttribute('tabindex');
-      });
-    };
-  }, [selectGenericPreview, tab]);
-
-  useLayoutEffect(() => {
-    const cards = document.querySelectorAll<HTMLElement>('article[data-cyclopedia-item-card="true"]');
-    cards.forEach((card) => {
-      const selected = tab === 'items'
-        && genericSelection?.kind === 'item'
-        && card.dataset.itemIdentifier === genericSelection.identifier;
-      card.dataset.selected = selected ? 'true' : 'false';
-      card.setAttribute('aria-pressed', selected ? 'true' : 'false');
-    });
-  }, [genericSelection, tab]);
-
   let selection: PreviewSelection | null = null;
   if ((tab === 'creatures' || tab === 'bosses') && browser?.selectedCreatureId != null) {
     selection = tab === 'bosses'
       ? { kind: 'boss', creatureId: browser.selectedCreatureId }
       : { kind: 'creature', creatureId: browser.selectedCreatureId };
-  } else if (tab === 'items' && genericSelection?.kind === 'item') {
+  } else if (isLootTab && genericSelection?.kind === 'item') {
     selection = genericSelection;
   } else if (tab === 'quests' && genericSelection?.kind === 'quest') {
     selection = genericSelection;
