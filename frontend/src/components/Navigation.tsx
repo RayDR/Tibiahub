@@ -9,6 +9,7 @@ import LanguageSwitcher from './LanguageSwitcher';
 import NotificationIndicator from './NotificationIndicator';
 import ThemeSwitcher from './ThemeSwitcher';
 import AccountMenu from './account/AccountMenu';
+import CharacterSwitcher from './account/CharacterSwitcher';
 import { Container } from './ui';
 import KnowledgeCategoryIcon, { categoryForTab } from './knowledge/KnowledgeCategoryIcon';
 import BrandNavigationIcon, { type BrandNavigationIconKey } from './icons/BrandNavigationIcon';
@@ -115,6 +116,7 @@ export default function Navigation() {
             </div>
 
             <div className="app-nav-utilities flex shrink-0 items-center gap-0.5">
+              {isAuthenticated ? <CharacterSwitcher /> : null}
               <LanguageSwitcher />
               {isAuthenticated ? <NotificationIndicator /> : null}
               <ThemeSwitcher />
