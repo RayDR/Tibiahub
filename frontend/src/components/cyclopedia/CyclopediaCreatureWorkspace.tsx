@@ -21,6 +21,7 @@ import HuntZonePreviewPanel from './HuntZonePreviewPanel';
 import ItemPreviewPanel from './ItemPreviewPanel';
 import NpcPreviewPanel from './NpcPreviewPanel';
 import QuestPreviewPanel from './QuestPreviewPanel';
+import UnsavedQuestProgressBanner from './UnsavedQuestProgressBanner';
 
 type PreviewSelection =
   | { kind: 'creature'; creatureId: number }
@@ -160,7 +161,10 @@ function CyclopediaCreatureWorkspaceInner({ children }: { children: ReactNode })
   return (
     <div className="cyclopedia-reference-frame">
       <main className="relative min-h-0 min-w-0 flex-1" data-workspace-main="cyclopedia">
-        <Container>{children}</Container>
+        <Container>
+          <UnsavedQuestProgressBanner />
+          {children}
+        </Container>
       </main>
       {selection ? (
         <CyclopediaPreviewPortal
