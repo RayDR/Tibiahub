@@ -19,6 +19,7 @@ import CreatureCard from '../components/CreatureCard';
 import HuntZoneCard from '../components/HuntZoneCard';
 import NpcCard from '../components/NpcCard';
 import ImageWithFallback from '../components/ImageWithFallback';
+import CyclopediaLootBrowser from '../components/CyclopediaLootBrowser';
 import {
   creaturesApi,
   huntZonesApi,
@@ -1355,7 +1356,15 @@ const CreaturesPage: React.FC = () => {
 
         {!loading && (
           <>
-            <div className={mode === 'quests' ? 'grid grid-cols-1 gap-4 lg:grid-cols-2' : 'grid grid-cols-1 gap-6 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4'}>
+            {mode === 'items' ? (
+              <CyclopediaLootBrowser
+                items={items}
+                linkState={cyclopediaRouteState}
+                onNavigate={persistCyclopediaState}
+              />
+            ) : null}
+
+            <div className={mode === 'items' ? 'hidden' : mode === 'quests' ? 'grid grid-cols-1 gap-4 lg:grid-cols-2' : 'grid grid-cols-1 gap-6 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4'}>
               {(mode === 'creatures' || mode === 'bosses') && creatures.map((creature, index) => <div key={creature.id} data-cyclopedia-result className="contents"><CreatureCard creature={creature} index={index} linkState={cyclopediaRouteState} onNavigate={persistCyclopediaState} /></div>)}
 
               {mode === 'items' && items.map((item, index) => (
