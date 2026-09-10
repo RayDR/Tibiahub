@@ -7,13 +7,19 @@ from app.models.user_character import UserCharacter
 from tests.conftest import make_user
 
 
-def _quest(db, *, name: str = "Progress Quest", slug: str = "progress-quest") -> TibiaWikiQuest:
+def _quest(
+    db,
+    *,
+    name: str = "Progress Quest",
+    slug: str = "progress-quest",
+    external_id: str = "990001",
+) -> TibiaWikiQuest:
     quest = TibiaWikiQuest(
         name=name,
         normalized_name=name.lower(),
         slug=slug,
         source_name="tibiawiki",
-        external_id="990001",
+        external_id=external_id,
         is_group=False,
     )
     db.add(quest)
@@ -160,7 +166,12 @@ def test_quest_progress_rejects_foreign_missions(client, db):
     character = _verified_character(db, user, name="Mission Knight")
     quest = _quest(db, name="Owned Mission Quest", slug="owned-mission-quest")
     _add_missions(db, quest, count=1)
-    other_quest = _quest(db, name="Other Mission Quest", slug="other-mission-quest")
+    other_quest = _quest(
+        db,
+        name="Other Mission Quest",
+        slug="other-mission-quest",
+        external_id="990002",
+    )
     foreign_mission = _add_missions(db, other_quest, count=1)[0]
     db.commit()
 
