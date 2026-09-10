@@ -81,6 +81,12 @@ export default function HuntZoneCard({
   const identifierString = String(identifier);
   const mapped = zone.spatial?.geometry_status === 'mapped' && Boolean(zone.spatial.world_map);
   const suggestedLevel = zone.recommended_level ?? zone.min_level;
+
+  // Keep the generic card presentation stable outside Cyclopedia.
+  const defaultPlace = zone.region || zone.city;
+  const defaultProfit = zone.avg_profit_hour ? `${zone.avg_profit_hour.toLocaleString()} gp/h` : zone.profit_rating;
+  const defaultExperience = zone.avg_exp_hour ? `${zone.avg_exp_hour.toLocaleString()}/h` : rawExperience ? rawExperience.toLocaleString() : zone.exp_rating;
+
   const levelRange = levelRangeFor(zone);
   const place = placeFor(zone);
   const vocations = recommendedVocationsFor(zone);
@@ -234,14 +240,14 @@ export default function HuntZoneCard({
       <div className="mt-auto">
         <div className="min-h-[4.25rem]">
           <Link to={`/hunt-zones/${identifier}`} state={linkState} onClick={onNavigate} className="line-clamp-2 font-serif text-xl font-bold leading-tight text-content-primary hover:text-primary sm:text-2xl">{zone.name}</Link>
-          <p className="mt-1 min-h-5 truncate text-sm text-content-secondary">{[place, zone.spatial?.z != null ? t('map.floor', { floor: formatDisplayFloor(zone.spatial.z) }) : null].filter(Boolean).join(' · ')}</p>
+          <p className="mt-1 min-h-5 truncate text-sm text-content-secondary">{[defaultPlace, zone.spatial?.z != null ? t('map.floor', { floor: formatDisplayFloor(zone.spatial.z) }) : null].filter(Boolean).join(' · ')}</p>
         </div>
 
         <div className="mt-3 grid min-h-[3.25rem] grid-cols-2 gap-x-4 gap-y-1 text-xs">
           <p className="truncate text-content-secondary"><span className="block text-[10px] uppercase tracking-wide text-content-muted">{t('cyclopedia.zones.suggested')}</span><strong className="text-content-primary">{suggestedLevel ? t('cyclopedia.zones.level', { level: suggestedLevel }) : t('cyclopedia.zones.needsAnalysis')}</strong></p>
           <p className="truncate text-content-secondary"><span className="block text-[10px] uppercase tracking-wide text-content-muted">{t('cyclopedia.zones.danger')}</span><strong className="text-content-primary">{zone.danger_rating || zone.difficulty || t('cyclopedia.zones.notRecorded')}</strong></p>
-          <p className="truncate text-content-secondary"><span className="block text-[10px] uppercase tracking-wide text-content-muted">EXP</span><strong className="text-content-primary">{experience || t('cyclopedia.zones.notRecorded')}</strong></p>
-          <p className="truncate text-content-secondary"><span className="block text-[10px] uppercase tracking-wide text-content-muted">{t('cyclopedia.zones.profit')}</span><strong className="text-content-primary">{profit || t('cyclopedia.zones.notRecorded')}</strong></p>
+          <p className="truncate text-content-secondary"><span className="block text-[10px] uppercase tracking-wide text-content-muted">EXP</span><strong className="text-content-primary">{defaultExperience || t('cyclopedia.zones.notRecorded')}</strong></p>
+          <p className="truncate text-content-secondary"><span className="block text-[10px] uppercase tracking-wide text-content-muted">{t('cyclopedia.zones.profit')}</span><strong className="text-content-primary">{defaultProfit || t('cyclopedia.zones.notRecorded')}</strong></p>
         </div>
 
         <div className="mt-4 grid w-full grid-cols-2 gap-2">
