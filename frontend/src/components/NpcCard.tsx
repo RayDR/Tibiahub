@@ -8,7 +8,6 @@ import {
   Info,
   MapPin,
   PackageOpen,
-  Route,
   ScrollText,
   Shield,
   ShoppingCart,
