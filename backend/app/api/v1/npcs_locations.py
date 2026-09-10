@@ -27,8 +27,15 @@ from app.services.text_utils import normalize_search_text
 
 
 router = APIRouter(tags=["knowledge reference catalogs"])
-NpcDirectoryCategory = Literal["buys", "sells", "quests", "travel", "other"]
+NpcDirectoryCategory = Literal[
+    "service", "trade", "information", "quests", "travel",
+    "buys", "sells", "other",
+]
 _REFERENCE_PLACEHOLDERS = {"-", "--", "n/a", "none", "unknown"}
+_INFORMATION_ROLE_TERMS = (
+    "spy", "inform", "guide", "scholar", "teacher", "trainer", "librarian",
+    "advisor", "adviser", "sage", "historian", "oracle",
+)
 
 
 class NamedReferenceSummary(BaseModel):
@@ -298,15 +305,30 @@ def _has_reference_rows(value: Any) -> bool:
 
 
 def _npc_matches_category(row: TibiaWikiNpc, category: NpcDirectoryCategory) -> bool:
-    categories = {
-        "buys": _has_reference_rows(row.buys),
-        "sells": _has_reference_rows(row.sells),
-        "quests": _has_reference_rows(row.related_quests),
-        "travel": _has_reference_rows(row.destinations),
+    buys = _has_reference_rows(row.buys)
+    sells = _has_reference_rows(row.sells)
+    quests = _has_reference_rows(row.related_quests)
+    travel = _has_reference_rows(row.destinations)
+    trade = buys or sells
+    role_context = f"{row.title or ''} {row.occupation or ''}".casefold().strip()
+    information = any(term in role_context for term in _INFORMATION_ROLE_TERMS)
+    service = bool(role_context) and not any((trade, information, quests, travel))
+
+    semantic_categories = {
+        "service": service,
+        "trade": trade,
+        "information": information,
+        "quests": quests,
+        "travel": travel,
     }
-    if category == "other":
-        return not any(categories.values())
-    return categories[category]
+    legacy_categories = {
+        "buys": buys,
+        "sells": sells,
+        "other": not any((trade, quests, travel)),
+    }
+    if category in semantic_categories:
+        return semantic_categories[category]
+    return legacy_categories[category]
 
 
 def _npc_directory_rows(query, category: NpcDirectoryCategory | None, skip: int, limit: int):
