@@ -14,7 +14,9 @@
 /* Detail links remain discoverable even when the card itself opens a preview. */
 .loot-cyclopedia-card__details,
 .npc-cyclopedia-card__details,
-.cyclopedia-zone-detail-link {
+.cyclopedia-zone-detail-link,
+.quest-card-open,
+.creature-card-open {
   opacity: 0.62;
 }
 
@@ -84,7 +86,9 @@
 @media (hover: none), (pointer: coarse) {
   .loot-cyclopedia-card__details,
   .npc-cyclopedia-card__details,
-  .cyclopedia-zone-detail-link {
+  .cyclopedia-zone-detail-link,
+  .quest-card-open,
+  .creature-card-open {
     opacity: 0.92;
     border-color: rgb(var(--ds-border) / 0.68);
     background: rgb(var(--ds-surface-overlay) / 0.92);
