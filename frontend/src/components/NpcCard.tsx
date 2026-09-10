@@ -1,5 +1,5 @@
-import { ArrowUpRight, BookOpenCheck, MapPin, PackageOpen, Route } from 'lucide-react';
-import { useEffect, useState } from 'react';
+import { ArrowUpRight, BookOpenCheck, MapPin, PackageOpen, Route, UserRound } from 'lucide-react';
+import { useEffect, useState, type ReactNode } from 'react';
 import { Link } from 'react-router-dom';
 import { useTranslation } from 'react-i18next';
 
@@ -13,6 +13,14 @@ interface NpcCardProps {
   npc: NpcDirectoryItem;
   linkState?: unknown;
   onNavigate?: () => void;
+}
+
+type NpcCardServiceTone = 'success' | 'info' | 'warning' | 'neutral';
+interface NpcCardService {
+  key: string;
+  label: string;
+  tone: NpcCardServiceTone;
+  icon: ReactNode;
 }
 
 function NpcPortrait({ npc, large = false }: { npc: NpcDirectoryItem; large?: boolean }) {
@@ -31,7 +39,7 @@ function NpcPortrait({ npc, large = false }: { npc: NpcDirectoryItem; large?: bo
           loading="lazy"
           decoding="async"
           onError={() => setFailed(true)}
-          className={large ? 'size-full object-contain p-2 [image-rendering:pixelated]' : 'max-h-20 max-w-full object-contain p-1 [image-rendering:pixelated]'}
+          className={large ? 'size-full object-contain [image-rendering:pixelated]' : 'max-h-20 max-w-full object-contain p-1 [image-rendering:pixelated]'}
         />
       ) : (
         <BrandCategoryFallbackIcon category="npcs" className={large ? 'size-14 opacity-80' : 'size-8'} />
@@ -65,7 +73,43 @@ export default function NpcCard({ npc, linkState, onNavigate }: NpcCardProps) {
   }
 
   const tradeCount = (npc.buys_count || 0) + (npc.sells_count || 0);
-  const subtitle = npc.title || npc.occupation || npc.location_name;
+  const services: NpcCardService[] = [];
+
+  if (tradeCount > 0) {
+    services.push({
+      key: 'trade',
+      label: t('npcDetail.trade'),
+      tone: 'success',
+      icon: <PackageOpen className="size-3" />,
+    });
+  }
+
+  if ((npc.destination_count || 0) > 0) {
+    services.push({
+      key: 'travel',
+      label: t('npcDetail.travel'),
+      tone: 'info',
+      icon: <Route className="size-3" />,
+    });
+  }
+
+  if ((npc.quest_count || 0) > 0) {
+    services.push({
+      key: 'quests',
+      label: t('npcDetail.quests'),
+      tone: 'warning',
+      icon: <BookOpenCheck className="size-3" />,
+    });
+  }
+
+  if (!services.length && (npc.occupation || npc.title)) {
+    services.push({
+      key: 'occupation',
+      label: npc.occupation || npc.title || '',
+      tone: 'neutral',
+      icon: <UserRound className="size-3" />,
+    });
+  }
 
   return (
     <article
@@ -82,23 +126,33 @@ export default function NpcCard({ npc, linkState, onNavigate }: NpcCardProps) {
         aria-pressed={selected}
         aria-label={npc.name}
       >
-        <NpcPortrait npc={npc} large />
+        <div className="npc-cyclopedia-card__media">
+          <NpcPortrait npc={npc} large />
+          {npc.map_available ? (
+            <span className="npc-cyclopedia-card__map-status" title={t('npcDirectory.card.mapped')}>
+              <MapPin className="size-3.5" />
+            </span>
+          ) : null}
+        </div>
+
         <div className="npc-cyclopedia-card__identity">
           <strong className="npc-cyclopedia-card__name">{npc.name}</strong>
-          {subtitle ? <span className="npc-cyclopedia-card__subtitle">{subtitle}</span> : null}
+          <span className="npc-cyclopedia-card__location">
+            <MapPin className="size-3 shrink-0" />
+            <span>{npc.location_name || t('npcDetail.unknownLocation')}</span>
+          </span>
         </div>
 
-        <div className="npc-cyclopedia-card__facts">
-          <span><PackageOpen className="size-3.5" />{t('npcDetail.trade')}<strong>{tradeCount}</strong></span>
-          <span><BookOpenCheck className="size-3.5" />{t('npcDetail.quests')}<strong>{npc.quest_count || 0}</strong></span>
-          <span><Route className="size-3.5" />{t('npcDetail.travel')}<strong>{npc.destination_count || 0}</strong></span>
-        </div>
-
-        <div className="npc-cyclopedia-card__location">
-          <MapPin className="size-3.5 shrink-0 text-primary" />
-          <span className="truncate">{npc.location_name || t('npcDetail.unknownLocation')}</span>
-          {npc.map_available ? <span className="npc-cyclopedia-card__mapped">{t('npcDetail.openMap')}</span> : null}
-        </div>
+        {services.length ? (
+          <div className="npc-cyclopedia-card__services" aria-label={t('npcDirectory.subtitle')}>
+            {services.slice(0, 2).map((service) => (
+              <span key={service.key} className="npc-cyclopedia-card__service" data-tone={service.tone} title={service.label}>
+                {service.icon}
+                <span>{service.label}</span>
+              </span>
+            ))}
+          </div>
+        ) : null}
       </button>
 
       <Link
@@ -106,8 +160,10 @@ export default function NpcCard({ npc, linkState, onNavigate }: NpcCardProps) {
         state={linkState}
         onClick={onNavigate}
         className="npc-cyclopedia-card__details"
+        aria-label={t('npcDirectory.card.open')}
+        title={t('npcDirectory.card.open')}
       >
-        {t('plannerRecovery.details')} <ArrowUpRight className="size-3.5" />
+        <ArrowUpRight className="size-3.5" />
       </Link>
     </article>
   );
