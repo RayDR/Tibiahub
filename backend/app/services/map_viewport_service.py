@@ -5,6 +5,7 @@ import base64
 import json
 import re
 from collections import defaultdict
+from itertools import zip_longest
 from typing import Any
 from uuid import UUID
 
@@ -386,9 +387,25 @@ def viewport_payload(
     _expand_relationships(db, found)
     _expand_zone_spawns(db, found)
     rows = _domain_rows(db, set(found), layers)
-    rows.sort(key=lambda value: (value[0], str(value[1].knowledge_entity_id)))
+    by_layer: dict[str, list[tuple[str, Any]]] = defaultdict(list)
+    for layer, row in rows:
+        by_layer[layer].append((layer, row))
+    for group in by_layer.values():
+        group.sort(key=lambda value: str(value[1].knowledge_entity_id))
+    # Neutral, deterministic rounds give each populated layer a turn before
+    # density truncation. Empty/exhausted layers do not consume page slots.
+    rows = [
+        value
+        for round_rows in zip_longest(*(by_layer[layer] for layer in sorted(by_layer)))
+        for value in round_rows if value is not None
+    ]
     if after is not None:
-        rows = [value for value in rows if f"{value[0]}:{value[1].knowledge_entity_id}" > after]
+        for index, (layer, row) in enumerate(rows):
+            if f"{layer}:{row.knowledge_entity_id}" == after:
+                rows = rows[index + 1:]
+                break
+        else:
+            raise ValueError("invalid_map_cursor")
     page_limit = density_limit(zoom, limit)
     page_rows = rows[:page_limit]
     has_more = len(rows) > page_limit

@@ -1,5 +1,8 @@
 from __future__ import annotations
 
+import base64
+from uuid import uuid4
+
 from app.knowledge.models import KnowledgeEntity, KnowledgeEntityType, SpatialMapPoint, SpatialMapRegion
 from app.knowledge.services.graph import KnowledgeGraphService, RelationshipInput
 from app.models import Creature
@@ -239,3 +242,78 @@ def test_viewport_projects_only_trusted_resolved_relationships(client, db):
     assert response.status_code == 200
     assert [row["name"] for row in response.json()["items"]] == ["Trusted Quest"]
     assert response.json()["items"][0]["spatial_evidence"][0]["relationship"] == "occurs_at_location"
+
+
+def test_low_zoom_balances_layers_and_resumes_exact_cursor(client, db):
+    floor = _floor(db)
+    candidates = {"creature": [], "location": [], "npc": [], "quest": []}
+    for layer, count in (("creature", 45), ("location", 1), ("npc", 3), ("quest", 2)):
+        for index in range(count):
+            name = f"Density {layer} {index}"
+            entity = _entity(db, layer, name)
+            candidates[layer].append(f"{layer}:{entity.uuid}")
+            if layer == "creature":
+                db.add(Creature(name=name, slug=entity.slug, knowledge_entity_id=entity.uuid,
+                                is_hidden=False, is_boss=False))
+            elif layer == "location":
+                _location(db, entity, name)
+            elif layer == "npc":
+                db.add(TibiaWikiNpc(name=name, normalized_name=name.lower(), slug=entity.slug,
+                                   external_id=f"npc:density:{index}", source_name="fixture",
+                                   knowledge_entity_id=entity.uuid))
+            else:
+                db.add(TibiaWikiQuest(name=name, slug=entity.slug, is_group=False,
+                                     knowledge_entity_id=entity.uuid))
+            _marker(db, floor, entity, 32100, 31900,
+                    sum(len(ids) for ids in candidates.values()))
+    db.flush()
+    # Expected rounds are independent of SQL insertion order and skip empty layers.
+    for ids in candidates.values():
+        ids.sort()
+    expected = []
+    for index in range(45):
+        for layer in ("creature", "location", "npc", "quest"):
+            if index < len(candidates[layer]):
+                expected.append(candidates[layer][index])
+
+    def request(**kwargs):
+        response = client.get("/api/v1/map/viewport", params=_params(zoom=-3, **kwargs))
+        assert response.status_code == 200, response.text
+        return response.json()
+
+    first = request()
+    first_ids = [row["id"] for row in first["items"]]
+    assert len(first_ids) <= 40
+    assert first["page"]["limit"] == 40
+    assert {row["entity_type"] for row in first["items"]} == set(candidates)
+    assert first_ids == expected[:40]
+    assert request() == first
+    second = request(cursor=first["page"]["next_cursor"])
+    second_ids = [row["id"] for row in second["items"]]
+    assert set(first_ids).isdisjoint(second_ids)
+    assert first_ids + second_ids == expected
+    assert second["page"] == {"limit": 40, "has_more": False, "next_cursor": None}
+
+    # End a page at a later layer, then resume at an earlier layer in the next round.
+    boundary = request(limit=4)
+    assert [row["id"] for row in boundary["items"]] == expected[:4]
+    token = boundary["page"]["next_cursor"]
+    decoded = base64.urlsafe_b64decode(token + "=" * (-len(token) % 4)).decode()
+    assert decoded == expected[3]
+    assert expected[4] < decoded  # A lexicographic cursor would wrongly skip this row.
+    resumed = request(limit=4, cursor=token)
+    assert [row["id"] for row in resumed["items"]] == expected[4:8]
+    assert request(limit=4, cursor=token) == resumed
+
+    # The exact cursor entity is stale if it leaves the bbox or active layers.
+    for overrides in ({"min_x": 32101}, {"layers": "creature,npc,location"}):
+        response = client.get("/api/v1/map/viewport", params=_params(zoom=-3, cursor=token, **overrides))
+        assert response.status_code == 422
+        assert response.json()["detail"] == {"code": "invalid_map_cursor"}
+
+
+def test_viewport_missing_cursor_entity_does_not_restart(client):
+    token = base64.urlsafe_b64encode(f"npc:{uuid4()}".encode()).decode().rstrip("=")
+    response = client.get("/api/v1/map/viewport", params=_params(cursor=token))
+    assert response.status_code == 422
+    assert response.json()["detail"] == {"code": "invalid_map_cursor"}
