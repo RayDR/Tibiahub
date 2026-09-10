@@ -1,11 +1,20 @@
-import React, { useEffect, useMemo, useState } from 'react';
-import { ExternalLink, PackageOpen, Skull, Tag } from 'lucide-react';
+import React from 'react';
+import {
+  ArrowUpRight,
+  Layers3,
+  PackageOpen,
+  Percent,
+  ShieldCheck,
+  Skull,
+  Sparkles,
+  Tag,
+} from 'lucide-react';
 import { Link } from 'react-router-dom';
 import { useTranslation } from 'react-i18next';
 
 import ImageWithFallback from './ImageWithFallback';
-import AppCard from './ui/AppCard';
 import { KnowledgeBadge } from './knowledge/KnowledgeDetail';
+import { useOptionalCyclopediaPreviewSelection } from './cyclopedia/CyclopediaPreviewSelectionContext';
 import type { ItemSearchResult } from '../types';
 import { availableItemMediaUrl } from '../utils/entityMedia';
 
@@ -45,8 +54,14 @@ const uniqueDrops = (drops: ItemSearchResult['drops']) => {
 const itemPath = (item: ItemSearchResult) =>
   `/items/${item.slug || item.normalized_name.split(' ').join('-')}`;
 
-const itemIdentifier = (item: ItemSearchResult) =>
-  item.image_item_id ?? item.external_id ?? item.id ?? null;
+const itemPreviewIdentifier = (item: ItemSearchResult): string =>
+  item.slug
+  || item.external_id
+  || (item.id != null ? String(item.id) : '')
+  || item.normalized_name;
+
+const rarityKey = (value?: string | null): string =>
+  normalizeDisplayKey(value).replace(/[^a-z0-9]+/g, '-');
 
 const CyclopediaLootBrowser: React.FC<CyclopediaLootBrowserProps> = ({
   items,
@@ -54,231 +69,123 @@ const CyclopediaLootBrowser: React.FC<CyclopediaLootBrowserProps> = ({
   onNavigate,
 }) => {
   const { t } = useTranslation();
-  const [selectedKey, setSelectedKey] = useState<string | null>(null);
-
-  useEffect(() => {
-    if (items.length === 0) {
-      setSelectedKey(null);
-      return;
-    }
-
-    setSelectedKey((current) =>
-      current && items.some((item) => item.normalized_name === current)
-        ? current
-        : items[0].normalized_name,
-    );
-  }, [items]);
-
-  const selectedItem = useMemo(
-    () => items.find((item) => item.normalized_name === selectedKey) || items[0] || null,
-    [items, selectedKey],
-  );
-
-  const selectedDrops = useMemo(
-    () => (selectedItem ? uniqueDrops(selectedItem.drops) : []),
-    [selectedItem],
-  );
+  const preview = useOptionalCyclopediaPreviewSelection();
 
   return (
-    <div className="grid min-w-0 gap-4 xl:grid-cols-[minmax(0,1fr)_22rem] 2xl:grid-cols-[minmax(0,1fr)_26rem]">
-      <div className="grid min-w-0 content-start gap-3 [grid-template-columns:repeat(auto-fill,minmax(11rem,1fr))]">
-        {items.map((item) => {
-          const drops = uniqueDrops(item.drops);
-          const primaryDrop = drops[0];
-          const labels = uniqueLabels([item.item_type, item.category]);
-          const selected = selectedItem?.normalized_name === item.normalized_name;
+    <div className="loot-cyclopedia-grid">
+      {items.map((item) => {
+        const drops = uniqueDrops(item.drops);
+        const primaryDrop = drops[0];
+        const labels = uniqueLabels([item.item_type, item.category]);
+        const identifier = itemPreviewIdentifier(item);
+        const selected = preview?.selection?.kind === 'item'
+          && preview.selection.identifier === identifier;
+        const rarity = primaryDrop?.rarity || null;
+        const bestChance = drops.reduce<number | null>((best, drop) => {
+          if (drop.chance == null) return best;
+          return best == null ? drop.chance : Math.max(best, drop.chance);
+        }, null);
 
-          return (
+        return (
+          <article
+            key={item.canonical_id || item.normalized_name}
+            data-cyclopedia-result
+            data-cyclopedia-item-card="true"
+            data-item-identifier={identifier}
+            data-selected={selected ? 'true' : 'false'}
+            className="loot-cyclopedia-card"
+          >
             <button
-              key={item.canonical_id || item.normalized_name}
               type="button"
-              data-cyclopedia-result
+              className="loot-cyclopedia-card__select"
+              onClick={() => preview?.select({ kind: 'item', identifier })}
               aria-pressed={selected}
-              onClick={() => setSelectedKey(item.normalized_name)}
-              className={`ds-enter group relative min-h-[13rem] overflow-hidden rounded-xl border bg-surface-raised/80 p-4 text-left shadow-sm transition duration-200 hover:-translate-y-0.5 hover:border-primary/45 hover:bg-surface-raised hover:shadow-lg focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/60 ${selected ? 'border-primary/70 ring-1 ring-primary/35 shadow-lg' : 'border-line'}`}
+              aria-label={item.item_name}
             >
-              <div className="flex min-w-0 items-start gap-3">
+              <div className="loot-cyclopedia-card__media">
                 <ImageWithFallback
                   src={availableItemMediaUrl(item.media)}
                   alt={item.item_name}
-                  className="size-12 object-contain [image-rendering:pixelated]"
-                  containerClassName="grid size-14 shrink-0 place-items-center rounded-lg border border-line/80 bg-surface-base/70"
+                  className="loot-cyclopedia-card__image [image-rendering:pixelated]"
+                  containerClassName="loot-cyclopedia-card__image-shell"
+                  fallbackKind="item"
                   fallbackLabel={item.item_name}
                 />
-                <div className="min-w-0 flex-1">
-                  <h3 className="line-clamp-2 min-h-10 font-serif text-[1.02rem] font-semibold leading-5 text-content-primary group-hover:text-primary">
-                    {item.item_name}
-                  </h3>
-                  {labels.length > 0 ? (
-                    <div className="mt-2 flex flex-wrap gap-1.5">
-                      {labels.slice(0, 2).map((label) => (
-                        <KnowledgeBadge key={normalizeDisplayKey(label)}>{label}</KnowledgeBadge>
-                      ))}
-                    </div>
+                <span className="loot-cyclopedia-card__crest" aria-hidden="true">
+                  <Sparkles className="size-4" />
+                </span>
+              </div>
+
+              <div className="loot-cyclopedia-card__identity">
+                <div className="loot-cyclopedia-card__title-row">
+                  <h3>{item.item_name}</h3>
+                  {rarity ? (
+                    <span className="loot-rarity-chip" data-rarity={rarityKey(rarity)} title={rarity}>
+                      {rarity}
+                    </span>
                   ) : null}
                 </div>
-              </div>
 
-              <div className="mt-4 space-y-2 border-t border-line/70 pt-3 text-xs text-content-secondary">
-                {primaryDrop ? (
-                  <div className="flex min-w-0 items-center gap-2">
-                    <Skull className="size-3.5 shrink-0 text-primary" aria-hidden="true" />
-                    <span className="truncate font-medium text-content-primary">{primaryDrop.creature_name}</span>
-                    {primaryDrop.is_boss ? <KnowledgeBadge tone="danger">{t('itemDetail.boss')}</KnowledgeBadge> : null}
-                  </div>
-                ) : (
-                  <div className="flex items-center gap-2 text-content-muted">
-                    <PackageOpen className="size-3.5 shrink-0" aria-hidden="true" />
-                    <span>{t('cyclopedia.loot.noDropSources', { defaultValue: 'No drop source recorded' })}</span>
-                  </div>
-                )}
+                <div className="loot-cyclopedia-card__facts">
+                  {primaryDrop ? (
+                    <div className="loot-cyclopedia-card__fact">
+                      <Skull className="size-3.5 shrink-0" aria-hidden="true" />
+                      <span className="truncate">{primaryDrop.creature_name}</span>
+                      {primaryDrop.is_boss ? (
+                        <KnowledgeBadge tone="danger">{t('itemDetail.boss')}</KnowledgeBadge>
+                      ) : null}
+                    </div>
+                  ) : (
+                    <div className="loot-cyclopedia-card__fact loot-cyclopedia-card__fact--muted">
+                      <PackageOpen className="size-3.5 shrink-0" aria-hidden="true" />
+                      <span>{t('cyclopedia.loot.noDropSources', { defaultValue: 'No drop source recorded' })}</span>
+                    </div>
+                  )}
 
-                <div className="flex min-w-0 items-center gap-2">
-                  <Tag className="size-3.5 shrink-0 text-content-muted" aria-hidden="true" />
-                  <span className="truncate">{labels[0] || t('common.unknown', { defaultValue: 'Unknown' })}</span>
-                  {primaryDrop?.rarity ? <span className="ml-auto truncate text-primary">{primaryDrop.rarity}</span> : null}
+                  <div className="loot-cyclopedia-card__fact loot-cyclopedia-card__fact--muted">
+                    <Tag className="size-3.5 shrink-0" aria-hidden="true" />
+                    <span className="truncate">{labels[0] || t('common.unknown', { defaultValue: 'Unknown' })}</span>
+                  </div>
+
+                  {bestChance != null ? (
+                    <div className="loot-cyclopedia-card__fact loot-cyclopedia-card__fact--accent">
+                      <Percent className="size-3.5 shrink-0" aria-hidden="true" />
+                      <span>{t('itemDetail.chance', { value: bestChance, defaultValue: `${bestChance}% best known drop` })}</span>
+                    </div>
+                  ) : drops.length > 1 ? (
+                    <div className="loot-cyclopedia-card__fact loot-cyclopedia-card__fact--muted">
+                      <Layers3 className="size-3.5 shrink-0" aria-hidden="true" />
+                      <span>{t('cyclopedia.items.creaturesMatched', { count: drops.length })}</span>
+                    </div>
+                  ) : (
+                    <div className="loot-cyclopedia-card__fact loot-cyclopedia-card__fact--muted">
+                      <ShieldCheck className="size-3.5 shrink-0" aria-hidden="true" />
+                      <span>
+                        {item.tradeable == null
+                          ? t('common.unknown', { defaultValue: 'Unknown' })
+                          : item.tradeable
+                            ? t('cyclopedia.loot.tradeable', { defaultValue: 'Tradeable' })
+                            : t('common.no', { defaultValue: 'No' })}
+                      </span>
+                    </div>
+                  )}
                 </div>
-
-                {primaryDrop?.chance != null ? (
-                  <div className="text-content-muted">Chance: {primaryDrop.chance}%</div>
-                ) : drops.length > 1 ? (
-                  <div className="text-content-muted">
-                    {t('cyclopedia.items.creaturesMatched', { count: drops.length })}
-                  </div>
-                ) : null}
               </div>
             </button>
-          );
-        })}
-      </div>
 
-      {selectedItem ? (
-        <aside className="min-w-0 xl:self-start">
-          <AppCard className="overflow-hidden border-primary/20 bg-surface-raised/95 p-0 shadow-2xl xl:sticky xl:top-[calc(var(--app-sticky-offset)+0.75rem)]">
-            <div className="border-b border-line bg-surface-base/35 p-5">
-              <div className="flex items-start gap-4">
-                <ImageWithFallback
-                  src={availableItemMediaUrl(selectedItem.media)}
-                  alt={selectedItem.item_name}
-                  className="size-20 object-contain [image-rendering:pixelated]"
-                  containerClassName="grid size-24 shrink-0 place-items-center rounded-xl border border-primary/25 bg-surface-base/80"
-                  fallbackLabel={selectedItem.item_name}
-                />
-                <div className="min-w-0 flex-1">
-                  <div className="flex items-start justify-between gap-3">
-                    <h2 className="font-serif text-2xl font-semibold leading-tight text-content-primary">
-                      {selectedItem.item_name}
-                    </h2>
-                    {itemIdentifier(selectedItem) != null ? (
-                      <span className="shrink-0 text-xs text-content-muted">#{itemIdentifier(selectedItem)}</span>
-                    ) : null}
-                  </div>
-                  <div className="mt-3 flex flex-wrap gap-2">
-                    {uniqueLabels([selectedItem.item_type, selectedItem.category]).map((label) => (
-                      <KnowledgeBadge key={normalizeDisplayKey(label)}>{label}</KnowledgeBadge>
-                    ))}
-                    {selectedDrops[0]?.rarity ? <KnowledgeBadge tone="primary">{selectedDrops[0].rarity}</KnowledgeBadge> : null}
-                  </div>
-                </div>
-              </div>
-            </div>
-
-            <div className="grid grid-cols-2 divide-x divide-line border-b border-line bg-surface-base/20">
-              <div className="p-4">
-                <p className="text-[10px] uppercase tracking-[0.14em] text-content-muted">
-                  {t('cyclopedia.loot.dropSources', { defaultValue: 'Drop sources' })}
-                </p>
-                <p className="mt-1 text-lg font-semibold text-content-primary">{selectedDrops.length}</p>
-              </div>
-              <div className="p-4">
-                <p className="text-[10px] uppercase tracking-[0.14em] text-content-muted">
-                  {t('cyclopedia.loot.tradeable', { defaultValue: 'Tradeable' })}
-                </p>
-                <p className="mt-1 text-sm font-semibold text-content-primary">
-                  {selectedItem.tradeable == null
-                    ? t('common.unknown', { defaultValue: 'Unknown' })
-                    : selectedItem.tradeable
-                      ? t('common.yes', { defaultValue: 'Yes' })
-                      : t('common.no', { defaultValue: 'No' })}
-                </p>
-              </div>
-            </div>
-
-            <div className="p-5">
-              <div className="space-y-3">
-                <div className="flex items-center justify-between gap-4 border-b border-line/70 pb-2 text-sm">
-                  <span className="text-content-muted">{t('cyclopedia.loot.category', { defaultValue: 'Category' })}</span>
-                  <span className="max-w-[60%] truncate text-right font-medium text-content-primary">
-                    {selectedItem.category || selectedItem.item_type || t('common.unknown', { defaultValue: 'Unknown' })}
-                  </span>
-                </div>
-                <div className="flex items-center justify-between gap-4 border-b border-line/70 pb-2 text-sm">
-                  <span className="text-content-muted">{t('cyclopedia.loot.stackable', { defaultValue: 'Stackable' })}</span>
-                  <span className="font-medium text-content-primary">
-                    {selectedItem.stackable == null
-                      ? t('common.unknown', { defaultValue: 'Unknown' })
-                      : selectedItem.stackable
-                        ? t('common.yes', { defaultValue: 'Yes' })
-                        : t('common.no', { defaultValue: 'No' })}
-                  </span>
-                </div>
-              </div>
-
-              <div className="mt-5">
-                <div className="mb-3 flex items-center justify-between gap-3">
-                  <h3 className="font-serif text-lg font-semibold text-content-primary">
-                    {t('cyclopedia.loot.droppedBy', { defaultValue: 'Dropped by' })}
-                  </h3>
-                  {selectedDrops.length > 0 ? <span className="text-xs text-content-muted">{selectedDrops.length}</span> : null}
-                </div>
-
-                {selectedDrops.length > 0 ? (
-                  <div className="space-y-2">
-                    {selectedDrops.slice(0, 6).map((drop) => (
-                      <div key={`${selectedItem.normalized_name}-${normalizeDisplayKey(drop.creature_name)}`} className="flex min-w-0 items-center gap-2 rounded-lg border border-line/70 bg-surface-base/35 px-3 py-2.5">
-                        <Skull className="size-4 shrink-0 text-primary" aria-hidden="true" />
-                        <div className="min-w-0 flex-1">
-                          {drop.creature_slug || drop.creature_id ? (
-                            <Link
-                              to={`/creatures/${drop.creature_slug || drop.creature_id}`}
-                              state={linkState}
-                              onClick={onNavigate}
-                              className="block truncate text-sm font-medium text-content-primary hover:text-primary hover:underline"
-                            >
-                              {drop.creature_name}
-                            </Link>
-                          ) : (
-                            <span className="block truncate text-sm font-medium text-content-primary">{drop.creature_name}</span>
-                          )}
-                          <div className="mt-0.5 flex gap-2 text-[11px] text-content-muted">
-                            {drop.rarity ? <span>{drop.rarity}</span> : null}
-                            {drop.chance != null ? <span>{drop.chance}%</span> : null}
-                          </div>
-                        </div>
-                        {drop.is_boss ? <KnowledgeBadge tone="danger">{t('itemDetail.boss')}</KnowledgeBadge> : null}
-                      </div>
-                    ))}
-                  </div>
-                ) : (
-                  <p className="rounded-lg border border-dashed border-line p-4 text-sm text-content-muted">
-                    {t('cyclopedia.loot.noDropSources', { defaultValue: 'No drop source recorded for this item yet.' })}
-                  </p>
-                )}
-              </div>
-
-              <Link
-                to={itemPath(selectedItem)}
-                state={linkState}
-                onClick={onNavigate}
-                className="mt-5 inline-flex w-full items-center justify-center gap-2 rounded-lg border border-primary/35 bg-primary/10 px-4 py-2.5 text-sm font-semibold text-primary transition hover:bg-primary/15"
-              >
-                {t('cyclopedia.loot.openDetails', { defaultValue: 'Open item details' })}
-                <ExternalLink className="size-4" aria-hidden="true" />
-              </Link>
-            </div>
-          </AppCard>
-        </aside>
-      ) : null}
+            <Link
+              to={itemPath(item)}
+              state={linkState}
+              onClick={onNavigate}
+              className="loot-cyclopedia-card__details"
+              aria-label={t('cyclopedia.loot.openDetails', { defaultValue: 'Open item details' })}
+              title={t('cyclopedia.loot.openDetails', { defaultValue: 'Open item details' })}
+            >
+              <ArrowUpRight className="size-3.5" />
+            </Link>
+          </article>
+        );
+      })}
     </div>
   );
 };
