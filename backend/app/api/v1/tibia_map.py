@@ -1,6 +1,7 @@
 """Public Tibia map API backed exclusively by locally imported world floors."""
 from __future__ import annotations
 
+import math
 from pathlib import Path
 from typing import Any
 from uuid import UUID
@@ -25,6 +26,11 @@ from app.services.map_presentation_service import (
     floor_payload as _floor_payload,
     zone_spatial_presentation,
     zone_spatial_presentations,
+)
+from app.services.map_viewport_service import (
+    MAP_VIEWPORT_LAYERS,
+    parse_layers as parse_viewport_layers,
+    viewport_payload,
 )
 from app.services.text_utils import normalize_search_text
 
@@ -578,6 +584,34 @@ def map_bootstrap(floor: int = Query(7, ge=0, le=15), db: Session = Depends(get_
         "towns": towns,
         "default_results": default_results[:40],
     }
+
+
+@router.get("/viewport")
+def map_viewport(
+    min_x: int = Query(..., ge=0, le=65535),
+    min_y: int = Query(..., ge=0, le=65535),
+    max_x: int = Query(..., ge=0, le=65535),
+    max_y: int = Query(..., ge=0, le=65535),
+    floor: int = Query(..., ge=0, le=15),
+    layers: str = Query(",".join(sorted(MAP_VIEWPORT_LAYERS)), max_length=150),
+    zoom: float = Query(0),
+    cursor: str | None = Query(None, max_length=512),
+    limit: int = Query(100, ge=1, le=200),
+    db: Session = Depends(get_db),
+):
+    """Return only trusted, resolved entities intersecting the requested viewport."""
+    if min_x >= max_x or min_y >= max_y:
+        raise HTTPException(status_code=422, detail={"code": "invalid_map_bbox"})
+    if not math.isfinite(zoom) or zoom < -10 or zoom > 30:
+        raise HTTPException(status_code=422, detail={"code": "invalid_map_zoom"})
+    try:
+        requested_layers = parse_viewport_layers(layers)
+        return viewport_payload(
+            db, min_x=min_x, min_y=min_y, max_x=max_x, max_y=max_y,
+            floor=floor, layers=requested_layers, zoom=zoom, cursor=cursor, limit=limit,
+        )
+    except ValueError as exc:
+        raise HTTPException(status_code=422, detail={"code": str(exc)}) from exc
 
 
 @router.get("/layers/{layer}")

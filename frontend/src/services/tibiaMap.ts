@@ -40,12 +40,22 @@ export interface TibiaMapLayerResult {
   layer: TibiaMapLayer; floor: number | null; items: TibiaMapResult[];
   total: number; has_more: boolean;
 }
+export interface TibiaMapViewport {
+  minX: number; minY: number; maxX: number; maxY: number; zoom: number; floor: number;
+}
+export interface TibiaMapViewportResponse {
+  floor: number;
+  bbox: { min_x: number; min_y: number; max_x: number; max_y: number };
+  layers: TibiaMapLayer[]; zoom: number; items: TibiaMapResult[];
+  page: { limit: number; has_more: boolean; next_cursor: string | null };
+}
 
 const CACHE_TTL_MS = 5 * 60 * 1000;
 interface CacheEntry<T> { value: T; expiresAt: number }
 const bootstrapCache = new Map<number, CacheEntry<TibiaMapBootstrap>>();
 const huntZoneContextCache = new Map<string, CacheEntry<HuntZoneMapContext>>();
-const layerCache = new Map<TibiaMapLayer, CacheEntry<TibiaMapLayerResult>>();
+const VIEWPORT_CACHE_SIZE = 24;
+const viewportCache = new Map<string, CacheEntry<TibiaMapViewportResponse>>();
 const SEARCH_TYPES: TibiaMapSearchType[] = ['hunt_zone', 'creature', 'boss', 'item', 'quest', 'npc', 'location'];
 
 function readCache<K, V>(cache: Map<K, CacheEntry<V>>, key: K): V | null {
@@ -55,7 +65,24 @@ function readCache<K, V>(cache: Map<K, CacheEntry<V>>, key: K): V | null {
     cache.delete(key);
     return null;
   }
+  // Map insertion order provides a small bounded LRU without another dependency.
+  cache.delete(key);
+  cache.set(key, entry);
   return entry.value;
+}
+
+function viewportRequest(viewport: TibiaMapViewport, layers: TibiaMapLayer[]) {
+  const zoomBucket = Math.floor(viewport.zoom);
+  const bucketSize = zoomBucket < -2 ? 256 : zoomBucket < 0 ? 128 : zoomBucket < 2 ? 64 : 32;
+  const minX = Math.floor(viewport.minX / bucketSize) * bucketSize;
+  const minY = Math.floor(viewport.minY / bucketSize) * bucketSize;
+  const maxX = Math.ceil(viewport.maxX / bucketSize) * bucketSize;
+  const maxY = Math.ceil(viewport.maxY / bucketSize) * bucketSize;
+  const active = [...layers].sort();
+  return {
+    key: [viewport.floor, minX, minY, maxX, maxY, active.join(','), zoomBucket].join(':'),
+    params: { min_x: minX, min_y: minY, max_x: maxX, max_y: maxY, floor: viewport.floor, layers: active.join(','), zoom: viewport.zoom, limit: 200 },
+  };
 }
 
 function cacheHuntZoneContext(identifier: number | string, value: HuntZoneMapContext) {
@@ -78,11 +105,17 @@ export const tibiaMapApi = {
     const response = await api.get('/map/search', { params: { q: query, layers: SEARCH_TYPES.join(','), limit: 30 }, signal });
     return response.data.items || [];
   },
-  async layer(layer: TibiaMapLayer, signal?: AbortSignal): Promise<TibiaMapLayerResult> {
-    const cached = readCache(layerCache, layer);
+  async viewport(viewport: TibiaMapViewport, layers: TibiaMapLayer[], signal?: AbortSignal): Promise<TibiaMapViewportResponse> {
+    const request = viewportRequest(viewport, layers);
+    const cached = readCache(viewportCache, request.key);
     if (cached) return cached;
-    const value = (await api.get(`/map/layers/${layer}`, { params: { limit: 250 }, signal })).data as TibiaMapLayerResult;
-    layerCache.set(layer, { value, expiresAt: Date.now() + CACHE_TTL_MS });
+    const value = (await api.get('/map/viewport', { params: request.params, signal })).data as TibiaMapViewportResponse;
+    viewportCache.set(request.key, { value, expiresAt: Date.now() + CACHE_TTL_MS });
+    while (viewportCache.size > VIEWPORT_CACHE_SIZE) {
+      const oldest = viewportCache.keys().next().value as string | undefined;
+      if (oldest == null) break;
+      viewportCache.delete(oldest);
+    }
     return value;
   },
   async huntZoneContext(identifier: number | string, signal?: AbortSignal): Promise<HuntZoneMapContext> {
