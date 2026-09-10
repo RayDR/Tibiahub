@@ -10,7 +10,9 @@ import { X } from 'lucide-react';
 import { createPortal } from 'react-dom';
 import { useLocation } from 'react-router-dom';
 
+import CreatureCard from '../CreatureCard';
 import { Container } from '../ui';
+import { BoostedCreatureProvider, useBoostedCreature } from './BoostedCreatureContext';
 import { CreatureBrowserProvider, useCreatureBrowser } from './CreatureBrowserContext';
 import {
   CyclopediaPreviewSelectionProvider,
@@ -31,12 +33,16 @@ type PreviewSelection =
   | { kind: 'zone'; identifier: string }
   | { kind: 'npc'; identifier: string };
 
+type PreviewSide = 'left' | 'right';
+
 export default function CyclopediaCreatureWorkspace({ children }: { children: ReactNode }) {
   return (
     <CreatureBrowserProvider>
-      <CyclopediaPreviewSelectionProvider>
-        <CyclopediaCreatureWorkspaceInner>{children}</CyclopediaCreatureWorkspaceInner>
-      </CyclopediaPreviewSelectionProvider>
+      <BoostedCreatureProvider>
+        <CyclopediaPreviewSelectionProvider>
+          <CyclopediaCreatureWorkspaceInner>{children}</CyclopediaCreatureWorkspaceInner>
+        </CyclopediaPreviewSelectionProvider>
+      </BoostedCreatureProvider>
     </CreatureBrowserProvider>
   );
 }
@@ -86,6 +92,7 @@ function CyclopediaCreatureWorkspaceInner({ children }: { children: ReactNode })
           {children}
         </Container>
       </main>
+      <BoostedCreatureGridPin tab={tab} search={location.search} />
       {selection ? (
         <CyclopediaPreviewPortal
           selection={selection}
@@ -93,6 +100,78 @@ function CyclopediaCreatureWorkspaceInner({ children }: { children: ReactNode })
         />
       ) : null}
     </div>
+  );
+}
+
+function BoostedCreatureGridPin({ tab, search }: { tab: string; search: string }) {
+  const boosted = useBoostedCreature();
+  const params = new URLSearchParams(search);
+  const kind = tab === 'bosses' ? 'boss' : 'creature';
+  const eligible = (tab === 'creatures' || tab === 'bosses')
+    && !(params.get('q') || '').trim()
+    && !(tab === 'creatures' && (params.get('category') || '').trim());
+  const featured = tab === 'bosses' ? boosted?.featuredBoss : boosted?.featuredCreature;
+  const [grid, setGrid] = useState<HTMLElement | null>(null);
+  const [hasNativeCard, setHasNativeCard] = useState(false);
+
+  useLayoutEffect(() => {
+    if (!eligible) {
+      setGrid(null);
+      setHasNativeCard(false);
+      return undefined;
+    }
+
+    const root = document.querySelector<HTMLElement>(
+      '.app-shell-cyclopedia main[data-workspace-main="cyclopedia"]',
+    );
+    if (!root) return undefined;
+
+    const locateGrid = () => {
+      const next = Array.from(root.querySelectorAll<HTMLElement>('.grid')).find((candidate) =>
+        candidate.querySelector(`[data-creature-card][data-entity-kind="${kind}"]`),
+      ) || null;
+      setGrid((current) => current === next ? current : next);
+    };
+
+    const observer = new MutationObserver(locateGrid);
+    locateGrid();
+    observer.observe(root, { childList: true, subtree: true });
+
+    return () => observer.disconnect();
+  }, [eligible, kind]);
+
+  useLayoutEffect(() => {
+    if (!grid || !featured) {
+      setHasNativeCard(false);
+      return undefined;
+    }
+
+    const detectNativeCard = () => {
+      const exists = Array.from(
+        grid.querySelectorAll<HTMLElement>(`[data-creature-card][data-creature-id="${featured.id}"]`),
+      ).some((card) => !card.closest('[data-cyclopedia-boosted-pin]'));
+      setHasNativeCard(exists);
+    };
+
+    const observer = new MutationObserver(detectNativeCard);
+    detectNativeCard();
+    observer.observe(grid, { childList: true, subtree: true });
+
+    return () => observer.disconnect();
+  }, [featured, grid]);
+
+  if (!eligible || !featured || !grid || hasNativeCard) return null;
+
+  return createPortal(
+    <div
+      className="cyclopedia-boosted-grid-entry"
+      data-cyclopedia-result
+      data-cyclopedia-boosted-pin
+      aria-label={featured.is_boss ? 'Daily boosted boss' : 'Daily boosted creature'}
+    >
+      <CreatureCard creature={featured} index={0} />
+    </div>,
+    grid,
   );
 }
 
@@ -142,6 +221,7 @@ function CyclopediaPreviewPortal({
 }) {
   const dockRef = useRef<HTMLElement | null>(null);
   const [resultsRegion, setResultsRegion] = useState<HTMLElement | null>(null);
+  const [side, setSide] = useState<PreviewSide>('right');
   const [insets, setInsets] = useState<PreviewInsets>({ top: 0, bottom: PREVIEW_EDGE_GAP });
   const selectionKey = selection.kind === 'creature' || selection.kind === 'boss'
     ? `${selection.kind}:${selection.creatureId}`
@@ -153,18 +233,29 @@ function CyclopediaPreviewPortal({
     const grid = result?.parentElement;
     const region = grid?.parentElement;
 
-    if (!region) {
+    if (!region || !grid || !selectedCard) {
       setResultsRegion(null);
       return undefined;
     }
 
+    const cardRect = selectedCard.getBoundingClientRect();
+    const gridRect = grid.getBoundingClientRect();
+    const cardCenter = cardRect.left + cardRect.width / 2;
+    const gridCenter = gridRect.left + gridRect.width / 2;
+    // Put the preview opposite the selected card so the user's working area
+    // stays visible. Small screens use the bottom-sheet CSS regardless.
+    const nextSide: PreviewSide = cardCenter >= gridCenter ? 'left' : 'right';
+
+    setSide(nextSide);
     region.dataset.cyclopediaPreviewHost = 'true';
     region.dataset.cyclopediaPreviewKind = selection.kind;
+    region.dataset.cyclopediaPreviewSide = nextSide;
     setResultsRegion(region);
 
     return () => {
       delete region.dataset.cyclopediaPreviewHost;
       delete region.dataset.cyclopediaPreviewKind;
+      delete region.dataset.cyclopediaPreviewSide;
     };
   }, [selectionKey]); // eslint-disable-line react-hooks/exhaustive-deps
 
@@ -279,6 +370,7 @@ function CyclopediaPreviewPortal({
       className="cyclopedia-creature-preview-dock"
       aria-label={`Selected ${label} preview`}
       data-preview-kind={selection.kind}
+      data-preview-side={side}
       style={dockStyle}
     >
       <div className="cyclopedia-creature-preview-sticky">

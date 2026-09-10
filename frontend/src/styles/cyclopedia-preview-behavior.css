@@ -29,7 +29,7 @@ html[data-layout='wide'] .app-shell-cyclopedia main[data-workspace-main='cyclope
   position: fixed;
   z-index: var(--z-map-overlay);
   top: var(--cyclopedia-preview-top, calc(var(--app-sticky-offset) + var(--space-4)));
-  right: var(--space-4);
+  right: auto;
   bottom: var(--cyclopedia-preview-bottom, var(--space-4));
   left: auto;
   width: min(29rem, calc(100vw - 2rem));
@@ -40,6 +40,59 @@ html[data-layout='wide'] .app-shell-cyclopedia main[data-workspace-main='cyclope
   border-radius: var(--radius-lg);
   box-shadow: var(--elevation-overlay);
   scrollbar-width: thin;
+}
+
+.cyclopedia-creature-preview-dock[data-preview-side='right'] {
+  right: var(--space-4);
+}
+
+.cyclopedia-creature-preview-dock[data-preview-side='left'] {
+  left: var(--space-4);
+}
+
+@keyframes cyclopedia-preview-enter-right {
+  from {
+    opacity: 0;
+    transform: translateX(1.35rem);
+  }
+  to {
+    opacity: 1;
+    transform: translateX(0);
+  }
+}
+
+@keyframes cyclopedia-preview-enter-left {
+  from {
+    opacity: 0;
+    transform: translateX(-1.35rem);
+  }
+  to {
+    opacity: 1;
+    transform: translateX(0);
+  }
+}
+
+/* Appearance > Motion controls the lateral preview entrance. */
+html[data-motion='enhanced'] .cyclopedia-creature-preview-dock[data-preview-side='right'] {
+  animation: cyclopedia-preview-enter-right var(--duration-base) var(--ease-standard);
+}
+
+html[data-motion='enhanced'] .cyclopedia-creature-preview-dock[data-preview-side='left'] {
+  animation: cyclopedia-preview-enter-left var(--duration-base) var(--ease-standard);
+}
+
+@media (prefers-reduced-motion: no-preference) {
+  html[data-motion='system'] .cyclopedia-creature-preview-dock[data-preview-side='right'] {
+    animation: cyclopedia-preview-enter-right var(--duration-base) var(--ease-standard);
+  }
+
+  html[data-motion='system'] .cyclopedia-creature-preview-dock[data-preview-side='left'] {
+    animation: cyclopedia-preview-enter-left var(--duration-base) var(--ease-standard);
+  }
+}
+
+html[data-motion='reduced'] .cyclopedia-creature-preview-dock {
+  animation: none;
 }
 
 .cyclopedia-creature-preview-sticky {
@@ -74,6 +127,44 @@ html[data-layout='wide'] .app-shell-cyclopedia main[data-workspace-main='cyclope
 
 .cyclopedia-creature-preview-sticky .creature-preview-identity {
   padding-right: 3.35rem;
+}
+
+/* Daily boosted Creature/Boss is pinned ahead of the normal grid ordering. */
+.cyclopedia-boosted-grid-entry {
+  order: -1;
+  min-width: 0;
+}
+
+.cyclopedia-boosted-grid-entry > .creature-browser-card {
+  height: 100%;
+}
+
+.creature-browser-card[data-boosted='true'] {
+  position: relative;
+  border-color: rgb(var(--ds-primary) / 0.72);
+  box-shadow: 0 0 0 1px rgb(var(--ds-primary) / 0.18), var(--elevation-card);
+}
+
+.creature-boosted-badge {
+  position: absolute;
+  z-index: 6;
+  top: var(--space-3);
+  left: var(--space-3);
+  display: inline-flex;
+  align-items: center;
+  gap: 0.3rem;
+  max-width: calc(100% - 6rem);
+  padding: 0.28rem 0.5rem;
+  border: 1px solid rgb(var(--ds-primary) / 0.5);
+  border-radius: 999px;
+  background: rgb(var(--ds-surface-overlay) / 0.92);
+  color: rgb(var(--ds-primary));
+  box-shadow: 0 0.25rem 0.7rem rgb(var(--ds-shadow) / 0.2);
+  font-size: 0.68rem;
+  font-weight: 800;
+  line-height: 1;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
 }
 
 /* Creature/Boss result density. */
@@ -113,19 +204,36 @@ html[data-layout='wide'] .app-shell-cyclopedia main[data-workspace-main='cyclope
 }
 
 /*
- * Wide desktop reserves only result-space for the fixed side dock. The preview
- * itself is portaled to document.body, so no ancestor clipping, transformed
- * container, or changing sticky height can make it float underneath the app
- * chrome. Navbar and sticky search remain above it in the stacking order.
+ * Wide desktop reserves result-space on the side occupied by the fixed dock.
+ * Because the side is selected from the clicked card before the host padding is
+ * applied, the preview never covers the half of the grid the user is working in.
  */
 @media (min-width: 1440px) {
   html[data-layout='wide'] [data-cyclopedia-preview-host='true'] {
-    padding-right: calc(29rem + clamp(1rem, 1.6vw, 1.75rem));
-    transition: padding-right var(--duration-base) var(--ease-standard);
+    transition:
+      padding-left var(--duration-base) var(--ease-standard),
+      padding-right var(--duration-base) var(--ease-standard);
   }
 
-  html[data-layout='wide'] .cyclopedia-creature-preview-dock {
+  html[data-layout='wide'] [data-cyclopedia-preview-host='true'][data-cyclopedia-preview-side='right'] {
+    padding-right: calc(29rem + clamp(1rem, 1.6vw, 1.75rem));
+    padding-left: 0;
+  }
+
+  html[data-layout='wide'] [data-cyclopedia-preview-host='true'][data-cyclopedia-preview-side='left'] {
+    padding-left: calc(29rem + clamp(1rem, 1.6vw, 1.75rem));
+    padding-right: 0;
+  }
+
+  html[data-layout='wide'] .cyclopedia-creature-preview-dock[data-preview-side='right'] {
     right: clamp(1.5rem, 2vw, 3rem);
+    left: auto;
+    width: 29rem;
+  }
+
+  html[data-layout='wide'] .cyclopedia-creature-preview-dock[data-preview-side='left'] {
+    right: auto;
+    left: clamp(1.5rem, 2vw, 3rem);
     width: 29rem;
   }
 
@@ -135,24 +243,39 @@ html[data-layout='wide'] .app-shell-cyclopedia main[data-workspace-main='cyclope
   }
 }
 
-/* Laptop/tablet: keep the list width stable and overlay from the right. */
+/* Laptop/tablet: keep the list width stable and overlay from the opposite side. */
 @media (min-width: 1024px) and (max-width: 1439px) {
-  .cyclopedia-creature-preview-dock {
+  .cyclopedia-creature-preview-dock[data-preview-side='right'] {
     right: var(--space-4);
+    left: auto;
+    width: min(29rem, calc(100vw - 2rem));
+  }
+
+  .cyclopedia-creature-preview-dock[data-preview-side='left'] {
+    right: auto;
+    left: var(--space-4);
     width: min(29rem, calc(100vw - 2rem));
   }
 }
 
-/* Compact desktop is always an overlay, regardless of available viewport. */
+/* Compact desktop is always an overlay, but still respects the selected side. */
 @media (min-width: 1440px) {
-  html[data-layout='compact'] .cyclopedia-creature-preview-dock {
+  html[data-layout='compact'] .cyclopedia-creature-preview-dock[data-preview-side='right'] {
     right: max(var(--space-4), calc((100vw - var(--app-content-max-width)) / 2 + var(--space-4)));
+    left: auto;
+  }
+
+  html[data-layout='compact'] .cyclopedia-creature-preview-dock[data-preview-side='left'] {
+    right: auto;
+    left: max(var(--space-4), calc((100vw - var(--app-content-max-width)) / 2 + var(--space-4)));
   }
 }
 
 /* Mobile/small tablet: bottom-sheet style overlay with an always-visible close. */
 @media (max-width: 1023px) {
-  .cyclopedia-creature-preview-dock {
+  .cyclopedia-creature-preview-dock,
+  .cyclopedia-creature-preview-dock[data-preview-side='right'],
+  .cyclopedia-creature-preview-dock[data-preview-side='left'] {
     top: auto;
     right: var(--space-3);
     bottom: calc(var(--app-mobile-nav-clearance) + var(--space-3));
