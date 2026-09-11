@@ -19,7 +19,15 @@
 @import './styles/quest-codex.css';
 @import './styles/map-workspace.css';
 
-.tibia-map-page { --z-map-overlay: 40; }
+/* Map workspace is isolated from legacy presentation aliases while it migrates
+   to the shared semantic design-system contract. */
+.tibia-map-page {
+  --z-map-overlay: 40;
+  --content-primary: var(--text-primary);
+  --content-secondary: var(--text-secondary);
+  --content-muted: var(--text-muted);
+  --line: var(--border);
+}
 
 @tailwind base;
 @tailwind components;
