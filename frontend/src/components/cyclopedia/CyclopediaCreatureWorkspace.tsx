@@ -35,6 +35,12 @@ type PreviewSelection =
 
 type PreviewSide = 'left' | 'right';
 
+interface PreviewAnchor {
+  left: number;
+  right: number;
+  top: number;
+}
+
 export default function CyclopediaCreatureWorkspace({ children }: { children: ReactNode }) {
   return (
     <CreatureBrowserProvider>
@@ -222,6 +228,7 @@ function CyclopediaPreviewPortal({
   const dockRef = useRef<HTMLElement | null>(null);
   const [resultsRegion, setResultsRegion] = useState<HTMLElement | null>(null);
   const [side, setSide] = useState<PreviewSide>('right');
+  const [anchor, setAnchor] = useState<PreviewAnchor | null>(null);
   const [insets, setInsets] = useState<PreviewInsets>({ top: 0, bottom: PREVIEW_EDGE_GAP });
   const selectionKey = selection.kind === 'creature' || selection.kind === 'boss'
     ? `${selection.kind}:${selection.creatureId}`
@@ -235,6 +242,7 @@ function CyclopediaPreviewPortal({
 
     if (!region || !grid || !selectedCard) {
       setResultsRegion(null);
+      setAnchor(null);
       return undefined;
     }
 
@@ -247,6 +255,7 @@ function CyclopediaPreviewPortal({
     const nextSide: PreviewSide = cardCenter >= gridCenter ? 'left' : 'right';
 
     setSide(nextSide);
+    setAnchor({ left: cardRect.left, right: cardRect.right, top: cardRect.top });
     region.dataset.cyclopediaPreviewHost = 'true';
     region.dataset.cyclopediaPreviewKind = selection.kind;
     region.dataset.cyclopediaPreviewSide = nextSide;
@@ -270,6 +279,8 @@ function CyclopediaPreviewPortal({
       frame = 0;
 
       const regionRect = resultsRegion.getBoundingClientRect();
+      const selectedCard = selectedCardFor(selection);
+      const cardRect = selectedCard?.getBoundingClientRect();
       const nav = document.querySelector<HTMLElement>(
         '.app-shell-cyclopedia header.app-primary-nav',
       );
@@ -291,6 +302,29 @@ function CyclopediaPreviewPortal({
         PREVIEW_EDGE_GAP,
         window.innerHeight - regionRect.bottom + PREVIEW_EDGE_GAP,
       );
+
+      const compactSideBySide = document.documentElement.dataset.layout === 'compact'
+        && window.innerWidth >= 1024;
+      const nextAnchorTop = cardRect
+        ? Math.max(
+            controlsBottom,
+            compactSideBySide
+              ? Math.min(cardRect.top, window.innerHeight - PREVIEW_EDGE_GAP - 220)
+              : cardRect.top,
+          )
+        : nextTop;
+
+      if (cardRect) {
+        setAnchor((current) => {
+          const next = { left: cardRect.left, right: cardRect.right, top: nextAnchorTop };
+          return current
+            && Math.abs(current.left - next.left) < 1
+            && Math.abs(current.right - next.right) < 1
+            && Math.abs(current.top - next.top) < 1
+            ? current
+            : next;
+        });
+      }
 
       setInsets((current) =>
         Math.abs(current.top - nextTop) < 1 && Math.abs(current.bottom - nextBottom) < 1
@@ -326,6 +360,8 @@ function CyclopediaPreviewPortal({
       resizeObserver = new ResizeObserver(scheduleMeasure);
       resizeObserver.observe(resultsRegion);
       if (searchSurface) resizeObserver.observe(searchSurface);
+      const selectedCard = selectedCardFor(selection);
+      if (selectedCard) resizeObserver.observe(selectedCard);
     }
 
     return () => {
@@ -335,7 +371,7 @@ function CyclopediaPreviewPortal({
       searchObserver?.disconnect();
       resizeObserver?.disconnect();
     };
-  }, [resultsRegion]);
+  }, [resultsRegion, selection, side]);
 
   useEffect(() => {
     const onKeyDown = (event: KeyboardEvent) => {
@@ -362,6 +398,9 @@ function CyclopediaPreviewPortal({
   const dockStyle = {
     '--cyclopedia-preview-top': `${insets.top}px`,
     '--cyclopedia-preview-bottom': `${insets.bottom}px`,
+    '--cyclopedia-preview-card-left': `${anchor?.left ?? PREVIEW_EDGE_GAP}px`,
+    '--cyclopedia-preview-card-right': `${anchor?.right ?? PREVIEW_EDGE_GAP}px`,
+    '--cyclopedia-preview-anchor-top': `${anchor?.top ?? insets.top}px`,
   } as CSSProperties;
 
   return createPortal(
