@@ -61,8 +61,6 @@ function CyclopediaCreatureWorkspaceInner({ children }: { children: ReactNode })
   const clearGenericPreview = genericPreview.clear;
   const genericSelection = genericPreview.selection;
   const tab = new URLSearchParams(location.search).get('tab') || 'creatures';
-  // Canonical URL key is `loot`; keep `items` as a compatibility alias for
-  // older links while the page mode itself remains `items` internally.
   const isLootTab = tab === 'loot' || tab === 'items';
 
   useEffect(() => {
@@ -250,8 +248,6 @@ function CyclopediaPreviewPortal({
     const gridRect = grid.getBoundingClientRect();
     const cardCenter = cardRect.left + cardRect.width / 2;
     const gridCenter = gridRect.left + gridRect.width / 2;
-    // Put the preview opposite the selected card so the user's working area
-    // stays visible. Small screens use the bottom-sheet CSS regardless.
     const nextSide: PreviewSide = cardCenter >= gridCenter ? 'left' : 'right';
 
     setSide(nextSide);
@@ -371,7 +367,7 @@ function CyclopediaPreviewPortal({
       searchObserver?.disconnect();
       resizeObserver?.disconnect();
     };
-  }, [resultsRegion, selection, side]);
+  }, [resultsRegion, selectionKey]); // eslint-disable-line react-hooks/exhaustive-deps
 
   useEffect(() => {
     const onKeyDown = (event: KeyboardEvent) => {
