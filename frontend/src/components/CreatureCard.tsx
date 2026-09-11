@@ -1,10 +1,12 @@
 import React, { useEffect } from 'react';
-import { ArrowRight, MapPin, Sword } from 'lucide-react';
+import { ArrowRight, Flame, MapPin, Sword } from 'lucide-react';
 import { Link, useLocation } from 'react-router-dom';
+import { useTranslation } from 'react-i18next';
 
 import { CreatureSimple } from '../types';
 import ImageWithFallback from './ImageWithFallback';
 import BrandCategoryFallbackIcon from './icons/BrandCategoryFallbackIcon';
+import { useBoostedCreature } from './cyclopedia/BoostedCreatureContext';
 import { useCreatureBrowser } from './cyclopedia/CreatureBrowserContext';
 
 interface CreatureCardProps {
@@ -27,10 +29,13 @@ const CreatureCard: React.FC<CreatureCardProps> = ({
   linkState,
   onNavigate,
 }) => {
+  const { t } = useTranslation();
   const location = useLocation();
   const browser = useCreatureBrowser();
+  const boosted = useBoostedCreature();
   const enriched = browser?.browseItem(creature.id);
   const selected = browser?.selectedCreatureId === creature.id;
+  const isBoosted = boosted?.isBoosted(creature) ?? false;
   const creaturePath = creature.slug || String(creature.id);
   const resolvedLinkState = linkState ?? { from: `${location.pathname}${location.search}` };
 
@@ -58,15 +63,27 @@ const CreatureCard: React.FC<CreatureCardProps> = ({
     <article
       className="creature-browser-card group"
       data-selected={selected ? 'true' : 'false'}
+      data-boosted={isBoosted ? 'true' : 'false'}
       data-creature-card
+      data-creature-id={creature.id}
       data-entity-kind={creature.is_boss ? 'boss' : 'creature'}
       role={browser ? 'button' : undefined}
       tabIndex={browser ? 0 : undefined}
       aria-pressed={browser ? selected : undefined}
       onClick={select}
       onKeyDown={activate}
-      style={{ animationDelay: `${Math.min(index, 10) * 35}ms` }}
+      style={{
+        animationDelay: `${Math.min(index, 10) * 35}ms`,
+        order: isBoosted ? -1 : undefined,
+      }}
     >
+      {isBoosted ? (
+        <span className="creature-boosted-badge" title={t('home.boosted.badge')}>
+          <Flame className="size-3.5" aria-hidden="true" />
+          {t('home.boosted.badge')}
+        </span>
+      ) : null}
+
       <span className="creature-card-corner creature-card-corner-start"><BrandCategoryFallbackIcon category={creature.is_boss ? 'bosses' : 'creatures'} className="size-4" /></span>
       <Link
         to={`/creatures/${creaturePath}`}

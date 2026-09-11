@@ -1,25 +1,26 @@
-/*
- * Cyclopedia > Loot reference surface.
- *
- * The underlying ItemSearchResult remains the lightweight browse read model.
- * Cards use media/category/drop data already present in that model, while the
- * shared selection dock fetches one ItemDetail only for the selected item.
- */
+/* Cyclopedia > Loot reference surface. */
 
-.app-shell-cyclopedia article[data-cyclopedia-item-card='true'] {
+.loot-cyclopedia-grid {
+  display: grid;
+  min-width: 0;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: var(--space-3);
+}
+
+.loot-cyclopedia-card {
   position: relative;
   display: flex;
   min-width: 0;
-  min-height: 20rem;
-  cursor: pointer;
+  min-height: 15.4rem;
   flex-direction: column;
   overflow: hidden;
-  border-color: rgb(var(--ds-border) / 0.62);
-  border-radius: 0.45rem;
+  border: 1px solid rgb(var(--ds-border) / 0.68);
+  border-radius: 0.5rem;
   background:
-    linear-gradient(180deg, rgb(var(--ds-surface-raised) / 0.88), rgb(var(--ds-surface) / 0.82));
+    radial-gradient(circle at 50% 18%, rgb(var(--ds-primary) / 0.045), transparent 34%),
+    linear-gradient(180deg, rgb(var(--ds-surface-raised) / 0.93), rgb(var(--ds-surface) / 0.86));
   box-shadow:
-    0 0.8rem 1.8rem rgb(var(--ds-shadow) / 0.15),
+    0 0.75rem 1.7rem rgb(var(--ds-shadow) / 0.15),
     inset 0 1px 0 rgb(var(--ds-text-primary) / 0.025);
   transition:
     border-color var(--duration-base) var(--ease-standard),
@@ -27,228 +28,807 @@
     transform var(--duration-base) var(--ease-standard);
 }
 
-.app-shell-cyclopedia article[data-cyclopedia-item-card='true']:hover,
-.app-shell-cyclopedia article[data-cyclopedia-item-card='true']:focus-visible {
-  border-color: rgb(var(--ds-primary) / 0.55);
+.loot-cyclopedia-card:hover,
+.loot-cyclopedia-card:focus-within {
+  border-color: rgb(var(--ds-primary) / 0.58);
   box-shadow:
-    0 1rem 2.3rem rgb(var(--ds-shadow) / 0.22),
+    0 0.95rem 2rem rgb(var(--ds-shadow) / 0.21),
     0 0 0 1px rgb(var(--ds-primary) / 0.1);
+  transform: translateY(-1px);
 }
 
-.app-shell-cyclopedia article[data-cyclopedia-item-card='true'][data-selected='true'] {
-  border-color: rgb(var(--ds-primary) / 0.9);
+.loot-cyclopedia-card[data-selected='true'] {
+  border-color: rgb(var(--ds-primary) / 0.96);
   box-shadow:
-    0 1rem 2.5rem rgb(var(--ds-shadow) / 0.24),
-    0 0 0 1px rgb(var(--ds-primary) / 0.34),
-    inset 0 0 1.6rem rgb(var(--ds-primary) / 0.035);
+    0 1rem 2.2rem rgb(var(--ds-shadow) / 0.24),
+    0 0 0 1px rgb(var(--ds-primary) / 0.42),
+    inset 0 0 1.5rem rgb(var(--ds-primary) / 0.045);
 }
 
-.app-shell-cyclopedia article[data-cyclopedia-item-card='true'][data-selected='true']::before {
+.loot-cyclopedia-card[data-selected='true']::before {
   content: '';
   position: absolute;
-  z-index: 2;
+  z-index: 4;
   inset: -1px;
   pointer-events: none;
   border-radius: inherit;
   box-shadow:
-    inset 0 2px 0 rgb(var(--ds-primary) / 0.72),
-    inset 0 -2px 0 rgb(var(--ds-primary) / 0.46);
+    inset 0 2px 0 rgb(var(--ds-primary) / 0.8),
+    inset 0 -2px 0 rgb(var(--ds-primary) / 0.5);
 }
 
-/* Identity/media region -------------------------------------------------- */
-.app-shell-cyclopedia article[data-cyclopedia-item-card='true'] > div:first-child {
+.loot-cyclopedia-card__select {
   display: flex;
-  min-height: 13.5rem;
-  flex: 1 0 auto;
+  width: 100%;
+  min-width: 0;
+  flex: 1;
   flex-direction: column;
   align-items: stretch;
-  gap: var(--space-3);
-  padding: var(--space-4);
+  padding: 0.65rem 0.7rem 0.7rem;
+  text-align: left;
 }
 
-.app-shell-cyclopedia article[data-cyclopedia-item-card='true'] > div:first-child > img,
-.app-shell-cyclopedia article[data-cyclopedia-item-card='true'] > div:first-child > [role='img'] {
-  width: 100% !important;
-  height: 8.25rem !important;
-  flex: 0 0 8.25rem;
-  align-self: center;
-  border: 0 !important;
-  border-radius: 0 !important;
-  padding: var(--space-3) !important;
+.loot-cyclopedia-card__media {
+  position: relative;
+  display: grid;
+  min-width: 0;
+  height: 5.9rem;
+  place-items: center;
+  border-bottom: 1px solid rgb(var(--ds-border) / 0.25);
+}
+
+.loot-cyclopedia-card__image-shell {
+  display: grid;
+  width: 100%;
+  height: 100%;
+  place-items: center;
+}
+
+.loot-cyclopedia-card__image {
+  width: 5.3rem;
+  height: 5.3rem;
   object-fit: contain;
-  background:
-    radial-gradient(circle at 50% 58%, rgb(var(--ds-primary) / 0.07), transparent 42%),
-    linear-gradient(180deg, rgb(var(--ds-surface-base) / 0.26), transparent) !important;
-  image-rendering: pixelated;
+  padding: 0.25rem;
+  filter: drop-shadow(0 0.35rem 0.45rem rgb(var(--ds-shadow) / 0.42));
 }
 
-.app-shell-cyclopedia article[data-cyclopedia-item-card='true'] > div:first-child > div:last-child {
+.loot-cyclopedia-card__crest {
+  position: absolute;
+  top: 0.1rem;
+  right: 0.05rem;
+  display: grid;
+  width: 1.55rem;
+  height: 1.55rem;
+  place-items: center;
+  color: rgb(var(--ds-text-muted) / 0.7);
+}
+
+.loot-cyclopedia-card__identity {
   display: flex;
   min-width: 0;
+  flex: 1;
   flex-direction: column;
-  gap: var(--space-2);
+  padding-top: 0.55rem;
 }
 
-.app-shell-cyclopedia article[data-cyclopedia-item-card='true'] > div:first-child a[href^='/items/'] {
+.loot-cyclopedia-card__title-row {
+  display: flex;
+  min-width: 0;
+  align-items: center;
+  gap: 0.4rem;
+}
+
+.loot-cyclopedia-card__title-row h3 {
+  min-width: 0;
+  flex: 1;
   overflow: hidden;
+  margin: 0;
   color: var(--text-primary);
   font-family: var(--font-heading);
-  font-size: var(--font-size-lg);
+  font-size: 0.94rem;
   font-weight: var(--font-weight-semibold);
-  line-height: var(--line-height-tight);
-  text-decoration: none;
+  line-height: 1.15;
   text-overflow: ellipsis;
   white-space: nowrap;
 }
 
-.app-shell-cyclopedia article[data-cyclopedia-item-card='true'] > div:first-child a[href^='/items/']:hover,
-.app-shell-cyclopedia article[data-cyclopedia-item-card='true'] > div:first-child a[href^='/items/']:focus-visible {
-  color: var(--primary);
-  text-decoration: underline;
-  text-underline-offset: 0.18rem;
-}
-
-.app-shell-cyclopedia article[data-cyclopedia-item-card='true'] > div:first-child > div:last-child > div {
-  display: flex;
-  min-width: 0;
-  flex-wrap: wrap;
-  gap: var(--space-1);
-  padding-top: var(--space-2);
-  border-top: 1px solid rgb(var(--ds-border) / 0.28);
-}
-
-/* Drop-source region ----------------------------------------------------- */
-.app-shell-cyclopedia article[data-cyclopedia-item-card='true'] > div:first-child + div {
-  display: grid;
-  min-height: 6.5rem;
-  gap: var(--space-1);
-  margin-top: auto;
-  border-top: 1px solid rgb(var(--ds-border) / 0.38);
-  padding: var(--space-3) var(--space-4) var(--space-4);
-  background: rgb(var(--ds-surface-base) / 0.22);
-}
-
-.app-shell-cyclopedia article[data-cyclopedia-item-card='true'] > div:first-child + div > div {
-  display: flex;
-  min-width: 0;
-  min-height: 1.75rem;
+.loot-rarity-chip {
+  display: inline-flex;
+  max-width: 46%;
+  min-height: 1.35rem;
+  flex: 0 0 auto;
   align-items: center;
-  gap: var(--space-2);
   overflow: hidden;
-  border-bottom: 1px solid rgb(var(--ds-border) / 0.18);
-  font-size: var(--font-size-xs);
+  border: 1px solid rgb(var(--ds-border) / 0.58);
+  border-radius: 999px;
+  padding: 0.12rem 0.38rem;
+  background: rgb(var(--ds-surface-base) / 0.5);
+  color: var(--text-secondary);
+  font-size: 0.58rem;
+  font-weight: var(--font-weight-semibold);
+  line-height: 1;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 
-.app-shell-cyclopedia article[data-cyclopedia-item-card='true'] > div:first-child + div > div:last-child {
-  border-bottom: 0;
+.loot-rarity-chip[data-rarity*='legendary'] {
+  border-color: rgb(var(--ds-warning) / 0.62);
+  background: rgb(var(--ds-warning) / 0.11);
+  color: var(--warning);
 }
 
-.app-shell-cyclopedia article[data-cyclopedia-item-card='true'] > div:first-child + div a[href^='/creatures/'] {
+.loot-rarity-chip[data-rarity*='epic'] {
+  border-color: rgb(168 85 247 / 0.62);
+  background: rgb(168 85 247 / 0.11);
+  color: rgb(196 138 255);
+}
+
+.loot-rarity-chip[data-rarity*='rare'] {
+  border-color: rgb(var(--ds-info) / 0.62);
+  background: rgb(var(--ds-info) / 0.11);
+  color: var(--info);
+}
+
+.loot-rarity-chip[data-rarity*='uncommon'] {
+  border-color: rgb(var(--ds-success) / 0.62);
+  background: rgb(var(--ds-success) / 0.11);
+  color: var(--success);
+}
+
+.loot-rarity-chip[data-rarity*='common'],
+.loot-rarity-chip[data-rarity*='always'] {
+  border-color: rgb(var(--ds-border) / 0.72);
+  background: rgb(var(--ds-surface-base) / 0.62);
+  color: var(--text-secondary);
+}
+
+.loot-cyclopedia-card__facts {
+  display: grid;
   min-width: 0;
+  gap: 0.26rem;
+  margin-top: auto;
+  padding-top: 0.65rem;
+}
+
+.loot-cyclopedia-card__fact {
+  display: flex;
+  min-width: 0;
+  min-height: 1.45rem;
+  align-items: center;
+  gap: 0.4rem;
   overflow: hidden;
   color: var(--text-secondary);
-  font-weight: var(--font-weight-medium);
-  text-overflow: ellipsis;
-  white-space: nowrap;
+  font-size: 0.66rem;
+  line-height: 1.15;
 }
 
-.app-shell-cyclopedia article[data-cyclopedia-item-card='true'] > div:first-child + div a[href^='/creatures/']:hover {
+.loot-cyclopedia-card__fact > svg {
   color: var(--primary);
 }
 
-/* Wide result density mirrors the monster browser. ---------------------- */
-.app-shell-cyclopedia .grid:has(> article[data-cyclopedia-item-card='true']) {
-  grid-template-columns: minmax(0, 1fr) !important;
-  gap: var(--space-3) !important;
+.loot-cyclopedia-card__fact--muted {
+  color: var(--text-muted);
+}
+
+.loot-cyclopedia-card__fact--muted > svg {
+  color: rgb(var(--ds-text-muted) / 0.84);
+}
+
+.loot-cyclopedia-card__fact--accent {
+  color: var(--text-secondary);
+  font-weight: var(--font-weight-medium);
+}
+
+.loot-cyclopedia-card__fact--accent > svg {
+  color: var(--primary);
+}
+
+.loot-cyclopedia-card__fact .knowledge-badge {
+  margin-left: auto;
+}
+
+.loot-cyclopedia-card__details {
+  position: absolute;
+  z-index: 6;
+  top: 0.45rem;
+  right: 0.45rem;
+  display: grid;
+  width: 1.7rem;
+  height: 1.7rem;
+  place-items: center;
+  border: 1px solid transparent;
+  border-radius: var(--radius-sm);
+  background: rgb(var(--ds-surface-overlay) / 0.68);
+  color: var(--text-muted);
+  opacity: 0.22;
+  transition:
+    opacity var(--duration-fast),
+    border-color var(--duration-fast),
+    color var(--duration-fast),
+    background var(--duration-fast);
+}
+
+.loot-cyclopedia-card:hover .loot-cyclopedia-card__details,
+.loot-cyclopedia-card__details:focus-visible {
+  opacity: 1;
+}
+
+.loot-cyclopedia-card__details:hover,
+.loot-cyclopedia-card__details:focus-visible {
+  border-color: rgb(var(--ds-primary) / 0.48);
+  background: rgb(var(--ds-surface-overlay) / 0.95);
+  color: var(--primary);
+  outline: none;
 }
 
 @media (min-width: 768px) {
-  .app-shell-cyclopedia .grid:has(> article[data-cyclopedia-item-card='true']) {
-    grid-template-columns: repeat(2, minmax(0, 1fr)) !important;
+  .loot-cyclopedia-grid {
+    grid-template-columns: repeat(3, minmax(0, 1fr));
   }
 }
 
 @media (min-width: 1024px) {
-  .app-shell-cyclopedia .grid:has(> article[data-cyclopedia-item-card='true']) {
-    grid-template-columns: repeat(3, minmax(0, 1fr)) !important;
-  }
-}
-
-@media (min-width: 1280px) {
-  .app-shell-cyclopedia .grid:has(> article[data-cyclopedia-item-card='true']) {
-    grid-template-columns: repeat(4, minmax(0, 1fr)) !important;
-  }
-}
-
-@media (min-width: 1600px) {
-  html[data-layout='wide'] .app-shell-cyclopedia .grid:has(> article[data-cyclopedia-item-card='true']) {
-    grid-template-columns: repeat(5, minmax(0, 1fr)) !important;
-  }
-}
-
-@media (min-width: 1920px) {
-  html[data-layout='wide'] .app-shell-cyclopedia .grid:has(> article[data-cyclopedia-item-card='true']) {
-    grid-template-columns: repeat(6, minmax(0, 1fr)) !important;
+  .loot-cyclopedia-grid {
+    grid-template-columns: repeat(4, minmax(0, 1fr));
   }
 }
 
 @media (min-width: 1440px) {
-  html[data-layout='wide'] [data-cyclopedia-preview-host='true'][data-cyclopedia-preview-kind='item']
-    .grid:has(> article[data-cyclopedia-item-card='true']) {
-    grid-template-columns: repeat(4, minmax(0, 1fr)) !important;
+  html[data-layout='wide'] .loot-cyclopedia-grid {
+    grid-template-columns: repeat(5, minmax(0, 1fr));
+  }
+
+  html[data-layout='wide'] [data-cyclopedia-preview-host='true'][data-cyclopedia-preview-kind='item'] .loot-cyclopedia-grid {
+    grid-template-columns: repeat(4, minmax(0, 1fr));
+  }
+}
+
+@media (min-width: 1800px) {
+  html[data-layout='wide'] .loot-cyclopedia-grid {
+    grid-template-columns: repeat(6, minmax(0, 1fr));
   }
 }
 
 /* Selected-item preview ------------------------------------------------- */
 .loot-preview-panel {
   min-width: 0;
+  overflow: hidden;
 }
 
-.loot-preview-identity {
-  align-items: center;
-}
-
-.loot-preview-sprite {
-  height: 8.5rem;
-}
-
-.loot-preview-columns {
-  align-items: start;
-}
-
-.loot-preview-acquisition {
+.loot-preview-hero {
+  display: grid;
+  grid-template-columns: 8.1rem minmax(0, 1fr);
+  gap: var(--space-4);
+  min-height: 10.5rem;
   padding: var(--space-4);
+  padding-right: 3.35rem;
   border-bottom: 1px solid rgb(var(--ds-border) / 0.48);
+}
+
+.loot-preview-art {
+  display: grid;
+  min-height: 8.4rem;
+  place-items: center;
+  overflow: hidden;
+  border-right: 1px solid rgb(var(--ds-primary) / 0.58);
+  background:
+    radial-gradient(circle at 50% 58%, rgb(var(--ds-primary) / 0.09), transparent 42%),
+    linear-gradient(180deg, rgb(var(--ds-surface-base) / 0.32), rgb(var(--ds-surface-base) / 0.1));
+}
+
+.loot-preview-art > div,
+.loot-preview-art img {
+  width: 100%;
+  height: 100%;
+}
+
+.loot-preview-art img {
+  padding: 0.75rem;
+  filter: drop-shadow(0 0.45rem 0.55rem rgb(var(--ds-shadow) / 0.42));
+}
+
+.loot-preview-hero-copy {
+  min-width: 0;
+  align-self: center;
+}
+
+.loot-preview-title-row {
+  display: flex;
+  min-width: 0;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: var(--space-2);
+}
+
+.loot-preview-name {
+  min-width: 0;
+  margin: 0;
+  color: var(--text-primary);
+  font-family: var(--font-heading);
+  font-size: clamp(1.45rem, 2vw, 1.8rem);
+  font-weight: var(--font-weight-semibold);
+  line-height: 1.1;
+}
+
+.loot-preview-id {
+  flex: 0 0 auto;
+  color: var(--text-muted);
+  font-family: var(--font-mono);
+  font-size: 0.66rem;
+}
+
+.loot-rarity-chip--preview {
+  max-width: none;
+  min-height: 1.55rem;
+  margin-top: 0.45rem;
+  padding-inline: 0.5rem;
+  font-size: 0.64rem;
+}
+
+.loot-preview-tags {
+  display: flex;
+  min-width: 0;
+  flex-wrap: wrap;
+  gap: 0.35rem;
+  margin-top: 0.65rem;
+}
+
+.loot-preview-tag {
+  display: inline-flex;
+  min-height: 1.55rem;
+  align-items: center;
+  gap: 0.3rem;
+  border: 1px solid rgb(var(--ds-border) / 0.5);
+  border-radius: var(--radius-sm);
+  padding-inline: 0.45rem;
+  background: rgb(var(--ds-surface-base) / 0.44);
+  color: var(--text-secondary);
+  font-size: 0.62rem;
+  font-weight: var(--font-weight-medium);
+}
+
+.loot-preview-description {
+  display: -webkit-box;
+  overflow: hidden;
+  margin-top: 0.75rem;
+  color: var(--text-secondary);
+  font-size: 0.72rem;
+  line-height: 1.5;
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 4;
+}
+
+.loot-preview-market-strip {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  border-bottom: 1px solid rgb(var(--ds-border) / 0.48);
+  background: rgb(var(--ds-surface-base) / 0.18);
+}
+
+.loot-preview-market-stat {
+  min-width: 0;
+  padding: 0.7rem 0.8rem;
+  border-right: 1px solid rgb(var(--ds-border) / 0.42);
+}
+
+.loot-preview-market-stat:last-child {
+  border-right: 0;
+}
+
+.loot-preview-market-stat > span {
+  display: flex;
+  min-width: 0;
+  align-items: center;
+  gap: 0.3rem;
+  color: var(--text-muted);
+  font-size: 0.58rem;
+  line-height: 1.15;
+}
+
+.loot-preview-market-stat > strong {
+  display: block;
+  overflow: hidden;
+  margin-top: 0.32rem;
+  color: var(--text-primary);
+  font-size: 0.76rem;
+  font-weight: var(--font-weight-semibold);
+  line-height: 1.2;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.loot-preview-market-stat[data-accent='true'] > span > svg,
+.loot-preview-market-stat[data-accent='true'] > strong {
+  color: var(--primary);
+}
+
+.loot-preview-main-grid {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) minmax(0, 1.16fr);
+  border-bottom: 1px solid rgb(var(--ds-border) / 0.48);
+}
+
+.loot-preview-section {
+  min-width: 0;
+  padding: var(--space-4);
+}
+
+.loot-preview-main-grid > .loot-preview-section:first-child {
+  border-right: 1px solid rgb(var(--ds-border) / 0.42);
+}
+
+.loot-preview-section-title {
+  display: flex;
+  min-width: 0;
+  align-items: center;
+  gap: var(--space-2);
+  margin: 0;
+  color: var(--text-primary);
+  font-family: var(--font-heading);
+  font-size: 0.82rem;
+  font-weight: var(--font-weight-semibold);
+}
+
+.loot-preview-section-title > svg {
+  color: var(--primary);
+}
+
+.loot-preview-section-heading {
+  display: flex;
+  min-width: 0;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--space-2);
+}
+
+.loot-preview-section-heading > span {
+  color: var(--text-muted);
+  font-family: var(--font-mono);
+  font-size: 0.62rem;
+}
+
+.loot-preview-detail-list {
+  display: grid;
+  margin-top: 0.55rem;
+}
+
+.loot-preview-detail-row {
+  display: flex;
+  min-width: 0;
+  min-height: 1.75rem;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--space-2);
+  border-bottom: 1px solid rgb(var(--ds-border) / 0.2);
+  color: var(--text-muted);
+  font-size: 0.65rem;
+}
+
+.loot-preview-detail-row:last-child {
+  border-bottom: 0;
+}
+
+.loot-preview-detail-row > strong {
+  max-width: 58%;
+  overflow: hidden;
+  color: var(--text-primary);
+  font-weight: var(--font-weight-medium);
+  text-align: right;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.loot-preview-drop-list {
+  display: grid;
+  margin-top: 0.5rem;
 }
 
 .loot-preview-drop-row {
   display: flex;
   min-width: 0;
+  min-height: 2.65rem;
   align-items: center;
-  gap: var(--space-3);
-  border: 1px solid rgb(var(--ds-border) / 0.28);
-  border-radius: var(--radius-md);
-  padding: var(--space-2);
-  background: rgb(var(--ds-surface-base) / 0.28);
+  gap: 0.5rem;
+  border-bottom: 1px solid rgb(var(--ds-border) / 0.2);
+  padding-block: 0.3rem;
+}
+
+.loot-preview-drop-row:last-child {
+  border-bottom: 0;
 }
 
 .loot-preview-drop-row:hover {
-  border-color: rgb(var(--ds-primary) / 0.28);
-  background: rgb(var(--ds-surface-hover) / 0.36);
+  background: rgb(var(--ds-primary) / 0.035);
+}
+
+.loot-preview-drop-image {
+  display: grid;
+  width: 2.2rem;
+  height: 2.2rem;
+  flex: 0 0 2.2rem;
+  place-items: center;
+}
+
+.loot-preview-drop-copy {
+  display: block;
+  min-width: 0;
+  flex: 1;
+}
+
+.loot-preview-drop-copy strong,
+.loot-preview-drop-copy small {
+  display: block;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.loot-preview-drop-copy strong {
+  color: var(--text-primary);
+  font-size: 0.65rem;
+  font-weight: var(--font-weight-semibold);
+}
+
+.loot-preview-drop-copy small {
+  margin-top: 0.08rem;
+  color: var(--text-muted);
+  font-size: 0.57rem;
+}
+
+.loot-preview-boss-chip {
+  flex: 0 0 auto;
+  border: 1px solid rgb(var(--ds-danger) / 0.52);
+  border-radius: 999px;
+  padding: 0.12rem 0.32rem;
+  background: rgb(var(--ds-danger) / 0.09);
+  color: var(--danger);
+  font-size: 0.54rem;
+  font-weight: var(--font-weight-semibold);
+}
+
+.loot-preview-empty {
+  margin-top: 0.55rem;
+  color: var(--text-muted);
+  font-size: 0.65rem;
+  line-height: 1.4;
+}
+
+.loot-preview-vocations,
+.loot-preview-related {
+  border-bottom: 1px solid rgb(var(--ds-border) / 0.48);
+}
+
+.loot-preview-vocation-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 0.35rem 0.6rem;
+  margin-top: 0.6rem;
+}
+
+.loot-preview-vocation-row {
+  display: grid;
+  min-width: 0;
+  grid-template-columns: 1rem minmax(0, 1fr) auto;
+  align-items: center;
+  gap: 0.35rem;
+  min-height: 1.65rem;
+  color: var(--success);
+  font-size: 0.6rem;
+}
+
+.loot-preview-vocation-row > strong {
+  overflow: hidden;
+  color: var(--text-primary);
+  font-weight: var(--font-weight-medium);
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.loot-preview-vocation-row > span {
+  border-radius: var(--radius-sm);
+  padding: 0.1rem 0.28rem;
+  background: rgb(var(--ds-success) / 0.09);
+  color: var(--success);
+  font-size: 0.52rem;
+}
+
+.loot-preview-vocation-row--neutral {
+  grid-template-columns: 1rem minmax(0, 1fr);
+  color: var(--primary);
+}
+
+.loot-preview-related-grid {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 0.45rem;
+  margin-top: 0.65rem;
+}
+
+.loot-preview-related-card {
+  display: grid;
+  min-width: 0;
+  min-height: 5rem;
+  place-items: center;
+  gap: 0.25rem;
+  border: 1px solid rgb(var(--ds-border) / 0.34);
+  border-radius: var(--radius-sm);
+  padding: 0.4rem;
+  background: rgb(var(--ds-surface-base) / 0.24);
+  color: var(--text-secondary);
+  text-align: center;
+}
+
+.loot-preview-related-card:hover {
+  border-color: rgb(var(--ds-primary) / 0.42);
+  color: var(--primary);
+}
+
+.loot-preview-related-image {
+  display: grid;
+  width: 3rem;
+  height: 3rem;
+  place-items: center;
+}
+
+.loot-preview-related-card > span {
+  width: 100%;
+  overflow: hidden;
+  font-size: 0.56rem;
+  font-weight: var(--font-weight-medium);
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.loot-preview-secondary-grid {
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+}
+
+.loot-preview-use-list {
+  display: grid;
+  gap: 0.3rem;
+  margin-top: 0.55rem;
+}
+
+.loot-preview-use-list > span {
+  overflow: hidden;
+  color: var(--text-secondary);
+  font-size: 0.62rem;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.loot-preview-tip {
+  display: flex;
+  min-width: 0;
+  gap: var(--space-3);
+  margin: var(--space-3) var(--space-4) 0;
+  border: 1px solid rgb(var(--ds-primary) / 0.45);
+  border-radius: var(--radius-sm);
+  padding: 0.7rem 0.8rem;
+  background: rgb(var(--ds-primary) / 0.07);
+  color: var(--primary);
+}
+
+.loot-preview-tip > div {
+  min-width: 0;
+}
+
+.loot-preview-tip strong {
+  display: block;
+  color: var(--primary);
+  font-family: var(--font-heading);
+  font-size: 0.7rem;
+}
+
+.loot-preview-tip p {
+  overflow: hidden;
+  margin-top: 0.18rem;
+  color: var(--text-secondary);
+  font-size: 0.62rem;
+  line-height: 1.35;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.loot-preview-full-link {
+  margin: var(--space-3) var(--space-4) var(--space-4);
 }
 
 @media (max-width: 639px) {
-  .app-shell-cyclopedia article[data-cyclopedia-item-card='true'] {
-    min-height: 18rem;
+  .loot-cyclopedia-grid {
+    gap: 0.65rem;
   }
 
-  .app-shell-cyclopedia article[data-cyclopedia-item-card='true'] > div:first-child > img,
-  .app-shell-cyclopedia article[data-cyclopedia-item-card='true'] > div:first-child > [role='img'] {
-    height: 7rem !important;
-    flex-basis: 7rem;
+  .loot-cyclopedia-card {
+    min-height: 14.5rem;
   }
 
-  .loot-preview-identity {
-    align-items: start;
+  .loot-cyclopedia-card__select {
+    padding: 0.55rem;
+  }
+
+  .loot-cyclopedia-card__media {
+    height: 5.25rem;
+  }
+
+  .loot-cyclopedia-card__image {
+    width: 4.75rem;
+    height: 4.75rem;
+  }
+
+  .loot-cyclopedia-card__title-row {
+    align-items: flex-start;
+    flex-direction: column;
+    gap: 0.25rem;
+  }
+
+  .loot-rarity-chip {
+    max-width: 100%;
+  }
+
+  .loot-preview-hero {
+    grid-template-columns: 6.3rem minmax(0, 1fr);
+    gap: var(--space-3);
+    min-height: 8.3rem;
+    padding: var(--space-3);
+    padding-right: 3rem;
+  }
+
+  .loot-preview-art {
+    min-height: 6.6rem;
+  }
+
+  .loot-preview-name {
+    font-size: 1.2rem;
+  }
+
+  .loot-preview-description {
+    font-size: 0.68rem;
+    -webkit-line-clamp: 3;
+  }
+
+  .loot-preview-market-stat {
+    padding: 0.6rem 0.45rem;
+  }
+
+  .loot-preview-market-stat > span {
+    font-size: 0.52rem;
+  }
+
+  .loot-preview-market-stat > strong {
+    font-size: 0.64rem;
+  }
+
+  .loot-preview-main-grid,
+  .loot-preview-secondary-grid {
+    grid-template-columns: 1fr;
+  }
+
+  .loot-preview-main-grid > .loot-preview-section:first-child {
+    border-right: 0;
+    border-bottom: 1px solid rgb(var(--ds-border) / 0.42);
+  }
+
+  .loot-preview-section {
+    padding: var(--space-3);
+  }
+
+  .loot-preview-vocation-grid {
+    grid-template-columns: 1fr;
+  }
+
+  .loot-preview-tip {
+    margin-inline: var(--space-3);
+  }
+
+  .loot-preview-full-link {
+    margin-inline: var(--space-3);
+    margin-bottom: var(--space-3);
+  }
+}
+
+@media (max-width: 360px) {
+  .loot-cyclopedia-grid {
+    grid-template-columns: 1fr;
   }
 }

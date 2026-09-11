@@ -1,12 +1,16 @@
-import { useEffect, useMemo, useState } from 'react';
+import { useEffect, useMemo, useState, type ReactNode } from 'react';
 import {
   ArrowRight,
+  BadgeDollarSign,
   Coins,
   Gem,
+  Info,
+  Layers3,
   Loader2,
   PackageOpen,
   Shield,
   ShoppingBag,
+  Sparkles,
   Swords,
   Weight,
 } from 'lucide-react';
@@ -15,7 +19,7 @@ import { useTranslation } from 'react-i18next';
 
 import ImageWithFallback from '../ImageWithFallback';
 import { itemsApi } from '../../services/api';
-import type { ItemDetail } from '../../types';
+import type { ItemDetail, ItemDropCreature } from '../../types';
 import { availableItemMediaUrl } from '../../utils/entityMedia';
 
 function displayRecord(value: Record<string, unknown>): string {
@@ -29,6 +33,50 @@ function displayRecord(value: Record<string, unknown>): string {
 function displayNumber(value: number | null | undefined, suffix = ''): string {
   if (value == null) return '—';
   return `${value.toLocaleString()}${suffix}`;
+}
+
+function recordPrice(value: Record<string, unknown>): number | null {
+  for (const key of ['price', 'value', 'cost']) {
+    const candidate = value[key];
+    if (typeof candidate === 'number' && Number.isFinite(candidate)) return candidate;
+    if (typeof candidate === 'string') {
+      const parsed = Number(candidate.replace(/[^0-9.-]/g, ''));
+      if (Number.isFinite(parsed)) return parsed;
+    }
+  }
+  return null;
+}
+
+function formatGold(value: number | null | undefined): string {
+  if (value == null) return '—';
+  if (Math.abs(value) >= 1000) {
+    const compact = value / 1000;
+    return `~ ${compact.toLocaleString(undefined, { maximumFractionDigits: compact >= 100 ? 0 : 1 })}k gp`;
+  }
+  return `~ ${value.toLocaleString()} gp`;
+}
+
+function priceRange(rows: Record<string, unknown>[]): string {
+  const prices = rows
+    .map(recordPrice)
+    .filter((value): value is number => value != null)
+    .sort((a, b) => a - b);
+  if (!prices.length) return '—';
+  if (prices.length === 1 || prices[0] === prices[prices.length - 1]) return formatGold(prices[0]);
+  return `${formatGold(prices[0]).replace(/^~ /, '')} – ${formatGold(prices[prices.length - 1]).replace(/^~ /, '')}`;
+}
+
+function rarityKey(value?: string | null): string {
+  return String(value || '')
+    .trim()
+    .toLowerCase()
+    .replace(/[^a-z0-9]+/g, '-');
+}
+
+function dropPath(drop: ItemDropCreature): string | null {
+  if (drop.creature_slug) return `/creatures/${drop.creature_slug}`;
+  if (drop.creature_id != null) return `/creatures/${drop.creature_id}`;
+  return null;
 }
 
 export default function ItemPreviewPanel({ identifier }: { identifier: string }) {
@@ -59,16 +107,21 @@ export default function ItemPreviewPanel({ identifier }: { identifier: string })
     return () => controller.abort();
   }, [identifier]);
 
-  const acquisition = useMemo(() => item?.drops.slice(0, 5) || [], [item]);
-  const combatFacts = useMemo(() => {
+  const drops = useMemo(() => {
     if (!item) return [];
-    return [
-      item.attack != null ? { label: t('itemDetail.attack'), value: item.attack } : null,
-      item.defense != null ? { label: t('itemDetail.defense'), value: item.defense } : null,
-      item.armor != null ? { label: t('itemDetail.armor'), value: item.armor } : null,
-      item.range != null ? { label: t('itemDetail.range'), value: item.range } : null,
-    ].filter((fact): fact is { label: string; value: number } => Boolean(fact));
-  }, [item, t]);
+    const seen = new Set<string>();
+    return item.drops.filter((drop) => {
+      const key = `${drop.creature_id ?? ''}:${drop.creature_name.trim().toLowerCase()}`;
+      if (seen.has(key)) return false;
+      seen.add(key);
+      return true;
+    });
+  }, [item]);
+
+  const bestDrop = useMemo(() => {
+    if (!drops.length) return null;
+    return [...drops].sort((a, b) => (b.chance ?? -1) - (a.chance ?? -1))[0] || null;
+  }, [drops]);
 
   if (loading) {
     return (
@@ -89,19 +142,28 @@ export default function ItemPreviewPanel({ identifier }: { identifier: string })
 
   const itemPath = `/items/${item.slug || item.normalized_name.split(' ').join('-')}`;
   const itemMediaUrl = availableItemMediaUrl(item.media);
-  const badges = [item.category, item.item_type, item.item_class, item.rarity].filter(
+  const rarity = item.rarity || drops.find((drop) => drop.rarity)?.rarity || null;
+  const identityBadges = [item.item_type, item.item_class].filter(
     (value): value is string => Boolean(value),
   );
+  const combatFacts = [
+    item.attack != null ? `${t('itemDetail.attack')}: ${item.attack}` : null,
+    item.defense != null ? `${t('itemDetail.defense')}: ${item.defense}` : null,
+    item.armor != null ? `${t('itemDetail.armor')}: ${item.armor}` : null,
+    item.range != null ? `${t('itemDetail.range')}: ${item.range}` : null,
+  ].filter((value): value is string => Boolean(value));
   const tradeRows = [
     ...item.buy_from.slice(0, 2).map((row) => ({ label: t('itemDetail.buyFrom'), value: displayRecord(row) })),
     ...item.sell_to.slice(0, 2).map((row) => ({ label: t('itemDetail.sellTo'), value: displayRecord(row) })),
   ];
-  const hasUsage = item.required_for.length > 0 || item.rewards_from.length > 0;
+  const relatedUsage = [...item.required_for.slice(0, 3), ...item.rewards_from.slice(0, 3)];
+  const primarySlot = item.slots[0] || item.item_type || '—';
+  const bestDropZone = bestDrop?.hunt_zones?.[0]?.name || null;
 
   return (
     <article className="creature-preview-panel loot-preview-panel" data-item-preview-panel>
-      <section className="creature-preview-identity loot-preview-identity">
-        <div className="creature-preview-sprite loot-preview-sprite">
+      <section className="loot-preview-hero">
+        <div className="loot-preview-art">
           <ImageWithFallback
             src={itemMediaUrl}
             alt={item.item_name}
@@ -111,128 +173,216 @@ export default function ItemPreviewPanel({ identifier }: { identifier: string })
             fallbackLabel={item.item_name}
           />
         </div>
-        <div className="min-w-0">
-          <div className="flex items-start gap-2">
-            <div className="min-w-0 flex-1">
-              <p className="mb-1 text-[10px] font-semibold uppercase tracking-[0.14em] text-primary">
-                {t('nav.loot')}
-              </p>
-              <h2 className="creature-preview-name break-words">{item.item_name}</h2>
+
+        <div className="loot-preview-hero-copy">
+          <div className="loot-preview-title-row">
+            <div className="min-w-0">
+              <h2 className="loot-preview-name">{item.item_name}</h2>
+              {rarity ? (
+                <span className="loot-rarity-chip loot-rarity-chip--preview" data-rarity={rarityKey(rarity)}>
+                  {rarity}
+                </span>
+              ) : null}
             </div>
             {item.game_item_id != null ? (
-              <span className="shrink-0 text-[10px] font-semibold text-content-muted">#{item.game_item_id}</span>
+              <span className="loot-preview-id">#{item.game_item_id}</span>
             ) : null}
           </div>
-          {badges.length ? (
-            <div className="mt-2 flex flex-wrap gap-1.5">
-              {badges.map((badge) => (
-                <span key={badge} className="creature-preview-chip">{badge}</span>
+
+          {(identityBadges.length > 0 || combatFacts.length > 0) ? (
+            <div className="loot-preview-tags">
+              {identityBadges.slice(0, 2).map((badge) => (
+                <span key={badge} className="loot-preview-tag"><Layers3 className="size-3.5" />{badge}</span>
+              ))}
+              {combatFacts.slice(0, 1).map((fact) => (
+                <span key={fact} className="loot-preview-tag"><Swords className="size-3.5" />{fact}</span>
               ))}
             </div>
           ) : null}
+
           {item.description || item.notes ? (
-            <p className="mt-3 line-clamp-4 text-sm leading-6 text-content-secondary">
-              {item.description || item.notes}
-            </p>
+            <p className="loot-preview-description">{item.description || item.notes}</p>
           ) : null}
         </div>
       </section>
 
-      <section className="creature-preview-stats" aria-label={t('itemDetail.eyebrow')}>
-        <PreviewStat icon={<Coins className="size-3.5" />} label={t('itemDetail.value')} value={displayNumber(item.value, ' gp')} />
-        <PreviewStat icon={<Weight className="size-3.5" />} label={t('itemDetail.weight')} value={displayNumber(item.weight, ' oz')} />
-        <PreviewStat icon={<Gem className="size-3.5" />} label={t('itemDetail.level')} value={displayNumber(item.level_requirement)} />
+      <section className="loot-preview-market-strip" aria-label={t('itemDetail.trade')}>
+        <MarketStat
+          icon={<Coins className="size-4" />}
+          label={t('itemDetail.value', { defaultValue: 'Reference value' })}
+          value={formatGold(item.value)}
+          accent
+        />
+        <MarketStat
+          icon={<BadgeDollarSign className="size-4" />}
+          label={t('itemDetail.buyFrom', { defaultValue: 'Typical buy' })}
+          value={priceRange(item.buy_from)}
+        />
+        <MarketStat
+          icon={<ShoppingBag className="size-4" />}
+          label={t('itemDetail.sellTo', { defaultValue: 'Typical sell' })}
+          value={priceRange(item.sell_to)}
+        />
       </section>
 
-      <section className="creature-preview-columns loot-preview-columns">
-        <div className="min-w-0">
-          <h3 className="creature-preview-section-title"><Swords className="size-4 text-primary" />{t('itemDetail.combat')}</h3>
-          {combatFacts.length ? (
-            <div className="creature-preview-list">
-              {combatFacts.map((fact) => (
-                <div key={fact.label} className="creature-preview-row">
-                  <span>{fact.label}</span><strong className="text-content-primary">{fact.value.toLocaleString()}</strong>
-                </div>
-              ))}
+      <section className="loot-preview-main-grid">
+        <div className="loot-preview-section loot-preview-details">
+          <h3 className="loot-preview-section-title">
+            <Gem className="size-4" />
+            {t('itemDetail.eyebrow', { defaultValue: 'Item details' })}
+          </h3>
+          <div className="loot-preview-detail-list">
+            <DetailRow label={t('itemDetail.slot', { defaultValue: 'Slot' })} value={primarySlot} />
+            <DetailRow label={t('cyclopedia.loot.category', { defaultValue: 'Category' })} value={item.category || item.item_class || item.item_type || '—'} />
+            <DetailRow label={t('itemDetail.weight')} value={displayNumber(item.weight, ' oz')} />
+            <DetailRow label={t('itemDetail.level')} value={displayNumber(item.level_requirement)} />
+            <DetailRow label={t('itemDetail.imbuements')} value={displayNumber(item.imbuement_slots)} />
+            <DetailRow
+              label={t('cyclopedia.loot.tradeable', { defaultValue: 'Tradeable' })}
+              value={item.tradeable == null ? '—' : item.tradeable ? t('common.yes') : t('common.no', { defaultValue: 'No' })}
+            />
+          </div>
+        </div>
+
+        <div className="loot-preview-section loot-preview-drops">
+          <div className="loot-preview-section-heading">
+            <h3 className="loot-preview-section-title">
+              <PackageOpen className="size-4" />
+              {t('cyclopedia.loot.droppedBy', { defaultValue: 'Dropped by' })}
+            </h3>
+            {drops.length ? <span>{drops.length}</span> : null}
+          </div>
+
+          {drops.length ? (
+            <div className="loot-preview-drop-list">
+              {drops.slice(0, 4).map((drop) => {
+                const path = dropPath(drop);
+                const content = (
+                  <>
+                    <ImageWithFallback
+                      src={drop.creature_id ? `/api/v1/creatures/${drop.creature_id}/image?placeholder=false` : null}
+                      alt=""
+                      className="size-9 object-contain [image-rendering:pixelated]"
+                      containerClassName="loot-preview-drop-image"
+                      fallbackKind={drop.is_boss ? 'boss' : 'creature'}
+                      fallbackLabel={drop.creature_name}
+                    />
+                    <span className="loot-preview-drop-copy">
+                      <strong>{drop.creature_name}</strong>
+                      <small>
+                        {drop.chance != null ? `${drop.chance}%` : drop.rarity || t('common.unknown', { defaultValue: 'Unknown chance' })}
+                      </small>
+                    </span>
+                    {drop.is_boss ? <span className="loot-preview-boss-chip">{t('itemDetail.boss')}</span> : null}
+                  </>
+                );
+
+                return path ? (
+                  <Link key={`${drop.creature_id || drop.creature_name}-${drop.relationship_id || ''}`} to={path} className="loot-preview-drop-row">
+                    {content}
+                  </Link>
+                ) : (
+                  <div key={`${drop.creature_id || drop.creature_name}-${drop.relationship_id || ''}`} className="loot-preview-drop-row">
+                    {content}
+                  </div>
+                );
+              })}
             </div>
           ) : (
-            <p className="mt-2 text-xs text-content-muted">{t('itemDetail.noDrops', { defaultValue: 'No combat properties documented.' })}</p>
+            <p className="loot-preview-empty">{t('itemDetail.noDrops')}</p>
           )}
-          {(item.slots.length > 0 || item.imbuement_slots != null) ? (
-            <div className="mt-3 flex flex-wrap gap-1.5">
-              {item.slots.slice(0, 4).map((slot) => <span key={slot} className="creature-preview-chip">{slot}</span>)}
-              {item.imbuement_slots != null ? <span className="creature-preview-chip">{t('itemDetail.imbuements')}: {item.imbuement_slots}</span> : null}
-            </div>
-          ) : null}
-        </div>
-
-        <div className="min-w-0">
-          <h3 className="creature-preview-section-title"><Shield className="size-4 text-primary" />{t('itemDetail.attributes')}</h3>
-          <div className="creature-preview-list">
-            <div className="creature-preview-row"><span>{t('itemDetail.trade', { defaultValue: 'Tradeable' })}</span><strong className="text-content-primary">{item.tradeable == null ? '—' : item.tradeable ? t('common.yes') : t('common.no', { defaultValue: 'No' })}</strong></div>
-            <div className="creature-preview-row"><span>Stackable</span><strong className="text-content-primary">{item.stackable == null ? '—' : item.stackable ? t('common.yes') : t('common.no', { defaultValue: 'No' })}</strong></div>
-            <div className="creature-preview-row"><span>{t('itemDetail.vocations')}</span><strong className="max-w-[10rem] truncate text-content-primary">{item.vocation_requirements.length ? item.vocation_requirements.join(', ') : '—'}</strong></div>
-          </div>
         </div>
       </section>
 
-      <section className="loot-preview-acquisition">
-        <div className="flex items-center justify-between gap-3">
-          <h3 className="creature-preview-section-title"><PackageOpen className="size-4 text-primary" />{t('itemDetail.acquisition')}</h3>
-          <span className="text-[10px] font-semibold uppercase tracking-wide text-content-muted">{item.drops.length} drops</span>
-        </div>
-        {acquisition.length ? (
-          <div className="mt-3 grid gap-2">
-            {acquisition.map((drop) => (
-              <div key={`${drop.creature_id || drop.creature_name}-${drop.relationship_id || ''}`} className="loot-preview-drop-row">
-                <ImageWithFallback
-                  src={drop.creature_id ? `/api/v1/creatures/${drop.creature_id}/image?placeholder=false` : null}
-                  alt=""
-                  className="size-10 object-contain [image-rendering:pixelated]"
-                  containerClassName="grid size-10 shrink-0 place-items-center"
-                  fallbackKind={drop.is_boss ? 'boss' : 'creature'}
-                  fallbackLabel={drop.creature_name}
-                />
-                <div className="min-w-0 flex-1">
-                  <div className="flex min-w-0 items-center gap-2">
-                    <span className="truncate text-sm font-semibold text-content-primary">{drop.creature_name}</span>
-                    {drop.is_boss ? <span className="creature-preview-chip">Boss</span> : null}
-                  </div>
-                  <div className="mt-1 flex flex-wrap gap-x-3 gap-y-1 text-[11px] text-content-muted">
-                    {drop.chance != null ? <span>{t('itemDetail.chance', { value: drop.chance })}</span> : null}
-                    {drop.rarity ? <span>{drop.rarity}</span> : null}
-                    {drop.hunt_zones[0]?.name ? <span className="truncate">{drop.hunt_zones[0].name}</span> : null}
-                  </div>
-                </div>
-              </div>
+      {(item.vocation_requirements.length > 0 || combatFacts.length > 1) ? (
+        <section className="loot-preview-section loot-preview-vocations">
+          <h3 className="loot-preview-section-title">
+            <Shield className="size-4" />
+            {t('itemDetail.vocations')}
+          </h3>
+          <div className="loot-preview-vocation-grid">
+            {item.vocation_requirements.map((vocation) => (
+              <span key={vocation} className="loot-preview-vocation-row">
+                <Shield className="size-3.5" />
+                <strong>{vocation}</strong>
+                <span>{t('itemDetail.required', { defaultValue: 'Required' })}</span>
+              </span>
+            ))}
+            {combatFacts.slice(1).map((fact) => (
+              <span key={fact} className="loot-preview-vocation-row loot-preview-vocation-row--neutral">
+                <Swords className="size-3.5" />
+                <strong>{fact}</strong>
+              </span>
             ))}
           </div>
-        ) : (
-          <p className="mt-3 text-sm text-content-muted">{t('itemDetail.noDrops')}</p>
-        )}
-      </section>
+        </section>
+      ) : null}
 
-      {(tradeRows.length > 0 || hasUsage) ? (
-        <section className="creature-preview-columns loot-preview-columns">
-          <div className="min-w-0">
-            <h3 className="creature-preview-section-title"><ShoppingBag className="size-4 text-primary" />{t('itemDetail.trade')}</h3>
-            {tradeRows.length ? (
-              <div className="creature-preview-list">
-                {tradeRows.map((row, index) => (
-                  <div key={`${row.label}-${row.value}-${index}`} className="creature-preview-row"><span>{row.label}</span><strong className="max-w-[10rem] truncate text-content-primary">{row.value}</strong></div>
-                ))}
-              </div>
-            ) : <p className="mt-2 text-xs text-content-muted">—</p>}
+      {drops.length > 0 ? (
+        <section className="loot-preview-section loot-preview-related">
+          <h3 className="loot-preview-section-title">
+            <Sparkles className="size-4" />
+            {t('itemDetail.relatedCreatures', { defaultValue: 'Related creatures' })}
+          </h3>
+          <div className="loot-preview-related-grid">
+            {drops.slice(0, 3).map((drop) => {
+              const path = dropPath(drop);
+              const tile = (
+                <>
+                  <ImageWithFallback
+                    src={drop.creature_id ? `/api/v1/creatures/${drop.creature_id}/image?placeholder=false` : null}
+                    alt=""
+                    className="size-12 object-contain [image-rendering:pixelated]"
+                    containerClassName="loot-preview-related-image"
+                    fallbackKind={drop.is_boss ? 'boss' : 'creature'}
+                    fallbackLabel={drop.creature_name}
+                  />
+                  <span>{drop.creature_name}</span>
+                </>
+              );
+              return path ? (
+                <Link key={`related-${drop.creature_id || drop.creature_name}`} to={path} className="loot-preview-related-card">{tile}</Link>
+              ) : (
+                <div key={`related-${drop.creature_id || drop.creature_name}`} className="loot-preview-related-card">{tile}</div>
+              );
+            })}
           </div>
-          <div className="min-w-0">
-            <h3 className="creature-preview-section-title"><PackageOpen className="size-4 text-primary" />{t('itemDetail.usedFor')}</h3>
-            {hasUsage ? (
-              <div className="creature-preview-list">
-                {[...item.required_for.slice(0, 2), ...item.rewards_from.slice(0, 2)].map((value) => (
-                  <div key={value} className="creature-preview-row"><span className="truncate">{value}</span></div>
+        </section>
+      ) : null}
+
+      {(tradeRows.length > 0 || relatedUsage.length > 0) ? (
+        <section className="loot-preview-main-grid loot-preview-secondary-grid">
+          <div className="loot-preview-section">
+            <h3 className="loot-preview-section-title"><ShoppingBag className="size-4" />{t('itemDetail.trade')}</h3>
+            {tradeRows.length ? (
+              <div className="loot-preview-detail-list">
+                {tradeRows.map((row, index) => (
+                  <DetailRow key={`${row.label}-${row.value}-${index}`} label={row.label} value={row.value} />
                 ))}
               </div>
-            ) : <p className="mt-2 text-xs text-content-muted">—</p>}
+            ) : <p className="loot-preview-empty">—</p>}
+          </div>
+          <div className="loot-preview-section">
+            <h3 className="loot-preview-section-title"><PackageOpen className="size-4" />{t('itemDetail.usedFor')}</h3>
+            {relatedUsage.length ? (
+              <div className="loot-preview-use-list">
+                {relatedUsage.map((value) => <span key={value}>{value}</span>)}
+              </div>
+            ) : <p className="loot-preview-empty">—</p>}
+          </div>
+        </section>
+      ) : null}
+
+      {bestDrop ? (
+        <section className="loot-preview-tip">
+          <Info className="size-5" />
+          <div>
+            <strong>{t('itemDetail.bestKnownSource', { defaultValue: 'Best known source' })}</strong>
+            <p>
+              {bestDrop.creature_name}
+              {bestDrop.chance != null ? ` · ${bestDrop.chance}%` : ''}
+              {bestDropZone ? ` · ${bestDropZone}` : ''}
+            </p>
           </div>
         </section>
       ) : null}
@@ -240,19 +390,39 @@ export default function ItemPreviewPanel({ identifier }: { identifier: string })
       <Link
         to={itemPath}
         state={{ from: `${location.pathname}${location.search}` }}
-        className="creature-preview-full-link"
+        className="creature-preview-full-link loot-preview-full-link"
       >
-        {t('itemDetail.eyebrow')} <ArrowRight className="size-4" />
+        {t('cyclopedia.loot.openDetails', { defaultValue: 'Open item details' })}
+        <ArrowRight className="size-4" />
       </Link>
     </article>
   );
 }
 
-function PreviewStat({ icon, label, value }: { icon: React.ReactNode; label: string; value: string }) {
+function MarketStat({
+  icon,
+  label,
+  value,
+  accent = false,
+}: {
+  icon: ReactNode;
+  label: string;
+  value: string;
+  accent?: boolean;
+}) {
   return (
-    <div className="creature-preview-stat">
-      <span className="flex items-center gap-1.5">{icon}{label}</span>
+    <div className="loot-preview-market-stat" data-accent={accent ? 'true' : 'false'}>
+      <span>{icon}{label}</span>
       <strong>{value}</strong>
+    </div>
+  );
+}
+
+function DetailRow({ label, value }: { label: string; value: string }) {
+  return (
+    <div className="loot-preview-detail-row">
+      <span>{label}</span>
+      <strong title={value}>{value}</strong>
     </div>
   );
 }

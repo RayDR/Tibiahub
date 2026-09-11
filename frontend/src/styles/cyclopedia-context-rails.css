@@ -4,7 +4,8 @@
  * The Loot composition is the reference for every Cyclopedia section:
  * recently viewed -> tabs/search -> popular -> result toolbar/content.
  * Legacy per-section discovery rails remain in code while their data paths are
- * migrated, but are hidden whenever the canonical shared rail is mounted.
+ * migrated, but are no longer rendered visually once the canonical rail owns
+ * discovery for the Cyclopedia surface.
  */
 
 [data-cyclopedia-context='recent'] {
@@ -38,10 +39,15 @@
 }
 
 /*
- * Hide old per-mode landing rails only after the new shared Popular portal is
- * present. This keeps the migration fail-safe if the shared chrome is ever not
- * mounted for a non-standard Cyclopedia surface.
+ * The old mode-specific discovery shelf must never reappear when AppTabs
+ * switches into its compact/sticky state. The shared horizontal Popular rail
+ * is the canonical discovery surface; compacting its host must not reveal the
+ * retired vertical shelf underneath it.
  */
+.app-shell-cyclopedia [data-cyclopedia-legacy-discovery='true'] {
+  display: none;
+}
+
 .app-shell-cyclopedia .ds-page:has(
   [data-cyclopedia-context-portal='popular']
 ) > .contents > [data-compact-entity-strip][data-strip-variant='rail'] {
@@ -53,12 +59,6 @@
 ) > .contents > div:has(
   > [data-compact-entity-strip][data-strip-variant='rail']
 ) {
-  display: none;
-}
-
-.app-shell-cyclopedia .ds-page:has(
-  [data-cyclopedia-context-portal='popular']
-) > .contents > [data-cyclopedia-legacy-discovery] {
   display: none;
 }
 
