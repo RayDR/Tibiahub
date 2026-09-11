@@ -19,7 +19,6 @@ import {
   Trophy,
   User,
   Users,
-  WalletCards,
   Zap,
 } from 'lucide-react';
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
