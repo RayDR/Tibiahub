@@ -30,16 +30,13 @@ html[data-layout='wide'] .app-shell-cyclopedia main[data-workspace-main='cyclope
   z-index: var(--z-map-overlay);
   top: var(--cyclopedia-preview-top, calc(var(--app-sticky-offset) + var(--space-4)));
   right: auto;
-  bottom: var(--cyclopedia-preview-bottom, var(--space-4));
+  bottom: auto;
   left: auto;
   width: min(29rem, calc(100vw - 2rem));
   min-width: 0;
-  max-height: none;
-  overflow-y: auto;
+  overflow: visible;
   padding: 0;
   border-radius: var(--radius-lg);
-  box-shadow: var(--elevation-overlay);
-  scrollbar-width: thin;
 }
 
 .cyclopedia-creature-preview-dock[data-preview-side='right'] {
@@ -95,10 +92,24 @@ html[data-motion='reduced'] .cyclopedia-creature-preview-dock {
   animation: none;
 }
 
+/* The dock itself should size to the rendered preview, not to the whole
+ * available viewport. The former top+bottom fixed constraints stretched the
+ * box and therefore its shadow even when the preview content was short. Keep
+ * the lower inset only as a max-height boundary and put scrolling/shadow on the
+ * actual preview surface. */
 .cyclopedia-creature-preview-sticky {
   position: relative;
+  width: 100%;
   min-width: 0;
-  min-height: 100%;
+  max-height: calc(
+    100dvh
+    - var(--cyclopedia-preview-top, calc(var(--app-sticky-offset) + var(--space-4)))
+    - var(--cyclopedia-preview-bottom, var(--space-4))
+  );
+  overflow-y: auto;
+  border-radius: inherit;
+  box-shadow: var(--elevation-overlay);
+  scrollbar-width: thin;
 }
 
 .cyclopedia-creature-preview-close {
@@ -258,7 +269,9 @@ html[data-motion='reduced'] .cyclopedia-creature-preview-dock {
   }
 }
 
-/* Compact desktop is always an overlay, but still respects the selected side. */
+/* Compact desktop is an overlay, but it must still open on the opposite side
+ * of the selected card. Align either edge with the centered compact content
+ * boundary rather than forcing every preview to the right. */
 @media (min-width: 1440px) {
   html[data-layout='compact'] .cyclopedia-creature-preview-dock[data-preview-side='right'] {
     right: max(var(--space-4), calc((100vw - var(--app-content-max-width)) / 2 + var(--space-4)));
@@ -281,6 +294,10 @@ html[data-motion='reduced'] .cyclopedia-creature-preview-dock {
     bottom: calc(var(--app-mobile-nav-clearance) + var(--space-3));
     left: var(--space-3);
     width: auto;
+    overflow: visible;
+  }
+
+  .cyclopedia-creature-preview-sticky {
     max-height: min(78dvh, 46rem);
   }
 }
