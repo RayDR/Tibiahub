@@ -4,7 +4,6 @@ import { Link, useLocation } from 'react-router-dom';
 import { useTranslation } from 'react-i18next';
 
 import { TIBIAHUB_WORLD_BACKGROUND } from '../../assets/brand/brandBackground';
-import { TIBIAHUB_TITLE_ICONS } from '../../assets/brand/brandTitleIcons';
 import Navigation from '../Navigation';
 import { Container } from '../ui';
 import { SuggestImprovementLink } from '../feedback/GitHubFeedbackLink';
@@ -48,10 +47,6 @@ export default function AppShell({ children, dataVersion }: { children: ReactNod
     </> : null}
     <Navigation />
     <div className={`app-shell-main relative flex min-h-0 flex-1 flex-col ${isMapWorkspace ? 'app-shell-main-map' : ''}`}>
-      {isMapWorkspace ? <div aria-hidden="true" className="pointer-events-none absolute right-4 top-16 z-map-overlay hidden items-center gap-2 rounded-xl border border-line bg-surface-overlay/90 px-3 py-2 shadow-lg backdrop-blur-md lg:flex">
-        <img src={TIBIAHUB_TITLE_ICONS.maps} alt="" draggable={false} className="size-9 object-contain drop-shadow-lg" />
-        <span className="font-serif text-lg font-bold tracking-wide text-content-primary">{t('map.title')}</span>
-      </div> : null}
       {context && !isMapWorkspace && !isCyclopediaWorkspace ? <Container><nav className="app-context-bar gap-1 text-xs text-content-muted" aria-label={t('shell.breadcrumbs')}>
         <Link to="/" className="inline-flex min-h-9 items-center gap-1 rounded px-1 hover:text-content-primary"><Home className="size-3.5" /><span className="sr-only">{t('nav.home')}</span></Link>
         <ChevronRight className="size-3.5" aria-hidden="true" />
