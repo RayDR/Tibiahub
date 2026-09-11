@@ -34,8 +34,27 @@
   box-shadow: 0 0 0 2px rgb(var(--ds-primary) / 0.08);
 }
 
-.app-global-search-results {
-  min-width: min(30rem, calc(100vw - 2rem));
+/* Keep suggestions proportional to the viewport instead of allowing result
+ * content to determine their width. The panel scrolls without exposing a
+ * scrollbar so long result sets remain bounded inside the navigation shell. */
+.app-navbar-global-search .app-global-search-results {
+  left: auto;
+  right: 0;
+  width: clamp(20rem, 38vw, 34rem);
+  min-width: 0;
+  max-width: calc(100vw - 2rem);
+  max-height: min(70dvh, 36rem);
+  overflow-x: hidden;
+  overflow-y: auto;
+  overscroll-behavior: contain;
+  -ms-overflow-style: none;
+  scrollbar-width: none;
+}
+
+.app-navbar-global-search .app-global-search-results::-webkit-scrollbar {
+  display: none;
+  width: 0;
+  height: 0;
 }
 
 @media (min-width: 1024px) {
