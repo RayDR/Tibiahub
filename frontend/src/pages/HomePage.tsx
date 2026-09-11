@@ -1,15 +1,19 @@
-import { useEffect, useMemo, useState } from 'react';
+import { type CSSProperties, useEffect, useMemo, useState } from 'react';
 import {
   ArrowRight,
   BookOpen,
   Clock3,
+  Compass,
   Flame,
-  Sparkles,
+  History,
+  Map,
+  Search,
+  Sword,
 } from 'lucide-react';
 import { Link } from 'react-router-dom';
 import { useTranslation } from 'react-i18next';
 
-import { Card, Page, Section } from '../components/ui';
+import { Page } from '../components/ui';
 import type { KnowledgeSearchSection } from '../components/search/KnowledgeSearchBox';
 import AssistantChat from '../components/assistant/AssistantChat';
 import { activityApi, type UserActivityEntry } from '../services/activity';
@@ -18,19 +22,21 @@ import { assistantHeroSessionSeed, selectAssistantHeroCopy } from '../utils/assi
 import KnowledgeCategoryIcon from '../components/knowledge/KnowledgeCategoryIcon';
 import { tibiaApi } from '../services/api';
 import type { BoostedCreatureProjection, TibiaBoostedResponse } from '../types';
-
-interface QuestHistoryEntry {
-  id: number;
-  questId: string;
-  title: string;
-  createdAt: string;
-}
+import { TIBIAHUB_WORLD_BACKGROUND } from '../assets/brand/brandBackground';
 
 interface HomeSearchOption {
   key: KnowledgeSearchSection;
   title: string;
   help: string;
   to: string;
+}
+
+interface HomeRecentEntry {
+  key: string;
+  title: string;
+  subtitle: string;
+  to: string;
+  category: KnowledgeSearchSection;
 }
 
 export default function HomePage() {
@@ -41,6 +47,7 @@ export default function HomePage() {
     () => selectAssistantHeroCopy(i18n.resolvedLanguage || i18n.language, new Date(), heroCopySeed),
     [heroCopySeed, i18n.language, i18n.resolvedLanguage],
   );
+  const isSpanish = (i18n.resolvedLanguage || i18n.language).startsWith('es');
 
   const [activity, setActivity] = useState<UserActivityEntry[]>([]);
   const [clearingHistory, setClearingHistory] = useState(false);
@@ -64,7 +71,6 @@ export default function HomePage() {
     }
 
     const controller = new AbortController();
-
     void activityApi
       .getMine(50, controller.signal)
       .then(setActivity)
@@ -73,51 +79,11 @@ export default function HomePage() {
     return () => controller.abort();
   }, [isAuthenticated]);
 
-  const questHistory = useMemo<QuestHistoryEntry[]>(() => {
-    const seen = new Set<string>();
-    const entries: QuestHistoryEntry[] = [];
-
-    for (const entry of activity) {
-      if (
-        entry.activity_type !== 'view_quest' ||
-        !entry.entity_id
-      ) {
-        continue;
-      }
-
-      const questId = String(entry.entity_id);
-
-      if (seen.has(questId)) {
-        continue;
-      }
-
-      seen.add(questId);
-      entries.push({
-        id: entry.id,
-        questId,
-        title:
-          String(entry.metadata?.name || '').trim() ||
-          t('home.questHistory.unknownQuest'),
-        createdAt: entry.created_at,
-      });
-
-      if (entries.length === 5) {
-        break;
-      }
-    }
-
-    return entries;
-  }, [activity, t]);
-
   const searchOptions: HomeSearchOption[] = [
     {
       key: 'creatures',
-      title: t(
-        'home.assistantPreview.categories.creatures.title',
-      ),
-      help: t(
-        'home.assistantPreview.categories.creatures.help',
-      ),
+      title: t('home.assistantPreview.categories.creatures.title'),
+      help: t('home.assistantPreview.categories.creatures.help'),
       to: '/cyclopedia?tab=creatures',
     },
     {
@@ -152,9 +118,34 @@ export default function HomePage() {
     },
   ];
 
+  const recentActivity = useMemo<HomeRecentEntry[]>(() => {
+    const seen = new Set<string>();
+    const entries: HomeRecentEntry[] = [];
+
+    for (const entry of activity) {
+      const mapped = mapActivity(entry, searchOptions, isSpanish);
+      if (!mapped || seen.has(mapped.key)) continue;
+      seen.add(mapped.key);
+      entries.push(mapped);
+      if (entries.length === 5) break;
+    }
+
+    return entries;
+  }, [activity, isSpanish, searchOptions]);
+
+  const featuredOptions = useMemo(
+    () => [
+      searchOptions[0],
+      searchOptions[1],
+      searchOptions[2],
+      searchOptions[3],
+      searchOptions[4],
+    ],
+    [searchOptions],
+  );
+
   const clearActivity = async () => {
     setClearingHistory(true);
-
     try {
       await activityApi.clearMine();
       setActivity([]);
@@ -163,118 +154,75 @@ export default function HomePage() {
     }
   };
 
-  const formatDate = (value: string) =>
-    new Date(value).toLocaleString(i18n.language, {
-      dateStyle: 'medium',
-      timeStyle: 'short',
-    });
+  const heroStyle = {
+    '--home-hero-image': `url("${TIBIAHUB_WORLD_BACKGROUND}")`,
+  } as CSSProperties;
+
+  const visualCopy = isSpanish
+    ? {
+        recent: 'Búsquedas recientes',
+        clear: 'Limpiar todo',
+        clearing: 'Limpiando…',
+        featured: 'Destacado ahora',
+        plannerTitle: 'Planea tu próxima cacería',
+        plannerHelp: 'Encuentra zonas de caza para tu nivel, vocación y objetivos.',
+        plannerAction: 'Abrir Hunt Planner',
+        mapTitle: 'Explora el mundo',
+        mapHelp: 'Recorre el mapa interactivo y descubre ubicaciones, NPCs y zonas de caza.',
+        mapAction: 'Abrir mapa mundial',
+        quote: 'El conocimiento es la clave de la aventura.',
+      }
+    : {
+        recent: 'Recent Searches',
+        clear: 'Clear all',
+        clearing: 'Clearing…',
+        featured: 'Popular Right Now',
+        plannerTitle: 'Plan Your Next Hunt',
+        plannerHelp: 'Find hunt zones for your level, vocation and goals.',
+        plannerAction: 'Open Hunt Planner',
+        mapTitle: 'Explore the World',
+        mapHelp: 'Browse the interactive map and discover locations, NPCs and hunt zones.',
+        mapAction: 'Open World Map',
+        quote: 'Knowledge is the key to adventure.',
+      };
 
   return (
-    <Page className="space-y-7">
-      <section className="assistant-hero relative overflow-hidden">
-        <div className="pointer-events-none absolute -right-24 -top-24 size-96 rounded-full bg-primary/10 blur-3xl" />
-        <div className="pointer-events-none absolute -bottom-40 left-1/3 size-80 rounded-full bg-accent/10 blur-3xl" />
+    <Page className="home-page">
+      <section className="home-hero" style={heroStyle} aria-labelledby="home-hero-title">
+        <div className="home-hero-copy">
+          <h1 id="home-hero-title" className="home-hero-title">
+            {highlightTibia(assistantCopy.headline)}
+          </h1>
+          <p className="home-hero-subtitle">{assistantCopy.supporting}</p>
 
-        <div className="relative min-w-0">
-          <div className="mb-3 inline-flex items-center gap-2 rounded-full bg-primary/10 px-3 py-1.5 text-xs font-semibold text-primary sm:mb-4">
-            <Sparkles className="size-3.5" />
-            {t('home.assistantPreview.identity')}
+          <div className="home-hero-assistant">
+            <AssistantChat />
           </div>
+        </div>
 
-          <header className="mb-4 max-w-4xl sm:mb-6">
-            <h1 className="text-balance font-heading text-[clamp(1.65rem,7vw,2.8rem)] font-bold leading-[1.12] tracking-[0.015em] text-content-primary">
-              {assistantCopy.headline}
-            </h1>
-            <p className="mt-2 max-w-3xl text-sm leading-6 text-content-secondary sm:mt-3 sm:text-base">
-              {assistantCopy.supporting}
-            </p>
-          </header>
-          <AssistantChat />
+        <div className="home-hero-art" aria-hidden="true">
+          <div className="home-hero-quote">
+            <span className="home-hero-quote-mark">“</span>
+            <p>{visualCopy.quote}</p>
+            <small>— TibiaHub</small>
+          </div>
         </div>
       </section>
 
-      {isAuthenticated && questHistory.length > 0 ? (
-        <Section aria-labelledby="home-quest-history">
-          <div className="flex flex-wrap items-end justify-between gap-3">
-            <div>
-              <h2
-                id="home-quest-history"
-                className="flex items-center gap-2 text-lg font-semibold"
-              >
-                <Clock3 className="size-5 text-primary" />
-                {t('home.questHistory.title')}
-              </h2>
-
-              <p className="text-sm text-content-muted">
-                {t('home.questHistory.help')}
-              </p>
-            </div>
-
-            <div className="flex flex-wrap items-center gap-2">
-              <Link
-                to="/cyclopedia?tab=quests&view=history"
-                className="app-button-secondary app-button-sm"
-              >
-                {t('home.questHistory.viewAll')}
-              </Link>
-
-              <button
-                type="button"
-                onClick={() => void clearActivity()}
-                disabled={clearingHistory}
-                className="app-button-ghost app-button-sm"
-              >
-                {clearingHistory
-                  ? t('home.questHistory.clearing')
-                  : t('home.questHistory.clear')}
-              </button>
-            </div>
+      <section className="home-section" aria-labelledby="home-explore-title">
+        <div className="home-section-heading">
+          <div>
+            <h2 id="home-explore-title">
+              <Search className="size-5 text-primary" aria-hidden="true" />
+              {t('home.assistantPreview.exploreTitle')}
+            </h2>
+            <p>{t('home.assistantPreview.exploreHelp')}</p>
           </div>
-
-          <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-5">
-            {questHistory.map((entry) => (
-              <Link
-                key={entry.questId}
-                to={`/quests/${encodeURIComponent(
-                  entry.questId,
-                )}`}
-                className="min-w-0"
-              >
-                <Card className="h-full p-4 transition hover:-translate-y-0.5 hover:border-primary/50 motion-reduce:transform-none">
-                  <BookOpen className="size-4 text-primary" />
-                  <h3 className="mt-3 line-clamp-2 font-semibold">
-                    {entry.title}
-                  </h3>
-                  <p className="mt-1 text-sm text-content-secondary">
-                    {t('home.questHistory.open')}
-                  </p>
-                  <p className="mt-3 text-xs text-content-muted">
-                    {formatDate(entry.createdAt)}
-                  </p>
-                </Card>
-              </Link>
-            ))}
-          </div>
-        </Section>
-      ) : null}
-
-      <Section aria-labelledby="home-search-options">
-        <div>
-          <h2
-            id="home-search-options"
-            className="text-lg font-semibold"
-          >
-            {t('home.assistantPreview.exploreTitle')}
-          </h2>
-
-          <p className="text-sm text-content-muted">
-            {t('home.assistantPreview.exploreHelp')}
-          </p>
         </div>
 
-        <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-6">
+        <div className="home-category-grid">
           {searchOptions.map((option) => (
-            <HomeCapabilityCard
+            <HomeCategoryCard
               key={option.key}
               option={option}
               boosted={
@@ -287,12 +235,113 @@ export default function HomePage() {
             />
           ))}
         </div>
-      </Section>
+      </section>
+
+      {recentActivity.length ? (
+        <section className="home-section" aria-labelledby="home-recent-title">
+          <div className="home-section-heading">
+            <h2 id="home-recent-title">
+              <History className="size-5 text-primary" aria-hidden="true" />
+              {visualCopy.recent}
+            </h2>
+            <button
+              type="button"
+              onClick={() => void clearActivity()}
+              disabled={clearingHistory}
+              className="app-button-ghost app-button-sm"
+            >
+              {clearingHistory ? visualCopy.clearing : visualCopy.clear}
+            </button>
+          </div>
+
+          <div className="home-rail">
+            {recentActivity.map((entry) => (
+              <Link key={entry.key} to={entry.to} className="home-rail-card">
+                <span className="home-rail-icon" aria-hidden="true">
+                  <KnowledgeCategoryIcon
+                    category={entry.category}
+                    label={entry.subtitle}
+                    className="size-8"
+                    mediaClassName="size-7"
+                  />
+                </span>
+                <span className="min-w-0">
+                  <strong>{entry.title}</strong>
+                  <small>{entry.subtitle}</small>
+                </span>
+                <ArrowRight className="size-4 text-content-muted" aria-hidden="true" />
+              </Link>
+            ))}
+          </div>
+        </section>
+      ) : null}
+
+      <section className="home-section" aria-labelledby="home-featured-title">
+        <div className="home-section-heading">
+          <h2 id="home-featured-title">
+            <Flame className="size-5 text-primary" aria-hidden="true" />
+            {visualCopy.featured}
+          </h2>
+        </div>
+
+        <div className="home-feature-grid">
+          {featuredOptions.map((option) => (
+            <HomeFeatureCard
+              key={option.key}
+              option={option}
+              boosted={
+                option.key === 'creatures'
+                  ? boosted?.creature
+                  : option.key === 'bosses'
+                    ? boosted?.boss
+                    : undefined
+              }
+            />
+          ))}
+        </div>
+      </section>
+
+      <section className="home-cta-grid" aria-label="TibiaHub tools">
+        <Link to="/planner" className="home-cta" data-kind="planner">
+          <div className="home-cta-copy">
+            <div className="home-cta-title">
+              <Sword className="size-8 text-primary" aria-hidden="true" />
+              <span>{visualCopy.plannerTitle}</span>
+            </div>
+            <p>{visualCopy.plannerHelp}</p>
+            <span className="app-button-primary app-button-sm">
+              {visualCopy.plannerAction}
+              <ArrowRight className="size-4" aria-hidden="true" />
+            </span>
+          </div>
+          <KnowledgeCategoryIcon
+            category="zones"
+            label={visualCopy.plannerTitle}
+            className="pointer-events-none absolute -right-6 -bottom-8 size-52 opacity-25"
+            mediaClassName="size-48"
+          />
+        </Link>
+
+        <Link to="/map" className="home-cta" data-kind="map">
+          <div className="home-cta-copy">
+            <div className="home-cta-title">
+              <Compass className="size-8 text-primary" aria-hidden="true" />
+              <span>{visualCopy.mapTitle}</span>
+            </div>
+            <p>{visualCopy.mapHelp}</p>
+            <span className="app-button-primary app-button-sm">
+              {visualCopy.mapAction}
+              <ArrowRight className="size-4" aria-hidden="true" />
+            </span>
+          </div>
+          <Map className="pointer-events-none absolute -right-2 -bottom-10 size-48 text-accent opacity-15" aria-hidden="true" />
+        </Link>
+      </section>
     </Page>
   );
 }
 
-function HomeCapabilityCard({
+function HomeCategoryCard({
   option,
   boosted,
 }: {
@@ -317,50 +366,135 @@ function HomeCapabilityCard({
     <Link
       to={option.to}
       title={option.help}
+      className="home-category-card"
+      data-boosted={current ? 'true' : 'false'}
       aria-label={`${option.title}: ${currentName ? t('home.boosted.today', { name: currentName }) : option.help}`}
-      className="group block h-full"
     >
-      <Card className={`relative h-full min-h-44 overflow-hidden p-0 transition duration-300 hover:-translate-y-1 hover:shadow-lg motion-reduce:transform-none motion-reduce:transition-none ${current ? 'border-accent/50 hover:border-accent/70' : 'hover:border-primary/60'}`}>
+      {current ? (
+        <span className="home-boosted-chip">
+          <Flame className="size-3" aria-hidden="true" />
+          {t('home.boosted.badge')}
+        </span>
+      ) : null}
+
+      <span className="home-category-media" aria-hidden="true">
         {imageUrl ? (
-          <span className="absolute -right-3 -top-2 grid size-28 place-items-center overflow-hidden rounded-3xl bg-accent/10">
-            <img
-              src={imageUrl}
-              alt=""
-              loading="lazy"
-              decoding="async"
-              onError={() => setImageFailed(true)}
-              className="size-24 object-contain p-1 [image-rendering:pixelated]"
-            />
-          </span>
+          <img
+            src={imageUrl}
+            alt=""
+            loading="lazy"
+            decoding="async"
+            onError={() => setImageFailed(true)}
+          />
         ) : (
-          <KnowledgeCategoryIcon category={option.key} label={option.title} className="absolute -right-3 -top-2 size-28 rounded-3xl bg-primary/[0.07] opacity-90 transition duration-300 group-hover:scale-110 group-hover:opacity-100 motion-reduce:transform-none" mediaClassName="size-24 p-1" />
+          <KnowledgeCategoryIcon
+            category={option.key}
+            label={option.title}
+            className="size-20"
+            mediaClassName="size-16"
+          />
         )}
-        <div className="relative z-10 flex h-full max-w-[72%] flex-col p-4">
-          <div>
-            {current ? (
-              <span className="inline-flex items-center gap-1 rounded-full bg-accent/15 px-2 py-1 text-[0.65rem] font-bold tracking-wide text-accent ring-1 ring-accent/40">
-                <Flame className="size-3" aria-hidden="true" />
-                {t('home.boosted.badge')}
-              </span>
-            ) : null}
-            <h3 className="mt-1 font-semibold">
-              {option.title}
-            </h3>
+      </span>
 
-            {currentName ? (
-              <p className="mt-1 line-clamp-2 text-sm font-semibold text-content-primary">
-                {t('home.boosted.today', { name: currentName })}
-              </p>
-            ) : (
-              <p className="mt-1 text-sm text-content-secondary">
-                {option.help}
-              </p>
-            )}
-          </div>
-
-          <ArrowRight className="mt-auto size-4 translate-y-2 self-end text-primary opacity-0 transition duration-300 group-hover:translate-x-1 group-hover:translate-y-0 group-hover:opacity-100 motion-reduce:transform-none" />
-        </div>
-      </Card>
+      <h3>{option.title}</h3>
+      <p>{currentName ? t('home.boosted.today', { name: currentName }) : option.help}</p>
+      <ArrowRight className="home-category-arrow size-4" aria-hidden="true" />
     </Link>
   );
+}
+
+function HomeFeatureCard({
+  option,
+  boosted,
+}: {
+  option: HomeSearchOption;
+  boosted?: BoostedCreatureProjection;
+}) {
+  const { t } = useTranslation();
+  const [imageFailed, setImageFailed] = useState(false);
+  const current = boosted?.resolution_state === 'unavailable' ? undefined : boosted;
+  const currentName = current?.resolution_state === 'resolved'
+    ? current.name
+    : current?.source_name;
+  const imageUrl = current?.resolution_state === 'resolved'
+    && current.media.status === 'available'
+    && !imageFailed
+    ? current.media.url
+    : null;
+
+  useEffect(() => setImageFailed(false), [current?.media.url]);
+
+  return (
+    <Link to={option.to} className="home-feature-card">
+      {imageUrl ? (
+        <img
+          src={imageUrl}
+          alt=""
+          loading="lazy"
+          decoding="async"
+          onError={() => setImageFailed(true)}
+          className="size-16 object-contain [image-rendering:pixelated]"
+        />
+      ) : (
+        <KnowledgeCategoryIcon
+          category={option.key}
+          label={option.title}
+          className="size-16"
+          mediaClassName="size-14"
+        />
+      )}
+      <span className="min-w-0 max-w-full">
+        <strong>{currentName || option.title}</strong>
+        <small>{currentName ? t('home.boosted.badge') : option.help}</small>
+      </span>
+    </Link>
+  );
+}
+
+function mapActivity(
+  entry: UserActivityEntry,
+  options: HomeSearchOption[],
+  isSpanish: boolean,
+): HomeRecentEntry | null {
+  const type = entry.activity_type;
+  const id = entry.entity_id ? String(entry.entity_id) : '';
+  const title = String(entry.metadata?.name || entry.query || '').trim();
+  if (!title) return null;
+
+  const byKey = (key: KnowledgeSearchSection) => options.find((option) => option.key === key);
+  const genericSubtitle = (key: KnowledgeSearchSection) => byKey(key)?.title || key;
+
+  if (type === 'view_creature' && id) {
+    return { key: `${type}:${id}`, title, subtitle: genericSubtitle('creatures'), to: `/creatures/${encodeURIComponent(id)}`, category: 'creatures' };
+  }
+  if (type === 'view_boss' && id) {
+    return { key: `${type}:${id}`, title, subtitle: genericSubtitle('bosses'), to: `/creatures/${encodeURIComponent(id)}`, category: 'bosses' };
+  }
+  if (type === 'view_item' && id) {
+    return { key: `${type}:${id}`, title, subtitle: genericSubtitle('items'), to: `/items/${encodeURIComponent(id)}`, category: 'items' };
+  }
+  if (type === 'view_quest' && id) {
+    return { key: `${type}:${id}`, title, subtitle: genericSubtitle('quests'), to: `/quests/${encodeURIComponent(id)}`, category: 'quests' };
+  }
+  if (type === 'view_zone' && id) {
+    return { key: `${type}:${id}`, title, subtitle: genericSubtitle('zones'), to: `/hunt-zones/${encodeURIComponent(id)}`, category: 'zones' };
+  }
+  if (type === 'hunt_search') {
+    return {
+      key: `${type}:${entry.query || entry.id}`,
+      title,
+      subtitle: isSpanish ? 'Búsqueda de cacería' : 'Hunt search',
+      to: '/planner',
+      category: 'zones',
+    };
+  }
+
+  return null;
+}
+
+function highlightTibia(value: string) {
+  const parts = value.split(/(Tibia)/gi);
+  return parts.map((part, index) => part.toLowerCase() === 'tibia'
+    ? <span key={`${part}-${index}`} className="home-hero-title-emphasis">{part}</span>
+    : part);
 }
