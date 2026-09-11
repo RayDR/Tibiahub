@@ -150,10 +150,33 @@ html[data-motion='reduced'] .cyclopedia-creature-preview-dock {
   height: 100%;
 }
 
+/* Home already treats boosted entries as accent content. Reuse that semantic
+ * accent here, and add a danger-toned edge so boosted never reads exactly like
+ * the primary/selected state when a theme maps accent and primary together. */
 .creature-browser-card[data-boosted='true'] {
+  --cyclopedia-boosted-rgb: var(--ds-accent);
   position: relative;
-  border-color: rgb(var(--ds-primary) / 0.72);
-  box-shadow: 0 0 0 1px rgb(var(--ds-primary) / 0.18), var(--elevation-card);
+  border-color: rgb(var(--cyclopedia-boosted-rgb) / 0.78);
+  background:
+    radial-gradient(circle at 18% 10%, rgb(var(--cyclopedia-boosted-rgb) / 0.12), transparent 28%),
+    linear-gradient(180deg, rgb(var(--ds-surface-raised) / 0.94), rgb(var(--ds-surface) / 0.87));
+  box-shadow:
+    0 0 0 1px rgb(var(--cyclopedia-boosted-rgb) / 0.2),
+    0 0 1.25rem rgb(var(--cyclopedia-boosted-rgb) / 0.11),
+    var(--elevation-card);
+}
+
+.creature-browser-card[data-boosted='true']::after {
+  content: '';
+  position: absolute;
+  z-index: 5;
+  top: 0.45rem;
+  bottom: 0.45rem;
+  left: 0;
+  width: 0.18rem;
+  pointer-events: none;
+  border-radius: 0 var(--radius-sm) var(--radius-sm) 0;
+  background: linear-gradient(180deg, rgb(var(--cyclopedia-boosted-rgb)), rgb(var(--ds-danger) / 0.92));
 }
 
 .creature-boosted-badge {
@@ -166,11 +189,13 @@ html[data-motion='reduced'] .cyclopedia-creature-preview-dock {
   gap: 0.3rem;
   max-width: calc(100% - 6rem);
   padding: 0.28rem 0.5rem;
-  border: 1px solid rgb(var(--ds-primary) / 0.5);
+  border: 1px solid rgb(var(--cyclopedia-boosted-rgb, var(--ds-accent)) / 0.55);
   border-radius: 999px;
-  background: rgb(var(--ds-surface-overlay) / 0.92);
-  color: rgb(var(--ds-primary));
-  box-shadow: 0 0.25rem 0.7rem rgb(var(--ds-shadow) / 0.2);
+  background: rgb(var(--cyclopedia-boosted-rgb, var(--ds-accent)) / 0.15);
+  color: rgb(var(--cyclopedia-boosted-rgb, var(--ds-accent)));
+  box-shadow:
+    0 0.25rem 0.7rem rgb(var(--ds-shadow) / 0.2),
+    inset 0 0 0 1px rgb(var(--ds-danger) / 0.12);
   font-size: 0.68rem;
   font-weight: 800;
   line-height: 1;
@@ -178,7 +203,8 @@ html[data-motion='reduced'] .cyclopedia-creature-preview-dock {
   text-transform: uppercase;
 }
 
-/* Creature/Boss result density. */
+/* Creature/Boss result density. Desktop gets one more card than the previous
+ * composition; large and extra-large Wide layouts gain two and three slots. */
 .app-shell-cyclopedia .grid:has(> [data-cyclopedia-result] > .creature-browser-card) {
   grid-template-columns: minmax(0, 1fr) !important;
 }
@@ -191,26 +217,25 @@ html[data-motion='reduced'] .cyclopedia-creature-preview-dock {
 
 @media (min-width: 1024px) {
   .app-shell-cyclopedia .grid:has(> [data-cyclopedia-result] > .creature-browser-card) {
-    grid-template-columns: repeat(3, minmax(0, 1fr)) !important;
+    grid-template-columns: repeat(4, minmax(0, 1fr)) !important;
   }
 }
 
 @media (min-width: 1280px) {
   .app-shell-cyclopedia .grid:has(> [data-cyclopedia-result] > .creature-browser-card) {
-    grid-template-columns: repeat(4, minmax(0, 1fr)) !important;
+    grid-template-columns: repeat(5, minmax(0, 1fr)) !important;
   }
 }
 
-/* Wide monitors use the available viewport instead of stopping at laptop density. */
 @media (min-width: 1600px) {
   html[data-layout='wide'] .app-shell-cyclopedia .grid:has(> [data-cyclopedia-result] > .creature-browser-card) {
-    grid-template-columns: repeat(5, minmax(0, 1fr)) !important;
+    grid-template-columns: repeat(6, minmax(0, 1fr)) !important;
   }
 }
 
 @media (min-width: 1920px) {
   html[data-layout='wide'] .app-shell-cyclopedia .grid:has(> [data-cyclopedia-result] > .creature-browser-card) {
-    grid-template-columns: repeat(6, minmax(0, 1fr)) !important;
+    grid-template-columns: repeat(7, minmax(0, 1fr)) !important;
   }
 }
 
@@ -248,9 +273,8 @@ html[data-motion='reduced'] .cyclopedia-creature-preview-dock {
     width: 29rem;
   }
 
-  /* Keep a predictable four-card working set beside the preview. */
   html[data-layout='wide'] [data-cyclopedia-preview-host='true'] .grid:has(> [data-cyclopedia-result] > .creature-browser-card) {
-    grid-template-columns: repeat(4, minmax(0, 1fr)) !important;
+    grid-template-columns: repeat(5, minmax(0, 1fr)) !important;
   }
 }
 
@@ -269,18 +293,25 @@ html[data-motion='reduced'] .cyclopedia-creature-preview-dock {
   }
 }
 
-/* Compact desktop is an overlay, but it must still open on the opposite side
- * of the selected card. Align either edge with the centered compact content
- * boundary rather than forcing every preview to the right. */
-@media (min-width: 1440px) {
+/* Compact desktop anchors the preview beside the card that opened it. Cards in
+ * the left half open to their right; cards in the right half open to their left.
+ * The panel width contracts to the actual available side instead of jumping to
+ * the viewport edge and obscuring unrelated cards. */
+@media (min-width: 1024px) {
+  html[data-layout='compact'] .cyclopedia-creature-preview-dock {
+    top: var(--cyclopedia-preview-anchor-top, var(--cyclopedia-preview-top));
+  }
+
   html[data-layout='compact'] .cyclopedia-creature-preview-dock[data-preview-side='right'] {
-    right: max(var(--space-4), calc((100vw - var(--app-content-max-width)) / 2 + var(--space-4)));
-    left: auto;
+    right: auto;
+    left: calc(var(--cyclopedia-preview-card-right) + var(--space-3));
+    width: min(29rem, calc(100vw - var(--cyclopedia-preview-card-right) - 2rem));
   }
 
   html[data-layout='compact'] .cyclopedia-creature-preview-dock[data-preview-side='left'] {
-    right: auto;
-    left: max(var(--space-4), calc((100vw - var(--app-content-max-width)) / 2 + var(--space-4)));
+    right: calc(100vw - var(--cyclopedia-preview-card-left) + var(--space-3));
+    left: auto;
+    width: min(29rem, calc(var(--cyclopedia-preview-card-left) - 2rem));
   }
 }
 
