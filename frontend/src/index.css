@@ -17,6 +17,7 @@
 @import './styles/scrollbar.css';
 @import './styles/hunt-zone-cards.css';
 @import './styles/quest-codex.css';
+@import './styles/map-workspace.css';
 
 @tailwind base;
 @tailwind components;
