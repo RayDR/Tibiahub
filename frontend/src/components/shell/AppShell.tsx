@@ -36,7 +36,7 @@ export default function AppShell({ children, dataVersion }: { children: ReactNod
   const isCyclopediaWorkspace = pathname === '/cyclopedia';
   const showWorldAmbience = !pathname.startsWith('/admin');
 
-  return <div className={`app-shell relative flex min-h-screen flex-col text-content-primary ${isCyclopediaWorkspace ? 'app-shell-cyclopedia' : ''}`} data-workspace={isCyclopediaWorkspace ? 'cyclopedia' : undefined}>
+  return <div className="app-shell relative flex min-h-screen flex-col text-content-primary" data-workspace={isCyclopediaWorkspace ? 'cyclopedia' : undefined}>
     {showWorldAmbience ? <>
       <div
         aria-hidden="true"
