@@ -248,7 +248,10 @@ function CyclopediaPreviewPortal({
     const gridRect = grid.getBoundingClientRect();
     const cardCenter = cardRect.left + cardRect.width / 2;
     const gridCenter = gridRect.left + gridRect.width / 2;
-    const nextSide: PreviewSide = cardCenter >= gridCenter ? 'left' : 'right';
+    const nearestEdge: PreviewSide = cardCenter >= gridCenter ? 'right' : 'left';
+    const nextSide: PreviewSide = document.documentElement.dataset.layout === 'wide'
+      ? nearestEdge
+      : nearestEdge === 'right' ? 'left' : 'right';
 
     setSide(nextSide);
     setAnchor({ left: cardRect.left, right: cardRect.right, top: cardRect.top });
