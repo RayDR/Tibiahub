@@ -5,6 +5,7 @@ const expect = (condition, message) => { if (!condition) throw new Error(message
 
 const floor = read('src/utils/tibiaFloors.ts');
 const map = read('src/pages/TibiaMapPage.tsx');
+const mapStyles = read('src/styles/map-workspace.css');
 const mapViewer = read('src/components/map/TibiaMapViewer.tsx');
 const mapService = read('src/services/tibiaMap.ts');
 const card = read('src/components/HuntZoneCard.tsx');
@@ -17,16 +18,19 @@ expect(floor.includes('7 - internalFloor'), 'Ground-floor display must remain a 
 for (const layer of ["'hunt_zone'", "'creature'", "'boss'", "'item'", "'quest'", "'npc'", "'location'"]) {
   expect(mapService.includes(layer), `Universal map layer missing: ${layer}`);
 }
-expect(map.includes('locationNotMapped'), 'Map selections need an explicit unmapped state.');
-expect(map.includes('100dvh-var(--app-nav-clearance)-var(--app-mobile-nav-clearance)'), 'Map workspace must fill the viewport below primary navigation.');
-expect(map.includes('overflow-x-auto') && map.includes('map.layers.${layer}'), 'Map category chips must remain horizontally scrollable and use universal local layers.');
-expect(map.includes("entity_type === 'town'") && map.includes('bootstrap?.towns'), 'Town results must come from authoritative map bootstrap data.');
+expect(map.includes('map.knowledgeOnly') && map.includes("spatial_state === 'unresolved'"), 'Map selections need explicit knowledge-only and unresolved states.');
+expect(mapStyles.includes('100dvh - var(--app-nav-clearance) - var(--app-mobile-nav-clearance)'), 'Map workspace must fill the viewport below primary navigation.');
+expect(map.includes('map-layer-row') && map.includes('map.layers.${layer}'), 'Map layer controls must remain visible and use universal local layers.');
+expect(map.includes("target.entityType === 'town'") && map.includes('bootstrap?.towns'), 'Town results must come from authoritative map bootstrap data.');
 expect(map.includes('townMatches') && map.includes('combined = [...townMatches, ...data]'), 'Known authoritative towns must participate in universal map search.');
 expect(map.includes('RECENT_MAP_TARGETS_KEY') && map.includes('entityType: row.entity_type') && !map.includes('x: row.x, y: row.y, z: row.z, name: row.name'), 'Recent map navigation must not persist a second coordinate store.');
 expect(map.includes('controlFooter={floorControl}') && mapViewer.includes('{controlFooter}</Controls>'), 'Floor selection must share the right-side map control stack.');
 expect(mapViewer.includes('scrollWheelZoom') && mapViewer.includes('touchZoom="center"') && mapViewer.includes('doubleClickZoom'), 'Map must support wheel, trackpad, and touch zoom alongside buttons.');
 expect(mapViewer.includes('InitialViewport') && mapViewer.includes('getBoundsZoom(bounds) + 0.5'), 'Initial world framing must use a readable fitted view while retaining reset-to-world.');
-expect(mapViewer.includes('relative isolate z-base') && map.includes('z-map-overlay'), 'Leaflet panes and application map overlays must use bounded stacking contexts.');
+expect(mapViewer.includes('relative isolate z-base') && mapStyles.includes('--z-map-overlay'), 'Leaflet panes and application map overlays must use bounded stacking contexts.');
+expect(map.includes('map-workspace-sidebar') && map.includes('map-inspector') && map.includes('map-canvas-shell'), 'Refreshed map workspace must retain the three-pane exploration structure.');
+expect(map.includes('nearbyResults') && map.includes('Math.hypot'), 'Nearby map context must derive only from loaded authoritative spatial evidence.');
+expect(map.includes('showRoutes ? (context?.routes || [])') && map.includes('activeLayers'), 'Layer and route controls must remain connected to actual map data.');
 expect(card.includes('LocalizedMapPreview'), 'Hunt Zone cards must use the localized canonical floor preview.');
 expect(cyclopedia.includes('<HuntZoneCard'), 'Cyclopedia Hunt Zones must reuse the shared aligned card.');
 expect(!cyclopedia.includes('getMapImageUrl(zone.id'), 'Cyclopedia cards must not reuse broad provider map fragments.');
