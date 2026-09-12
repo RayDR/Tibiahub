@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+from datetime import datetime, timedelta, timezone
 from typing import Any, Optional
 
 from fastapi import APIRouter, Depends, HTTPException, Query
@@ -15,6 +16,9 @@ from app.models.user_activity import UserActivity
 from app.models.user_character import UserCharacter
 
 router = APIRouter(prefix="/me", tags=["User Activity"])
+
+HUNT_SEARCH_ACTIVITY_TYPE = "hunt_search"
+HUNT_SEARCH_TTL = timedelta(days=7)
 
 
 class ActivityCreateRequest(BaseModel):
@@ -65,6 +69,38 @@ def _to_response(entry: UserActivity) -> ActivityResponse:
     )
 
 
+def _prune_expired_hunt_searches(db: Session, user_id: int) -> int:
+    """Delete planner snapshots after their seven-day restore window."""
+    cutoff = datetime.now(timezone.utc) - HUNT_SEARCH_TTL
+    return (
+        db.query(UserActivity)
+        .filter(
+            UserActivity.user_id == user_id,
+            UserActivity.activity_type == HUNT_SEARCH_ACTIVITY_TYPE,
+            UserActivity.created_at < cutoff,
+        )
+        .delete(synchronize_session=False)
+    )
+
+
+def _replace_hunt_search_for_scope(
+    db: Session,
+    *,
+    user_id: int,
+    character_id: Optional[int],
+) -> int:
+    """Keep one authoritative planner snapshot per account/character scope."""
+    query = db.query(UserActivity).filter(
+        UserActivity.user_id == user_id,
+        UserActivity.activity_type == HUNT_SEARCH_ACTIVITY_TYPE,
+    )
+    if character_id is None:
+        query = query.filter(UserActivity.character_id.is_(None))
+    else:
+        query = query.filter(UserActivity.character_id == character_id)
+    return query.delete(synchronize_session=False)
+
+
 @router.get("/activity", response_model=list[ActivityResponse])
 def get_my_activity(
     limit: int = Query(40, ge=1, le=200),
@@ -73,6 +109,9 @@ def get_my_activity(
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user),
 ):
+    if _prune_expired_hunt_searches(db, current_user.id):
+        db.commit()
+
     query = db.query(UserActivity).filter(UserActivity.user_id == current_user.id)
     if character_id is not None:
         character = _verified_character(db, current_user.id, character_id)
@@ -86,6 +125,7 @@ def get_my_activity(
 @router.delete("/activity")
 def clear_my_activity(
     character_id: Optional[int] = Query(None, ge=1),
+    activity_type: Optional[str] = Query(None),
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user),
 ):
@@ -93,6 +133,8 @@ def clear_my_activity(
     if character_id is not None:
         character = _verified_character(db, current_user.id, character_id)
         query = query.filter(UserActivity.character_id == character.id)
+    if activity_type:
+        query = query.filter(UserActivity.activity_type == activity_type)
     deleted = query.delete(synchronize_session=False)
     db.commit()
     return {"status": "ok", "deleted": deleted}
@@ -108,6 +150,14 @@ def record_my_activity(
     if payload.character_id is not None:
         character = _verified_character(db, current_user.id, payload.character_id)
         character_id = character.id
+
+    _prune_expired_hunt_searches(db, current_user.id)
+    if payload.activity_type == HUNT_SEARCH_ACTIVITY_TYPE:
+        _replace_hunt_search_for_scope(
+            db,
+            user_id=current_user.id,
+            character_id=character_id,
+        )
 
     entry = UserActivity(
         user_id=current_user.id,
