@@ -1,0 +1,39 @@
+/* Experimental Cyclopedia result density.
+ *
+ * Mirrors Tailwind's:
+ *   grid grid-cols-2 gap-6 md:grid-cols-4 lg:grid-cols-6 xl:grid-cols-8
+ *
+ * This intentionally ignores Compact/Wide layout mode. Previews are floating,
+ * so opening one must not change the result-grid column contract.
+ */
+
+[data-workspace='cyclopedia'] .grid:has(> [data-cyclopedia-result]),
+[data-workspace='cyclopedia'] .loot-cyclopedia-grid,
+[data-workspace='cyclopedia'] .cyclopedia-quest-grid {
+  grid-template-columns: repeat(2, minmax(0, 1fr)) !important;
+  gap: 1.5rem !important;
+}
+
+@media (min-width: 768px) {
+  [data-workspace='cyclopedia'] .grid:has(> [data-cyclopedia-result]),
+  [data-workspace='cyclopedia'] .loot-cyclopedia-grid,
+  [data-workspace='cyclopedia'] .cyclopedia-quest-grid {
+    grid-template-columns: repeat(4, minmax(0, 1fr)) !important;
+  }
+}
+
+@media (min-width: 1024px) {
+  [data-workspace='cyclopedia'] .grid:has(> [data-cyclopedia-result]),
+  [data-workspace='cyclopedia'] .loot-cyclopedia-grid,
+  [data-workspace='cyclopedia'] .cyclopedia-quest-grid {
+    grid-template-columns: repeat(6, minmax(0, 1fr)) !important;
+  }
+}
+
+@media (min-width: 1280px) {
+  [data-workspace='cyclopedia'] .grid:has(> [data-cyclopedia-result]),
+  [data-workspace='cyclopedia'] .loot-cyclopedia-grid,
+  [data-workspace='cyclopedia'] .cyclopedia-quest-grid {
+    grid-template-columns: repeat(8, minmax(0, 1fr)) !important;
+  }
+}
