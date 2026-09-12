@@ -22,6 +22,7 @@
 @import './styles/map-workspace.css';
 @import './styles/quest-hunt-map-polish.css';
 @import './styles/hunt-planner-layout.css';
+@import './styles/cyclopedia-preview-wide-relative.css';
 
 /* Map workspace is isolated from legacy presentation aliases while it migrates
    to the shared semantic design-system contract. */
