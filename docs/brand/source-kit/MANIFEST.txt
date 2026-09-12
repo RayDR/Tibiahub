@@ -1,0 +1,9 @@
+Included folders
+- logos/main
+- logos/alternates
+- icons/navigation
+- icons/sections
+- page-titles
+- module-assets
+- ui-concepts
+- docs
