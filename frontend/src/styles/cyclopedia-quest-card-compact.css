@@ -1,0 +1,101 @@
+/* Compact Quest library cards after removing the large decorative artwork block. */
+
+.cyclopedia-quest-grid {
+  align-items: stretch;
+  gap: 0.625rem;
+}
+
+.cyclopedia-quest-card {
+  min-height: 14.75rem;
+}
+
+.quest-card-corner {
+  top: 0.7rem;
+  left: 0.75rem;
+}
+
+.quest-card-open {
+  top: 0.45rem;
+  right: 0.45rem;
+  width: 1.75rem;
+  height: 1.75rem;
+}
+
+.quest-card-body {
+  gap: 0.55rem;
+  padding: 2.9rem 0.8rem 0.75rem;
+}
+
+.quest-card-body h3 {
+  font-size: 0.98rem;
+  line-height: 1.22;
+}
+
+.quest-card-badge {
+  min-height: 1.2rem;
+  padding-inline: 0.4rem;
+  font-size: 0.6rem;
+}
+
+.quest-card-stat {
+  padding: 0.4rem 0.45rem;
+}
+
+.quest-card-stat span {
+  font-size: 0.62rem;
+}
+
+.quest-card-stat strong {
+  margin-top: 0.1rem;
+  font-size: 0.68rem;
+}
+
+.quest-card-meta {
+  gap: 0.45rem;
+  font-size: 0.68rem;
+}
+
+.quest-card-meta > span {
+  gap: 0.35rem;
+}
+
+.quest-card-summary {
+  min-height: 2.25rem;
+  font-size: 0.68rem;
+  line-height: 1.4;
+  -webkit-line-clamp: 2;
+}
+
+.quest-card-flags {
+  min-height: 1.45rem;
+  gap: 0.4rem;
+  padding-top: 0.4rem;
+  font-size: 0.64rem;
+}
+
+/* Quest browsing intentionally tops out at three cards per row. The wider
+ * layouts used to force five or six columns, which made the compact cards too
+ * narrow and harder to scan. */
+@media (min-width: 640px) {
+  .cyclopedia-quest-grid {
+    grid-template-columns: repeat(2, minmax(0, 1fr)) !important;
+  }
+}
+
+@media (min-width: 1280px) {
+  .cyclopedia-quest-grid,
+  html[data-layout='wide'] .cyclopedia-quest-grid,
+  html[data-layout='wide'] [data-cyclopedia-preview-host='true'][data-cyclopedia-preview-kind='quest'] .cyclopedia-quest-grid {
+    grid-template-columns: repeat(3, minmax(0, 1fr)) !important;
+  }
+}
+
+@media (max-width: 639px) {
+  .cyclopedia-quest-card {
+    min-height: 13.75rem;
+  }
+
+  .quest-card-body {
+    padding-top: 2.75rem;
+  }
+}
