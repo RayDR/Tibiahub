@@ -134,7 +134,7 @@ export default function CyclopediaPersonalHistoryStrip({
 }: {
   mode: CyclopediaPersonalHistoryMode;
 }) {
-  const { t, i18n } = useTranslation();
+  const { i18n } = useTranslation();
   const { isAuthenticated } = useAuth();
   const location = useLocation();
   const [items, setItems] = useState<CompactEntityStripItem[]>([]);
@@ -198,11 +198,9 @@ export default function CyclopediaPersonalHistoryStrip({
 
   if (items.length === 0) return null;
 
-  const title = t('cyclopedia.cards.recentlyViewed', {
-    defaultValue: i18n.resolvedLanguage?.startsWith('es')
-      ? 'Vistos recientemente'
-      : 'Recently viewed',
-  });
+  const title = i18n.resolvedLanguage?.startsWith('es')
+    ? 'Recientes'
+    : 'Recent';
 
   return (
     <div data-cyclopedia-context="recent">
