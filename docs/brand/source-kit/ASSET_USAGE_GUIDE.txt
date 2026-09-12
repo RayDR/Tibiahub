@@ -1,0 +1,39 @@
+TibiaHub Brand Kit v2
+
+Recommended usage
+=================
+
+Can the current resources be used in the primary navbar?
+- Yes, the current PNG assets are usable immediately for prototype and production if needed.
+- For the smallest navbar icons and any UI that must stay crisp on every DPI/theme, SVG redraws are still recommended later.
+- Use PNGs now as the approved visual reference set; convert/redraw to SVG afterward for the final UI system.
+
+Primary navbar icon suggestions
+-------------------------------
+- home.png               -> Home
+- cyclopedia.png         -> Cyclopedia
+- hunt_planner.png       -> Hunt Planner
+- map.png                -> Map
+- guild.png              -> Guild
+- search.png             -> Global Search
+- character_selector.png -> Character selector / chooser
+- loot.png               -> Loot
+- quest.png              -> Quest
+- hunt_zone.png          -> Hunt Zone
+- npc.png                -> NPC
+
+Title / hero asset suggestions
+------------------------------
+- cyclopedia_title_asset.png   -> Cyclopedia header/title icon
+- hunt_planner_title_asset.png -> Hunt Planner header/title icon
+- map_title_asset.png          -> Maps header/title icon
+- guild_title_asset.png        -> Guild header/title icon
+- quest_title_asset.png        -> Quests header/title icon
+- hunt_zone_title_asset.png    -> Hunt Zones header/title icon
+- loot_title_asset.png         -> Loot header/title icon
+- npc_title_asset.png          -> NPCs header/title icon
+
+Notes
+-----
+- The current kit is image-based. SVG versions are not included yet.
+- For final system consistency, treat these files as the canonical art direction references for a later SVG pass.

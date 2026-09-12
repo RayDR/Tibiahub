@@ -36,7 +36,7 @@ export default function AppShell({ children, dataVersion }: { children: ReactNod
   const isCyclopediaWorkspace = pathname === '/cyclopedia';
   const showWorldAmbience = !pathname.startsWith('/admin');
 
-  return <div className={`app-shell relative flex min-h-screen flex-col text-content-primary ${isCyclopediaWorkspace ? 'app-shell-cyclopedia' : ''}`} data-workspace={isCyclopediaWorkspace ? 'cyclopedia' : undefined}>
+  return <div className={`app-shell relative flex min-h-screen flex-col text-content-primary}`} data-workspace={isCyclopediaWorkspace ? 'cyclopedia' : undefined}>
     {showWorldAmbience ? <>
       <div
         aria-hidden="true"
@@ -47,7 +47,7 @@ export default function AppShell({ children, dataVersion }: { children: ReactNod
     </> : null}
     <Navigation />
     <div className={`app-shell-main relative flex min-h-0 flex-1 flex-col ${isMapWorkspace ? 'app-shell-main-map' : ''}`}>
-      {context && !isMapWorkspace && !isCyclopediaWorkspace ? <Container><nav className="app-context-bar gap-1 text-xs text-content-muted" aria-label={t('shell.breadcrumbs')}>
+      {context && !isMapWorkspace ? <Container><nav className="app-context-bar gap-1 text-xs text-content-muted" aria-label={t('shell.breadcrumbs')}>
         <Link to="/" className="inline-flex min-h-9 items-center gap-1 rounded px-1 hover:text-content-primary"><Home className="size-3.5" /><span className="sr-only">{t('nav.home')}</span></Link>
         <ChevronRight className="size-3.5" aria-hidden="true" />
         {context.parent ? <><Link to={context.parent.to} className="rounded px-1 hover:text-content-primary">{context.parent.label}</Link><ChevronRight className="size-3.5" aria-hidden="true" /></> : null}
