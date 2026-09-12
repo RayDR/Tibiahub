@@ -51,10 +51,43 @@
   scrollbar-width: none;
 }
 
-.app-navbar-global-search .app-global-search-results::-webkit-scrollbar {
+.app-navbar-global-search .app-global-search-results::-webkit-scrollbar,
+.app-global-search-results--compact::-webkit-scrollbar {
   display: none;
   width: 0;
   height: 0;
+}
+
+/* Compact content mode keeps the global search as a single utility icon.
+ * The input expands only when invoked (or via Ctrl/Cmd+K), freeing horizontal
+ * space for authenticated navigation without removing search capability. */
+.app-navbar-global-search--compact {
+  z-index: var(--z-dropdown);
+}
+
+.app-global-search-compact-panel {
+  z-index: var(--z-dropdown);
+  width: clamp(18rem, 42vw, 34rem);
+  min-width: 0;
+  max-width: calc(100vw - 1.5rem);
+  overflow: hidden;
+}
+
+.app-global-search-results--compact {
+  max-height: min(62dvh, 30rem);
+  overflow-x: hidden;
+  overflow-y: auto;
+  overscroll-behavior: contain;
+  -ms-overflow-style: none;
+  scrollbar-width: none;
+}
+
+[data-layout='compact'] .app-nav-grid {
+  gap: var(--space-2);
+}
+
+[data-layout='compact'] .app-nav-utilities {
+  min-width: 0;
 }
 
 @media (min-width: 1024px) {
@@ -68,7 +101,18 @@
 }
 
 @media (max-width: 1279px) {
-  .app-navbar-global-search {
+  .app-navbar-global-search:not(.app-navbar-global-search--compact) {
     width: min(16rem, 24vw);
+  }
+}
+
+@media (max-width: 639px) {
+  .app-global-search-compact-panel {
+    position: fixed;
+    top: calc(var(--app-nav-clearance) - .2rem);
+    right: var(--space-3);
+    left: var(--space-3);
+    width: auto;
+    max-width: none;
   }
 }

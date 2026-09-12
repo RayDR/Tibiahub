@@ -4,6 +4,7 @@ import { ChevronDown } from 'lucide-react';
 import { useTranslation } from 'react-i18next';
 
 import { useAuth } from '../context/AuthContext';
+import { useAppearance } from '../context/AppearanceContext';
 import { cyclopediaSections } from '../config/cyclopediaSections';
 import LanguageSwitcher from './LanguageSwitcher';
 import NotificationIndicator from './NotificationIndicator';
@@ -33,6 +34,8 @@ export default function Navigation() {
   const navigate = useNavigate();
   const { t } = useTranslation();
   const { isAuthenticated, user } = useAuth();
+  const { layout } = useAppearance();
+  const compactLayout = layout === 'compact';
   const [cyclopediaMenuOpen, setCyclopediaMenuOpen] = useState(false);
   const [presentation, setPresentation] = useState<SitePresentationSettings>(DEFAULT_SITE_PRESENTATION);
   const menuRef = useRef<HTMLDivElement | null>(null);
@@ -90,7 +93,7 @@ export default function Navigation() {
               <span className="hidden font-serif text-sm font-bold text-content-primary sm:inline"><span className="text-primary">Tibia</span>Hub</span>
             </Link>
 
-            <div className="app-nav-center hidden min-w-0 items-center gap-3 lg:flex" data-alignment={presentation.navbar_alignment}>
+            <div className="app-nav-center hidden min-w-0 items-center gap-3 lg:flex" data-alignment={presentation.navbar_alignment} data-layout={layout}>
               <nav className="app-nav-links flex min-w-0 items-center gap-1" aria-label={t('shell.primaryNavigation')} data-alignment={presentation.navbar_alignment}>
                 {primaryItems.map(item => {
                   if (item.path === '/cyclopedia') {
@@ -112,11 +115,12 @@ export default function Navigation() {
                 })}
               </nav>
 
-              {presentation.navbar_show_global_search ? <GlobalCyclopediaSearch className="app-navbar-global-search w-[min(22rem,28vw)] shrink-0" /> : null}
+              {presentation.navbar_show_global_search && !compactLayout ? <GlobalCyclopediaSearch className="app-navbar-global-search w-[min(22rem,28vw)] shrink-0" /> : null}
             </div>
 
             <div className="app-nav-utilities flex shrink-0 items-center gap-0.5">
-              {isAuthenticated ? <CharacterSwitcher /> : null}
+              {presentation.navbar_show_global_search && compactLayout ? <GlobalCyclopediaSearch compact /> : null}
+              {isAuthenticated && !compactLayout ? <CharacterSwitcher /> : null}
               <LanguageSwitcher />
               {isAuthenticated ? <NotificationIndicator /> : null}
               <ThemeSwitcher />
