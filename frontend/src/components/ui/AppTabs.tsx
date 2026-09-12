@@ -57,7 +57,9 @@ const AppTabs: React.FC<AppTabsProps> = ({
     ? activeKey as CyclopediaMode
     : null;
   const showPersonalHistory =
-    cyclopediaMode != null && cyclopediaMode !== 'creatures';
+    cyclopediaMode != null &&
+    cyclopediaMode !== 'creatures' &&
+    cyclopediaMode !== 'bosses';
 
   useLayoutEffect(() => {
     if (!hasCanonicalCyclopediaChrome) {
