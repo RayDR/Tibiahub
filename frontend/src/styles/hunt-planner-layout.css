@@ -2,6 +2,30 @@
    Keep the toolbar stable at the full planner-content width. The preview only
    shares horizontal space with the results/session area below the toolbar. */
 
+/* The planner close control must not float beside the preview panel. The rich
+   preview establishes a BFC via overflow:hidden, so a floated close button makes
+   the entire panel shrink for its full height and leaves the empty right gutter
+   visible in the planner. Keep the control sticky, but remove it from float-based
+   width negotiation and pull its normal-flow footprint back out. */
+.hunt-planner-preview__close {
+  float: none;
+  margin: var(--space-2) var(--space-2) calc(-2.25rem - var(--space-2)) auto;
+}
+
+.hunt-planner-preview > .hunt-zone-preview-panel,
+.hunt-planner-preview > .creature-preview-panel {
+  width: 100%;
+  max-width: none;
+  min-width: 0;
+  box-sizing: border-box;
+}
+
+/* Reserve only header content space for the overlaying close control; the
+   preview surface itself still occupies the full column width. */
+.hunt-planner-preview .hunt-zone-preview-identity {
+  padding-right: 4rem;
+}
+
 @media (min-width: 1180px) {
   .hunt-planner-workspace {
     grid-template-columns: minmax(17.5rem, 20rem) minmax(0, 1fr);
