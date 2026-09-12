@@ -25,6 +25,8 @@ const imageFallback = read('src/components/ImageWithFallback.tsx');
 const itemDetail = read('src/pages/ItemDetailPage.tsx');
 const tabs = read('src/components/ui/AppTabs.tsx');
 const api = read('src/services/api.ts');
+const indexCss = read('src/index.css');
+const previewWide = read('src/styles/cyclopedia-preview-wide-relative.css');
 
 assertIncludes(
   app,
@@ -100,6 +102,27 @@ assertExcludes(
   'Cyclopedia must not perform the redundant Loot trending GET.',
 );
 
+assertIncludes(
+  indexCss,
+  "@import './styles/cyclopedia-preview-wide-relative.css';",
+  'Wide card-relative preview rules must load globally.',
+);
+assertIncludes(
+  previewWide,
+  "left: calc(var(--cyclopedia-preview-card-right) + var(--space-3));",
+  'Wide left-half selections must open the preview to the card right.',
+);
+assertIncludes(
+  previewWide,
+  "right: calc(100vw - var(--cyclopedia-preview-card-left) + var(--space-3));",
+  'Wide right-half selections must open the preview to the card left.',
+);
+assertIncludes(
+  previewWide,
+  'padding-left: 0 !important;',
+  'Wide preview must not reserve a permanent viewport-edge rail.',
+);
+
 console.log(
-  'Cyclopedia shell polish checks passed: route state, cache reuse, media failure dedupe, personal history and Loot dedupe are wired.',
+  'Cyclopedia shell polish checks passed: route state, cache reuse, media failure dedupe, personal history, Loot dedupe and card-relative Wide preview are wired.',
 );
