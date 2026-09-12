@@ -20,6 +20,7 @@
 @import './styles/hunt-planner.css';
 @import './styles/quest-codex.css';
 @import './styles/map-workspace.css';
+@import './styles/quest-hunt-map-polish.css';
 
 /* Map workspace is isolated from legacy presentation aliases while it migrates
    to the shared semantic design-system contract. */
