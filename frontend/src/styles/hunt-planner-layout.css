@@ -1,0 +1,64 @@
+/* Hunt Planner desktop composition -----------------------------------------
+   Keep the toolbar stable at the full planner-content width. The preview only
+   shares horizontal space with the results/session area below the toolbar. */
+
+@media (min-width: 1180px) {
+  .hunt-planner-workspace {
+    grid-template-columns: minmax(17.5rem, 20rem) minmax(0, 1fr);
+    column-gap: var(--space-3);
+    row-gap: 0;
+  }
+
+  /* Promote the center children into the workspace grid without changing the
+     semantic DOM structure in HuntRecommendationsPage. */
+  .hunt-planner-center {
+    display: contents;
+  }
+
+  .hunt-planner-setup {
+    grid-column: 1;
+    grid-row: 1 / span 3;
+  }
+
+  .hunt-planner-toolbar {
+    grid-column: 2;
+    grid-row: 1;
+    min-width: 0;
+  }
+
+  .hunt-planner-results {
+    grid-column: 2;
+    grid-row: 2;
+    min-width: 0;
+  }
+
+  .hunt-planner-schedule {
+    grid-column: 2;
+    grid-row: 3;
+    min-width: 0;
+  }
+
+  .hunt-planner-preview {
+    grid-column: 3;
+    grid-row: 2 / span 2;
+    align-self: start;
+  }
+
+  .hunt-planner-workspace:has(> .hunt-planner-preview) {
+    grid-template-columns: minmax(17.5rem, 20rem) minmax(30rem, 1fr) minmax(21rem, 26rem);
+  }
+
+  .hunt-planner-workspace:has(> .hunt-planner-preview) .hunt-planner-toolbar {
+    grid-column: 2 / 4;
+  }
+}
+
+@media (min-width: 1440px) {
+  .hunt-planner-workspace {
+    grid-template-columns: minmax(18rem, 20.5rem) minmax(0, 1fr);
+  }
+
+  .hunt-planner-workspace:has(> .hunt-planner-preview) {
+    grid-template-columns: minmax(18rem, 20.5rem) minmax(34rem, 1fr) minmax(23rem, 27rem);
+  }
+}
