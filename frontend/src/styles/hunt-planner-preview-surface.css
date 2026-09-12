@@ -1,0 +1,16 @@
+/* Hunt Planner preview surface alignment.
+ *
+ * The close control belongs to the preview chrome, but it must not reserve a
+ * separate row above HuntZonePreviewPanel. Keep it sticky for long previews
+ * while cancelling its flow height so the panel surface starts at the top of
+ * the preview column and fully covers the background.
+ */
+.hunt-planner-preview__close {
+  float: none;
+  margin: 0 var(--space-2) -2.25rem auto;
+  transform: translateY(var(--space-2));
+}
+
+.hunt-planner-preview > .hunt-zone-preview-panel {
+  width: 100%;
+}
