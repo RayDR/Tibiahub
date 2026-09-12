@@ -139,6 +139,8 @@ export default function TibiaMapPage() {
   const [mapLoading, setMapLoading] = useState(true);
   const [searchLoading, setSearchLoading] = useState(false);
   const [searchError, setSearchError] = useState(false);
+  const [searchPanelOpen, setSearchPanelOpen] = useState(() => Boolean((params.get('q') || '').trim().length >= 2));
+  const [selectedCity, setSelectedCity] = useState('Thais');
   const [sidebarOpen, setSidebarOpen] = useState(() =>
     typeof window !== 'undefined' && window.matchMedia('(min-width: 1024px)').matches,
   );
@@ -157,10 +159,10 @@ export default function TibiaMapPage() {
     subtitle: 'Explora el mundo de Tibia. Descubre ubicaciones, planea tus hunts y encuentra tu próxima aventura.',
     motto: 'EL CONOCIMIENTO\nIMPULSA GRANDES\nAVENTURAS',
     layers: 'Capas', legend: 'Leyenda', mapLayers: 'Capas del mapa', filters: 'Filtros', quickFilters: 'Filtros rápidos',
-    reset: 'Restablecer', routes: 'Rutas', recent: 'Recientes', allLayers: 'Mostrar todo', huntsOnly: 'Hunts', questsOnly: 'Quests', towns: 'Lugares',
+    reset: 'Restablecer', routes: 'Rutas', recent: 'Recientes', allLayers: 'Mostrar todo', huntsOnly: 'Hunts', questsOnly: 'Quests', towns: 'Lugares', city: 'Ciudad',
     mapSearch: 'Buscar en el mapa…', coordinates: 'Coordenadas', copyCoordinates: 'Copiar coordenadas', copied: 'Coordenadas copiadas',
     openDetails: 'Abrir detalles', nearby: 'Cerca de aquí', noNearby: 'No hay resultados cercanos en la vista cargada.',
-    selectedHint: 'Selecciona un marcador o busca una entidad para ver su información.',
+    selectedHint: 'Selecciona un marcador o busca una entidad para ver su información.', searchResults: 'Resultados de búsqueda', hideSearchResults: 'Ocultar resultados', showSearchResults: 'Mostrar resultados',
     knowledge: 'Datos documentados', creatures: 'Criaturas', details: 'Detalles', floor: 'Piso', mapData: 'Datos del mapa',
     huntZones: 'Hunts', npcs: 'NPCs', quests: 'Quests', other: 'POIs', distance: 'casillas',
     location: 'Ubicación', loading: 'Cargando capa…', unavailable: 'Sin datos documentados',
@@ -168,16 +170,17 @@ export default function TibiaMapPage() {
     subtitle: "Explore Tibia's world. Discover locations, plan your hunts, and find your next adventure.",
     motto: 'KNOWLEDGE\nFUELS GREATER\nADVENTURES',
     layers: 'Layers', legend: 'Legend', mapLayers: 'Map Layers', filters: 'Filters', quickFilters: 'Quick Filters',
-    reset: 'Reset', routes: 'Routes', recent: 'Recent', allLayers: 'Show all', huntsOnly: 'Hunts', questsOnly: 'Quests', towns: 'Places',
+    reset: 'Reset', routes: 'Routes', recent: 'Recent', allLayers: 'Show all', huntsOnly: 'Hunts', questsOnly: 'Quests', towns: 'Places', city: 'City',
     mapSearch: 'Search the map…', coordinates: 'Coordinates', copyCoordinates: 'Copy Coordinates', copied: 'Coordinates copied',
     openDetails: 'Open details', nearby: 'Nearby', noNearby: 'No nearby results in the currently loaded view.',
-    selectedHint: 'Select a marker or search for an entity to inspect it.',
+    selectedHint: 'Select a marker or search for an entity to inspect it.', searchResults: 'Search Results', hideSearchResults: 'Hide results', showSearchResults: 'Show results',
     knowledge: 'Documented data', creatures: 'Creatures', details: 'Details', floor: 'Floor', mapData: 'Map data',
     huntZones: 'Hunts', npcs: 'NPCs', quests: 'Quests', other: 'POIs', distance: 'tiles',
     location: 'Location', loading: 'Loading layer…', unavailable: 'No documented data',
   }, [isSpanish]);
 
   const noResultsLabel = isSpanish ? 'No se encontraron resultados.' : 'No results found.';
+  const cityOptions = useMemo(() => [...(bootstrap?.towns || [])].sort((a, b) => a.name.localeCompare(b.name)), [bootstrap?.towns]);
 
   const replaceParams = (next: URLSearchParams) => {
     internalParamsUpdate.current = next.toString();
@@ -196,7 +199,9 @@ export default function TibiaMapPage() {
       internalParamsUpdate.current = null;
       return;
     }
-    setQuery(params.get('q') || params.get('slug')?.replace(/-/g, ' ') || '');
+    const nextQuery = params.get('q') || params.get('slug')?.replace(/-/g, ' ') || '';
+    setQuery(nextQuery);
+    setSearchPanelOpen(nextQuery.trim().length >= 2);
     setFloor(initialFloor(params.get('floor')));
     setResults([]);
     setSearchError(false);
@@ -217,6 +222,12 @@ export default function TibiaMapPage() {
       .finally(() => { if (current) setMapLoading(false); });
     return () => { current = false; controller.abort(); };
   }, [floor]);
+
+  useEffect(() => {
+    if (!cityOptions.length) return;
+    if (cityOptions.some((town) => town.name === selectedCity)) return;
+    setSelectedCity(cityOptions.find((town) => town.name.toLocaleLowerCase() === 'thais')?.name || cityOptions[0].name);
+  }, [cityOptions, selectedCity]);
 
   const selectResult = (
     row: TibiaMapResult | null,
@@ -418,7 +429,6 @@ export default function TibiaMapPage() {
 
   const map = bootstrap?.world_map;
   const selectedOnAnotherFloor = focusedEvidence?.z != null && focusedEvidence.z !== floor;
-  const defaultResults = bootstrap?.default_results?.length ? bootstrap.default_results : bootstrap?.towns || [];
   const failedLayers = [...activeLayers].filter((layer) => layerStates[layer] === 'error');
   const loadingLayers = [...activeLayers].filter((layer) => layerStates[layer] === 'loading');
   const previewValues = Object.entries(selected?.preview || {}).filter(([, value]) =>
@@ -473,6 +483,7 @@ export default function TibiaMapPage() {
     replaceParams(next);
     setSearchRequestedSelection(requestedMapSelection(next));
     setQuery(target.name);
+    setSearchPanelOpen(true);
     clearSelectionState();
     setSidebarOpen(true);
   };
@@ -485,12 +496,14 @@ export default function TibiaMapPage() {
     if (value.trim()) next.set('q', value);
     replaceParams(next);
     if (value.trim()) setSidebarOpen(true);
+    setSearchPanelOpen(value.trim().length >= 2);
   };
 
   const clearSearch = () => {
     setQuery('');
     setResults([]);
     setSearchError(false);
+    setSearchPanelOpen(false);
     setSearchRequestedSelection(null);
     clearSelectionState();
     replaceParams(new URLSearchParams({ floor: String(floor) }));
@@ -506,8 +519,9 @@ export default function TibiaMapPage() {
     setActiveLayers(layer === 'all' ? new Set(layers) : new Set([layer]));
   };
 
-  const applyRookgaardSearch = () => {
-    updateSearch('Rookgaard');
+  const applyCitySearch = (name: string) => {
+    setSelectedCity(name);
+    if (name) updateSearch(name);
   };
 
   const copyCoordinates = async () => {
@@ -525,7 +539,7 @@ export default function TibiaMapPage() {
     return <button
       key={row.id}
       type="button"
-      onClick={() => selectResult(row)}
+      onClick={() => { selectResult(row); setSearchPanelOpen(false); }}
       className="map-result-row"
       data-selected={selected?.id === row.id}
     >
@@ -574,6 +588,7 @@ export default function TibiaMapPage() {
   const selectedTypeLabel = selected
     ? t(`map.layers.${selected.entity_type}`, { defaultValue: selected.entity_type.replace(/_/g, ' ') })
     : '';
+  const searchSidebarVisible = searchPanelOpen && query.trim().length >= 2;
 
   return <div className="tibia-map-page" aria-label={t('map.title')}>
     <section className="map-workspace-hero">
@@ -587,7 +602,7 @@ export default function TibiaMapPage() {
       <p className="map-workspace-hero__motto">{copy.motto}</p>
     </section>
 
-    <div className={`map-workspace ${sidebarOpen ? '' : 'map-workspace--sidebar-collapsed'}`}>
+    <div className={`map-workspace ${sidebarOpen ? '' : 'map-workspace--sidebar-collapsed'} ${searchSidebarVisible ? 'map-workspace--search-open' : ''}`}>
       {sidebarOpen ? <aside className="map-workspace-sidebar" aria-label={t('map.sidebar')}>
         <div className="map-sidebar-tabs" role="tablist" aria-label={copy.mapLayers}>
           <button type="button" role="tab" aria-selected={sidebarTab === 'layers'} data-active={sidebarTab === 'layers'} onClick={() => setSidebarTab('layers')}><Layers3 className="size-4" />{copy.layers}</button>
@@ -597,11 +612,27 @@ export default function TibiaMapPage() {
         <div className="map-sidebar-scroll">
           <label className="map-search-field">
             <Search className="size-4" />
-            <input value={query} onChange={(event) => updateSearch(event.target.value)} placeholder={t('map.searchPlaceholder')} aria-label={t('map.searchLabel')} />
+            <input value={query} onChange={(event) => updateSearch(event.target.value)} onFocus={() => { if (query.trim().length >= 2) setSearchPanelOpen(true); }} placeholder={t('map.searchPlaceholder')} aria-label={t('map.searchLabel')} />
+            {query.trim().length >= 2 && !searchPanelOpen ? <button type="button" onClick={() => setSearchPanelOpen(true)} aria-label={copy.showSearchResults} title={copy.showSearchResults}><PanelLeftOpen className="size-4" /></button> : null}
             {query ? <button type="button" onClick={clearSearch} aria-label={t('a11y.clearSearch')}><X className="size-4" /></button> : null}
           </label>
 
           {sidebarTab === 'layers' ? <>
+            <section className="map-sidebar-section map-quick-filters--primary">
+              <h2>{copy.quickFilters}</h2>
+              <div className="map-quick-filters">
+                <button type="button" onClick={() => applyQuickLayer('all')}><Sparkles className="size-3.5" />{copy.allLayers}</button>
+                <button type="button" onClick={() => applyQuickLayer('hunt_zone')}><MapPinned className="size-3.5" />{copy.huntsOnly}</button>
+                <button type="button" onClick={() => applyQuickLayer('quest')}><BookOpenCheck className="size-3.5" />{copy.questsOnly}</button>
+                <label className="map-city-filter">
+                  <MapPin className="size-3.5 text-primary" aria-hidden="true" />
+                  <select value={selectedCity} onChange={(event) => applyCitySearch(event.target.value)} aria-label={copy.city}>
+                    {cityOptions.map((town) => <option key={town.id} value={town.name}>{town.name}</option>)}
+                  </select>
+                </label>
+              </div>
+            </section>
+
             <section className="map-sidebar-section">
               <header><h2>{copy.mapLayers}</h2><button type="button" onClick={resetLayers}>{copy.reset}</button></header>
               <div className="map-layer-list">
@@ -632,16 +663,6 @@ export default function TibiaMapPage() {
               </div>
             </section>
 
-            <section className="map-sidebar-section">
-              <h2>{copy.quickFilters}</h2>
-              <div className="map-quick-filters">
-                <button type="button" onClick={() => applyQuickLayer('all')}><Sparkles className="size-3.5" />{copy.allLayers}</button>
-                <button type="button" onClick={() => applyQuickLayer('hunt_zone')}><MapPinned className="size-3.5" />{copy.huntsOnly}</button>
-                <button type="button" onClick={() => applyQuickLayer('quest')}><BookOpenCheck className="size-3.5" />{copy.questsOnly}</button>
-                <button type="button" onClick={applyRookgaardSearch}><MapPin className="size-3.5" />Rookgaard</button>
-              </div>
-            </section>
-
             {recentTargets.length ? <section className="map-sidebar-section">
               <h2 className="flex items-center gap-1.5"><Clock3 className="size-3.5" />{copy.recent}</h2>
               <div className="map-recent-list">{recentTargets.map((target) => <button key={target.id} type="button" onClick={() => openRecent(target)}><span>{target.name}</span><small>{t(`map.layers.${target.entityType}`, { defaultValue: target.entityType })}</small></button>)}</div>
@@ -655,19 +676,19 @@ export default function TibiaMapPage() {
             <div><Route className="size-4 text-primary" /><span>{copy.routes}</span></div>
             <p>{isSpanish ? 'Los marcadores agrupados combinan entidades cercanas al alejar el mapa.' : 'Grouped markers combine nearby entities when the map is zoomed out.'}</p>
           </section>}
+        </div>
+      </aside> : null}
 
-          {query.trim() ? <section className="map-sidebar-section map-search-results" aria-live="polite">
-            <h2>{t('map.searchResults')}</h2>
-            {searchLoading ? <p className="map-sidebar-message">{t('map.loading')}</p> : null}
-            {searchError ? <p className="map-sidebar-message text-danger"><AlertTriangle className="size-4" />{t('map.searchError')}</p> : null}
-            {!searchLoading && !searchError && query.trim().length >= 2 && !visible.length ? <p className="map-sidebar-message">{noResultsLabel}</p> : null}
-            {!searchLoading && query.trim().length >= 2 ? visible.map(renderResult) : null}
-          </section> : null}
-
-          {!query.trim() && defaultResults.length ? <section className="map-sidebar-section map-search-results map-default-locations">
-            <h2>{copy.towns}</h2>
-            {defaultResults.slice(0, 8).map(renderResult)}
-          </section> : null}
+      {searchSidebarVisible ? <aside className="map-search-sidebar" aria-label={copy.searchResults}>
+        <header className="map-search-sidebar__header">
+          <h2>{copy.searchResults}</h2>
+          <button type="button" onClick={() => setSearchPanelOpen(false)} aria-label={copy.hideSearchResults} title={copy.hideSearchResults}><X className="size-4" /></button>
+        </header>
+        <div className="map-search-sidebar__body" aria-live="polite">
+          {searchLoading ? <p className="map-sidebar-message">{t('map.loading')}</p> : null}
+          {searchError ? <p className="map-sidebar-message text-danger"><AlertTriangle className="size-4" />{t('map.searchError')}</p> : null}
+          {!searchLoading && !searchError && !visible.length ? <p className="map-sidebar-message">{noResultsLabel}</p> : null}
+          {!searchLoading ? visible.map(renderResult) : null}
         </div>
       </aside> : null}
 
@@ -676,7 +697,8 @@ export default function TibiaMapPage() {
 
         <div className="map-canvas-search">
           <Search className="size-4" />
-          <input value={query} onChange={(event) => updateSearch(event.target.value)} placeholder={copy.mapSearch} aria-label={t('map.searchLabel')} />
+          <input value={query} onChange={(event) => updateSearch(event.target.value)} onFocus={() => { if (query.trim().length >= 2) setSearchPanelOpen(true); }} placeholder={copy.mapSearch} aria-label={t('map.searchLabel')} />
+          {query.trim().length >= 2 && !searchPanelOpen ? <button type="button" onClick={() => setSearchPanelOpen(true)} aria-label={copy.showSearchResults} title={copy.showSearchResults}><PanelLeftOpen className="size-4" /></button> : null}
           {query ? <button type="button" onClick={clearSearch} aria-label={t('a11y.clearSearch')}><X className="size-4" /></button> : null}
         </div>
 
