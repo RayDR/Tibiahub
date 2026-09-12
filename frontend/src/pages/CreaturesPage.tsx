@@ -1301,13 +1301,6 @@ const CreaturesPage: React.FC = () => {
             ) : null}
           </AppCard>
         </div>
-
-        {!searchTerm.trim() && !selectedResult.trim() && !creatureCategory && !itemCategory && !npcCategory ? (
-          mode === 'creatures' ? <CompactEntityStrip title={t('cyclopedia.discovery.mostPopularCreatures')} items={topPreviewCards} variant="rail" nudgeSessionKey="popular-creatures" linkState={cyclopediaRouteState} onNavigate={persistCyclopediaState} />
-          : mode === 'bosses' ? <CompactEntityStrip title={t('cyclopedia.discovery.popularBosses')} items={topPreviewCards} variant="rail" nudgeSessionKey="popular-bosses" linkState={cyclopediaRouteState} onNavigate={persistCyclopediaState} />
-          : mode === 'items' ? <div className="space-y-4 rounded-2xl border border-line bg-surface-raised/60 p-4"><CompactEntityStrip title={t('cyclopedia.discovery.popularLoot')} items={topPreviewCards} variant="rail" nudgeSessionKey="popular-loot" linkState={cyclopediaRouteState} onNavigate={persistCyclopediaState} /><CompactEntityStrip title={t('cyclopedia.discovery.trendingLoot')} items={lootTrendingPreviewCards} variant="rail" nudgeSessionKey="trending-loot" linkState={cyclopediaRouteState} onNavigate={persistCyclopediaState} /></div>
-          : null
-        ) : null}
       </div>
 
       {mode === 'quests' ? <QuestLibraryShelves linkState={cyclopediaRouteState} onNavigate={persistCyclopediaState} /> : null}
