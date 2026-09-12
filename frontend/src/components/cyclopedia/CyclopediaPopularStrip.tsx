@@ -9,6 +9,7 @@ import {
   creaturesApi,
   huntZonesApi,
   itemsApi,
+  namedKnowledgeApi,
   questsApi,
 } from '../../services/api';
 import { discoveryApi } from '../../services/discovery';
@@ -17,6 +18,7 @@ import {
   saveCyclopediaReturnTarget,
 } from '../../utils/cyclopediaNavigation';
 import { availableItemMediaUrl } from '../../utils/entityMedia';
+import { localNpcMediaUrl } from '../../utils/npcCyclopedia';
 
 export type CyclopediaPopularMode =
   | 'creatures'
@@ -26,13 +28,15 @@ export type CyclopediaPopularMode =
   | 'zones'
   | 'npcs';
 
+const POPULAR_ITEM_COUNT = 20;
+
 async function loadPopular(
   mode: CyclopediaPopularMode,
   signal: AbortSignal,
   dropsLabel: (count: number) => string,
 ): Promise<CompactEntityStripItem[]> {
   if (mode === 'creatures') {
-    const rows = await creaturesApi.getPopular(12, signal);
+    const rows = await creaturesApi.getPopular(POPULAR_ITEM_COUNT, signal);
     return rows.map((row) => ({
       id: `popular:creature:${row.id}`,
       name: row.name,
@@ -43,7 +47,7 @@ async function loadPopular(
   }
 
   if (mode === 'bosses') {
-    const rows = await creaturesApi.getPopularBosses(12, signal);
+    const rows = await creaturesApi.getPopularBosses(POPULAR_ITEM_COUNT, signal);
     return rows.map((row) => ({
       id: `popular:boss:${row.id}`,
       name: row.name,
@@ -54,7 +58,7 @@ async function loadPopular(
   }
 
   if (mode === 'items') {
-    const rows = await itemsApi.getPopular(12, signal);
+    const rows = await itemsApi.getPopular(POPULAR_ITEM_COUNT, signal);
     return rows.map((row) => ({
       id: `popular:item:${row.normalized_name}`,
       name: row.item_name,
@@ -65,7 +69,7 @@ async function loadPopular(
   }
 
   if (mode === 'quests') {
-    const rows = await questsApi.getHighlights(12, signal);
+    const rows = await questsApi.getHighlights(POPULAR_ITEM_COUNT, signal);
     return rows.map((row) => ({
       id: `popular:quest:${row.id || row.slug || row.name}`,
       name: row.name,
@@ -75,7 +79,7 @@ async function loadPopular(
   }
 
   if (mode === 'zones') {
-    const rows = await huntZonesApi.getHighlights(12, signal);
+    const rows = await huntZonesApi.getHighlights(POPULAR_ITEM_COUNT, signal);
     return rows.map((row) => ({
       id: `popular:zone:${row.id}`,
       name: row.name,
@@ -85,11 +89,13 @@ async function loadPopular(
     }));
   }
 
-  // NPC popularity is sourced only from the shared discovery read model so we
-  // do not mislabel an alphabetical directory page as "popular".
+  // Discovery-ranked NPCs stay first. If the discovery sample has fewer than
+  // twenty NPCs, fill the remaining visible rail with canonical directory rows
+  // so every populated Cyclopedia section can expose at least twenty entries.
   const discovery = await discoveryApi.load(signal);
   const seen = new Set<string>();
   const cards: CompactEntityStripItem[] = [];
+
   for (const row of [...discovery.trending, ...discovery.latest_knowledge]) {
     if ((row.entity_type || '').toLowerCase() !== 'npc') continue;
     const key = String(row.id || row.slug || row.name).trim();
@@ -102,8 +108,28 @@ async function loadPopular(
       to: `/npcs/${row.slug || row.id}`,
       imageUrl: row.image_url || undefined,
     });
-    if (cards.length >= 12) break;
+    if (cards.length >= POPULAR_ITEM_COUNT) return cards;
   }
+
+  const page = await namedKnowledgeApi.listNpcs(
+    { skip: 0, limit: POPULAR_ITEM_COUNT },
+    signal,
+  );
+
+  for (const row of page.items) {
+    const key = String(row.canonical_id || row.slug || row.id).trim();
+    if (!key || seen.has(key)) continue;
+    seen.add(key);
+    cards.push({
+      id: `popular:npc:${key}`,
+      name: row.name,
+      subtitle: row.occupation || row.location_name || undefined,
+      to: `/npcs/${row.slug || row.id}`,
+      imageUrl: localNpcMediaUrl(row.media) || undefined,
+    });
+    if (cards.length >= POPULAR_ITEM_COUNT) break;
+  }
+
   return cards;
 }
 
