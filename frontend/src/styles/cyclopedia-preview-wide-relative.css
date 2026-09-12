@@ -1,0 +1,95 @@
+/* Wide Cyclopedia previews follow the same card-relative placement model as
+   compact desktop. The preview overlays beside the selected card instead of
+   reserving a permanent viewport-edge rail or reflowing the result grid. */
+
+@media (min-width: 1024px) {
+  html[data-layout='wide'] [data-cyclopedia-preview-host='true'] {
+    padding-left: 0 !important;
+    padding-right: 0 !important;
+    transition: none !important;
+  }
+
+  html[data-layout='wide'] .cyclopedia-creature-preview-dock {
+    top: var(--cyclopedia-preview-anchor-top, var(--cyclopedia-preview-top));
+  }
+
+  /* In Wide, the workspace currently reports the nearest viewport edge in
+     data-preview-side. Invert that edge when positioning so the preview uses
+     the same opposite-half decision as Compact: left-side cards open right,
+     right-side cards open left. */
+  html[data-layout='wide'] .cyclopedia-creature-preview-dock[data-preview-side='left'] {
+    right: auto;
+    left: calc(var(--cyclopedia-preview-card-right) + var(--space-3));
+    width: min(29rem, calc(100vw - var(--cyclopedia-preview-card-right) - 2rem));
+  }
+
+  html[data-layout='wide'] .cyclopedia-creature-preview-dock[data-preview-side='right'] {
+    right: calc(100vw - var(--cyclopedia-preview-card-left) + var(--space-3));
+    left: auto;
+    width: min(29rem, calc(var(--cyclopedia-preview-card-left) - 2rem));
+  }
+}
+
+/* Keep Wide result density stable while the preview is open. */
+@media (min-width: 1440px) {
+  html[data-layout='wide'] [data-cyclopedia-preview-host='true']
+    .grid:has(> [data-cyclopedia-result] > .creature-browser-card) {
+    grid-template-columns: repeat(5, minmax(0, 1fr)) !important;
+  }
+
+  html[data-layout='wide'] [data-cyclopedia-preview-host='true'][data-cyclopedia-preview-kind='item']
+    .loot-cyclopedia-grid {
+    grid-template-columns: repeat(5, minmax(0, 1fr)) !important;
+  }
+
+  html[data-layout='wide'] [data-cyclopedia-preview-host='true'][data-cyclopedia-preview-kind='quest']
+    .cyclopedia-quest-grid {
+    grid-template-columns: repeat(4, minmax(0, 1fr)) !important;
+  }
+
+  html[data-layout='wide'] [data-cyclopedia-preview-host='true'][data-cyclopedia-preview-kind='zone']
+    .grid:has(> [data-cyclopedia-result] > .cyclopedia-zone-card) {
+    grid-template-columns: repeat(4, minmax(0, 1fr)) !important;
+  }
+}
+
+@media (min-width: 1600px) {
+  html[data-layout='wide'] [data-cyclopedia-preview-host='true']
+    .grid:has(> [data-cyclopedia-result] > .creature-browser-card) {
+    grid-template-columns: repeat(6, minmax(0, 1fr)) !important;
+  }
+
+  html[data-layout='wide'] [data-cyclopedia-preview-host='true'][data-cyclopedia-preview-kind='quest']
+    .cyclopedia-quest-grid {
+    grid-template-columns: repeat(5, minmax(0, 1fr)) !important;
+  }
+
+  html[data-layout='wide'] [data-cyclopedia-preview-host='true'][data-cyclopedia-preview-kind='zone']
+    .grid:has(> [data-cyclopedia-result] > .cyclopedia-zone-card) {
+    grid-template-columns: repeat(5, minmax(0, 1fr)) !important;
+  }
+}
+
+@media (min-width: 1800px) {
+  html[data-layout='wide'] [data-cyclopedia-preview-host='true'][data-cyclopedia-preview-kind='item']
+    .loot-cyclopedia-grid {
+    grid-template-columns: repeat(6, minmax(0, 1fr)) !important;
+  }
+}
+
+@media (min-width: 1920px) {
+  html[data-layout='wide'] [data-cyclopedia-preview-host='true']
+    .grid:has(> [data-cyclopedia-result] > .creature-browser-card) {
+    grid-template-columns: repeat(7, minmax(0, 1fr)) !important;
+  }
+
+  html[data-layout='wide'] [data-cyclopedia-preview-host='true'][data-cyclopedia-preview-kind='quest']
+    .cyclopedia-quest-grid {
+    grid-template-columns: repeat(6, minmax(0, 1fr)) !important;
+  }
+
+  html[data-layout='wide'] [data-cyclopedia-preview-host='true'][data-cyclopedia-preview-kind='zone']
+    .grid:has(> [data-cyclopedia-result] > .cyclopedia-zone-card) {
+    grid-template-columns: repeat(6, minmax(0, 1fr)) !important;
+  }
+}
