@@ -6,8 +6,8 @@ import { useTranslation } from 'react-i18next';
 import { TIBIAHUB_WORLD_BACKGROUND } from '../../assets/brand/brandBackground';
 import Navigation from '../Navigation';
 import { Container } from '../ui';
-import { SuggestImprovementLink } from '../feedback/GitHubFeedbackLink';
 import CyclopediaCreatureWorkspace from '../cyclopedia/CyclopediaCreatureWorkspace';
+import SiteFooter from './SiteFooter';
 
 function currentContext(pathname: string, t: (key: string) => string): { parent?: { label: string; to: string }; label: string } | null {
   if (pathname === '/') return null;
@@ -60,12 +60,7 @@ export default function AppShell({ children, dataVersion }: { children: ReactNod
           {isMapWorkspace ? children : <Container>{children}</Container>}
         </main>
       )}
-      {!isMapWorkspace ? <footer className="relative mt-16 border-t border-line py-8 text-center">
-        <p className="text-sm text-content-secondary">{t('footer.project', { version: dataVersion || t('footer.unavailable') })}</p>
-        <p className="mt-2 text-xs text-content-muted">{t('footer.trademark')}</p>
-        <p className="mt-2 text-xs text-content-muted">{t('footer.dataSource')} <a href="https://tibia.fandom.com" target="_blank" rel="noopener noreferrer" className="text-primary hover:text-primary-hover">TibiaWiki</a></p>
-        <SuggestImprovementLink className="mt-3 justify-center" />
-      </footer> : null}
+      {!isMapWorkspace ? <SiteFooter dataVersion={dataVersion} /> : null}
     </div>
   </div>;
 }
