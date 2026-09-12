@@ -44,6 +44,9 @@ export default function SiteFooter({ dataVersion }: { dataVersion?: string }) {
 
   const copy = isSpanish
     ? {
+        footerLabel: 'Pie de página de TibiaHub',
+        shortcutsLabel: 'Accesos del pie de página',
+        knowledgeHub: 'Centro de conocimiento de la comunidad',
         tagline: 'Hecho por la comunidad de Tibia, para la comunidad de Tibia.',
         about: 'TibiaHub reúne Cyclopedia, hunts, mapa, herramientas y espacios de comunidad en una sola experiencia pensada para jugadores.',
         aboutLabel: 'Acerca de',
@@ -64,14 +67,17 @@ export default function SiteFooter({ dataVersion }: { dataVersion?: string }) {
         npcs: 'NPCs',
         sourceCode: 'Código fuente',
         suggest: 'Sugerir una mejora',
-        gameData: 'Fuente de datos del juego',
+        gameData: 'Referencia de datos',
         dataVersion: 'Versión de datos',
         unavailable: 'no disponible',
         copyright: `© ${year} TibiaHub. Proyecto independiente de la comunidad.`,
-        disclaimer: 'Tibia y los nombres, imágenes y contenidos relacionados con el juego pertenecen a CipSoft GmbH. TibiaHub es un proyecto independiente de fans y no está afiliado, patrocinado ni operado por CipSoft GmbH.',
+        disclaimer: 'Tibia y los recursos oficiales del juego pertenecen a CipSoft GmbH. TibiaHub es un proyecto independiente de fans y no está afiliado, patrocinado ni operado por CipSoft GmbH.',
         attribution: 'Los datos y recursos de terceros conservan la atribución y los derechos de sus respectivas fuentes y propietarios.',
       }
     : {
+        footerLabel: 'TibiaHub footer',
+        shortcutsLabel: 'Footer shortcuts',
+        knowledgeHub: 'Community knowledge hub',
         tagline: 'Made by the Tibia community, for the Tibia community.',
         about: 'TibiaHub brings Cyclopedia, hunts, maps, tools and community spaces into one player-focused experience.',
         aboutLabel: 'About',
@@ -92,11 +98,11 @@ export default function SiteFooter({ dataVersion }: { dataVersion?: string }) {
         npcs: 'NPCs',
         sourceCode: 'Source code',
         suggest: 'Suggest an improvement',
-        gameData: 'Game data source',
+        gameData: 'Data reference',
         dataVersion: 'Data version',
         unavailable: 'unavailable',
         copyright: `© ${year} TibiaHub. Independent community project.`,
-        disclaimer: 'Tibia and related game names, images and content belong to CipSoft GmbH. TibiaHub is an independent fan project and is not affiliated with, sponsored by, or operated by CipSoft GmbH.',
+        disclaimer: 'Tibia and official game assets belong to CipSoft GmbH. TibiaHub is an independent fan project and is not affiliated with, sponsored by, or operated by CipSoft GmbH.',
         attribution: 'Third-party data and resources retain the attribution and rights of their respective sources and owners.',
       };
 
@@ -140,7 +146,7 @@ export default function SiteFooter({ dataVersion }: { dataVersion?: string }) {
   ];
 
   return (
-    <footer className="relative mt-16 border-t border-line bg-surface-base/90" aria-label="TibiaHub footer">
+    <footer className="relative mt-16 border-t border-line bg-surface-base/90" aria-label={copy.footerLabel}>
       <Container>
         <div className="flex flex-col gap-5 py-5 lg:flex-row lg:items-center lg:justify-between">
           <a href="#tibiahub-footer-about" className="inline-flex min-w-0 items-center gap-3 self-start">
@@ -156,7 +162,7 @@ export default function SiteFooter({ dataVersion }: { dataVersion?: string }) {
             </span>
           </a>
 
-          <nav className="flex flex-wrap items-center gap-x-5 gap-y-2 text-sm" aria-label="Footer shortcuts">
+          <nav className="flex flex-wrap items-center gap-x-5 gap-y-2 text-sm" aria-label={copy.shortcutsLabel}>
             <a href="#tibiahub-footer-about" className="text-content-secondary hover:text-primary">{copy.aboutLabel}</a>
             <a href="#tibiahub-footer-legal" className="text-content-secondary hover:text-primary">{copy.legalLabel}</a>
             <a href={suggestionUrl} target="_blank" rel="noopener noreferrer" className="inline-flex items-center gap-1.5 text-content-secondary hover:text-primary">
@@ -164,7 +170,7 @@ export default function SiteFooter({ dataVersion }: { dataVersion?: string }) {
               {copy.suggest}
             </a>
             <a href={GITHUB_REPOSITORY} target="_blank" rel="noopener noreferrer" aria-label="GitHub" className="grid size-9 place-items-center rounded-lg border border-line bg-surface-raised text-content-secondary transition hover:border-primary/50 hover:text-primary">
-              <Github className="size-4.5" aria-hidden="true" />
+              <Github className="size-4" aria-hidden="true" />
             </a>
           </nav>
         </div>
@@ -182,7 +188,7 @@ export default function SiteFooter({ dataVersion }: { dataVersion?: string }) {
                 />
                 <div>
                   <h2 className="font-heading text-xl font-semibold text-content-primary">TibiaHub</h2>
-                  <p className="text-xs font-semibold uppercase tracking-[0.14em] text-primary">Community knowledge hub</p>
+                  <p className="text-xs font-semibold uppercase tracking-[0.14em] text-primary">{copy.knowledgeHub}</p>
                 </div>
               </div>
               <p className="mt-4 max-w-md text-sm leading-6 text-content-secondary">{copy.about}</p>
