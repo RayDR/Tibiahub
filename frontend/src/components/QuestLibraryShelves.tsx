@@ -230,7 +230,7 @@ export default function QuestLibraryShelves({ linkState, onNavigate }: Props) {
         </div>
       ) : quests.length ? (
         <>
-          <div className="cyclopedia-quest-grid grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4">
+          <div className="cyclopedia-quest-grid grid grid-cols-1 gap-2 sm:grid-cols-2 xl:grid-cols-3">
             {quests.map((quest) => {
               const identifier = questIdentifier(quest);
               const active = selectedIdentifier === identifier;
@@ -268,16 +268,12 @@ export default function QuestLibraryShelves({ linkState, onNavigate }: Props) {
                     aria-label={t('questDetail.openQuest')}
                     title={t('questDetail.openQuest')}
                   >
-                    <ArrowRight className="size-4" />
+                    <ArrowRight className="size-3.5" />
                   </Link>
-
-                  <div className="quest-card-art" aria-hidden="true">
-                    <BrandCategoryFallbackIcon category="quests" className="quest-card-art-icon" />
-                  </div>
 
                   <div className="quest-card-body">
                     <div className="flex min-w-0 items-start gap-2">
-                      <h3 className="min-w-0 flex-1 line-clamp-2 font-serif text-lg font-semibold text-content-primary">{quest.name}</h3>
+                      <h3 className="min-w-0 flex-1 line-clamp-2 font-serif font-semibold text-content-primary">{quest.name}</h3>
                       {quest.is_access_quest ? <span className="quest-card-badge quest-card-badge-access">{t('questDetail.access')}</span> : null}
                     </div>
 
@@ -288,8 +284,8 @@ export default function QuestLibraryShelves({ linkState, onNavigate }: Props) {
                     </div>
 
                     <div className="quest-card-meta">
-                      {location ? <span><MapPin className="size-4 shrink-0 text-primary" /><span className="truncate">{location}</span></span> : null}
-                      {npc ? <span><UserRound className="size-4 shrink-0 text-content-muted" /><span className="truncate">{npc}</span></span> : null}
+                      {location ? <span><MapPin className="size-3.5 shrink-0 text-primary" /><span className="truncate">{location}</span></span> : null}
+                      {npc ? <span><UserRound className="size-3.5 shrink-0 text-content-muted" /><span className="truncate">{npc}</span></span> : null}
                     </div>
 
                     <p className="quest-card-summary">
@@ -297,9 +293,9 @@ export default function QuestLibraryShelves({ linkState, onNavigate }: Props) {
                     </p>
 
                     <div className="quest-card-flags">
-                      {quest.premium_required ? <span><Crown className="size-3.5" />{t('questDetail.premium')}</span> : null}
-                      {quest.repeatable ? <span><Repeat2 className="size-3.5" />{t('questDetail.repeatable')}</span> : null}
-                      {quest.is_access_quest ? <span><ShieldCheck className="size-3.5" />{t('questDetail.access')}</span> : null}
+                      {quest.premium_required ? <span><Crown className="size-3" />{t('questDetail.premium')}</span> : null}
+                      {quest.repeatable ? <span><Repeat2 className="size-3" />{t('questDetail.repeatable')}</span> : null}
+                      {quest.is_access_quest ? <span><ShieldCheck className="size-3" />{t('questDetail.access')}</span> : null}
                       {!quest.premium_required && !quest.repeatable && !quest.is_access_quest ? <span className="text-content-muted">{type}</span> : null}
                     </div>
                   </div>
