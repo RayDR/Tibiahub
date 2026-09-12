@@ -19,6 +19,7 @@ import {
   Trophy,
   User,
   Users,
+  X,
   Zap,
 } from 'lucide-react';
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
@@ -26,6 +27,7 @@ import { useSearchParams } from 'react-router-dom';
 import { useTranslation } from 'react-i18next';
 
 import BrandCategoryFallbackIcon from '../components/icons/BrandCategoryFallbackIcon';
+import BrandNavigationIcon from '../components/icons/BrandNavigationIcon';
 import HuntZonePreviewPanel from '../components/cyclopedia/HuntZonePreviewPanel';
 import AppButton from '../components/ui/AppButton';
 import AppInput from '../components/ui/AppInput';
@@ -36,7 +38,6 @@ import { useAuth } from '../context/AuthContext';
 import { activityApi } from '../services/activity';
 import { huntZonesApi, tibiaApi } from '../services/api';
 import type { HuntZoneSpatial } from '../types';
-import { faCompass } from '@fortawesome/free-solid-svg-icons';
 
 const VOCATIONS = [
   { id: 'knight', icon: Shield },
@@ -168,11 +169,13 @@ export default function HuntRecommendationsPage() {
     recommended: 'Recomendadas', compare: 'Comparar', mapView: 'Mapa', saved: 'Planes guardados', showing: 'Mostrando', recommendedHunts: 'hunts recomendadas', sort: 'Ordenar', bestOverall: 'Mejor resultado', bestXp: 'Más EXP', bestProfit: 'Más ganancia',
     huntLocation: 'Zona', recommendedFor: 'Recomendado para', risk: 'Riesgo', match: 'Match', preview: 'Selecciona una hunt para ver el preview', schedule: 'Plan de sesión', today: 'Hoy', break: 'Descanso', session: 'sesión',
     savedCharacter: 'La última búsqueda se guarda 7 días para el personaje activo.', savedSession: 'La última búsqueda se guarda 7 días en esta sesión.', restored: 'Búsqueda anterior restaurada.', highlightBoosted: 'Priorizar hunts con boosted', planningBudget: 'Solo se conserva como dato del plan; no altera el ranking hasta contar con costos de supplies documentados.',
+    closePreview: 'Cerrar preview',
   } : {
     setup: 'Planner Setup', reset: 'Reset', targetRange: 'Target Level Range', duration: 'Hunt Duration', budget: 'Budget (optional)', priority: 'Priority', find: 'Find Hunts', scouting: 'Scouting…',
     recommended: 'Recommended', compare: 'Compare', mapView: 'Map View', saved: 'Saved Plans', showing: 'Showing', recommendedHunts: 'recommended hunts', sort: 'Sort by', bestOverall: 'Best overall', bestXp: 'Most XP', bestProfit: 'Most profit',
     huntLocation: 'Hunt Location', recommendedFor: 'Recommended For', risk: 'Risk', match: 'Match', preview: 'Select a hunt to open its preview', schedule: 'Hunt Schedule', today: 'Today', break: 'Break', session: 'session',
     savedCharacter: 'The last search is retained for 7 days for the active character.', savedSession: 'The last search is retained for 7 days in this session.', restored: 'Previous search restored.', highlightBoosted: 'Prioritize hunts with boosted creatures', planningBudget: 'Stored with the plan only; it does not affect ranking until documented supply-cost data is available.',
+    closePreview: 'Close preview',
   }, [isSpanish]);
 
   const [mode, setMode] = useState<PlannerMode>('solo');
@@ -186,7 +189,6 @@ export default function HuntRecommendationsPage() {
   const [sort, setSort] = useState<PlannerSort>('match');
   const [highlightBoosted, setHighlightBoosted] = useState(true);
   const [boostedNames, setBoostedNames] = useState<string[]>([]);
-
   const [data, setData] = useState<RecommendationResponse | null>(null);
   const [loading, setLoading] = useState(false);
   const [loadingMore, setLoadingMore] = useState(false);
@@ -458,16 +460,15 @@ export default function HuntRecommendationsPage() {
 
   return (
     <Page className="hunt-planner-page space-y-4">
-      <section className="hunt-planner-hero">
-        <div className="hunt-planner-hero__content">
-          <div>
-            <PageHeader title={t('plannerRecovery.title')} subtitle={t('plannerRecovery.subtitle')} icon={faCompass} size="md" />
-          </div>
-          <p className="hunt-planner-hero__motto">Plan hunts<br />gain progress<br />live greater adventures</p>
-        </div>
-      </section>
+      <PageHeader
+        title={t('plannerRecovery.title')}
+        subtitle={t('plannerRecovery.subtitle')}
+        size="lg"
+        iconElement={<BrandNavigationIcon icon="planner" className="size-12 text-primary sm:size-14" />}
+        secondaryActions={<p className="hunt-planner-header-motto">Plan hunts<br />gain progress<br />live greater adventures</p>}
+      />
 
-      <div className="hunt-planner-workspace">
+      <div className="hunt-planner-workspace" data-preview-open={selectedIdentifier ? 'true' : 'false'}>
         <aside className="hunt-planner-setup hunt-planner-panel" aria-label={copy.setup}>
           <header className="hunt-planner-setup__header">
             <h2 className="hunt-planner-section-title"><LayoutGrid className="size-4 text-primary" />{copy.setup}</h2>
@@ -591,6 +592,7 @@ export default function HuntRecommendationsPage() {
               const risk = riskKey(item.danger || item.difficulty);
               const match = matchPercent(item.score);
               const firstCreature = item.creatures?.[0];
+              const place = [item.city, item.region].filter(Boolean).join(' · ') || t('common.unknown');
               return (
                 <button
                   key={item.zone_id}
@@ -605,15 +607,18 @@ export default function HuntRecommendationsPage() {
                     <span className="hunt-planner-result__sprite">
                       {firstCreature?.image_url ? <img src={firstCreature.image_url} alt="" /> : <BrandCategoryFallbackIcon category="zones" className="size-8 text-primary" />}
                     </span>
-                    <span className="min-w-0">
-                      <span className="hunt-planner-result__name">{item.zone_name}{boosted ? <span className="ml-2 rounded-full border border-accent/50 bg-accent/10 px-1.5 py-0.5 text-[0.58rem] font-bold uppercase text-accent">Boosted</span> : null}</span>
-                      <span className="hunt-planner-result__place">{[item.city, item.region].filter(Boolean).join(' · ') || t('common.unknown')}</span>
+                    <span className="hunt-planner-result__identity">
+                      <span className="hunt-planner-result__name-row">
+                        <span className="hunt-planner-result__name" title={item.zone_name}>{item.zone_name}</span>
+                        {boosted ? <span className="hunt-planner-result__boosted">Boosted</span> : null}
+                      </span>
+                      <span className="hunt-planner-result__place" title={place}>{place}</span>
                     </span>
                   </span>
                   <span className="hunt-planner-result__recommended">{recommendedFor(item)}</span>
                   <Metric value={item.avg_exp_hour} max={maxExp} />
                   <Metric value={item.avg_profit_hour} max={maxProfit} profit />
-                  <span><span className="hunt-planner-risk" data-risk={risk}>{item.danger || item.difficulty || risk}</span></span>
+                  <span className="hunt-planner-result__risk-cell"><span className="hunt-planner-risk" data-risk={risk}>{item.danger || item.difficulty || risk}</span></span>
                   <Metric value={match} max={100} match suffix="%" />
                 </button>
               );
@@ -637,18 +642,14 @@ export default function HuntRecommendationsPage() {
           </section>
         </main>
 
-        <aside className="hunt-planner-preview" aria-label={t('plannerRecovery.inspector')}>
-          {selectedIdentifier ? (
+        {selectedIdentifier ? (
+          <aside className="hunt-planner-preview" aria-label={t('plannerRecovery.inspector')}>
+            <button type="button" className="hunt-planner-preview__close" onClick={() => setSelected(null)} aria-label={copy.closePreview} title={copy.closePreview}>
+              <X className="size-4" />
+            </button>
             <HuntZonePreviewPanel identifier={selectedIdentifier} />
-          ) : (
-            <div className="hunt-planner-preview__empty">
-              <div>
-                <BrandCategoryFallbackIcon category="zones" className="mx-auto size-14 text-primary" />
-                <p className="mt-3 text-sm">{copy.preview}</p>
-              </div>
-            </div>
-          )}
-        </aside>
+          </aside>
+        ) : null}
       </div>
     </Page>
   );
