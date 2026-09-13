@@ -16,7 +16,6 @@ ALLOWED_SERVICES = {
     "tibiahub-knowledge-worker",
     "tibiahub-email-worker",
     "tibiahub-sync-worker",
-    "tibiahub-localization-worker",
 }
 
 
@@ -240,9 +239,8 @@ def test_backend_runtime_is_versioned_activated_and_rollback_safe():
         ecosystem.count(
             "script: 'runtime-current/bin/python'"
         )
-        == 6
+        == 5
     )
-    assert "tibiahub-localization-worker" in ecosystem
 
     assert "tibiahub_runtime_dir" in postgres
     assert "TIBIAHUB_PYTHON_RUNTIME" in postgres
