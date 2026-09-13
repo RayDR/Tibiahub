@@ -158,7 +158,7 @@ export default function TibiaMapPage() {
   const copy = useMemo(() => isSpanish ? {
     subtitle: 'Explora el mundo de Tibia. Descubre ubicaciones, planea tus hunts y encuentra tu próxima aventura.',
     motto: 'EL CONOCIMIENTO\nIMPULSA GRANDES\nAVENTURAS',
-    layers: 'Capas', legend: 'Leyenda', mapLayers: 'Capas del mapa', filters: 'Filtros', quickFilters: 'Filtros rápidos',
+    layers: 'Capas', hideLayers: 'Ocultar capas', legend: 'Leyenda', mapLayers: 'Capas del mapa', filters: 'Filtros', quickFilters: 'Filtros rápidos',
     reset: 'Restablecer', routes: 'Rutas', recent: 'Recientes', allLayers: 'Mostrar todo', huntsOnly: 'Hunts', questsOnly: 'Quests', towns: 'Lugares', city: 'Ciudad',
     mapSearch: 'Buscar en el mapa…', coordinates: 'Coordenadas', copyCoordinates: 'Copiar coordenadas', copied: 'Coordenadas copiadas',
     openDetails: 'Abrir detalles', nearby: 'Cerca de aquí', noNearby: 'No hay resultados cercanos en la vista cargada.',
@@ -169,7 +169,7 @@ export default function TibiaMapPage() {
   } : {
     subtitle: "Explore Tibia's world. Discover locations, plan your hunts, and find your next adventure.",
     motto: 'KNOWLEDGE\nFUELS GREATER\nADVENTURES',
-    layers: 'Layers', legend: 'Legend', mapLayers: 'Map Layers', filters: 'Filters', quickFilters: 'Quick Filters',
+    layers: 'Layers', hideLayers: 'Hide layers', legend: 'Legend', mapLayers: 'Map Layers', filters: 'Filters', quickFilters: 'Quick Filters',
     reset: 'Reset', routes: 'Routes', recent: 'Recent', allLayers: 'Show all', huntsOnly: 'Hunts', questsOnly: 'Quests', towns: 'Places', city: 'City',
     mapSearch: 'Search the map…', coordinates: 'Coordinates', copyCoordinates: 'Copy Coordinates', copied: 'Coordinates copied',
     openDetails: 'Open details', nearby: 'Nearby', noNearby: 'No nearby results in the currently loaded view.',
@@ -236,6 +236,9 @@ export default function TibiaMapPage() {
     preferredLocation?: string | null,
   ) => {
     setSelected(row);
+    if (row && typeof window !== 'undefined' && window.matchMedia('(max-width: 1023px)').matches) {
+      setSidebarOpen(false);
+    }
     const evidence = row?.spatial_evidence?.find((item) => item.label === preferredLocation)
       || row?.spatial_evidence?.[0]
       || (row?.x != null && row.y != null
@@ -604,6 +607,10 @@ export default function TibiaMapPage() {
 
     <div className={`map-workspace ${sidebarOpen ? '' : 'map-workspace--sidebar-collapsed'} ${searchSidebarVisible ? 'map-workspace--search-open' : ''}`}>
       {sidebarOpen ? <aside className="map-workspace-sidebar" aria-label={t('map.sidebar')}>
+        <div className="map-sidebar-mobile-header">
+          <span><Layers3 className="size-4" />{copy.layers}</span>
+          <button type="button" onClick={() => setSidebarOpen(false)} aria-label={copy.hideLayers} title={copy.hideLayers}><X className="size-4" /></button>
+        </div>
         <div className="map-sidebar-tabs" role="tablist" aria-label={copy.mapLayers}>
           <button type="button" role="tab" aria-selected={sidebarTab === 'layers'} data-active={sidebarTab === 'layers'} onClick={() => setSidebarTab('layers')}><Layers3 className="size-4" />{copy.layers}</button>
           <button type="button" role="tab" aria-selected={sidebarTab === 'legend'} data-active={sidebarTab === 'legend'} onClick={() => setSidebarTab('legend')}><Info className="size-4" />{copy.legend}</button>
@@ -754,7 +761,7 @@ export default function TibiaMapPage() {
         {failedLayers.length ? <div className="map-canvas-status map-canvas-status--error"><AlertTriangle className="size-3.5" />{t('map.layerFailed', { layers: failedLayers.map((layer) => t(`map.layers.${layer}`)).join(', ') })}</div> : null}
       </section>
 
-      <aside className="map-inspector" aria-label={selected?.name || t('plannerRecovery.inspector')}>
+      <aside className={`map-inspector ${selected ? '' : 'map-inspector--empty'}`} aria-label={selected?.name || t('plannerRecovery.inspector')}>
         {selected ? <>
           <header className="map-inspector-header">
             <div className="map-inspector-heading">

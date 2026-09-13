@@ -1,0 +1,101 @@
+/* Mobile map overlay contract.
+ * The map is the primary surface: auxiliary panels must never trap or fully
+ * obscure it, and every mobile drawer needs an obvious way back to the map. */
+
+.map-sidebar-mobile-header {
+  display: none;
+}
+
+@media (max-width: 1023px) {
+  .map-sidebar-mobile-header {
+    display: flex;
+    min-height: 3rem;
+    flex: 0 0 auto;
+    align-items: center;
+    justify-content: space-between;
+    gap: var(--space-2);
+    border-bottom: 1px solid var(--line);
+    padding: 0.55rem 0.65rem;
+    background: rgb(var(--ds-surface-overlay) / 0.92);
+  }
+
+  .map-sidebar-mobile-header > span {
+    display: inline-flex;
+    min-width: 0;
+    align-items: center;
+    gap: 0.45rem;
+    color: var(--content-primary);
+    font-size: 0.72rem;
+    font-weight: 800;
+    letter-spacing: 0.07em;
+    text-transform: uppercase;
+  }
+
+  .map-sidebar-mobile-header button {
+    display: grid;
+    width: 2.15rem;
+    height: 2.15rem;
+    flex: 0 0 auto;
+    place-items: center;
+    border: 1px solid var(--line);
+    border-radius: var(--radius-sm);
+    background: rgb(var(--ds-surface-base) / 0.42);
+    color: var(--content-secondary);
+  }
+
+  .map-sidebar-mobile-header button:hover,
+  .map-sidebar-mobile-header button:focus-visible {
+    border-color: rgb(var(--ds-primary) / 0.55);
+    color: var(--primary);
+    outline: none;
+  }
+
+  /* The empty desktop inspector is useful as a persistent third column, but on
+     mobile it blocks the map before the user has selected anything. */
+  .map-inspector--empty {
+    display: none !important;
+  }
+
+  /* Search results take precedence over Layers if both states happen to be
+     active while typing. This prevents stacked mobile drawers. */
+  .map-workspace--search-open .map-workspace-sidebar {
+    visibility: hidden;
+    pointer-events: none;
+  }
+
+  .map-workspace-sidebar,
+  .map-search-sidebar,
+  .map-inspector:not(.map-inspector--empty) {
+    box-shadow: 0 1rem 3rem rgb(var(--ds-shadow) / 0.5);
+  }
+}
+
+@media (max-width: 639px) {
+  /* Phone-sized controls behave as bottom sheets. The top of the map stays
+     visible for orientation, while the sheet remains scrollable and closable. */
+  .map-workspace-sidebar,
+  .map-search-sidebar,
+  .map-inspector:not(.map-inspector--empty) {
+    top: auto !important;
+    right: 0.4rem !important;
+    bottom: 0.4rem !important;
+    left: 0.4rem !important;
+    width: auto !important;
+    max-height: min(70dvh, 34rem) !important;
+    border-radius: 0.8rem;
+  }
+
+  .map-inspector:not(.map-inspector--empty) {
+    max-height: min(62dvh, 31rem) !important;
+  }
+
+  .map-search-sidebar {
+    max-height: min(66dvh, 32rem) !important;
+  }
+
+  .map-sidebar-scroll,
+  .map-search-sidebar__body,
+  .map-inspector:not(.map-inspector--empty) {
+    overscroll-behavior: contain;
+  }
+}
