@@ -1,0 +1,28 @@
+/* Bound dynamic Cyclopedia result regions to one viewport. The result surface
+ * owns vertical scrolling so infinite loading can continue without extending
+ * the document indefinitely and pushing the site footer away. */
+
+.app-shell[data-workspace='cyclopedia'] main[data-workspace-main='cyclopedia'] .ds-page > div:last-child,
+.app-shell[data-workspace='cyclopedia'] .cyclopedia-quest-browser {
+  width: 100%;
+  max-height: 100dvh;
+  overflow-x: hidden;
+  overflow-y: auto;
+  overscroll-behavior-y: contain;
+  -ms-overflow-style: none;
+  scrollbar-width: none;
+}
+
+.app-shell[data-workspace='cyclopedia'] main[data-workspace-main='cyclopedia'] .ds-page > div:last-child::-webkit-scrollbar,
+.app-shell[data-workspace='cyclopedia'] .cyclopedia-quest-browser::-webkit-scrollbar {
+  display: none;
+  width: 0;
+  height: 0;
+}
+
+/* Keep a small trailing scroll target so the infinite-scroll sentinels can
+ * intersect naturally inside the bounded surface. */
+.app-shell[data-workspace='cyclopedia'] main[data-workspace-main='cyclopedia'] .ds-page > div:last-child,
+.app-shell[data-workspace='cyclopedia'] .cyclopedia-quest-browser {
+  scroll-padding-bottom: var(--space-6);
+}
