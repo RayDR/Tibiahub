@@ -119,15 +119,10 @@ export default function Navigation() {
             </div>
 
             <div className="app-nav-utilities flex shrink-0 items-center gap-0.5">
-              {presentation.navbar_show_global_search ? (
-                <>
-                  <div className="lg:hidden"><GlobalCyclopediaSearch compact /></div>
-                  {compactLayout ? <div className="hidden lg:block"><GlobalCyclopediaSearch compact /></div> : null}
-                </>
-              ) : null}
-              {isAuthenticated && !compactLayout ? <div className="hidden lg:block"><CharacterSwitcher /></div> : null}
-              <LanguageSwitcher />
+              {presentation.navbar_show_global_search && compactLayout ? <GlobalCyclopediaSearch compact /> : null}
+              {isAuthenticated && !compactLayout ? <CharacterSwitcher /> : null}
               {isAuthenticated ? <NotificationIndicator /> : null}
+              <LanguageSwitcher />
               <ThemeSwitcher />
               {isAuthenticated ? <AccountMenu /> : <Link to="/login" className="app-button-primary app-button-sm ml-1">{t('auth.login')}</Link>}
             </div>
