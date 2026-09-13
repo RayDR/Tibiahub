@@ -18,6 +18,11 @@ from app.knowledge.models.jobs import (
     KnowledgeProviderCursor,
     KnowledgeWorkerHeartbeat,
 )
+from app.knowledge.models.localization import (
+    LOCALIZATION_ORIGINS,
+    LOCALIZATION_STATUSES,
+    KnowledgeLocalization,
+)
 from app.knowledge.models.mappings import KnowledgeExternalMapping
 from app.knowledge.models.observations import KnowledgeProviderObservation
 from app.knowledge.models.relationships import KnowledgeCreatureItemDrop
@@ -39,6 +44,7 @@ __all__ = [
     "KnowledgeJobAttempt",
     "KnowledgeProviderCursor",
     "KnowledgeWorkerHeartbeat",
+    "KnowledgeLocalization",
     "KnowledgeExternalMapping",
     "KnowledgeProviderObservation",
     "KnowledgeCreatureItemDrop",
@@ -54,4 +60,6 @@ __all__ = [
     "ACTIVE_KNOWLEDGE_JOB_STATES",
     "KNOWLEDGE_JOB_STATES",
     "KNOWLEDGE_JOB_TRIGGERS",
+    "LOCALIZATION_ORIGINS",
+    "LOCALIZATION_STATUSES",
 ]
