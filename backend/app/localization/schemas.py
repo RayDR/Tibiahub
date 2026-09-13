@@ -26,6 +26,7 @@ class LocalizationResponse(BaseModel):
     language: str
     text: str
     source_language: str
+    source_text: str | None
     source_text_hash: str
     origin: str
     status: str
