@@ -28,6 +28,13 @@ def _idempotency_key(*parts: str) -> str:
     return f"loc:{hashlib.sha256(payload.encode('utf-8')).hexdigest()}"
 
 
+def _mark_enqueue_result(row: LocalizationJob, *, created: bool) -> LocalizationJob:
+    # Runtime-only marker used by batch/backfill metrics. It is deliberately
+    # not persisted and does not alter the durable job contract.
+    row._localization_newly_enqueued = created
+    return row
+
+
 class LocalizationQueueService:
     @staticmethod
     def enqueue_field(
@@ -85,7 +92,7 @@ class LocalizationQueueService:
         )
         existing_job = db.query(LocalizationJob).filter_by(idempotency_key=idempotency_key).first()
         if existing_job is not None:
-            return existing_job
+            return _mark_enqueue_result(existing_job, created=False)
 
         row = LocalizationJob(
             entity_uuid=entity_uuid,
@@ -106,9 +113,10 @@ class LocalizationQueueService:
             with db.begin_nested():
                 db.add(row)
                 db.flush()
-            return row
+            return _mark_enqueue_result(row, created=True)
         except IntegrityError:
-            return db.query(LocalizationJob).filter_by(idempotency_key=idempotency_key).one()
+            existing = db.query(LocalizationJob).filter_by(idempotency_key=idempotency_key).one()
+            return _mark_enqueue_result(existing, created=False)
 
     @staticmethod
     def enqueue_targets(
@@ -141,7 +149,7 @@ class LocalizationQueueService:
                     context=context,
                     force=force,
                 )
-                queued += int(row is not None and row.status in {"pending", "retry"})
+                queued += int(bool(row is not None and getattr(row, "_localization_newly_enqueued", False)))
         return queued
 
     @staticmethod
