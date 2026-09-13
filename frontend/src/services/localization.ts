@@ -12,6 +12,7 @@ export interface KnowledgeLocalization {
   language: string;
   text: string;
   source_language: string;
+  source_text: string | null;
   source_text_hash: string;
   origin: 'provider' | 'machine' | 'human';
   status: LocalizationStatus;
