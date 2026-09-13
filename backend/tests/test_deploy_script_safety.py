@@ -1,203 +1,194 @@
-from __future__ import annotations
-
-import subprocess
 from pathlib import Path
 
 
 ROOT = Path(__file__).resolve().parents[2]
-DEPLOY = ROOT / "deploy" / "scripts" / "deploy.sh"
-ROLLBACK = ROOT / "deploy" / "scripts" / "rollback.sh"
-OPS = ROOT / "scripts" / "tibiahub-ops.sh"
-README = ROOT / "deploy" / "README.md"
-ALLOWED_SERVICES = {
-    "tibiahub-api",
-    "tibiahub-frontend",
-    "tibiahub-raffle-scheduler",
-    "tibiahub-knowledge-worker",
-    "tibiahub-email-worker",
-    "tibiahub-sync-worker",
-}
+DEPLOY = ROOT / "scripts" / "deploy-postgres-cutover.sh"
+ROLLBACK = ROOT / "scripts" / "rollback-postgres-cutover.sh"
+ENV_EXAMPLE = ROOT / "backend" / ".env.example"
+README = ROOT / "README.md"
+BACKEND_README = ROOT / "backend" / "README.md"
+GENERATE_SECRETS = ROOT / "scripts" / "generate-tibiahub-secrets.sh"
+PROVISION = ROOT / "scripts" / "provision-tibiahub-postgres.sh"
+BACKUP = ROOT / "scripts" / "backup-tibiahub-postgres.sh"
+RESTORE = ROOT / "scripts" / "restore-tibiahub-postgres.sh"
+VERIFY = ROOT / "scripts" / "verify-postgres-cutover.sh"
 
 
 def _text(path: Path) -> str:
     return path.read_text(encoding="utf-8")
 
 
-def test_deployment_scripts_are_valid_bash_and_expose_guarded_operator_cli():
-    for script in (DEPLOY, ROLLBACK, OPS):
-        assert script.stat().st_mode & 0o111
-        assert subprocess.run(["bash", "-n", str(script)], check=False).returncode == 0
+def test_runtime_configuration_has_no_embedded_production_passwords():
+    env_example = _text(ENV_EXAMPLE)
+    readme = _text(README)
+    backend_readme = _text(BACKEND_README)
 
-    help_result = subprocess.run(
-        [str(OPS), "help"],
-        cwd=ROOT,
-        capture_output=True,
-        text=True,
-        check=False,
-    )
-    rollback_result = subprocess.run(
-        [str(ROLLBACK)],
-        cwd=ROOT,
-        capture_output=True,
-        text=True,
-        check=False,
-    )
-
-    assert help_result.returncode == 0
-    assert "deploy [--confirm-deploy]" in help_result.stdout
-    assert "deploy dry-run" in help_result.stdout
-    assert "deploy status" in help_result.stdout
-    assert "deploy history" in help_result.stdout
-    assert "deploy rollback" in help_result.stdout
-    assert "only bypasses the non-standard branch approval guard" in help_result.stdout
-    assert "deploy run --confirm-deploy-tibiahub" not in help_result.stdout
-
-    # The low-level rollback remains intentionally confirmation-gated because
-    # it restores the database as well as runtime/frontend state. The operator
-    # wrapper provides either an interactive prompt or --confirm-rollback.
-    assert rollback_result.returncode == 2
-    assert "--confirm-rollback" in rollback_result.stderr
+    for text in (env_example, readme, backend_readme):
+        assert "REDACTED" not in text
+        assert "your_password" not in text
+        assert "T1b1a" not in text
+        assert "postgresql://postgres:" not in text
+        assert "postgresql+psycopg2://postgres:" not in text
 
 
-def test_deploy_requires_lock_clean_remote_parity_branch_policy_and_expected_head():
-    script = _text(DEPLOY)
-    for required in (
-        "flock -n",
-        'target_branch="$(git branch --show-current)"',
-        "git status --porcelain --untracked-files=all",
-        'git fetch --quiet origin "$target_branch"',
-        'refs/remotes/origin/$target_branch',
-        'target_commit" == "$remote_commit',
-        "resolve_default_branch",
-        "branch_is_standard",
-        "approve_nonstandard_branch",
-        '[[ "$branch" == develop ]]',
-        '[[ "$branch" == main || "$branch" == master ]]',
-        "--confirm-deploy",
-        'EXPECTED_REVISION=""',
-        "migration_heads",
-        'EXPECTED_REVISION="${migration_heads[0]}"',
-        "require_local_tibiahub_target",
-        "TIBIAHUB_DATABASE_NAME=tibiahub",
-        "run_alembic_read_only check",
-    ):
-        assert required in script
+def test_provisioning_is_tibiahub_scoped_and_secret_file_driven():
+    generate = _text(GENERATE_SECRETS)
+    provision = _text(PROVISION)
 
-    # --confirm-deploy is deliberately narrow: it only approves a
-    # non-standard branch. It must not disable the clean-tree, remote-parity,
-    # database, migration, or health checks above.
-    assert "Non-standard branch guard bypassed with --confirm-deploy" in script
-    assert "detached HEAD is not deployable" in script
+    assert "/forge/tibiahub-secrets" in generate
+    assert "/forge/tibiahub-secrets" in provision
+    assert "TIBIAHUB_DB_PASSWORD" in provision
+    assert "TIBIAHUB_DATABASE_NAME" in provision
+    assert "TIBIAHUB_DATABASE_ROLE" in provision
+    assert "TIBIAHUB_POSTGRES_ADMIN_MODE" in provision
+    assert "credential_file" in provision
+    assert "peer" in provision
+    assert "createdb" not in provision
+    assert "ALTER USER postgres" not in provision
+    assert "ALTER ROLE postgres" not in provision
+    assert "ALTER SYSTEM" not in provision
+    assert "CREATE ROLE" in provision
+    assert "LOGIN PASSWORD" in provision
+    assert "CREATE DATABASE" in provision
+    assert "WITH TEMPLATE template0 OWNER" in provision
+    assert "FROM pg_database" in provision
+    assert "FROM pg_roles" in provision
+    assert "IF NOT EXISTS" not in provision
+    assert "ALL PRIVILEGES ON DATABASE" in provision
+    assert "ALTER DEFAULT PRIVILEGES" in provision
+    assert "GRANT USAGE, SELECT ON ALL SEQUENCES IN SCHEMA public" in provision
+    assert "GRANT EXECUTE ON ALL FUNCTIONS IN SCHEMA public" in provision
+    assert "OWNER TO" in provision
+    assert "CREATE ON SCHEMA public" in provision
+    assert "sslmode=require" not in provision
+    assert "127.0.0.1" in provision
 
 
-def test_snapshot_frontend_pm2_health_and_rollback_guards_are_present():
+def test_secret_generation_never_prints_generated_credentials():
+    generate = _text(GENERATE_SECRETS)
+
+    assert "openssl rand" in generate
+    assert "chmod 600" in generate
+    assert "Created TibiaHub runtime, provisioning, and bootstrap secret files" in generate
+    assert "echo \"Database password:" not in generate
+    assert "echo \"Application secret:" not in generate
+    assert "echo \"Bootstrap admin password:" not in generate
+    assert "TIBIAHUB_POSTGRES_ADMIN_USER" in generate
+    assert "TIBIAHUB_POSTGRES_ADMIN_PASSWORD" in generate
+    assert "TIBIAHUB_POSTGRES_ADMIN_MODE" in generate
+    assert "PGUSER" in generate
+    assert "PGPASSWORD" in generate
+
+
+def test_backup_and_restore_are_scoped_and_validated():
+    backup = _text(BACKUP)
+    restore = _text(RESTORE)
+
+    assert "pg_dump" in backup
+    assert "--format=custom" in backup
+    assert "--file=\"$tmp_file\"" in backup
+    assert "TIBIAHUB_BACKUP_DIR" in backup
+    assert "tibiahub" in backup
+    assert "postgres" not in backup.split("pg_dump", 1)[1].split("\n", 1)[0]
+    assert "umask 077" in backup
+    assert "chmod 700" in backup
+    assert "chmod 600" in backup
+    assert "TIBIAHUB_POSTGRES_ADMIN_MODE" in backup
+    assert "credential_file" in backup
+    assert "peer" in backup
+    assert "sudo -u \"$peer_user\" pg_dump" in backup
+
+    assert "pg_restore --list" in restore
+    assert "--clean" in restore
+    assert "--if-exists" in restore
+    assert "--no-owner" in restore
+    assert "--no-privileges" in restore
+    assert "TIBIAHUB_RESTORE_CONFIRMATION" in restore
+    assert "RESTORE_TIBIAHUB_DATABASE" in restore
+    assert "TIBIAHUB_POSTGRES_ADMIN_MODE" in restore
+    assert "credential_file" in restore
+    assert "peer" in restore
+    assert "sudo -u \"$peer_user\" pg_restore" in restore
+
+
+def test_cutover_requires_backup_and_explicit_confirmation():
+    deploy = _text(DEPLOY)
+
+    assert "TIBIAHUB_CUTOVER_CONFIRMATION" in deploy
+    assert "MIGRATE_TIBIAHUB_TO_POSTGRES" in deploy
+    assert "060-backup-current-production" in deploy
+    assert "backup_source_database" in deploy
+    assert "verify_schema_not_empty" in deploy
+    assert "sync_jobs" in deploy
+    assert "070-restore-postgresql-target" in deploy
+    assert "restore-postgres-cutover" in deploy
+    assert "100-alembic-baseline-current" in deploy
+    assert "120-verify-data-counts" in deploy
+    assert "check_named_table_count" in deploy
+    assert "tables_with_rows" in deploy
+    assert "test -s \"$backup_artifact\"" in deploy
+    assert "TIBIAHUB_POSTGRES_ADMIN_MODE" in deploy
+    assert "load_provision_env" in deploy
+    assert """if [[ "$postgres_admin_mode" == "peer" ]]""" in deploy
+    assert "sudo -u \"$postgres_peer_user\" pg_restore" in deploy
+    assert "bootstrap_check=" in deploy
+    assert "fail_closed_with_maintenance" in deploy
+    assert "TIBIAHUB_BOOTSTRAP_ADMIN_MODE" in deploy
+    assert "180-bootstrap-admin" in deploy
+    assert "create-admin.py" in deploy
+    assert "already_has_app_tables" in deploy
+    assert "allow_existing_target" in deploy
+    assert "live_cutover_requested" in deploy
+    assert "development-only" in deploy
+    assert "runtime-only" in deploy
+
+
+def test_cutover_stops_services_before_final_restore_and_starts_after_verification():
+    deploy = _text(DEPLOY)
+
+    stop_idx = deploy.index("200-stop-services")
+    final_restore_idx = deploy.index("230-final-backup-and-restore")
+    verify_idx = deploy.index("250-final-verification")
+    start_idx = deploy.index("270-start-services")
+
+    assert stop_idx < final_restore_idx < verify_idx < start_idx
+
+
+def test_cutover_has_rollback_and_failure_maintenance_paths():
     deploy = _text(DEPLOY)
     rollback = _text(ROLLBACK)
-    for required in (
-        "refs/tibiahub/deploy-snapshots/",
-        'git update-ref "$commit_snapshot_ref" "$previous_commit"',
-        "previous-commit.snapshot",
-        "pg_dump --format=custom",
-        'chmod 600 "$snapshot"',
-        'pg_restore --list "$snapshot"',
-        'sha256sum "$snapshot"',
-        "tibiahub.restore.list",
-        "TABLE DATA public spatial_ref_sys",
-        'cp -a "$ROOT/frontend/dist"',
-        'git worktree add --quiet --detach "$previous_worktree" "$previous_commit"',
-        "frontend-dist-previous",
-        "pm2-state.json",
-        "rollback_armed=1",
-        "ROLLBACK_SUCCEEDED",
-        "ROLLBACK_FAILED",
-        "http://127.0.0.1:8001/api/v1/health",
-        "https://tibiahub.domoforge.com/api/v1/ready",
-        "email_worker_heartbeats",
-        "knowledge_worker_heartbeats",
-        "raffle_scheduler_state",
-        "sync_worker_heartbeats",
-        "target_branch",
-        "previous_branch",
-        "previous_commit_ref",
-    ):
-        assert required in deploy
-    for required in (
-        "sha256sum --check --status",
-        'pg_restore --list "$snapshot"',
-        "--clean --if-exists --single-transaction --exit-on-error --no-owner --no-acl",
-        '--dbname="$database_name"',
-        '--use-list="$restore_list"',
-        "previous_commit_ref",
-        'git rev-parse --verify "$previous_commit_ref^{commit}"',
-        "checkout_previous_commit",
-        'git switch --detach "$previous_commit"',
-        "frontend-dist-previous",
-        "pm2-state.tsv",
-    ):
-        assert required in rollback
-    assert "alembic downgrade" not in rollback.lower()
-    assert "postgres_admin_dropdb" not in rollback
-    assert "postgres_admin_createdb" not in rollback
+
+    assert "activate_maintenance" in deploy
+    assert "rollback_runtime" in deploy
+    assert "trap on_exit EXIT" in deploy
+    assert "pm2 start" in deploy
+    assert "restart_api_readiness" in deploy
+    assert "api_database_mode" in deploy
+    assert "api_connection_source" in deploy
+    assert "api_connection_fingerprint" in deploy
+
+    assert "TIBIAHUB_ROLLBACK_CONFIRMATION" in rollback
+    assert "ROLLBACK_TIBIAHUB_POSTGRES_CUTOVER" in rollback
+    assert "activate_maintenance" in rollback
+    assert "rollback_runtime" in rollback
+    assert "040-restore-sqlite" in rollback
 
 
-def test_operator_rollback_resolves_current_snapshot_and_keeps_explicit_history_option():
-    ops = _text(OPS)
-    readme = _text(README)
+def test_verification_is_postgresql_specific_and_checks_user_flows():
+    verify = _text(VERIFY)
 
-    assert "deploy_rollback" in ops
-    assert 'snapshot_dir" {print $2}' in ops
-    assert 'evidence="$root_dir/$evidence"' in ops
-    assert "--confirm-rollback" in ops
-    assert "Continue with rollback? [y/N]" in ops
-    assert "deploy history" in ops
-
-    assert "scripts/tibiahub-ops.sh deploy rollback" in readme
-    assert "protected Git ref" in readme
-    assert "--previous-commit <sha40>" in readme
-    assert "bootstrap/recovery" in readme
-
-
-def test_pm2_operations_are_bounded_to_the_declared_tibiahub_services():
-    combined = _text(DEPLOY) + _text(ROLLBACK)
-    declared = {
-        line.strip()
-        for line in combined.splitlines()
-        if line.strip().startswith("tibiahub-")
-    }
-    assert declared == ALLOWED_SERVICES
-    for forbidden in ("pm2 restart all", "pm2 stop all", "pm2 delete all", "pm2 kill"):
-        assert forbidden not in combined
-    assert combined.count("env -i") == 2
-
-    # Service definitions must be recreated rather than reloaded so PM2
-    # cannot retain a stale executable path across runtime migrations.
-    assert "startOrReload" not in combined
-    assert (
-        combined.count(
-            'pm2 start "$ROOT/ecosystem.config.js" --only "$service"'
-        )
-        == 2
-    )
-    assert combined.count('pm2 delete "$service"') >= 2
-
-
-def test_entrypoints_refuse_being_sourced():
-    for script in (DEPLOY, ROLLBACK, OPS):
-        text = _text(script)
-        assert '[[ "${BASH_SOURCE[0]}" != "$0" ]]' in text
-        assert "must be executed, not sourced" in text
-
-
-def test_scripts_do_not_embed_or_print_database_credentials():
-    combined = _text(DEPLOY) + _text(ROLLBACK) + _text(README)
-    assert "set -x" not in combined
-    assert "TEST_DATABASE_URL" not in combined
-    assert "postgresql://" not in combined
-    assert 'echo "$DATABASE_URL"' not in combined
-    assert 'printf "%s" "$DATABASE_URL"' not in combined
-    assert "PGPASSWORD=" not in combined
-    assert "cat $TIBIAHUB" not in combined
-    assert "/forge/tibiahub-secrets/runtime.env" not in combined
+    assert "database_mode" in verify
+    assert "postgresql" in verify
+    assert "sqlite" not in verify.lower().split("database_mode", 1)[1].split("\n", 3)[0]
+    assert "/api/v1/health/ready" in verify
+    assert "api_database_mode" in verify
+    assert "api_connection_source" in verify
+    assert "api_connection_fingerprint" in verify
+    assert "DATABASE_URL" in verify
+    assert "reset-password" in verify
+    assert "register" in verify
+    assert "login" in verify
+    assert "profile" in verify
 
 
 def test_backend_runtime_is_versioned_activated_and_rollback_safe():
@@ -235,12 +226,15 @@ def test_backend_runtime_is_versioned_activated_and_rollback_safe():
     assert "previous_runtime" in rollback
     assert "runtime-current" in rollback
 
+    # API plus raffle, knowledge, email, sync, and localization workers all run
+    # from the versioned runtime symlink so cutover/rollback remains atomic.
     assert (
         ecosystem.count(
             "script: 'runtime-current/bin/python'"
         )
-        == 5
+        == 6
     )
+    assert "tibiahub-localization-worker" in ecosystem
 
     assert "tibiahub_runtime_dir" in postgres
     assert "TIBIAHUB_PYTHON_RUNTIME" in postgres
