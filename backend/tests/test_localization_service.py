@@ -5,6 +5,7 @@ from app.knowledge.adapters.protocol import CanonicalEntityCandidate, KnowledgeN
 from app.knowledge.models import KnowledgeLocalization, LocalizationJob
 from app.localization.backfill import LocalizationBackfillService
 from app.localization.planner import LocalizationPlanningService
+from app.localization.projection import apply_localizations_to_payload
 from app.localization.provider import TranslationResult
 from app.localization.queue import LocalizationQueueService
 from app.localization.service import (
@@ -17,6 +18,7 @@ from app.localization.service import (
     source_text_hash,
 )
 from app.models.creature import Creature
+from app.models.user import User
 
 
 def test_normalize_language_tag_preserves_region_semantics():
@@ -29,6 +31,11 @@ def test_language_fallbacks_use_base_language_then_english():
     assert language_fallbacks("es-MX") == ["es-MX", "es", "en"]
     assert language_fallbacks("pt-BR") == ["pt-BR", "pt", "en"]
     assert language_fallbacks(None) == ["en"]
+
+
+def test_configured_targets_support_translation_back_to_english(monkeypatch):
+    monkeypatch.setattr(settings, "LOCALIZATION_TARGET_LANGUAGES", "en,es,pt-BR")
+    assert settings.localization_target_languages == ["en", "es", "pt-BR"]
 
 
 def test_protect_and_restore_terms_keeps_tibia_names_stable():
@@ -197,6 +204,72 @@ def test_review_and_approval_lock_human_text(db):
     assert row.approved_at is not None
 
 
+def test_reviewer_authored_source_is_persisted_and_rendered(db, monkeypatch):
+    monkeypatch.setattr(settings, "LOCALIZATION_ENABLED", True)
+    author = User(username="localization-author", hashed_password="test")
+    db.add(author)
+    db.flush()
+
+    row = ContentLocalizationService.author_source(
+        db,
+        resource_type="creature",
+        resource_key="reviewer-authored-demon",
+        field_path="description",
+        language="es",
+        text="Un Demon muy peligroso.",
+        author_id=author.id,
+    )
+
+    assert row.origin == "human"
+    assert row.status == "reviewed"
+    assert row.locked is True
+    assert row.language == "es"
+    assert row.source_language == "es"
+    assert row.created_by_id == author.id
+
+    payload, projection = apply_localizations_to_payload(
+        db,
+        resource_type="creature",
+        payload={"canonical_id": "reviewer-authored-demon", "description": "A dangerous Demon."},
+        requested="es-MX",
+    )
+    assert payload["description"] == "Un Demon muy peligroso."
+    assert projection.localized_fields == ("description",)
+    assert projection.applied_languages == ("es",)
+
+
+def test_public_projection_supports_nested_hunt_zone_fields(db, monkeypatch):
+    monkeypatch.setattr(settings, "LOCALIZATION_ENABLED", True)
+    db.add(
+        KnowledgeLocalization(
+            resource_type="hunt_zone",
+            resource_key="ferumbras-ascendant",
+            field_path="access.notes",
+            language="es",
+            text="Necesitas acceso a la zona.",
+            source_language="en",
+            source_text="You need access to the area.",
+            source_text_hash=source_text_hash("You need access to the area."),
+            origin="machine",
+            status="generated",
+        )
+    )
+    db.flush()
+
+    payload, projection = apply_localizations_to_payload(
+        db,
+        resource_type="hunt_zone",
+        payload={
+            "canonical_id": "ferumbras-ascendant",
+            "description": "Hunt zone",
+            "access": {"notes": "You need access to the area."},
+        },
+        requested="es",
+    )
+    assert payload["access"]["notes"] == "Necesitas acceso a la zona."
+    assert projection.localized_fields == ("access.notes",)
+
+
 def test_queue_is_opt_in_and_idempotent(db, monkeypatch):
     monkeypatch.setattr(settings, "LOCALIZATION_ENABLED", True)
     monkeypatch.setattr(settings, "LOCALIZATION_AUTO_ENQUEUE", False)
@@ -287,6 +360,33 @@ def test_planner_enqueues_only_translatable_fields_and_protects_tibia_terms(db, 
         .one()
     )
     assert set(job.protected_terms) >= {"Demon", "The Demon", "Edron"}
+
+
+def test_planner_maps_area_and_town_to_public_location_namespace(db, monkeypatch):
+    monkeypatch.setattr(settings, "LOCALIZATION_ENABLED", True)
+    monkeypatch.setattr(settings, "LOCALIZATION_AUTO_ENQUEUE", True)
+    monkeypatch.setattr(settings, "LOCALIZATION_TARGET_LANGUAGES", "es")
+
+    result = KnowledgeNormalizationResult(
+        action="upsert",
+        provider_code="future-portuguese-provider",
+        external_id="venore-area-1",
+        candidate=CanonicalEntityCandidate(
+            entity_type="area",
+            canonical_name="Venore",
+            language_neutral_id="area:venore",
+        ),
+        canonical_data={"description": "Uma área de Tibia.", "language": "pt-BR"},
+    )
+    assert LocalizationPlanningService.plan_normalization(
+        db,
+        result=result,
+        entity_uuid=None,
+        applied_status="updated",
+    ) == 1
+    job = db.query(LocalizationJob).filter_by(resource_key="venore-area-1").one()
+    assert job.resource_type == "location"
+    assert job.source_language == "pt-BR"
 
 
 def test_existing_content_backfill_is_paginated_and_idempotent(db, monkeypatch):
