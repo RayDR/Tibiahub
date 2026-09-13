@@ -78,6 +78,32 @@ def resource_key_for_row(row: Any) -> str:
     return str(getattr(row, "id"))
 
 
+def resource_key_for_payload(payload: dict[str, Any]) -> str | None:
+    """Resolve the same stable key used by sync/backfill from a public payload."""
+    for key in ("canonical_id", "knowledge_entity_id", "external_id", "id"):
+        value = payload.get(key)
+        if value not in (None, ""):
+            return str(value)
+    return None
+
+
+def source_language_for_payload(payload: dict[str, Any]) -> str:
+    for key in ("source_language", "language"):
+        value = payload.get(key)
+        normalized = normalize_language_tag(value if isinstance(value, str) else None)
+        if normalized:
+            return normalized
+    for key in ("provider_metadata", "parser_metadata", "raw_data"):
+        metadata = payload.get(key)
+        if not isinstance(metadata, dict):
+            continue
+        value = metadata.get("language") or metadata.get("source_language")
+        normalized = normalize_language_tag(value if isinstance(value, str) else None)
+        if normalized:
+            return normalized
+    return normalize_language_tag(settings.LOCALIZATION_DEFAULT_LANGUAGE) or "en"
+
+
 def _mission_matches(mission: dict[str, Any], identity: str) -> bool:
     return str(mission.get("external_id") or "") == identity or str(mission.get("sequence") or "") == identity
 
@@ -115,7 +141,44 @@ def _apply_field_path(payload: dict[str, Any], field_path: str, text: str) -> bo
                 return False
             objectives[index] = text
             return True
-    return False
+
+    current: Any = payload
+    for part in parts[:-1]:
+        if not isinstance(current, dict) or part not in current:
+            return False
+        current = current[part]
+    if not isinstance(current, dict) or parts[-1] not in current:
+        return False
+    current[parts[-1]] = text
+    return True
+
+
+def _select_localizations(
+    db: Session,
+    *,
+    resource_type: str,
+    resource_key: str,
+    requested: str,
+    source_language: str,
+) -> dict[str, KnowledgeLocalization]:
+    fallbacks = language_fallbacks(requested, default=source_language)
+    rows = (
+        db.query(KnowledgeLocalization)
+        .filter(
+            KnowledgeLocalization.resource_type == resource_type,
+            KnowledgeLocalization.resource_key == resource_key,
+            KnowledgeLocalization.language.in_(fallbacks),
+            KnowledgeLocalization.status.in_(["generated", "reviewed", "approved"]),
+        )
+        .all()
+    )
+    rank = {language: index for index, language in enumerate(fallbacks)}
+    selected: dict[str, KnowledgeLocalization] = {}
+    for localization in rows:
+        current = selected.get(localization.field_path)
+        if current is None or rank.get(localization.language, 999) < rank.get(current.language, 999):
+            selected[localization.field_path] = localization
+    return selected
 
 
 def apply_localizations(
@@ -132,24 +195,13 @@ def apply_localizations(
     if not settings.LOCALIZATION_ENABLED or requested == source_language:
         return payload, LocalizationProjection(requested, source_language, (), ())
 
-    fallbacks = language_fallbacks(requested, default=source_language)
-    rows = (
-        db.query(KnowledgeLocalization)
-        .filter(
-            KnowledgeLocalization.resource_type == resource_type,
-            KnowledgeLocalization.resource_key == resource_key_for_row(row),
-            KnowledgeLocalization.language.in_(fallbacks),
-            KnowledgeLocalization.status.in_(["generated", "reviewed", "approved"]),
-        )
-        .all()
+    selected = _select_localizations(
+        db,
+        resource_type=resource_type,
+        resource_key=resource_key_for_row(row),
+        requested=requested,
+        source_language=source_language,
     )
-    rank = {language: index for index, language in enumerate(fallbacks)}
-    selected: dict[str, KnowledgeLocalization] = {}
-    for localization in rows:
-        current = selected.get(localization.field_path)
-        if current is None or rank.get(localization.language, 999) < rank.get(current.language, 999):
-            selected[localization.field_path] = localization
-
     localized_fields: list[str] = []
     languages: list[str] = []
     for field_path, localization in selected.items():
@@ -158,6 +210,42 @@ def apply_localizations(
             if localization.language not in languages:
                 languages.append(localization.language)
 
+    return payload, LocalizationProjection(
+        requested_language=requested,
+        source_language=source_language,
+        localized_fields=tuple(sorted(localized_fields)),
+        applied_languages=tuple(languages),
+    )
+
+
+def apply_localizations_to_payload(
+    db: Session,
+    *,
+    resource_type: str,
+    payload: dict[str, Any],
+    requested: str,
+) -> tuple[dict[str, Any], LocalizationProjection]:
+    """Overlay translations using only stable identity present in a public payload."""
+    requested = normalize_language_tag(requested) or settings.LOCALIZATION_DEFAULT_LANGUAGE
+    source_language = source_language_for_payload(payload)
+    resource_key = resource_key_for_payload(payload)
+    if not settings.LOCALIZATION_ENABLED or resource_key is None or requested == source_language:
+        return payload, LocalizationProjection(requested, source_language, (), ())
+
+    selected = _select_localizations(
+        db,
+        resource_type=resource_type,
+        resource_key=resource_key,
+        requested=requested,
+        source_language=source_language,
+    )
+    localized_fields: list[str] = []
+    languages: list[str] = []
+    for field_path, localization in selected.items():
+        if _apply_field_path(payload, field_path, localization.text):
+            localized_fields.append(field_path)
+            if localization.language not in languages:
+                languages.append(localization.language)
     return payload, LocalizationProjection(
         requested_language=requested,
         source_language=source_language,
