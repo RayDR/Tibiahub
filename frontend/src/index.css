@@ -24,6 +24,7 @@
 @import './styles/hunt-planner-layout.css';
 @import './styles/cyclopedia-preview-wide-relative.css';
 @import './styles/cyclopedia-grid-layout.css';
+@import './styles/cyclopedia-results-scroll.css';
 
 /* Map workspace is isolated from legacy presentation aliases while it migrates
    to the shared semantic design-system contract. */
