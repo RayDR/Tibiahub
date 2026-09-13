@@ -156,8 +156,10 @@ class Settings(BaseSettings):
             raise ValueError("Configured SMTP requires exactly one of SMTP_USE_TLS or SMTP_USE_SSL")
         if not self.LOCALIZATION_DEFAULT_LANGUAGE.strip():
             raise ValueError("LOCALIZATION_DEFAULT_LANGUAGE cannot be empty")
-        if self.LOCALIZATION_ENABLED and self.LOCALIZATION_PROVIDER == "openai" and self.OPENAI_API_KEY is None:
-            raise ValueError("LOCALIZATION_ENABLED with provider=openai requires OPENAI_API_KEY")
+        if self.LOCALIZATION_WORKER_ENABLED and not self.LOCALIZATION_ENABLED:
+            raise ValueError("LOCALIZATION_WORKER_ENABLED requires LOCALIZATION_ENABLED")
+        if self.LOCALIZATION_WORKER_ENABLED and self.LOCALIZATION_PROVIDER == "openai" and self.OPENAI_API_KEY is None:
+            raise ValueError("LOCALIZATION_WORKER_ENABLED with provider=openai requires OPENAI_API_KEY")
         return self
 
     @property
