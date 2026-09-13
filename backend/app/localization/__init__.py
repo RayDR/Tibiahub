@@ -7,7 +7,9 @@ from app.localization.provider import (
     TranslationResult,
 )
 from app.localization.service import (
+    ContentLocalizationService,
     ContentTranslationService,
+    LocalizedText,
     language_fallbacks,
     normalize_language_tag,
     protect_terms,
@@ -20,7 +22,9 @@ __all__ = [
     "TranslationProviderError",
     "TranslationRequest",
     "TranslationResult",
+    "ContentLocalizationService",
     "ContentTranslationService",
+    "LocalizedText",
     "language_fallbacks",
     "normalize_language_tag",
     "protect_terms",
