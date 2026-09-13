@@ -27,6 +27,24 @@ export interface KnowledgeLocalization {
   updated_at: string;
 }
 
+export interface LocalizationJob {
+  id: number;
+  entity_uuid: string | null;
+  resource_type: string;
+  resource_key: string;
+  field_path: string;
+  source_language: string;
+  target_language: string;
+  source_text_hash: string;
+  status: LocalizationJobStatus;
+  attempt_count: number;
+  next_attempt_at: string | null;
+  safe_failure_category: string | null;
+  created_at: string;
+  started_at: string | null;
+  completed_at: string | null;
+}
+
 export interface LocalizationDiagnostics {
   enabled: boolean;
   auto_enqueue: boolean;
@@ -78,6 +96,19 @@ export const localizationAdminApi = {
   ).data,
   unlock: async (id: string) => (
     await api.post<KnowledgeLocalization>(`/admin/knowledge/localizations/${encodeURIComponent(id)}/unlock`)
+  ).data,
+  enqueueJob: async (payload: {
+    entity_uuid?: string | null;
+    resource_type: string;
+    resource_key: string;
+    field_path: string;
+    source_text: string;
+    source_language: string;
+    target_language: string;
+    protected_terms?: string[];
+    context?: string;
+  }) => (
+    await api.post<LocalizationJob>('/admin/knowledge/localization-jobs', payload)
   ).data,
   backfill: async (payload: {
     resource_type: 'creature' | 'item' | 'quest' | 'npc' | 'location' | 'hunt_zone';
