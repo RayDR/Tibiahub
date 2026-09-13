@@ -67,16 +67,17 @@ class FakeTranslationProvider:
 
 
 def test_translation_persists_provider_detected_source_language(db):
-    provider = FakeTranslationProvider(detected_language="pt-BR", translated_text="Um Demon perigoso.")
+    source = "Um Demon perigoso."
+    provider = FakeTranslationProvider(detected_language="pt-BR", translated_text="Un Demon peligroso.")
     service = ContentTranslationService(provider)
 
     row = asyncio.run(
         service.translate_and_store(
             db,
             resource_type="creature",
-            resource_key="demon",
+            resource_key="demon-pt-source",
             field_path="description",
-            source_text="Um Demon perigoso.",
+            source_text=source,
             source_language="auto",
             target_language="es",
             protected_terms=("Demon",),
@@ -84,6 +85,7 @@ def test_translation_persists_provider_detected_source_language(db):
     )
 
     assert row.source_language == "pt-BR"
+    assert row.source_text == source
     assert row.language == "es"
     assert row.status == "generated"
     assert row.provider == "fake"
@@ -94,11 +96,12 @@ def test_approved_translation_becomes_stale_without_provider_call(db):
     old_source = "Old English source"
     row = KnowledgeLocalization(
         resource_type="creature",
-        resource_key="demon",
+        resource_key="demon-approved-stale",
         field_path="description",
         language="es",
         text="Traducción humana aprobada",
         source_language="en",
+        source_text=old_source,
         source_text_hash=source_text_hash(old_source),
         origin="human",
         status="approved",
@@ -110,14 +113,15 @@ def test_approved_translation_becomes_stale_without_provider_call(db):
     db.add(row)
     db.flush()
     provider = FakeTranslationProvider()
+    changed_source = "Changed English source"
 
     result = asyncio.run(
         ContentTranslationService(provider).translate_and_store(
             db,
             resource_type="creature",
-            resource_key="demon",
+            resource_key="demon-approved-stale",
             field_path="description",
-            source_text="Changed English source",
+            source_text=changed_source,
             source_language="en",
             target_language="es",
         )
@@ -126,6 +130,7 @@ def test_approved_translation_becomes_stale_without_provider_call(db):
     assert result.id == row.id
     assert result.status == "stale"
     assert result.text == "Traducción humana aprobada"
+    assert result.source_text == changed_source
     assert provider.calls == 0
 
 
@@ -133,11 +138,12 @@ def test_locale_resolution_ignores_stale_translation_and_falls_back_to_source(db
     db.add(
         KnowledgeLocalization(
             resource_type="creature",
-            resource_key="demon",
+            resource_key="demon-stale-fallback",
             field_path="description",
             language="es",
             text="Viejo",
             source_language="en",
+            source_text="Old source",
             source_text_hash=source_text_hash("Old source"),
             origin="human",
             status="stale",
@@ -149,7 +155,7 @@ def test_locale_resolution_ignores_stale_translation_and_falls_back_to_source(db
     result = ContentLocalizationService.resolve_text(
         db,
         resource_type="creature",
-        resource_key="demon",
+        resource_key="demon-stale-fallback",
         field_path="description",
         source_text="Current source",
         source_language="en",
@@ -165,11 +171,12 @@ def test_locale_resolution_ignores_stale_translation_and_falls_back_to_source(db
 def test_review_and_approval_lock_human_text(db):
     row = KnowledgeLocalization(
         resource_type="item",
-        resource_key="sudden-death-rune",
+        resource_key="sudden-death-rune-review",
         field_path="description",
         language="es",
         text="Borrador",
         source_language="en",
+        source_text="Source",
         source_text_hash=source_text_hash("Source"),
         origin="machine",
         status="generated",
@@ -193,11 +200,12 @@ def test_review_and_approval_lock_human_text(db):
 def test_queue_is_opt_in_and_idempotent(db, monkeypatch):
     monkeypatch.setattr(settings, "LOCALIZATION_ENABLED", True)
     monkeypatch.setattr(settings, "LOCALIZATION_AUTO_ENQUEUE", False)
+    resource_key = "queue-idempotency-demon"
 
     assert LocalizationQueueService.enqueue_field(
         db,
         resource_type="creature",
-        resource_key="demon",
+        resource_key=resource_key,
         field_path="description",
         source_text="Demons are dangerous.",
         source_language="en",
@@ -207,7 +215,7 @@ def test_queue_is_opt_in_and_idempotent(db, monkeypatch):
     first = LocalizationQueueService.enqueue_field(
         db,
         resource_type="creature",
-        resource_key="demon",
+        resource_key=resource_key,
         field_path="description",
         source_text="Demons are dangerous.",
         source_language="en",
@@ -217,7 +225,7 @@ def test_queue_is_opt_in_and_idempotent(db, monkeypatch):
     second = LocalizationQueueService.enqueue_field(
         db,
         resource_type="creature",
-        resource_key="demon",
+        resource_key=resource_key,
         field_path="description",
         source_text="Demons are dangerous.",
         source_language="en",
@@ -228,7 +236,12 @@ def test_queue_is_opt_in_and_idempotent(db, monkeypatch):
     assert first is not None
     assert second is not None
     assert first.id == second.id
-    assert db.query(LocalizationJob).count() == 1
+    assert (
+        db.query(LocalizationJob)
+        .filter_by(resource_type="creature", resource_key=resource_key, field_path="description", target_language="es")
+        .count()
+        == 1
+    )
 
 
 def test_planner_enqueues_only_translatable_fields_and_protects_tibia_terms(db, monkeypatch):
@@ -239,11 +252,11 @@ def test_planner_enqueues_only_translatable_fields_and_protects_tibia_terms(db, 
     result = KnowledgeNormalizationResult(
         action="upsert",
         provider_code="tibiawiki",
-        external_id="123",
+        external_id="planner-creature-123",
         candidate=CanonicalEntityCandidate(
             entity_type="creature",
             canonical_name="Demon",
-            language_neutral_id="creature:tibiawiki:123",
+            language_neutral_id="creature:tibiawiki:planner-creature-123",
             aliases=("The Demon",),
         ),
         canonical_data={
@@ -263,9 +276,16 @@ def test_planner_enqueues_only_translatable_fields_and_protects_tibia_terms(db, 
     )
 
     assert queued == 1
-    job = db.query(LocalizationJob).one()
-    assert job.field_path == "description"
-    assert job.target_language == "es"
+    job = (
+        db.query(LocalizationJob)
+        .filter_by(
+            resource_type="creature",
+            resource_key="planner-creature-123",
+            field_path="description",
+            target_language="es",
+        )
+        .one()
+    )
     assert set(job.protected_terms) >= {"Demon", "The Demon", "Edron"}
 
 
@@ -273,14 +293,15 @@ def test_existing_content_backfill_is_paginated_and_idempotent(db, monkeypatch):
     monkeypatch.setattr(settings, "LOCALIZATION_ENABLED", True)
     monkeypatch.setattr(settings, "LOCALIZATION_AUTO_ENQUEUE", False)
 
-    first_creature = Creature(name="Demon", description="A dangerous creature.")
-    second_creature = Creature(name="Dragon", description="A fire-breathing creature.")
+    first_creature = Creature(name="Backfill Demon", description="A dangerous creature.")
+    second_creature = Creature(name="Backfill Dragon", description="A fire-breathing creature.")
     db.add_all([first_creature, second_creature])
     db.flush()
 
     first_page = LocalizationBackfillService.backfill(
         db,
         resource_type="creature",
+        after_id=first_creature.id - 1,
         limit=1,
         target_languages=("es",),
     )
@@ -292,11 +313,18 @@ def test_existing_content_backfill_is_paginated_and_idempotent(db, monkeypatch):
     repeated = LocalizationBackfillService.backfill(
         db,
         resource_type="creature",
+        after_id=first_creature.id - 1,
         limit=1,
         target_languages=("es",),
     )
     assert repeated.queued == 0
-    assert db.query(LocalizationJob).count() == 1
+    resource_keys = (str(first_creature.id), str(second_creature.id))
+    scoped_jobs = db.query(LocalizationJob).filter(
+        LocalizationJob.resource_type == "creature",
+        LocalizationJob.resource_key.in_(resource_keys),
+        LocalizationJob.target_language == "es",
+    )
+    assert scoped_jobs.count() == 1
 
     second_page = LocalizationBackfillService.backfill(
         db,
@@ -309,4 +337,4 @@ def test_existing_content_backfill_is_paginated_and_idempotent(db, monkeypatch):
     assert second_page.queued == 1
     assert second_page.next_cursor is None
     assert second_page.exhausted is True
-    assert db.query(LocalizationJob).count() == 2
+    assert scoped_jobs.count() == 2
