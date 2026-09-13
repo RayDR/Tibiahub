@@ -116,7 +116,7 @@ class Settings(BaseSettings):
     LOCALIZATION_PROVIDER: Literal["openai"] = "openai"
     LOCALIZATION_MODEL: str = "gpt-5-mini"
     LOCALIZATION_DEFAULT_LANGUAGE: str = "en"
-    LOCALIZATION_TARGET_LANGUAGES: str = "es,pt-BR"
+    LOCALIZATION_TARGET_LANGUAGES: str = "en,es,pt-BR"
     LOCALIZATION_TIMEOUT_SECONDS: int = Field(45, ge=5, le=180)
     LOCALIZATION_MAX_SOURCE_CHARS: int = Field(12000, ge=200, le=50000)
     LOCALIZATION_WORKER_ENABLED: bool = False
@@ -189,7 +189,7 @@ class Settings(BaseSettings):
         values: list[str] = []
         for raw in self.LOCALIZATION_TARGET_LANGUAGES.split(","):
             value = raw.strip()
-            if value and value not in values and value != self.LOCALIZATION_DEFAULT_LANGUAGE:
+            if value and value not in values:
                 values.append(value)
         return values
 
