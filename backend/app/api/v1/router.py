@@ -4,7 +4,7 @@ API v1 Router - Combines all API endpoints
 from fastapi import APIRouter, Depends
 
 from app.api.v1 import assistant, creatures, creature_browser, hunt_zones, admin as admin_old, recommendations, items, item_browser, quests, quest_browser, knowledge_graph, npcs_locations, seo, spatial, tibia_map, hunt_analyzer, category_visuals, site_presentation
-from app.api.v1.endpoints import auth, guild, profile, admin, hunts, events, catalog, sync, password_reset, email_verification, character_ownership, tibia, sync_admin, raffles, raffle_participants, health, me_activity, notifications, workspaces, leadership, knowledge_admin, maintenance, maintenance_mode, admin_assistance, guild_permissions, quest_progress
+from app.api.v1.endpoints import auth, guild, profile, admin, hunts, events, catalog, sync, password_reset, email_verification, character_ownership, tibia, sync_admin, raffles, raffle_participants, health, me_activity, notifications, workspaces, leadership, knowledge_admin, localization_admin, maintenance, maintenance_mode, admin_assistance, guild_permissions, quest_progress
 
 api_router = APIRouter()
 
@@ -31,6 +31,7 @@ api_router.include_router(raffles.router, prefix="/raffles", tags=["Guild Raffle
 api_router.include_router(notifications.router)
 api_router.include_router(workspaces.router, prefix="/admin", tags=["Admin Workspaces"])
 api_router.include_router(knowledge_admin.router, prefix="/admin/knowledge", tags=["Knowledge Operations"])
+api_router.include_router(localization_admin.router, prefix="/admin/knowledge", tags=["Knowledge Localization"])
 api_router.include_router(maintenance.router, prefix="/admin/maintenance", tags=["Admin Maintenance"])
 api_router.include_router(maintenance_mode.router, prefix="/maintenance", tags=["Maintenance"])
 api_router.include_router(admin_assistance.router, prefix="/admin/assistance", tags=["Admin Assistance"])
