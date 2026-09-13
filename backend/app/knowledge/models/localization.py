@@ -72,6 +72,10 @@ class KnowledgeLocalization(Base):
     text = Column(Text, nullable=False)
 
     source_language = Column(String(32), nullable=False)
+    # Latest canonical/source snapshot used to generate or stale-check this
+    # localized value. It is evidence for reviewers, not a replacement for the
+    # canonical domain row or immutable provider document.
+    source_text = Column(Text, nullable=True)
     source_text_hash = Column(String(64), nullable=False)
     origin = Column(String(16), nullable=False, default="machine")
     status = Column(String(16), nullable=False, default="generated")
