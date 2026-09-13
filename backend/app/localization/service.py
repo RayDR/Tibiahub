@@ -4,6 +4,8 @@ from __future__ import annotations
 
 import hashlib
 import re
+from dataclasses import dataclass
+from datetime import UTC, datetime
 from uuid import UUID
 
 from sqlalchemy.orm import Session
@@ -13,6 +15,15 @@ from app.localization.provider import TranslationProvider, TranslationRequest
 
 
 _TERM_TOKEN = "[[TH_TERM_{index:04d}]]"
+
+
+@dataclass(frozen=True, slots=True)
+class LocalizedText:
+    text: str
+    language: str
+    status: str
+    origin: str
+    used_fallback: bool
 
 
 def normalize_language_tag(value: str | None) -> str | None:
@@ -64,6 +75,119 @@ def restore_terms(text: str, replacements: dict[str, str]) -> str:
     for token, term in replacements.items():
         restored = restored.replace(token, term)
     return restored
+
+
+class ContentLocalizationService:
+    """Read and human-review operations independent of any translation provider."""
+
+    @staticmethod
+    def resolve_text(
+        db: Session,
+        *,
+        resource_type: str,
+        resource_key: str,
+        field_path: str,
+        source_text: str | None,
+        source_language: str,
+        requested_language: str | None,
+        default_language: str = "en",
+    ) -> LocalizedText | None:
+        if source_text is None:
+            return None
+        source_language = normalize_language_tag(source_language) or source_language
+        requested = normalize_language_tag(requested_language) or normalize_language_tag(default_language) or "en"
+        if requested == source_language:
+            return LocalizedText(source_text, source_language, "source", "provider", False)
+
+        fallbacks = language_fallbacks(requested, default=default_language)
+        rows = (
+            db.query(KnowledgeLocalization)
+            .filter(
+                KnowledgeLocalization.resource_type == resource_type,
+                KnowledgeLocalization.resource_key == resource_key,
+                KnowledgeLocalization.field_path == field_path,
+                KnowledgeLocalization.language.in_(fallbacks),
+                KnowledgeLocalization.status.in_(["generated", "reviewed", "approved"]),
+            )
+            .all()
+        )
+        by_language = {row.language: row for row in rows}
+        for language in fallbacks:
+            row = by_language.get(language)
+            if row is not None:
+                return LocalizedText(
+                    row.text,
+                    row.language,
+                    row.status,
+                    row.origin,
+                    row.language != requested,
+                )
+            if language == source_language:
+                return LocalizedText(source_text, source_language, "source", "provider", language != requested)
+        return LocalizedText(source_text, source_language, "source", "provider", source_language != requested)
+
+    @staticmethod
+    def review(
+        db: Session,
+        localization: KnowledgeLocalization,
+        *,
+        reviewer_id: int,
+        text: str | None = None,
+        lock: bool | None = None,
+    ) -> KnowledgeLocalization:
+        if localization.status == "failed":
+            raise ValueError("failed localization cannot be reviewed")
+        if text is not None:
+            clean = text.strip()
+            if not clean:
+                raise ValueError("localized text cannot be empty")
+            localization.text = clean
+            localization.origin = "human"
+        localization.status = "reviewed"
+        localization.reviewed_by_id = reviewer_id
+        localization.reviewed_at = datetime.now(UTC)
+        if lock is not None:
+            localization.locked = lock
+        db.flush()
+        return localization
+
+    @staticmethod
+    def approve(
+        db: Session,
+        localization: KnowledgeLocalization,
+        *,
+        reviewer_id: int,
+        text: str | None = None,
+    ) -> KnowledgeLocalization:
+        ContentLocalizationService.review(
+            db,
+            localization,
+            reviewer_id=reviewer_id,
+            text=text,
+            lock=True,
+        )
+        now = datetime.now(UTC)
+        localization.status = "approved"
+        localization.approved_by_id = reviewer_id
+        localization.approved_at = now
+        localization.reviewed_by_id = reviewer_id
+        localization.reviewed_at = now
+        localization.locked = True
+        db.flush()
+        return localization
+
+    @staticmethod
+    def unlock_for_regeneration(
+        db: Session,
+        localization: KnowledgeLocalization,
+    ) -> KnowledgeLocalization:
+        localization.locked = False
+        localization.approved_by_id = None
+        localization.approved_at = None
+        if localization.status == "approved":
+            localization.status = "reviewed"
+        db.flush()
+        return localization
 
 
 class ContentTranslationService:
@@ -159,6 +283,8 @@ class ContentTranslationService:
             existing.provider = result.provider
             existing.provider_model = result.model
             existing.provider_metadata = result.metadata
+            existing.reviewed_by_id = None
+            existing.reviewed_at = None
 
         db.flush()
         return existing
