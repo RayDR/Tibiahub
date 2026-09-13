@@ -26,6 +26,7 @@ def upgrade() -> None:
         sa.Column("language", sa.String(length=32), nullable=False),
         sa.Column("text", sa.Text(), nullable=False),
         sa.Column("source_language", sa.String(length=32), nullable=False),
+        sa.Column("source_text", sa.Text(), nullable=True),
         sa.Column("source_text_hash", sa.String(length=64), nullable=False),
         sa.Column("origin", sa.String(length=16), nullable=False, server_default="machine"),
         sa.Column("status", sa.String(length=16), nullable=False, server_default="generated"),
