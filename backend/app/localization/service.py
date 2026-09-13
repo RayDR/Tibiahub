@@ -102,7 +102,18 @@ class ContentTranslationService:
         if existing and existing.source_text_hash == digest and existing.status not in {"failed", "stale"}:
             return existing
 
-        if existing and (existing.locked or existing.status == "approved"):
+        # An approved translation remains human-owned even after it becomes stale.
+        # approved_at is retained when status changes to stale so later retries cannot
+        # silently replace the previously approved text.
+        human_protected = bool(
+            existing
+            and (
+                existing.locked
+                or existing.status == "approved"
+                or existing.approved_at is not None
+            )
+        )
+        if existing and human_protected:
             existing.status = "stale"
             existing.source_text_hash = digest
             existing.source_language = source_language
