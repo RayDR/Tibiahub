@@ -5,6 +5,7 @@ import { FontAwesomeIcon } from '@fortawesome/react-fontawesome';
 import { faCheck, faLanguage } from '@fortawesome/free-solid-svg-icons';
 
 import { useViewportPopover } from '../hooks/useViewportPopover';
+import { clearKnowledgeRequestCache } from '../services/knowledgeRequestCache';
 
 export default function LanguageSwitcher() {
     const { i18n, t } = useTranslation();
@@ -33,9 +34,16 @@ export default function LanguageSwitcher() {
         return () => document.removeEventListener('keydown', closeOnEscape);
     }, [isOpen]);
 
-    const changeLanguage = (code: string) => {
-        i18n.changeLanguage(code);
+    const changeLanguage = async (code: string) => {
+        // Persist the explicit UI choice for server-side content localization.
+        // The cookie contains only a locale code; no secret or account data.
+        document.cookie = `tibiahub_lang=${encodeURIComponent(code)}; Path=/; Max-Age=31536000; SameSite=Lax`;
+        clearKnowledgeRequestCache();
+        await i18n.changeLanguage(code);
         setIsOpen(false);
+        // Existing detail loaders are not uniformly keyed by i18n state yet.
+        // Reload once so every public knowledge request uses the new locale.
+        window.location.reload();
     };
 
     const menu = isOpen ? createPortal(
@@ -55,12 +63,12 @@ export default function LanguageSwitcher() {
                         key={lang.code}
                         role="menuitemradio"
                         aria-checked={activeCode === lang.code}
-                        onClick={() => changeLanguage(lang.code)}
+                        onClick={() => void changeLanguage(lang.code)}
                         aria-label={t('a11y.switchLanguageTo', { language: lang.name })}
                         className={`flex w-full items-center gap-3 px-4 py-3 text-sm transition-all duration-300 ${
                             activeCode === lang.code
                                 ? 'bg-primary/20 text-primary font-semibold'
-                                : 'text-content-primary hover:bg-surface-inverse/5'
+                                : 'text-content-primary hover:bg-surface-inverse/5 hover:text-primary'
                         }`}
                     >
                         <span className="inline-flex w-8 items-center justify-center rounded border border-line px-1 py-0.5 text-[11px] font-semibold text-content-muted">
