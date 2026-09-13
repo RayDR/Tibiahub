@@ -19,6 +19,7 @@ from starlette.responses import Response
 from app.core.config import settings
 from app.db.database import SessionLocal
 from app.localization.projection import apply_localizations_to_payload, requested_language
+from app.localization.service import normalize_language_tag
 
 
 logger = logging.getLogger("app.localization.public")
@@ -60,6 +61,16 @@ def _vary_accept_language(headers: dict[str, str]) -> None:
     headers["vary"] = ", ".join(values)
 
 
+def _requested_content_language(request: Request) -> str:
+    explicit = normalize_language_tag(request.query_params.get("lang"))
+    if explicit:
+        return explicit
+    persisted = normalize_language_tag(request.cookies.get("tibiahub_lang"))
+    if persisted:
+        return persisted
+    return requested_language(request)
+
+
 class PublicLocalizationMiddleware(BaseHTTPMiddleware):
     """Overlay persisted localized fields for public detail JSON responses."""
 
@@ -97,7 +108,7 @@ class PublicLocalizationMiddleware(BaseHTTPMiddleware):
                     background=response.background,
                 )
 
-            language = requested_language(request, request.query_params.get("lang"))
+            language = _requested_content_language(request)
             localized, field_count, applied_languages = await run_in_threadpool(
                 _project_payload,
                 resource_type,
