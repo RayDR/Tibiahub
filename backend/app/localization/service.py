@@ -226,9 +226,6 @@ class ContentTranslationService:
         if existing and existing.source_text_hash == digest and existing.status not in {"failed", "stale"}:
             return existing
 
-        # An approved translation remains human-owned even after it becomes stale.
-        # approved_at is retained when status changes to stale so later retries cannot
-        # silently replace the previously approved text.
         human_protected = bool(
             existing
             and (
@@ -255,6 +252,7 @@ class ContentTranslationService:
             )
         )
         translated_text = restore_terms(result.text, replacements)
+        detected_source_language = normalize_language_tag(result.source_language) or result.source_language or source_language
 
         if existing is None:
             existing = KnowledgeLocalization(
@@ -264,7 +262,7 @@ class ContentTranslationService:
                 field_path=field_path,
                 language=target_language,
                 text=translated_text,
-                source_language=source_language,
+                source_language=detected_source_language,
                 source_text_hash=digest,
                 origin="machine",
                 status="generated",
@@ -276,7 +274,7 @@ class ContentTranslationService:
         else:
             existing.entity_uuid = entity_uuid or existing.entity_uuid
             existing.text = translated_text
-            existing.source_language = source_language
+            existing.source_language = detected_source_language
             existing.source_text_hash = digest
             existing.origin = "machine"
             existing.status = "generated"
