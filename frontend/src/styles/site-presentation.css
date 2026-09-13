@@ -107,6 +107,30 @@
 }
 
 @media (max-width: 639px) {
+  .app-primary-nav > .app-nav-container {
+    width: 100vw;
+    max-width: none;
+    padding-inline: 0;
+  }
+
+  .app-primary-nav .app-nav-shell {
+    width: 100%;
+    grid-template-columns: auto minmax(0, 1fr);
+    gap: var(--space-1);
+    border-radius: 0;
+    padding-left: max(var(--space-2), env(safe-area-inset-left));
+    padding-right: max(var(--space-2), env(safe-area-inset-right));
+  }
+
+  .app-primary-nav .app-nav-brand {
+    justify-self: start;
+  }
+
+  .app-primary-nav .app-nav-utilities {
+    min-width: 0;
+    justify-self: end;
+  }
+
   .app-global-search-compact-panel {
     position: fixed;
     top: calc(var(--app-nav-clearance) - .2rem);
