@@ -109,6 +109,22 @@ class Settings(BaseSettings):
     SYNC_WORKER_LEASE_SECONDS: int = Field(900, ge=60, le=3600)
     SYNC_WORKER_MAX_IDLE_SECONDS: int = Field(30, ge=1, le=3600)
 
+    # Content localization. Both enqueueing and execution are opt-in so a
+    # deploy cannot begin consuming an external translation API unexpectedly.
+    LOCALIZATION_ENABLED: bool = False
+    LOCALIZATION_AUTO_ENQUEUE: bool = False
+    LOCALIZATION_PROVIDER: Literal["openai"] = "openai"
+    LOCALIZATION_MODEL: str = "gpt-5-mini"
+    LOCALIZATION_DEFAULT_LANGUAGE: str = "en"
+    LOCALIZATION_TARGET_LANGUAGES: str = "es,pt-BR"
+    LOCALIZATION_TIMEOUT_SECONDS: int = Field(45, ge=5, le=180)
+    LOCALIZATION_MAX_SOURCE_CHARS: int = Field(12000, ge=200, le=50000)
+    LOCALIZATION_WORKER_ENABLED: bool = False
+    LOCALIZATION_WORKER_ID: str = "localization-worker-1"
+    LOCALIZATION_WORKER_POLL_SECONDS: int = Field(5, ge=1, le=300)
+    LOCALIZATION_WORKER_LEASE_SECONDS: int = Field(180, ge=30, le=3600)
+    LOCALIZATION_WORKER_MAX_ATTEMPTS: int = Field(5, ge=1, le=20)
+
     # Read-only TibiaHub Assistant. Disabled until explicitly enabled through
     # the external runtime configuration.
     ASSISTANT_ENABLED: bool = False
@@ -138,6 +154,10 @@ class Settings(BaseSettings):
             raise ValueError("MEDIA_STORAGE_ROOT must be an absolute path")
         if self.smtp_configured and self.SMTP_USE_TLS == self.SMTP_USE_SSL:
             raise ValueError("Configured SMTP requires exactly one of SMTP_USE_TLS or SMTP_USE_SSL")
+        if not self.LOCALIZATION_DEFAULT_LANGUAGE.strip():
+            raise ValueError("LOCALIZATION_DEFAULT_LANGUAGE cannot be empty")
+        if self.LOCALIZATION_ENABLED and self.LOCALIZATION_PROVIDER == "openai" and self.OPENAI_API_KEY is None:
+            raise ValueError("LOCALIZATION_ENABLED with provider=openai requires OPENAI_API_KEY")
         return self
 
     @property
@@ -161,6 +181,15 @@ class Settings(BaseSettings):
         if isinstance(self.CORS_ORIGINS, str):
             return [origin.strip() for origin in self.CORS_ORIGINS.split(",")]
         return self.CORS_ORIGINS
+
+    @property
+    def localization_target_languages(self) -> list[str]:
+        values: list[str] = []
+        for raw in self.LOCALIZATION_TARGET_LANGUAGES.split(","):
+            value = raw.strip()
+            if value and value not in values and value != self.LOCALIZATION_DEFAULT_LANGUAGE:
+                values.append(value)
+        return values
 
     @property
     def smtp_from_address(self) -> str:
