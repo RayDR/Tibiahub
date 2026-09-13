@@ -25,8 +25,27 @@ logger = logging.getLogger(__name__)
 _LINK_RE = re.compile(r"\[\[(?:[^|\]]+\|)?([^\]]+)\]\]")
 _HTML_RE = re.compile(r"<[^>]+>")
 _COMMENT_RE = re.compile(r"<!--.*?-->", re.S)
+_DANGLING_COMMENT_RE = re.compile(r"<!--.*$", re.S)
+_GALLERY_RE = re.compile(
+    r"<gallery\b[^>]*>.*?</gallery\s*>",
+    re.I | re.S,
+)
+_UNCLOSED_GALLERY_RE = re.compile(
+    r"<gallery\b[^>]*>.*$",
+    re.I | re.S,
+)
 _TEMPLATE_RE = re.compile(r"\{\{[^{}]*\}\}")
 _NON_ALNUM_RE = re.compile(r"[^a-z0-9]+")
+_SEMANTIC_EMPTY_TEXT = {
+    "",
+    "?",
+    "??",
+    "--",
+    "unknown",
+    "n/a",
+    "n.a",
+    "none",
+}
 
 BESTIARY_CHARM_POINTS = {
     "Harmless": 1,
@@ -108,18 +127,47 @@ def _build_sprite_url(asset_name: str) -> str:
 
 def _strip_markup(value: str) -> str:
     text = html.unescape(value or "")
+
+    # Galleries are presentation/media metadata, not semantic prose.
+    # Preserve meaningful prose that appears before or after them.
+    text = _GALLERY_RE.sub(" ", text)
+    text = _UNCLOSED_GALLERY_RE.sub(" ", text)
+
+    # Infobox values are parsed line-by-line. A multiline comment may
+    # therefore appear here only as its opening fragment.
     text = _COMMENT_RE.sub("", text)
-    text = text.replace("<br />", ", ").replace("<br/>", ", ").replace("<br>", ", ")
-    text = _LINK_RE.sub(lambda match: match.group(1), text)
+    text = _DANGLING_COMMENT_RE.sub("", text)
+
+    text = (
+        text.replace("<br />", ", ")
+        .replace("<br/>", ", ")
+        .replace("<br>", ", ")
+    )
+
+    text = _LINK_RE.sub(
+        lambda match: match.group(1),
+        text,
+    )
+
     previous = None
     while previous != text:
         previous = text
         text = _TEMPLATE_RE.sub("", text)
+
     text = _HTML_RE.sub("", text)
     text = text.replace("'''", "").replace("''", "")
     text = text.replace("&nbsp;", " ")
     text = re.sub(r"\s+", " ", text)
-    return text.strip(" ,")
+
+    cleaned = text.strip(" ,")
+
+    marker = cleaned.casefold().strip()
+    marker = marker.rstrip(".").strip()
+
+    if marker in _SEMANTIC_EMPTY_TEXT:
+        return ""
+
+    return cleaned
 
 
 def _extract_infobox_param_map(wikitext: str) -> Dict[str, str]:
@@ -134,15 +182,58 @@ def _extract_infobox_param_map(wikitext: str) -> Dict[str, str]:
     return params
 
 
+def _dedupe_reference_values(
+    values: List[str],
+) -> List[str]:
+    result: List[str] = []
+    seen: set[str] = set()
+
+    for raw_value in values:
+        item = _strip_markup(raw_value).strip()
+
+        # Removing templates such as Mapper Coords can leave "." or
+        # other punctuation-only fragments. They are not locations.
+        if not item or not any(
+            character.isalnum()
+            for character in item
+        ):
+            continue
+
+        key = re.sub(
+            r"\s+",
+            " ",
+            item,
+        ).casefold()
+
+        if key in seen:
+            continue
+
+        seen.add(key)
+        result.append(item)
+
+    return result
+
+
 def _extract_links(value: str) -> List[str]:
-    links = [_strip_markup(match.group(1)) for match in _LINK_RE.finditer(value)]
+    links = [
+        match.group(1)
+        for match in _LINK_RE.finditer(value)
+    ]
+
     if links:
-        return [item for item in links if item]
+        return _dedupe_reference_values(links)
 
     cleaned = _strip_markup(value)
+
     if not cleaned:
         return []
-    return [item.strip() for item in cleaned.split(",") if item.strip()]
+
+    return _dedupe_reference_values(
+        [
+            item.strip()
+            for item in cleaned.split(",")
+        ]
+    )
 
 
 _LOOT_AMOUNT_TOKEN_RE = re.compile(
@@ -441,42 +532,103 @@ async def get_tibiamaps_bounds() -> Dict[str, Any]:
 
 def _build_creature_payload(name: str, wikitext: str) -> Dict[str, Any]:
     params = _extract_infobox_param_map(wikitext)
+
+    def optional_text(value: Optional[str]) -> Optional[str]:
+        cleaned = _strip_markup(value or "")
+        if not cleaned:
+            return None
+        if cleaned.strip().lower() in {
+            "?",
+            "??",
+            "--",
+            "unknown",
+            "unknown.",
+            "n/a",
+            "n.a.",
+            "none",
+        }:
+            return None
+        return cleaned
+
     display_name = _strip_markup(params.get("name") or name)
     actual_name = _strip_markup(params.get("actualname") or display_name)
-    bestiary_level = _strip_markup(params.get("bestiarylevel") or "") or None
+
+    hitpoints = _to_int(params.get("hp"))
+    experience = _to_int(params.get("exp"))
+    armor = _to_int(params.get("armor"))
+    speed = _to_int(params.get("speed"))
+    max_damage = _to_int(params.get("maxdmg"))
+    summon_cost = _to_int(params.get("summon"))
+    convince_cost = _to_int(params.get("convince"))
+
+    bestiary_class = optional_text(params.get("bestiaryclass"))
+    bestiary_level = optional_text(params.get("bestiarylevel"))
+    creature_class = optional_text(params.get("creatureclass"))
+    primary_type = optional_text(params.get("primarytype"))
+
+    bestiary_text = optional_text(params.get("bestiarytext"))
+    notes = optional_text(params.get("notes"))
+
+    # TibiaWiki uses these as two distinct semantics:
+    # - behaviour: what the creature itself does
+    # - strategy: advice for the player fighting it
+    behavior = optional_text(
+        params.get("behaviour") or params.get("behavior")
+    )
+    strategy = optional_text(params.get("strategy"))
+
+    # Keep description backward-compatible for pages that have no bestiary
+    # text while preserving notes separately when both exist.
+    description = bestiary_text or notes
+
     locations = _extract_links(params.get("location", ""))
     loot_items = _extract_loot_items(wikitext)
+
+    source_unknown_fields = [
+        field
+        for field, value in {
+            "hitpoints": hitpoints,
+            "experience": experience,
+            "armor": armor,
+            "speed": speed,
+            "max_damage": max_damage,
+        }.items()
+        if value is None
+    ]
+
     missing_fields = [
         field
         for field, value in {
             "image_url": actual_name,
-            "experience": params.get("exp"),
-            "hitpoints": params.get("hp"),
+            "experience": experience,
+            "hitpoints": hitpoints,
             "locations": locations,
             "loot": loot_items,
         }.items()
-        if not value
+        if value in (None, "", [], {})
     ]
 
     payload = {
         "id": creature_id_for_name(display_name),
         "slug": slugify_name(display_name),
         "name": display_name,
-        "article": _strip_markup(params.get("article") or "") or None,
-        "plural": _strip_markup(params.get("plural") or "") or None,
-        "hitpoints": _to_int(params.get("hp")),
-        "experience": _to_int(params.get("exp")),
-        "armor": _to_int(params.get("armor")),
-        "speed": _to_int(params.get("speed")),
-        "max_damage": _to_int(params.get("maxdmg")),
-        "summon_cost": _to_int(params.get("summon")),
-        "convince_cost": _to_int(params.get("convince")),
+        "article": optional_text(params.get("article")),
+        "plural": optional_text(params.get("plural")),
+        "hitpoints": hitpoints,
+        "experience": experience,
+        "armor": armor,
+        "speed": speed,
+        "max_damage": max_damage,
+        "summon_cost": summon_cost,
+        "convince_cost": convince_cost,
         "difficulty": bestiary_level,
-        "occurrence": _strip_markup(params.get("occurrence") or "") or None,
+        "occurrence": optional_text(params.get("occurrence")),
         "is_boss": _to_bool(params.get("isboss")),
         "loot_value": None,
-        "description": _strip_markup(params.get("bestiarytext") or params.get("notes") or "") or None,
-        "behavior": _strip_markup(params.get("strategy") or params.get("behaviour") or "") or None,
+        "description": description,
+        "behavior": behavior,
+        "strategy": strategy,
+        "notes": notes,
         "image_url": _build_sprite_url(actual_name) if actual_name else None,
         "loot_items": loot_items,
         "spawn_locations": [],
@@ -484,24 +636,30 @@ def _build_creature_payload(name: str, wikitext: str) -> Dict[str, Any]:
         "resistances": [],
         "locations": locations,
         "related_tasks": [],
-        "bestiary_class": _strip_markup(params.get("bestiaryclass") or "") or None,
+        "bestiary_class": bestiary_class,
         "bestiary_level": bestiary_level,
         "charm_points": BESTIARY_CHARM_POINTS.get(bestiary_level),
-        "creature_class": _strip_markup(params.get("creatureclass") or "") or None,
-        "primary_type": _strip_markup(params.get("primarytype") or "") or None,
+        "creature_class": creature_class,
+        "primary_type": primary_type,
         "source_url": _build_wiki_page_url(display_name),
         "data_sources": ["tibiawiki", "tibiadata"],
         "missing_fields": missing_fields,
+        "source_unknown_fields": source_unknown_fields,
         "classification": _infer_classification(
             name=display_name,
-            creature_class=_strip_markup(params.get("creatureclass") or "") or None,
-            bestiary_class=_strip_markup(params.get("bestiaryclass") or "") or None,
+            creature_class=creature_class,
+            bestiary_class=bestiary_class,
         ),
     }
-    if missing_fields:
-        logger.warning("creature_incomplete name=%s missing=%s", display_name, ",".join(missing_fields))
-    return payload
 
+    if missing_fields:
+        logger.warning(
+            "creature_incomplete name=%s missing=%s",
+            display_name,
+            ",".join(missing_fields),
+        )
+
+    return payload
 
 async def get_creature_detail_by_name(name: str) -> Dict[str, Any]:
     if settings.USE_MOCK_DATA:

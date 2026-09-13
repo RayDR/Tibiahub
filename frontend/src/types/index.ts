@@ -90,6 +90,8 @@ export interface Creature {
   loot_value?: number;
   description?: string;
   behavior?: string;
+  strategy?: string;
+  notes?: string;
   image_url?: string;
   image_alias?: string;
   image_url_override?: string;

@@ -45,6 +45,7 @@ from app.knowledge.services.normalization import KnowledgeNormalizationService
 from app.knowledge.workers.knowledge_worker import KnowledgeWorker
 from app.models import Creature
 from app.models.workspace_audit import WorkspaceAudit
+from app.services.bestiary_source import _build_creature_payload
 from app.services.text_utils import normalize_search_text
 from tests.conftest import make_user
 
@@ -305,11 +306,15 @@ def test_identity_mapping_bridge_reuses_uuid_and_versions_only_canonical_changes
     updated = _apply_detail(db, updated_raw)
     assert updated.status == "updated" and creature.hitpoints == 8300 and creature.data_version == 2
 
-    prior_description = creature.description
     prior_version = creature.data_version
     _apply_detail(db, fixture("tibiawiki_creature_partial.json"))
-    assert creature.hitpoints == 8300 and creature.description == prior_description
-    assert creature.data_version == prior_version
+
+    # Partiality belongs to individual source fields, not to the whole
+    # entity. HP is absent from this document, so preserve the prior HP.
+    # Description is explicitly supplied, so accept the new evidence.
+    assert creature.hitpoints == 8300
+    assert creature.description == "A partial record."
+    assert creature.data_version == prior_version + 1
 
 
 def test_exact_name_reuses_entity_but_weak_fuzzy_name_does_not(db, creature_registry):
@@ -702,3 +707,274 @@ def test_admin_controls_require_global_admin_catalog_confirmation_and_audit(clie
     created = client.post("/api/v1/admin/knowledge/jobs", headers=admin_headers, json=payload)
     assert created.status_code == 201 and created.json()["item"]["job_type"] == "creature_catalog"
     assert db.query(WorkspaceAudit).filter_by(action="knowledge_job_enqueued").count() == 1
+def test_creature_semantics_keep_behaviour_strategy_and_notes_separate(
+    db,
+    creature_registry,
+):
+    raw = fixture("tibiawiki_creature_detail.json")
+    wikitext = raw["parse"]["wikitext"]["*"]
+
+    marker = "| strategy = Keep your distance and use ice attacks."
+
+    assert marker in wikitext
+
+    raw["parse"]["wikitext"]["*"] = wikitext.replace(
+        marker,
+        (
+            "| behaviour = Fights in close combat and retreats at low health.\n"
+            "| strategy = Keep your distance and use ice attacks.\n"
+            "| notes = Appears in this regression fixture only."
+        ),
+    )
+
+    _apply_detail(db, raw)
+
+    creature = db.query(Creature).one()
+
+    assert creature.behavior == (
+        "Fights in close combat and retreats at low health."
+    )
+    assert creature.strategy == (
+        "Keep your distance and use ice attacks."
+    )
+    assert creature.notes == (
+        "Appears in this regression fixture only."
+    )
+
+    # Bestiary text remains the overview when both bestiary text and notes
+    # exist. Notes are preserved separately rather than discarded.
+    assert creature.description == "A powerful demonic creature."
+
+
+def test_unknown_provider_numeric_values_clear_only_legacy_zero_sentinels(
+    db,
+    creature_registry,
+):
+    _apply_detail(
+        db,
+        fixture("tibiawiki_creature_detail.json"),
+    )
+
+    creature = db.query(Creature).one()
+
+    # Simulate values created by the historical compatibility path.
+    creature.hitpoints = 0
+    creature.experience = 0
+    creature.armor = 0
+    creature.speed = 0
+    db.flush()
+
+    raw = fixture("tibiawiki_creature_detail.json")
+    wikitext = raw["parse"]["wikitext"]["*"]
+
+    replacements = {
+        "| hp = 8200": "| hp = ?",
+        "| exp = 6000": "| exp = ?",
+        "| armor = 55": "| armor = ?",
+        "| speed = 280": "| speed = ?",
+    }
+
+    for old, new in replacements.items():
+        assert old in wikitext
+        wikitext = wikitext.replace(old, new)
+
+    raw["parse"]["wikitext"]["*"] = wikitext
+
+    _apply_detail(db, raw)
+
+    assert creature.hitpoints is None
+    assert creature.experience is None
+    assert creature.armor is None
+    assert creature.speed is None
+
+    assert {"hitpoints", "experience"}.issubset(
+        set(creature.missing_fields or [])
+    )
+
+
+def test_legitimate_provider_zero_is_not_treated_as_unknown(
+    db,
+    creature_registry,
+):
+    raw = fixture("tibiawiki_creature_detail.json")
+    wikitext = raw["parse"]["wikitext"]["*"]
+
+    replacements = {
+        "| hp = 8200": "| hp = 0",
+        "| exp = 6000": "| exp = 0",
+        "| armor = 55": "| armor = 0",
+        "| speed = 280": "| speed = 0",
+    }
+
+    for old, new in replacements.items():
+        assert old in wikitext
+        wikitext = wikitext.replace(old, new)
+
+    raw["parse"]["wikitext"]["*"] = wikitext
+
+    _apply_detail(db, raw)
+
+    creature = db.query(Creature).one()
+
+    assert creature.hitpoints == 0
+    assert creature.experience == 0
+    assert creature.armor == 0
+    assert creature.speed == 0
+
+    assert "hitpoints" not in (creature.missing_fields or [])
+    assert "experience" not in (creature.missing_fields or [])
+def test_partial_creature_updates_supplied_behaviour_and_strategy(
+    db,
+    creature_registry,
+):
+    raw = fixture("tibiawiki_creature_detail.json")
+
+    # First simulate the historical semantic error where strategy was stored
+    # as behavior.
+    _apply_detail(db, raw)
+    creature = db.query(Creature).one()
+    creature.behavior = "Old strategy incorrectly stored as behavior."
+    db.flush()
+
+    wikitext = raw["parse"]["wikitext"]["*"]
+
+    strategy_line = (
+        "| strategy = Keep your distance and use ice attacks."
+    )
+
+    assert strategy_line in wikitext
+
+    # Remove loot so the document is genuinely partial while still supplying
+    # valid combat semantics.
+    wikitext = wikitext.replace(
+        strategy_line,
+        (
+            "| behaviour = Fights in close combat and retreats at low health.\n"
+            "| strategy = Keep your distance and use ice attacks."
+        ),
+    )
+
+    wikitext = wikitext.replace(
+        "{{Loot Item|1-3|Demon Horn|Rare}}",
+        "",
+    )
+
+    raw["parse"]["wikitext"]["*"] = wikitext
+
+    _apply_detail(db, raw)
+
+    assert "loot" in (creature.missing_fields or [])
+
+    # The unrelated missing loot field must not prevent valid supplied
+    # semantics from repairing the canonical row.
+    assert creature.behavior == (
+        "Fights in close combat and retreats at low health."
+    )
+    assert creature.strategy == (
+        "Keep your distance and use ice attacks."
+    )
+
+    # Fields explicitly supplied by this partial document remain authoritative.
+    assert creature.hitpoints == 8200
+    assert creature.experience == 6000
+def test_creature_source_cleans_nonsemantic_notes_markup():
+    young_goanna = _build_creature_payload(
+        "Young Goanna",
+        """
+{{Infobox Creature
+| name = Young Goanna
+| hp = 6950
+| exp = 5250
+| notes = <gallery captionalign="center" mode="nolines">Young Goanna Artwork.jpg|Official [[Creature Artwork]]</gallery> They are a younger version of the [[Adult Goanna]].
+| location = [[Kilmaresh Central Steppe]]
+}}
+""",
+    )
+
+    assert young_goanna["notes"] == (
+        "They are a younger version of the Adult Goanna."
+    )
+
+    artwork_only = _build_creature_payload(
+        "White Weretiger",
+        """
+{{Infobox Creature
+| name = White Weretiger
+| hp = 6100
+| exp = 5200
+| notes = <gallery captionalign="center" mode="nolines">Weretiger Artwork.jpg|Official [[Creature Artwork]]</gallery>
+| location = [[Oskayaat]]
+}}
+""",
+    )
+
+    assert artwork_only["notes"] is None
+
+    dangling_comment = _build_creature_payload(
+        "Achad",
+        """
+{{Infobox Creature
+| name = Achad
+| hp = 185
+| exp = 70
+| notes = Greenhorn challenger.<br /><!--
+| behaviour = Fights until death in close combat.
+| strategy = Kill it normally.
+| location = [[Svargrond Arena]]
+}}
+""",
+    )
+
+    assert dangling_comment["notes"] == (
+        "Greenhorn challenger."
+    )
+
+    semantic_empty = _build_creature_payload(
+        "A Greedy Eye",
+        """
+{{Infobox Creature
+| name = A Greedy Eye
+| hp = ?
+| exp = ?
+| notes = None.
+| location = [[Somewhere]]
+}}
+""",
+    )
+
+    assert semantic_empty["notes"] is None
+
+
+def test_creature_source_deduplicates_and_sanitizes_locations():
+    cocoon = _build_creature_payload(
+        "Cocoon",
+        """
+{{Infobox Creature
+| name = Cocoon
+| hp = ?
+| exp = ?
+| location = [[Vengoth]] in the lair of [[Devovorga]] after having killed all the sub-bosses and damaged [[Devovorga]] enough.
+}}
+""",
+    )
+
+    assert cocoon["locations"] == [
+        "Vengoth",
+        "Devovorga",
+    ]
+
+    feroxa = _build_creature_payload(
+        "Feroxa",
+        """
+{{Infobox Creature
+| name = Feroxa
+| hp = 150000
+| exp = ?
+| location = Behind the teleport, {{Mapper Coords|130.177|123.42|11|8|text=here}}.
+}}
+""",
+    )
+
+    assert feroxa["locations"] == [
+        "Behind the teleport",
+    ]

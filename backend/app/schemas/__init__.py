@@ -322,6 +322,8 @@ class CreatureBase(BaseModel):
     loot_value: Optional[float] = None
     description: Optional[str] = None
     behavior: Optional[str] = None
+    strategy: Optional[str] = None
+    notes: Optional[str] = None
     image_url: Optional[str] = None
     image_alias: Optional[str] = None
     image_url_override: Optional[str] = None

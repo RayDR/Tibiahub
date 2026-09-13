@@ -230,6 +230,24 @@ def _bridge_creature(db: Session, entity: KnowledgeEntity, dto: CreatureKnowledg
     protected = set(creature.protected_fields or [])
     canonical_changed = False
 
+    # Two distinct partial contracts exist:
+    #
+    # 1. Global/opaque partial:
+    #    is_partial=True but the provider does not identify missing fields.
+    #    Existing canonical content must remain untouched.
+    #
+    # 2. Field-aware partial:
+    #    missing_fields explicitly identifies what the provider could not
+    #    supply. Fields present in dto.provided_fields remain authoritative.
+    #
+    # This lets a record missing only loot still repair behaviour/strategy,
+    # while preserving the conservative identity-only behavior for opaque
+    # partial documents.
+    partial_missing_fields = set(
+        dto.provider_metadata.get("missing_fields") or []
+    )
+    field_aware_partial = bool(partial_missing_fields)
+
     def assign(
         field: str,
         value,
@@ -248,7 +266,12 @@ def _bridge_creature(db: Session, entity: KnowledgeEntity, dto: CreatureKnowledg
             and not created
             and getattr(creature, field) not in (None, "", [])
         ):
-            return
+            # An opaque partial document is not trusted to replace canonical
+            # content. A field-aware partial document may replace only fields
+            # that it explicitly supplied; the provided_fields guard above
+            # already rejects fields that are actually missing.
+            if not field_aware_partial or provided is None:
+                return
         if getattr(creature, field) != value:
             setattr(creature, field, value)
             canonical_changed = True
@@ -284,6 +307,8 @@ def _bridge_creature(db: Session, entity: KnowledgeEntity, dto: CreatureKnowledg
     assign("is_boss", dto.is_boss, provided="is_boss")
     assign("description", dto.description, provided="description")
     assign("behavior", dto.behavior, provided="behavior")
+    assign("strategy", dto.strategy, provided="strategy")
+    assign("notes", dto.notes, provided="notes")
     assign("bestiary_class", dto.bestiary_class, provided="bestiary_class")
     assign("bestiary_level", dto.bestiary_level, provided="bestiary_level")
     assign("charm_points", dto.charm_points, provided="charm_points")
@@ -294,6 +319,28 @@ def _bridge_creature(db: Session, entity: KnowledgeEntity, dto: CreatureKnowledg
         assign("image_url", dto.image_reference, provided="image_reference")
     assign("locations", list(dto.locations), provided="locations")
     assign("related_tasks", list(dto.task_references), provided="task_references")
+
+    # Historical imports represented provider unknown values ("?", blank)
+    # as integer zero. Clear only that known legacy sentinel when the current
+    # source explicitly says the field is unknown. Legitimate provider zero
+    # values remain untouched.
+    source_unknown_fields = set(
+        dto.provider_metadata.get("source_unknown_fields") or []
+    )
+    for field in (
+        "hitpoints",
+        "experience",
+        "armor",
+        "speed",
+        "max_damage",
+    ):
+        if (
+            field in source_unknown_fields
+            and field not in protected
+            and getattr(creature, field, None) == 0
+        ):
+            setattr(creature, field, None)
+            canonical_changed = True
 
     data_sources = list(creature.data_sources or [])
     if "tibiawiki" not in data_sources:

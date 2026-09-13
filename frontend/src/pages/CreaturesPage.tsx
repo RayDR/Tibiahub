@@ -1355,7 +1355,7 @@ const CreaturesPage: React.FC = () => {
               />
             ) : null}
 
-            <div className={mode === 'items' ? 'hidden' : mode === 'quests' ? 'grid grid-cols-1 gap-4 lg:grid-cols-2' : 'grid grid-cols-1 gap-6 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4'}>
+            <div className={mode === 'items' ? 'hidden' : mode === 'quests' ? 'grid grid-cols-2 gap-4 lg:grid-cols-4' : 'grid grid-cols-2 gap-6 md:grid-cols-4 lg:grid-cols-6 xl:grid-cols-8'}>
               {(mode === 'creatures' || mode === 'bosses') && creatures.map((creature, index) => <div key={creature.id} data-cyclopedia-result className="contents"><CreatureCard creature={creature} index={index} linkState={cyclopediaRouteState} onNavigate={persistCyclopediaState} /></div>)}
 
               {mode === 'items' && items.map((item, index) => (

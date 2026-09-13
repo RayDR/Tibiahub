@@ -118,6 +118,8 @@ def upsert_creature_payload(db: Session, payload: dict[str, Any]) -> Creature:
         "loot_value",
         "description",
         "behavior",
+        "strategy",
+        "notes",
         "bestiary_class",
         "bestiary_level",
         "charm_points",
@@ -126,6 +128,27 @@ def upsert_creature_payload(db: Session, payload: dict[str, Any]) -> Creature:
         "primary_type",
     ]:
         _copy_if_present(creature, payload, field)
+
+    # Historical legacy imports sometimes stored provider unknown
+    # numeric values as zero. Clear only those explicitly identified by the
+    # current parser; do not clear legitimate provider zeros.
+    source_unknown_fields = set(
+        payload.get("source_unknown_fields") or []
+    )
+    protected = set(getattr(creature, "protected_fields", None) or [])
+    for field in (
+        "hitpoints",
+        "experience",
+        "armor",
+        "speed",
+        "max_damage",
+    ):
+        if (
+            field in source_unknown_fields
+            and field not in protected
+            and getattr(creature, field, None) == 0
+        ):
+            setattr(creature, field, None)
 
     # Only overwrite image_url when not locked by admin
     if not getattr(creature, "image_locked", False):

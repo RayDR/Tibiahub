@@ -49,7 +49,9 @@ class CreatureKnowledgeDTO:
     immunities: tuple[str, ...] = ()
     abilities: tuple[str, ...] = ()
     behavior: str | None = None
+    strategy: str | None = None
     description: str | None = None
+    notes: str | None = None
     loot: tuple[CreatureLootReference, ...] = ()
     locations: tuple[str, ...] = ()
     task_references: tuple[str, ...] = ()
@@ -106,6 +108,8 @@ class CreatureKnowledgeDTO:
             "occurrence": "occurrence",
             "description": "description",
             "behavior": "behavior",
+            "strategy": "strategy",
+            "notes": "notes",
             "bestiary_class": "bestiary_class",
             "bestiary_level": "bestiary_level",
             "charm_points": "charm_points",
@@ -165,14 +169,22 @@ class CreatureKnowledgeDTO:
             primary_type=payload.get("primary_type"),
             charm_points=payload.get("charm_points"),
             behavior=payload.get("behavior"),
+            strategy=payload.get("strategy"),
             description=payload.get("description"),
+            notes=payload.get("notes"),
             loot=loot,
             locations=tuple(str(item) for item in payload.get("locations") or []),
             task_references=tuple(str(item) for item in payload.get("related_tasks") or []),
             image_reference=payload.get("image_url"),
             source_reference=payload.get("source_url"),
             is_boss=bool(payload.get("is_boss")),
-            provider_metadata={"page_title": page_title, "missing_fields": sorted(missing)},
+            provider_metadata={
+                "page_title": page_title,
+                "missing_fields": sorted(missing),
+                "source_unknown_fields": sorted(
+                    set(payload.get("source_unknown_fields") or [])
+                ),
+            },
             provided_fields=frozenset(provided),
             is_partial=bool(missing),
         )

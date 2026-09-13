@@ -70,7 +70,9 @@ class Creature(Base):
     
     # Description
     description = Column(Text)
-    behavior = Column(Text)  # How the creature behaves in combat
+    behavior = Column(Text)  # Provider behaviour: how the creature acts
+    strategy = Column(Text)  # Provider strategy: player-facing combat advice
+    notes = Column(Text)  # Provider notes distinct from bestiary description
     bestiary_class = Column(String(100), nullable=True)
     bestiary_level = Column(String(50), nullable=True)
     charm_points = Column(Integer, nullable=True)
@@ -129,7 +131,7 @@ class Creature(Base):
         fields = (
             "article", "plural", "hitpoints", "experience", "armor", "speed",
             "max_damage", "summon_cost", "convince_cost", "difficulty", "occurrence",
-            "description", "behavior", "bestiary_class", "bestiary_level", "charm_points",
+            "description", "behavior", "strategy", "notes", "bestiary_class", "bestiary_level", "charm_points",
             "classification", "creature_class", "primary_type", "locations", "related_tasks",
         )
         return [field for field in fields if getattr(self, field, None) not in (None, "", [], {})]
