@@ -53,11 +53,14 @@ def _project_payload(resource_type: str, payload: dict, language: str) -> tuple[
         return localized, len(projection.localized_fields), projection.applied_languages
 
 
-def _vary_accept_language(headers: dict[str, str]) -> None:
+def _vary_language_inputs(headers: dict[str, str]) -> None:
     current = headers.get("vary", "")
     values = [value.strip() for value in current.split(",") if value.strip()]
-    if not any(value.lower() == "accept-language" for value in values):
-        values.append("Accept-Language")
+    lowered = {value.lower() for value in values}
+    for value in ("Accept-Language", "Cookie"):
+        if value.lower() not in lowered:
+            values.append(value)
+            lowered.add(value.lower())
     headers["vary"] = ", ".join(values)
 
 
@@ -94,7 +97,7 @@ class PublicLocalizationMiddleware(BaseHTTPMiddleware):
         original_body = b"".join(chunks)
         headers = dict(response.headers)
         headers.pop("content-length", None)
-        _vary_accept_language(headers)
+        _vary_language_inputs(headers)
 
         try:
             payload = json.loads(original_body)
