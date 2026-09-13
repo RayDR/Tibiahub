@@ -8,6 +8,7 @@ from sqlalchemy.orm import Session
 
 from app.knowledge.models import KnowledgeEntity
 from app.localization.queue import LocalizationQueueService
+from app.localization.service import normalize_language_tag
 from app.models.creature import Creature
 from app.models.external_data import Item, TibiaWikiLocation, TibiaWikiNpc, TibiaWikiQuest
 from app.models.hunt_zone import HuntZone
@@ -52,6 +53,24 @@ def _entity_terms(db: Session, row) -> tuple[str, ...]:
                 terms.add(entity.canonical_name)
             terms.update(alias.alias for alias in entity.aliases if alias.alias)
     return tuple(sorted(terms, key=len, reverse=True))
+
+
+def _source_language_for(row, fallback: str) -> str:
+    """Prefer provider evidence so mixed English/Portuguese datasets backfill correctly."""
+    for attribute in ("provider_metadata", "parser_metadata", "raw_data"):
+        metadata = getattr(row, attribute, None)
+        if not isinstance(metadata, dict):
+            continue
+        candidates = [metadata]
+        canonical = metadata.get("canonical")
+        if isinstance(canonical, dict):
+            candidates.append(canonical)
+        for candidate in candidates:
+            value = candidate.get("language") or candidate.get("source_language")
+            normalized = normalize_language_tag(value if isinstance(value, str) else None)
+            if normalized:
+                return normalized
+    return normalize_language_tag(fallback) or "auto"
 
 
 def _fields_for(row, resource_type: str) -> dict[str, str | None]:
@@ -133,7 +152,7 @@ class LocalizationBackfillService:
                 resource_type=resource_type,
                 resource_key=_resource_key(row),
                 fields=fields,
-                source_language=source_language,
+                source_language=_source_language_for(row, source_language),
                 entity_uuid=getattr(row, "knowledge_entity_id", None),
                 protected_terms=_entity_terms(db, row),
                 context=f"Tibia {resource_type} knowledge: {_canonical_name(row)}",
