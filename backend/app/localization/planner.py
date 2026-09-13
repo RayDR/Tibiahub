@@ -114,9 +114,12 @@ class LocalizationPlanningService:
         protected.add(candidate.canonical_name)
         protected.update(alias for alias in candidate.aliases if alias)
         resource_key = str(entity_uuid or result.external_id or candidate.language_neutral_id)
+        # Areas and towns are persisted/read through the public Location family,
+        # so their localized prose must use the same resource namespace.
+        resource_type = "location" if entity_type in {"location", "area", "town"} else entity_type
         return LocalizationQueueService.enqueue_targets(
             db,
-            resource_type=entity_type,
+            resource_type=resource_type,
             resource_key=resource_key,
             fields=fields,
             source_language=_source_language(data),
