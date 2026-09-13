@@ -86,3 +86,21 @@ class LocalizationJobPage(BaseModel):
     total: int
     skip: int
     limit: int
+
+
+class LocalizationBackfillRequest(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    resource_type: str = Field(pattern="^(creature|item|quest|npc|location|hunt_zone)$")
+    after_id: int = Field(default=0, ge=0)
+    limit: int = Field(default=100, ge=1, le=500)
+    source_language: str = Field(default="en", min_length=2, max_length=32)
+    target_languages: list[str] | None = Field(default=None, max_length=10)
+
+
+class LocalizationBackfillResponse(BaseModel):
+    resource_type: str
+    scanned: int
+    queued: int
+    next_cursor: int | None
+    exhausted: bool
