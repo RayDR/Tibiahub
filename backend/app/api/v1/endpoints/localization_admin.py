@@ -202,6 +202,37 @@ def enqueue_localization_job(
 ):
     if not settings.LOCALIZATION_ENABLED:
         raise HTTPException(status_code=409, detail={"code": "localization_disabled"})
+
+    # Manual/reviewer-authored prose is a first-class locale variant. Store it
+    # independently from the canonical provider row before using it to seed
+    # machine translations for other locales.
+    if payload.source_language != "auto":
+        try:
+            authored = ContentLocalizationService.author_source(
+                db,
+                resource_type=payload.resource_type,
+                resource_key=payload.resource_key,
+                field_path=payload.field_path,
+                language=payload.source_language,
+                text=payload.source_text,
+                author_id=admin.id,
+                entity_uuid=payload.entity_uuid,
+            )
+        except ValueError as exc:
+            raise HTTPException(status_code=409, detail={"code": "localization_source_locked"}) from exc
+        _audit(
+            db,
+            admin,
+            action="localization_source_authored",
+            target_type="knowledge_localization",
+            target_id=str(authored.id),
+            metadata={
+                "resource_type": authored.resource_type,
+                "field_path": authored.field_path,
+                "language": authored.language,
+            },
+        )
+
     row = LocalizationQueueService.enqueue_field(
         db,
         resource_type=payload.resource_type,
