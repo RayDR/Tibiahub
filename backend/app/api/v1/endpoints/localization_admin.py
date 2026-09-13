@@ -1,4 +1,4 @@
-"""Global-admin localization review, queue, and diagnostics endpoints."""
+"""Global-admin localization review, queue, backfill, and diagnostics endpoints."""
 
 from __future__ import annotations
 
@@ -12,8 +12,11 @@ from app.api.v1.endpoints.auth import get_current_admin_user
 from app.core.config import settings
 from app.db.database import get_db
 from app.knowledge.models import KnowledgeLocalization, LocalizationJob
+from app.localization.backfill import LocalizationBackfillService
 from app.localization.queue import LocalizationQueueService
 from app.localization.schemas import (
+    LocalizationBackfillRequest,
+    LocalizationBackfillResponse,
     LocalizationJobPage,
     LocalizationJobRequest,
     LocalizationJobResponse,
@@ -230,6 +233,45 @@ def enqueue_localization_job(
     db.commit()
     db.refresh(row)
     return row
+
+
+@router.post("/localization-backfill", response_model=LocalizationBackfillResponse)
+def backfill_localizations(
+    payload: LocalizationBackfillRequest,
+    db: Session = Depends(get_db),
+    admin: User = Depends(get_current_admin_user),
+):
+    if not settings.LOCALIZATION_ENABLED:
+        raise HTTPException(status_code=409, detail={"code": "localization_disabled"})
+    targets = tuple(payload.target_languages) if payload.target_languages else None
+    try:
+        result = LocalizationBackfillService.backfill(
+            db,
+            resource_type=payload.resource_type,
+            after_id=payload.after_id,
+            limit=payload.limit,
+            source_language=payload.source_language,
+            target_languages=targets,
+        )
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail={"code": "localization_backfill_invalid"}) from exc
+    _audit(
+        db,
+        admin,
+        action="localization_backfill_enqueued",
+        target_type="localization_backfill",
+        target_id=payload.resource_type,
+        metadata={
+            "source_language": payload.source_language,
+            "target_languages": list(targets or settings.localization_target_languages),
+            "scanned": result.scanned,
+            "queued": result.queued,
+            "after_id": payload.after_id,
+            "next_cursor": result.next_cursor,
+        },
+    )
+    db.commit()
+    return LocalizationBackfillResponse(**result.__dict__)
 
 
 @router.post("/localization-jobs/{job_id}/retry", response_model=LocalizationJobResponse)
