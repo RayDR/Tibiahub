@@ -295,7 +295,7 @@ def test_existing_content_backfill_is_paginated_and_idempotent(db, monkeypatch):
         limit=1,
         target_languages=("es",),
     )
-    assert repeated.queued == 1
+    assert repeated.queued == 0
     assert db.query(LocalizationJob).count() == 1
 
     second_page = LocalizationBackfillService.backfill(
