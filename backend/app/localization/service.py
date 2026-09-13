@@ -236,6 +236,7 @@ class ContentTranslationService:
         )
         if existing and human_protected:
             existing.status = "stale"
+            existing.source_text = source_text
             existing.source_text_hash = digest
             existing.source_language = source_language
             db.flush()
@@ -263,6 +264,7 @@ class ContentTranslationService:
                 language=target_language,
                 text=translated_text,
                 source_language=detected_source_language,
+                source_text=source_text,
                 source_text_hash=digest,
                 origin="machine",
                 status="generated",
@@ -275,6 +277,7 @@ class ContentTranslationService:
             existing.entity_uuid = entity_uuid or existing.entity_uuid
             existing.text = translated_text
             existing.source_language = detected_source_language
+            existing.source_text = source_text
             existing.source_text_hash = digest
             existing.origin = "machine"
             existing.status = "generated"
