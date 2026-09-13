@@ -127,6 +127,85 @@ class ContentLocalizationService:
         return LocalizedText(source_text, source_language, "source", "provider", source_language != requested)
 
     @staticmethod
+    def author_source(
+        db: Session,
+        *,
+        resource_type: str,
+        resource_key: str,
+        field_path: str,
+        language: str,
+        text: str,
+        author_id: int,
+        entity_uuid: UUID | None = None,
+    ) -> KnowledgeLocalization:
+        """Persist reviewer-authored prose as a protected human locale variant.
+
+        Provider/canonical rows remain untouched. This gives reviewer-authored
+        Spanish/Portuguese/etc. text a durable public representation while that
+        same text can independently feed translation jobs for other locales.
+        """
+        language = normalize_language_tag(language) or language.strip()
+        clean = text.strip()
+        if not language or not clean:
+            raise ValueError("authored localization requires language and text")
+        digest = source_text_hash(clean)
+        existing = (
+            db.query(KnowledgeLocalization)
+            .filter(
+                KnowledgeLocalization.resource_type == resource_type,
+                KnowledgeLocalization.resource_key == resource_key,
+                KnowledgeLocalization.field_path == field_path,
+                KnowledgeLocalization.language == language,
+            )
+            .first()
+        )
+        if existing is not None:
+            if existing.text == clean and existing.origin == "human":
+                return existing
+            if existing.locked or existing.status == "approved":
+                raise ValueError("locked localization must be explicitly unlocked before replacement")
+            existing.entity_uuid = entity_uuid or existing.entity_uuid
+            existing.text = clean
+            existing.source_language = language
+            existing.source_text = clean
+            existing.source_text_hash = digest
+            existing.origin = "human"
+            existing.status = "reviewed"
+            existing.provider = None
+            existing.provider_model = None
+            existing.provider_metadata = {"authored_source": True}
+            existing.locked = True
+            existing.reviewed_by_id = author_id
+            existing.reviewed_at = datetime.now(UTC)
+            existing.approved_by_id = None
+            existing.approved_at = None
+            db.flush()
+            return existing
+
+        now = datetime.now(UTC)
+        authored = KnowledgeLocalization(
+            entity_uuid=entity_uuid,
+            resource_type=resource_type,
+            resource_key=resource_key,
+            field_path=field_path,
+            language=language,
+            text=clean,
+            source_language=language,
+            source_text=clean,
+            source_text_hash=digest,
+            origin="human",
+            status="reviewed",
+            provider_metadata={"authored_source": True},
+            locked=True,
+            created_by_id=author_id,
+            reviewed_by_id=author_id,
+            reviewed_at=now,
+        )
+        db.add(authored)
+        db.flush()
+        return authored
+
+    @staticmethod
     def review(
         db: Session,
         localization: KnowledgeLocalization,
