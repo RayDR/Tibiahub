@@ -86,7 +86,7 @@ export default function Navigation() {
   return (
     <>
       <header className="app-primary-nav fixed inset-x-0 top-0 z-navbar">
-        <Container className="pt-2 sm:pt-3">
+        <Container className="app-nav-container pt-2 sm:pt-3">
           <div className="app-nav-shell app-nav-grid rounded-xl px-2 py-1.5 shadow-lg backdrop-blur-md sm:px-3">
             <Link to="/" className="app-nav-brand flex min-h-11 min-w-0 items-center gap-2 rounded-lg px-1.5" aria-label={t('shell.homeLabel')}>
               <img src="/assets/logo/tibiahub.png" alt="" className="size-8 shrink-0 rounded-lg sm:size-9" />
@@ -119,8 +119,13 @@ export default function Navigation() {
             </div>
 
             <div className="app-nav-utilities flex shrink-0 items-center gap-0.5">
-              {presentation.navbar_show_global_search && compactLayout ? <GlobalCyclopediaSearch compact /> : null}
-              {isAuthenticated && !compactLayout ? <CharacterSwitcher /> : null}
+              {presentation.navbar_show_global_search ? (
+                <>
+                  <div className="lg:hidden"><GlobalCyclopediaSearch compact /></div>
+                  {compactLayout ? <div className="hidden lg:block"><GlobalCyclopediaSearch compact /></div> : null}
+                </>
+              ) : null}
+              {isAuthenticated && !compactLayout ? <div className="hidden lg:block"><CharacterSwitcher /></div> : null}
               <LanguageSwitcher />
               {isAuthenticated ? <NotificationIndicator /> : null}
               <ThemeSwitcher />
