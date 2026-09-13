@@ -16,6 +16,8 @@ const PAGE_SIZE = 20;
 const REVIEW_STATES: LocalizationStatus[] = ['generated', 'stale', 'reviewed', 'approved', 'failed'];
 const RESOURCE_TYPES = ['creature', 'item', 'quest', 'npc', 'location', 'hunt_zone'] as const;
 
+type ResourceType = (typeof RESOURCE_TYPES)[number];
+
 function StatusBadge({ value }: { value: string }) {
   const tone = value === 'approved'
     ? 'bg-success/15 text-success'
@@ -43,8 +45,15 @@ export default function LocalizationReview() {
   const [loading, setLoading] = useState(true);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState(false);
-  const [backfillType, setBackfillType] = useState<(typeof RESOURCE_TYPES)[number]>('creature');
+  const [backfillType, setBackfillType] = useState<ResourceType>('creature');
   const [backfillLimit, setBackfillLimit] = useState(20);
+  const [authorResourceType, setAuthorResourceType] = useState<ResourceType>('creature');
+  const [authorResourceKey, setAuthorResourceKey] = useState('');
+  const [authorFieldPath, setAuthorFieldPath] = useState('description');
+  const [authorSourceLanguage, setAuthorSourceLanguage] = useState('es');
+  const [authorTargets, setAuthorTargets] = useState('en,pt-BR');
+  const [authorProtectedTerms, setAuthorProtectedTerms] = useState('');
+  const [authorText, setAuthorText] = useState('');
 
   const load = useCallback(async (nextSkip = skip) => {
     const controller = new AbortController();
@@ -75,7 +84,6 @@ export default function LocalizationReview() {
     } finally {
       setLoading(false);
     }
-    return () => controller.abort();
   }, [languageFilter, resourceFilter, selected, skip, statusFilter]);
 
   useEffect(() => {
@@ -149,6 +157,49 @@ export default function LocalizationReview() {
     }
   };
 
+  const queueAuthoredText = async () => {
+    const sourceText = authorText.trim();
+    const resourceKey = authorResourceKey.trim();
+    const fieldPath = authorFieldPath.trim();
+    const sourceLanguage = authorSourceLanguage.trim();
+    const targets = [...new Set(
+      authorTargets.split(',').map((value) => value.trim()).filter((value) => value && value !== sourceLanguage),
+    )];
+    if (!sourceText || !resourceKey || !fieldPath || !sourceLanguage || targets.length === 0) return;
+
+    const accepted = await confirmation.confirm(
+      t('localization.authorConfirm', {
+        defaultValue: `Queue this ${sourceLanguage} text for ${targets.join(', ')}? The source text remains untouched.`,
+      }),
+      { title: t('localization.authorTitle', { defaultValue: 'Translate reviewer-authored content' }), confirmLabel: t('localization.queue', { defaultValue: 'Queue' }) },
+    );
+    if (!accepted) return;
+
+    setBusy(true);
+    try {
+      const protectedTerms = authorProtectedTerms.split(',').map((value) => value.trim()).filter(Boolean);
+      await Promise.all(targets.map((targetLanguage) => localizationAdminApi.enqueueJob({
+        resource_type: authorResourceType,
+        resource_key: resourceKey,
+        field_path: fieldPath,
+        source_text: sourceText,
+        source_language: sourceLanguage,
+        target_language: targetLanguage,
+        protected_terms: protectedTerms,
+        context: `Reviewer-authored Tibia ${authorResourceType} content`,
+      })));
+      toast.success(t('localization.authorQueued', {
+        defaultValue: `${targets.length} translation job(s) queued from reviewer-authored content.`,
+      }));
+      setAuthorText('');
+      await load(0);
+    } catch {
+      toast.error(t('localization.authorFailed', { defaultValue: 'Reviewer-authored content could not be queued.' }));
+    } finally {
+      setBusy(false);
+    }
+  };
+
   const runBackfill = async () => {
     const accepted = await confirmation.confirm(
       t('localization.backfillConfirm', {
@@ -162,7 +213,7 @@ export default function LocalizationReview() {
       const result = await localizationAdminApi.backfill({
         resource_type: backfillType,
         limit: backfillLimit,
-        source_language: diagnostics?.default_language || 'en',
+        source_language: 'auto',
         target_languages: diagnostics?.target_languages,
       });
       toast.success(t('localization.backfillQueued', {
@@ -316,12 +367,59 @@ export default function LocalizationReview() {
       </section>
 
       <section className="rounded-xl border border-line bg-surface-base/60 p-4">
+        <h3 className="font-medium text-content-primary">{t('localization.authorTitle', { defaultValue: 'Author in any language' })}</h3>
+        <p className="mt-1 text-xs text-content-muted">
+          {t('localization.authorHelp', { defaultValue: 'A reviewer can write source text in Spanish, English, Portuguese, or another supported locale and queue durable translations without replacing canonical provider content.' })}
+        </p>
+        <div className="mt-3 grid gap-3 md:grid-cols-2 xl:grid-cols-3">
+          <label className="grid gap-1 text-xs text-content-secondary">
+            {t('localization.resource', { defaultValue: 'Resource' })}
+            <select value={authorResourceType} onChange={(event) => setAuthorResourceType(event.target.value as ResourceType)} className="min-h-11 rounded-lg border border-line bg-surface-base px-3 text-sm">
+              {RESOURCE_TYPES.map((value) => <option key={value} value={value}>{value}</option>)}
+            </select>
+          </label>
+          <label className="grid gap-1 text-xs text-content-secondary">
+            {t('localization.resourceKey', { defaultValue: 'Resource key / canonical ID' })}
+            <input value={authorResourceKey} onChange={(event) => setAuthorResourceKey(event.target.value)} className="min-h-11 rounded-lg border border-line bg-surface-base px-3 text-sm" />
+          </label>
+          <label className="grid gap-1 text-xs text-content-secondary">
+            {t('localization.fieldPath', { defaultValue: 'Field path' })}
+            <input value={authorFieldPath} onChange={(event) => setAuthorFieldPath(event.target.value)} className="min-h-11 rounded-lg border border-line bg-surface-base px-3 text-sm" />
+          </label>
+          <label className="grid gap-1 text-xs text-content-secondary">
+            {t('localization.sourceLanguage', { defaultValue: 'Source language' })}
+            <input value={authorSourceLanguage} onChange={(event) => setAuthorSourceLanguage(event.target.value)} className="min-h-11 rounded-lg border border-line bg-surface-base px-3 text-sm" placeholder="es" />
+          </label>
+          <label className="grid gap-1 text-xs text-content-secondary">
+            {t('localization.targetLanguages', { defaultValue: 'Target languages (comma separated)' })}
+            <input value={authorTargets} onChange={(event) => setAuthorTargets(event.target.value)} className="min-h-11 rounded-lg border border-line bg-surface-base px-3 text-sm" placeholder="en,pt-BR" />
+          </label>
+          <label className="grid gap-1 text-xs text-content-secondary">
+            {t('localization.protectedTerms', { defaultValue: 'Protected Tibia terms (comma separated)' })}
+            <input value={authorProtectedTerms} onChange={(event) => setAuthorProtectedTerms(event.target.value)} className="min-h-11 rounded-lg border border-line bg-surface-base px-3 text-sm" placeholder="Demon, Edron" />
+          </label>
+        </div>
+        <label className="mt-3 grid gap-1 text-xs text-content-secondary">
+          {t('localization.sourceText', { defaultValue: 'Reviewer-authored source text' })}
+          <textarea value={authorText} onChange={(event) => setAuthorText(event.target.value)} className="min-h-36 resize-y rounded-lg border border-line bg-surface-base p-3 text-sm text-content-primary" />
+        </label>
+        <button
+          className="app-button-primary mt-3"
+          onClick={() => void queueAuthoredText()}
+          disabled={busy || !diagnostics?.enabled || !authorText.trim() || !authorResourceKey.trim() || !authorFieldPath.trim() || !authorSourceLanguage.trim()}
+        >
+          <Sparkles className="h-4 w-4" />
+          {t('localization.translateAuthored', { defaultValue: 'Queue translations' })}
+        </button>
+      </section>
+
+      <section className="rounded-xl border border-line bg-surface-base/60 p-4">
         <h3 className="font-medium text-content-primary">{t('localization.backfill', { defaultValue: 'Existing content backfill' })}</h3>
         <p className="mt-1 text-xs text-content-muted">{t('localization.backfillHelp', { defaultValue: 'Queue a small, idempotent batch first. Backfill never rewrites canonical content.' })}</p>
         <div className="mt-3 flex flex-wrap items-end gap-2">
           <label className="grid gap-1 text-xs text-content-secondary">
             {t('localization.resource', { defaultValue: 'Resource' })}
-            <select value={backfillType} onChange={(event) => setBackfillType(event.target.value as (typeof RESOURCE_TYPES)[number])} className="min-h-11 rounded-lg border border-line bg-surface-base px-3 text-sm">
+            <select value={backfillType} onChange={(event) => setBackfillType(event.target.value as ResourceType)} className="min-h-11 rounded-lg border border-line bg-surface-base px-3 text-sm">
               {RESOURCE_TYPES.map((value) => <option key={value} value={value}>{value}</option>)}
             </select>
           </label>
