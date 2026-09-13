@@ -50,6 +50,30 @@ def _reconcile_world_map_markers(db: Session, applied: AppliedNormalization) -> 
     )
 
 
+def _plan_localizations(
+    db: Session,
+    result: KnowledgeNormalizationResult,
+    applied: AppliedNormalization,
+) -> AppliedNormalization:
+    from app.localization.planner import LocalizationPlanningService
+
+    queued = LocalizationPlanningService.plan_normalization(
+        db,
+        result=result,
+        entity_uuid=applied.entity_uuid,
+        applied_status=applied.status,
+    )
+    if not queued:
+        return applied
+    return AppliedNormalization(
+        applied.status,
+        applied.entity_uuid,
+        applied.aliases_created,
+        applied.warnings,
+        {**applied.metrics, "localization_jobs_enqueued": queued},
+    )
+
+
 class KnowledgeNormalizationService:
     @staticmethod
     def apply(db: Session, result: KnowledgeNormalizationResult) -> AppliedNormalization:
@@ -141,16 +165,15 @@ class KnowledgeNormalizationService:
                 applied = HuntZoneKnowledgeNormalizationService.apply(db, result)
             else:
                 raise ValueError("TibiaWiki normalization requires a supported canonical entity type")
-            return _reconcile_world_map_markers(
-                db,
-                AppliedNormalization(
-                    applied.status,
-                    applied.entity_uuid,
-                    applied.aliases_created,
-                    applied.warnings,
-                    getattr(applied, "metrics", {}),
-                ),
+            normalized = AppliedNormalization(
+                applied.status,
+                applied.entity_uuid,
+                applied.aliases_created,
+                applied.warnings,
+                getattr(applied, "metrics", {}),
             )
+            normalized = _plan_localizations(db, result, normalized)
+            return _reconcile_world_map_markers(db, normalized)
         candidate = result.candidate
         if candidate is None:
             raise ValueError("Upsert normalization requires a canonical candidate")
