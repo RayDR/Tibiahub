@@ -42,8 +42,11 @@ class LocalizationQueueService:
         entity_uuid: UUID | None = None,
         protected_terms: tuple[str, ...] = (),
         context: str | None = None,
+        force: bool = False,
     ) -> LocalizationJob | None:
-        if not settings.LOCALIZATION_ENABLED or not settings.LOCALIZATION_AUTO_ENQUEUE:
+        if not settings.LOCALIZATION_ENABLED:
+            return None
+        if not force and not settings.LOCALIZATION_AUTO_ENQUEUE:
             return None
         text = (source_text or "").strip()
         if not text:
@@ -119,6 +122,7 @@ class LocalizationQueueService:
         protected_terms: tuple[str, ...] = (),
         context: str | None = None,
         target_languages: tuple[str, ...] | None = None,
+        force: bool = False,
     ) -> int:
         targets = target_languages or tuple(settings.localization_target_languages)
         queued = 0
@@ -135,6 +139,7 @@ class LocalizationQueueService:
                     entity_uuid=entity_uuid,
                     protected_terms=protected_terms,
                     context=context,
+                    force=force,
                 )
                 queued += int(row is not None and row.status in {"pending", "retry"})
         return queued
