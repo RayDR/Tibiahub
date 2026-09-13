@@ -11,15 +11,26 @@ from app.knowledge.adapters.protocol import KnowledgeNormalizationResult
 from app.localization.queue import LocalizationQueueService
 
 
-_TEXT_FIELDS: dict[str, tuple[str, ...]] = {
-    "creature": ("description", "behavior", "strategy", "notes"),
-    "item": ("description", "notes"),
-    "quest": ("description", "summary"),
-    "npc": ("title", "occupation", "location_text", "description"),
-    "location": ("description", "access_notes"),
-    "area": ("description", "access_notes"),
-    "town": ("description", "access_notes"),
-    "hunt_zone": ("description", "access_notes", "vocation_text"),
+# (canonical source field, public localization field path). Keeping these
+# separate lets provider DTOs remain provider-neutral while the stored
+# localization targets the shape actually rendered by TibiaHub.
+_TEXT_FIELDS: dict[str, tuple[tuple[str, str], ...]] = {
+    "creature": (
+        ("description", "description"),
+        ("behavior", "behavior"),
+        ("strategy", "strategy"),
+        ("notes", "notes"),
+    ),
+    "item": (("description", "description"), ("notes", "notes")),
+    "quest": (("description", "description"), ("summary", "summary")),
+    "npc": (("title", "title"), ("occupation", "occupation"), ("description", "description")),
+    "location": (("description", "description"), ("access_notes", "access_notes")),
+    "area": (("description", "description"), ("access_notes", "access_notes")),
+    "town": (("description", "description"), ("access_notes", "access_notes")),
+    # Hunt Zone access notes are exposed inside the public `access` object.
+    # `vocation_text` is intentionally omitted until it has a public prose
+    # surface; translating invisible canonical metadata only burns tokens.
+    "hunt_zone": (("description", "description"), ("access_notes", "access.notes")),
 }
 _REFERENCE_KEYS = {
     "canonical_name",
@@ -61,10 +72,10 @@ def _collect_reference_terms(value, *, key: str | None = None) -> set[str]:
 
 
 def _iter_translatable_fields(entity_type: str, data: dict) -> Iterator[tuple[str, str]]:
-    for field_path in _TEXT_FIELDS.get(entity_type, ()):
-        value = data.get(field_path)
+    for source_field, public_field_path in _TEXT_FIELDS.get(entity_type, ()):
+        value = data.get(source_field)
         if isinstance(value, str) and value.strip():
-            yield field_path, value.strip()
+            yield public_field_path, value.strip()
 
     if entity_type == "quest":
         for index, mission in enumerate(data.get("missions") or []):
