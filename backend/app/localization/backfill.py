@@ -16,7 +16,7 @@ from app.models.hunt_zone import HuntZone
 SUPPORTED_BACKFILL_TYPES = ("creature", "item", "quest", "npc", "location", "hunt_zone")
 
 
-@dataclass(frozen=True, slots=True)
+@dataclass(frozen=True)
 class LocalizationBackfillResult:
     resource_type: str
     scanned: int
