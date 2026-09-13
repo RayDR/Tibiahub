@@ -14,6 +14,7 @@ from contextlib import asynccontextmanager
 from app.core.config import settings
 from app.db.database import DatabaseNotReadyError, SessionLocal, verify_connection_and_schema
 from app.api.v1.router import api_router
+from app.localization.middleware import PublicLocalizationMiddleware
 from app.services.sync_service import SyncService
 from app.services.maintenance_mode_service import MaintenanceModeService
 from app.models.maintenance_sync import MaintenanceHold
@@ -92,6 +93,10 @@ app.add_middleware(
     allow_methods=["*"],
     allow_headers=["*"],
 )
+# Public localization is a read-only overlay. It never calls OpenAI and fails
+# open to canonical content, so knowledge reads remain available independently
+# from the localization worker/provider.
+app.add_middleware(PublicLocalizationMiddleware)
 
 
 _MAINTENANCE_PUBLIC_PATHS = {
