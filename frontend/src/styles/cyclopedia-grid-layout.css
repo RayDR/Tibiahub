@@ -1,0 +1,115 @@
+/* Canonical Cyclopedia result grid.
+ *
+ * Compact/default:
+ *   base 1, md 2, lg 4, xl 6
+ * Wide:
+ *   lg 5, xl 7
+ * Wide Loot/NPC:
+ *   xl 8
+ *
+ * Preview state is intentionally excluded from the density contract. Floating
+ * previews must never reserve columns or reflow the result grid. */
+
+.loot-cyclopedia-grid,
+.cyclopedia-quest-grid {
+  grid-template-columns: repeat(1, minmax(0, 1fr)) !important;
+  gap: 1.5rem !important;
+}
+
+@supports selector(:has(*)) {
+  .grid:has(> [data-cyclopedia-result] > .creature-browser-card),
+  .grid:has(> [data-cyclopedia-result] > .cyclopedia-zone-card),
+  .grid:has(> [data-cyclopedia-result] > .npc-cyclopedia-card) {
+    grid-template-columns: repeat(1, minmax(0, 1fr)) !important;
+    gap: 1.5rem !important;
+  }
+}
+
+@media (min-width: 768px) {
+  .loot-cyclopedia-grid,
+  .cyclopedia-quest-grid {
+    grid-template-columns: repeat(2, minmax(0, 1fr)) !important;
+  }
+
+  @supports selector(:has(*)) {
+    .grid:has(> [data-cyclopedia-result] > .creature-browser-card),
+    .grid:has(> [data-cyclopedia-result] > .cyclopedia-zone-card),
+    .grid:has(> [data-cyclopedia-result] > .npc-cyclopedia-card) {
+      grid-template-columns: repeat(2, minmax(0, 1fr)) !important;
+    }
+  }
+}
+
+@media (min-width: 1024px) {
+  .loot-cyclopedia-grid,
+  .cyclopedia-quest-grid {
+    grid-template-columns: repeat(4, minmax(0, 1fr)) !important;
+  }
+
+  @supports selector(:has(*)) {
+    .grid:has(> [data-cyclopedia-result] > .creature-browser-card),
+    .grid:has(> [data-cyclopedia-result] > .cyclopedia-zone-card),
+    .grid:has(> [data-cyclopedia-result] > .npc-cyclopedia-card) {
+      grid-template-columns: repeat(4, minmax(0, 1fr)) !important;
+    }
+  }
+
+  html[data-layout='wide'] .loot-cyclopedia-grid,
+  html[data-layout='wide'] .cyclopedia-quest-grid {
+    grid-template-columns: repeat(5, minmax(0, 1fr)) !important;
+  }
+
+  @supports selector(:has(*)) {
+    html[data-layout='wide'] .grid:has(> [data-cyclopedia-result] > .creature-browser-card),
+    html[data-layout='wide'] .grid:has(> [data-cyclopedia-result] > .cyclopedia-zone-card),
+    html[data-layout='wide'] .grid:has(> [data-cyclopedia-result] > .npc-cyclopedia-card) {
+      grid-template-columns: repeat(5, minmax(0, 1fr)) !important;
+    }
+  }
+}
+
+@media (min-width: 1280px) {
+  .loot-cyclopedia-grid,
+  .cyclopedia-quest-grid {
+    grid-template-columns: repeat(6, minmax(0, 1fr)) !important;
+  }
+
+  @supports selector(:has(*)) {
+    .grid:has(> [data-cyclopedia-result] > .creature-browser-card),
+    .grid:has(> [data-cyclopedia-result] > .cyclopedia-zone-card),
+    .grid:has(> [data-cyclopedia-result] > .npc-cyclopedia-card) {
+      grid-template-columns: repeat(6, minmax(0, 1fr)) !important;
+    }
+  }
+
+  html[data-layout='wide'] .cyclopedia-quest-grid {
+    grid-template-columns: repeat(7, minmax(0, 1fr)) !important;
+  }
+
+  html[data-layout='wide'] .loot-cyclopedia-grid {
+    grid-template-columns: repeat(8, minmax(0, 1fr)) !important;
+  }
+
+  @supports selector(:has(*)) {
+    html[data-layout='wide'] .grid:has(> [data-cyclopedia-result] > .creature-browser-card),
+    html[data-layout='wide'] .grid:has(> [data-cyclopedia-result] > .cyclopedia-zone-card) {
+      grid-template-columns: repeat(7, minmax(0, 1fr)) !important;
+    }
+
+    html[data-layout='wide'] .grid:has(> [data-cyclopedia-result] > .npc-cyclopedia-card) {
+      grid-template-columns: repeat(8, minmax(0, 1fr)) !important;
+    }
+  }
+
+  /* Legacy preview-specific selectors in older entity styles are neutralized
+     to the same counts, so opening/closing a floating preview cannot reflow. */
+  html[data-layout='wide'] [data-cyclopedia-preview-host='true'][data-cyclopedia-preview-kind='item']
+    .loot-cyclopedia-grid {
+    grid-template-columns: repeat(8, minmax(0, 1fr)) !important;
+  }
+
+  html[data-layout='wide'] [data-cyclopedia-preview-host='true'][data-cyclopedia-preview-kind='quest']
+    .cyclopedia-quest-grid {
+    grid-template-columns: repeat(7, minmax(0, 1fr)) !important;
+  }
+}
