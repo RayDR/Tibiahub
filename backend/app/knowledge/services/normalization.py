@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import logging
 from dataclasses import dataclass, field
 from uuid import UUID
 
@@ -17,6 +18,9 @@ from app.knowledge.services.entities import (
     DuplicateKnowledgeEntityError,
     KnowledgeEntityService,
 )
+
+
+logger = logging.getLogger(__name__)
 
 
 @dataclass(frozen=True, slots=True)
@@ -47,6 +51,48 @@ def _reconcile_world_map_markers(db: Session, applied: AppliedNormalization) -> 
         applied.aliases_created,
         applied.warnings,
         {**applied.metrics, "world_map_markers_reconciled": reconciliation["changed"]},
+    )
+
+
+def _plan_localizations(
+    db: Session,
+    result: KnowledgeNormalizationResult,
+    applied: AppliedNormalization,
+) -> AppliedNormalization:
+    """Best-effort localization planning isolated from the canonical transaction."""
+    from app.localization.planner import LocalizationPlanningService
+
+    try:
+        # A localization/queue failure must never roll back normalized Tibia data.
+        with db.begin_nested():
+            queued = LocalizationPlanningService.plan_normalization(
+                db,
+                result=result,
+                entity_uuid=applied.entity_uuid,
+                applied_status=applied.status,
+            )
+    except Exception:
+        logger.exception(
+            "localization_planning_failed provider=%s external_id=%s entity_type=%s",
+            result.provider_code,
+            result.external_id,
+            getattr(result.candidate, "entity_type", None),
+        )
+        return AppliedNormalization(
+            applied.status,
+            applied.entity_uuid,
+            applied.aliases_created,
+            applied.warnings + 1,
+            {**applied.metrics, "localization_planning_failed": 1},
+        )
+    if not queued:
+        return applied
+    return AppliedNormalization(
+        applied.status,
+        applied.entity_uuid,
+        applied.aliases_created,
+        applied.warnings,
+        {**applied.metrics, "localization_jobs_enqueued": queued},
     )
 
 
@@ -141,16 +187,15 @@ class KnowledgeNormalizationService:
                 applied = HuntZoneKnowledgeNormalizationService.apply(db, result)
             else:
                 raise ValueError("TibiaWiki normalization requires a supported canonical entity type")
-            return _reconcile_world_map_markers(
-                db,
-                AppliedNormalization(
-                    applied.status,
-                    applied.entity_uuid,
-                    applied.aliases_created,
-                    applied.warnings,
-                    getattr(applied, "metrics", {}),
-                ),
+            normalized = AppliedNormalization(
+                applied.status,
+                applied.entity_uuid,
+                applied.aliases_created,
+                applied.warnings,
+                getattr(applied, "metrics", {}),
             )
+            normalized = _plan_localizations(db, result, normalized)
+            return _reconcile_world_map_markers(db, normalized)
         candidate = result.candidate
         if candidate is None:
             raise ValueError("Upsert normalization requires a canonical candidate")
@@ -249,12 +294,11 @@ class KnowledgeNormalizationService:
                 entity_uuid=entity.uuid,
                 payload={"source": "knowledge_normalization"},
             )
-        return _reconcile_world_map_markers(
-            db,
-            AppliedNormalization(
-                "created" if created else "updated" if changed else "unchanged",
-                entity.uuid,
-                len(candidate.aliases) + 1 if created else aliases_created,
-                len(result.warnings),
-            ),
+        normalized = AppliedNormalization(
+            "created" if created else "updated" if changed else "unchanged",
+            entity.uuid,
+            len(candidate.aliases) + 1 if created else aliases_created,
+            len(result.warnings),
         )
+        normalized = _plan_localizations(db, result, normalized)
+        return _reconcile_world_map_markers(db, normalized)

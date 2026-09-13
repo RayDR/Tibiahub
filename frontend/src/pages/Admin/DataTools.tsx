@@ -1,5 +1,5 @@
 /**
- * DataTools – consolidated page for API Monitor, durable Full Sync, and Knowledge.
+ * DataTools – consolidated page for API Monitor, durable Full Sync, Knowledge, and localization review.
  */
 import { useEffect, useState } from 'react';
 import { useTranslation } from 'react-i18next';
@@ -7,15 +7,16 @@ import axios from 'axios';
 import {
     CheckCircle, XCircle, AlertCircle,
     RefreshCw, Database, Globe, BookOpen, Code,
-    Workflow,
+    Workflow, Languages,
 } from 'lucide-react';
 import KnowledgeOperations from './KnowledgeOperations';
+import LocalizationReview from './LocalizationReview';
 import FullSyncDashboard from './FullSyncDashboard';
 import { WorkspaceContentHeader } from '../../components/workspace/WorkspacePrimitives';
 import { DegradedState, ErrorState, LoadingState } from '../../components/ui';
 import { formatNumber, formatTime } from '../../utils/locale';
 
-type Tab = 'api-monitor' | 'admin-sync' | 'knowledge';
+type Tab = 'api-monitor' | 'admin-sync' | 'knowledge' | 'localization';
 
 // ── API Monitor types ──────────────────────────────────────────────────────────
 interface APIStatus {
@@ -141,6 +142,7 @@ export default function DataTools({ initialTab = 'api-monitor' }: { initialTab?:
         { id: 'api-monitor', label: t('adminDataTools.tabs.monitor'), icon: Globe, description: t('adminDataTools.tabs.monitorHelp') },
         { id: 'admin-sync', label: t('adminDataTools.tabs.sync'), icon: RefreshCw, description: t('adminDataTools.tabs.syncHelp') },
         { id: 'knowledge', label: t('knowledgeOps.navigation'), icon: Workflow, description: t('knowledgeOps.subtitle') },
+        { id: 'localization', label: t('localization.navigation', { defaultValue: 'Localization' }), icon: Languages, description: t('localization.subtitle', { defaultValue: 'Review translated knowledge content.' }) },
     ];
 
     return (
@@ -152,12 +154,12 @@ export default function DataTools({ initialTab = 'api-monitor' }: { initialTab?:
             />
 
             {/* Tabs */}
-            <div className="flex gap-1 border-b border-line">
+            <div className="flex gap-1 overflow-x-auto border-b border-line">
                 {tabs.map(({ id, label, icon: Icon }) => (
                     <button
                         key={id}
                         onClick={() => setActiveTab(id)}
-                        className={`flex items-center gap-2 px-4 py-2.5 border-b-2 text-sm font-medium transition-colors ${
+                        className={`flex shrink-0 items-center gap-2 px-4 py-2.5 border-b-2 text-sm font-medium transition-colors ${
                             activeTab === id
                                 ? 'border-primary text-primary'
                                 : 'border-transparent text-content-secondary hover:text-content-primary'
@@ -174,6 +176,7 @@ export default function DataTools({ initialTab = 'api-monitor' }: { initialTab?:
                 {activeTab === 'api-monitor' && <APIMonitorTab />}
                 {activeTab === 'admin-sync' && <AdminSyncTab />}
                 {activeTab === 'knowledge' && <KnowledgeOperations />}
+                {activeTab === 'localization' && <LocalizationReview />}
             </div>
         </div>
     );
