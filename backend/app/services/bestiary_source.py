@@ -47,6 +47,20 @@ _SEMANTIC_EMPTY_TEXT = {
     "none",
 }
 
+_LSTH_RE = re.compile(
+    r"^\s*\{\{#lsth\s*:\s*([^|{}]+?)\s*\|\s*([^{}]+?)\s*\}\}\s*$",
+    re.I | re.S,
+)
+
+_MESSAGE_TEMPLATE_RE = re.compile(
+    r"\{\{(?:sound|server message)\|([^{}]*?)\}\}",
+    re.I | re.S,
+)
+
+_WIKI_HEADING_RE = re.compile(
+    r"^(={1,6})\s*(.*?)\s*\1\s*$"
+)
+
 BESTIARY_CHARM_POINTS = {
     "Harmless": 1,
     "Trivial": 5,
@@ -125,6 +139,45 @@ def _build_sprite_url(asset_name: str) -> str:
     return f"{settings.TIBIAWIKI_BASE_PAGE_URL}/Special:FilePath/{quoted}.gif"
 
 
+def _build_file_reference_url(
+    file_reference: str,
+) -> str:
+    """
+    Build Special:FilePath only from an explicit MediaWiki File reference.
+    Unlike _build_sprite_url(), this function never invents an extension.
+    """
+    value = str(file_reference or "").strip()
+
+    if value.casefold().startswith("file:"):
+        value = value[5:].strip()
+
+    quoted = quote(
+        value.replace(" ", "_"),
+        safe="_.-()",
+    )
+
+    return (
+        f"{settings.TIBIAWIKI_BASE_PAGE_URL}"
+        f"/Special:FilePath/{quoted}"
+    )
+
+
+
+def _is_semantic_empty_text(value: object) -> bool:
+    """
+    Return True only for canonical/source placeholder text such as
+    Unknown, None, ?, N/A, etc. Empty/None values are also semantically empty.
+    """
+    if value is None:
+        return True
+
+    marker = html.unescape(str(value)).strip().casefold()
+    marker = marker.rstrip(".").strip()
+
+    return marker in _SEMANTIC_EMPTY_TEXT
+
+
+
 def _strip_markup(value: str) -> str:
     text = html.unescape(value or "")
 
@@ -168,6 +221,239 @@ def _strip_markup(value: str) -> str:
         return ""
 
     return cleaned
+
+
+
+def _parse_lsth_transclusion(
+    value: Optional[str],
+) -> Optional[Dict[str, str]]:
+    raw = str(value or "").strip()
+    if not raw:
+        return None
+
+    match = _LSTH_RE.fullmatch(raw)
+    if match is None:
+        return None
+
+    page = match.group(1).strip()
+    section = match.group(2).strip()
+
+    if not page or not section:
+        return None
+
+    return {
+        "page": page,
+        "section": section,
+    }
+
+
+def _remove_media_wikilinks(value: str) -> str:
+    """Remove File:/Image: wikilinks, including links with nested captions."""
+    text = value or ""
+    output: List[str] = []
+    cursor = 0
+    length = len(text)
+
+    while cursor < length:
+        start = text.find("[[", cursor)
+
+        if start < 0:
+            output.append(text[cursor:])
+            break
+
+        output.append(text[cursor:start])
+
+        pos = start + 2
+        depth = 1
+
+        while pos < length and depth:
+            if text.startswith("[[", pos):
+                depth += 1
+                pos += 2
+                continue
+
+            if text.startswith("]]", pos):
+                depth -= 1
+                pos += 2
+                continue
+
+            pos += 1
+
+        if depth != 0:
+            # Unbalanced markup: preserve it rather than guessing.
+            output.append(text[start:])
+            break
+
+        block = text[start:pos]
+        inner = block[2:-2]
+        target = inner.split("|", 1)[0].strip().casefold()
+
+        if target.startswith("file:") or target.startswith("image:"):
+            output.append(" ")
+        else:
+            output.append(block)
+
+        cursor = pos
+
+    return "".join(output)
+
+
+def _extract_wiki_section(
+    wikitext: str,
+    section_title: str,
+) -> Optional[str]:
+    """Extract one exact heading section without following provider links."""
+    lines = (wikitext or "").splitlines()
+    wanted = normalize_name(_strip_markup(section_title or ""))
+
+    headings: List[tuple[int, int, str]] = []
+
+    for index, line in enumerate(lines):
+        match = _WIKI_HEADING_RE.match(line.strip())
+        if match is None:
+            continue
+
+        headings.append(
+            (
+                index,
+                len(match.group(1)),
+                match.group(2).strip(),
+            )
+        )
+
+    matches = [
+        heading
+        for heading in headings
+        if normalize_name(_strip_markup(heading[2])) == wanted
+    ]
+
+    if len(matches) != 1:
+        return None
+
+    start, level, _title = matches[0]
+    end = len(lines)
+
+    for next_index, next_level, _next_title in headings:
+        if next_index <= start:
+            continue
+
+        if next_level <= level:
+            end = next_index
+            break
+
+    return "\n".join(
+        lines[start + 1:end]
+    ).strip()
+
+
+def _strip_strategy_section_markup(value: str) -> str:
+    """
+    Strip presentation-oriented wikitext from a quest strategy section while
+    preserving semantic prose, list items, dialogue and table cell content.
+    """
+    text = html.unescape(value or "")
+
+    text = _GALLERY_RE.sub(" ", text)
+    text = _UNCLOSED_GALLERY_RE.sub(" ", text)
+    text = _COMMENT_RE.sub(" ", text)
+    text = _DANGLING_COMMENT_RE.sub(" ", text)
+
+    # File/Image links are presentation evidence, not strategy prose.
+    text = _remove_media_wikilinks(text)
+
+    # Preserve message/dialogue text before removing the remaining templates.
+    previous = None
+    while previous != text:
+        previous = text
+
+        text = _MESSAGE_TEMPLATE_RE.sub(
+            lambda match: match.group(1).strip(),
+            text,
+        )
+
+    previous = None
+    while previous != text:
+        previous = text
+        text = _TEMPLATE_RE.sub(" ", text)
+
+    text = (
+        text.replace("<br />", "\n")
+        .replace("<br/>", "\n")
+        .replace("<br>", "\n")
+    )
+
+    text = _HTML_RE.sub(" ", text)
+
+    output: List[str] = []
+
+    for raw_line in text.splitlines():
+        line = raw_line.strip()
+
+        if not line:
+            continue
+
+        # MediaWiki table framing.
+        if (
+            line.startswith("{|")
+            or line == "|}"
+            or line.startswith("|-")
+        ):
+            continue
+
+        # Table header metadata is not strategy prose.
+        if line.startswith("!"):
+            continue
+
+        if line.startswith("|"):
+            line = line[1:].strip()
+
+            # Pure style/document metadata cells are presentation-only.
+            if line.casefold().startswith("style="):
+                continue
+
+        line = line.lstrip("*#;: ").strip()
+
+        if not line:
+            continue
+
+        cleaned = _strip_markup(line)
+
+        if not cleaned:
+            continue
+
+        marker = cleaned.casefold().strip()
+
+        if marker in {
+            "right",
+            "left",
+            "center",
+            "thumb",
+        }:
+            continue
+
+        if re.fullmatch(r"\\d+px", marker):
+            continue
+
+        output.append(cleaned)
+
+    cleaned = " ".join(output)
+
+    # Images used only as status icons can leave an empty "(icon)" shell.
+    cleaned = re.sub(
+        r"\\(\\s*icon\\s*\\)",
+        "",
+        cleaned,
+        flags=re.I,
+    )
+
+    cleaned = re.sub(
+        r"\\s+",
+        " ",
+        cleaned,
+    ).strip(" ,")
+
+    return cleaned
+
 
 
 def _extract_infobox_param_map(wikitext: str) -> Dict[str, str]:
@@ -530,7 +816,12 @@ async def get_tibiamaps_bounds() -> Dict[str, Any]:
     return data if isinstance(data, dict) else {}
 
 
-def _build_creature_payload(name: str, wikitext: str) -> Dict[str, Any]:
+def _build_creature_payload(
+    name: str,
+    wikitext: str,
+    *,
+    image_reference: str | None = None,
+) -> Dict[str, Any]:
     params = _extract_infobox_param_map(wikitext)
 
     def optional_text(value: Optional[str]) -> Optional[str]:
@@ -566,23 +857,147 @@ def _build_creature_payload(name: str, wikitext: str) -> Dict[str, Any]:
     creature_class = optional_text(params.get("creatureclass"))
     primary_type = optional_text(params.get("primarytype"))
 
-    bestiary_text = optional_text(params.get("bestiarytext"))
-    notes = optional_text(params.get("notes"))
+    raw_bestiary_text = params.get("bestiarytext")
+    raw_notes = params.get("notes")
+    raw_behavior = (
+        params.get("behaviour")
+        if "behaviour" in params
+        else params.get("behavior")
+    )
+    raw_strategy = params.get("strategy")
+    raw_location = params.get("location")
+
+    bestiary_text = optional_text(raw_bestiary_text)
+    notes = optional_text(raw_notes)
 
     # TibiaWiki uses these as two distinct semantics:
     # - behaviour: what the creature itself does
     # - strategy: advice for the player fighting it
-    behavior = optional_text(
-        params.get("behaviour") or params.get("behavior")
+    behavior = optional_text(raw_behavior)
+
+    strategy_transclusion = _parse_lsth_transclusion(
+        raw_strategy
     )
-    strategy = optional_text(params.get("strategy"))
+
+    strategy = (
+        None
+        if strategy_transclusion is not None
+        else optional_text(raw_strategy)
+    )
 
     # Keep description backward-compatible for pages that have no bestiary
     # text while preserving notes separately when both exist.
     description = bestiary_text or notes
 
-    locations = _extract_links(params.get("location", ""))
+    locations = _extract_links(raw_location or "")
     loot_items = _extract_loot_items(wikitext)
+
+    # Source absence, blank source fields, and explicit semantic-empty source
+    # values are three distinct contracts.
+    #
+    #   absent:
+    #       no provider evidence -> preserve canonical
+    #
+    #   present but blank:
+    #       provider currently supplies no value -> clear only a canonical
+    #       semantic placeholder, never useful canonical prose
+    #
+    #   present with Unknown/None/?/N/A or markup that sanitizes empty:
+    #       explicit semantic-empty evidence -> stale canonical may be cleared
+    #
+    # This prevents an empty "| behaviour =" from erasing useful historical
+    # knowledge while still removing legacy canonical values such as
+    # "Unknown." and "None.".
+    source_clear_fields: set[str] = set()
+    source_blank_fields: set[str] = set()
+
+    bestiary_text_supplied = (
+        "bestiarytext" in params
+    )
+    notes_supplied = (
+        "notes" in params
+    )
+    behavior_supplied = (
+        "behaviour" in params
+        or "behavior" in params
+    )
+    strategy_supplied = (
+        "strategy" in params
+    )
+    location_supplied = (
+        "location" in params
+    )
+
+    def classify_empty_source(
+        field: str,
+        *,
+        supplied: bool,
+        raw_values: tuple[object, ...],
+        parsed_value: object,
+    ) -> None:
+        if not supplied:
+            return
+
+        if parsed_value not in (None, "", [], ()):
+            return
+
+        supplied_raw = [
+            value
+            for value in raw_values
+            if value is not None
+        ]
+
+        has_nonblank_raw = any(
+            bool(str(value).strip())
+            for value in supplied_raw
+        )
+
+        if has_nonblank_raw:
+            source_clear_fields.add(field)
+        else:
+            source_blank_fields.add(field)
+
+    classify_empty_source(
+        "behavior",
+        supplied=behavior_supplied,
+        raw_values=(raw_behavior,),
+        parsed_value=behavior,
+    )
+
+    if strategy_transclusion is None:
+        classify_empty_source(
+            "strategy",
+            supplied=strategy_supplied,
+            raw_values=(raw_strategy,),
+            parsed_value=strategy,
+        )
+
+    classify_empty_source(
+        "description",
+        supplied=(
+            bestiary_text_supplied
+            or notes_supplied
+        ),
+        raw_values=(
+            raw_bestiary_text,
+            raw_notes,
+        ),
+        parsed_value=description,
+    )
+
+    classify_empty_source(
+        "notes",
+        supplied=notes_supplied,
+        raw_values=(raw_notes,),
+        parsed_value=notes,
+    )
+
+    classify_empty_source(
+        "locations",
+        supplied=location_supplied,
+        raw_values=(raw_location,),
+        parsed_value=locations,
+    )
 
     source_unknown_fields = [
         field
@@ -596,10 +1011,33 @@ def _build_creature_payload(name: str, wikitext: str) -> Dict[str, Any]:
         if value is None
     ]
 
+    # Media identity is evidence-driven when MediaWiki supplied an exact
+    # File reference. The historical name-derived URL remains a compatibility
+    # fallback only; it is explicitly labelled as synthetic provenance.
+    exact_image_reference = (
+        str(image_reference).strip()
+        if image_reference
+        else None
+    )
+
+    if exact_image_reference:
+        image_url = _build_file_reference_url(
+            exact_image_reference
+        )
+        image_evidence = "page_images_exact"
+    elif actual_name:
+        image_url = _build_sprite_url(
+            actual_name
+        )
+        image_evidence = "synthetic_name_fallback"
+    else:
+        image_url = None
+        image_evidence = "none"
+
     missing_fields = [
         field
         for field, value in {
-            "image_url": actual_name,
+            "image_url": image_url,
             "experience": experience,
             "hitpoints": hitpoints,
             "locations": locations,
@@ -629,7 +1067,9 @@ def _build_creature_payload(name: str, wikitext: str) -> Dict[str, Any]:
         "behavior": behavior,
         "strategy": strategy,
         "notes": notes,
-        "image_url": _build_sprite_url(actual_name) if actual_name else None,
+        "image_url": image_url,
+        "image_file_reference": exact_image_reference,
+        "image_evidence": image_evidence,
         "loot_items": loot_items,
         "spawn_locations": [],
         "weaknesses": [],
@@ -645,6 +1085,9 @@ def _build_creature_payload(name: str, wikitext: str) -> Dict[str, Any]:
         "data_sources": ["tibiawiki", "tibiadata"],
         "missing_fields": missing_fields,
         "source_unknown_fields": source_unknown_fields,
+        "source_clear_fields": sorted(source_clear_fields),
+        "source_blank_fields": sorted(source_blank_fields),
+        "strategy_transclusion": strategy_transclusion,
         "classification": _infer_classification(
             name=display_name,
             creature_class=creature_class,

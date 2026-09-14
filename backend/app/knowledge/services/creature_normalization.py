@@ -14,7 +14,12 @@ from app.knowledge.dto import CreatureKnowledgeDTO
 from app.knowledge.events import KnowledgeEventType, emit_event
 from app.knowledge.indexing import normalize_name
 from app.knowledge.metadata import refresh_search_metadata
-from app.knowledge.models import KnowledgeEntity, KnowledgeEntityAlias, KnowledgeExternalMapping
+from app.knowledge.models import (
+    KnowledgeDocument,
+    KnowledgeEntity,
+    KnowledgeEntityAlias,
+    KnowledgeExternalMapping,
+)
 from app.knowledge.schemas import KnowledgeEntityCreate
 from app.knowledge.services.entities import (
     DuplicateKnowledgeAliasError,
@@ -25,6 +30,11 @@ from app.knowledge.services.failures import InvalidNormalizationContractError
 from app.knowledge.services.item_relationships import link_creature_loot
 from app.models import Creature, Loot
 from app.services.entity_metadata_service import EntityMetadataService
+from app.services.bestiary_source import (
+    _extract_wiki_section,
+    _is_semantic_empty_text,
+    _strip_strategy_section_markup,
+)
 from app.services.text_utils import normalize_search_text
 
 
@@ -191,6 +201,83 @@ def _update_entity(
     return changed, aliases_created, warnings
 
 
+
+def _resolve_local_strategy_transclusion(
+    db: Session,
+    reference: dict | None,
+) -> str | None:
+    """
+    Resolve #lsth strictly from already-stored TibiaWiki KnowledgeDocuments.
+
+    No provider request is permitted here. If the page or exact section cannot
+    be resolved deterministically, return None and preserve canonical content.
+    """
+    if not isinstance(reference, dict):
+        return None
+
+    page = str(reference.get("page") or "").strip()
+    section = str(reference.get("section") or "").strip()
+
+    if not page or not section:
+        return None
+
+    wanted_page = normalize_search_text(page)
+
+    documents = (
+        db.query(KnowledgeDocument)
+        .filter(
+            KnowledgeDocument.provider_id == "tibiawiki"
+        )
+        .order_by(
+            KnowledgeDocument.retrieved_at.desc()
+        )
+        .all()
+    )
+
+    for document in documents:
+        raw = document.raw_json or {}
+        parsed = raw.get("parse") or {}
+
+        title = str(
+            parsed.get("title") or ""
+        ).strip()
+
+        if (
+            not title
+            or normalize_search_text(title) != wanted_page
+        ):
+            continue
+
+        node = parsed.get("wikitext") or {}
+
+        if not isinstance(node, dict):
+            continue
+
+        wikitext = str(
+            node.get("*") or ""
+        )
+
+        if not wikitext:
+            continue
+
+        section_raw = _extract_wiki_section(
+            wikitext,
+            section,
+        )
+
+        if section_raw is None:
+            return None
+
+        cleaned = _strip_strategy_section_markup(
+            section_raw
+        )
+
+        return cleaned or None
+
+    return None
+
+
+
 def _bridge_creature(db: Session, entity: KnowledgeEntity, dto: CreatureKnowledgeDTO) -> tuple[Creature, bool]:
     creature = db.query(Creature).filter(Creature.knowledge_entity_id == entity.uuid).first()
     if creature is None:
@@ -248,6 +335,30 @@ def _bridge_creature(db: Session, entity: KnowledgeEntity, dto: CreatureKnowledg
     )
     field_aware_partial = bool(partial_missing_fields)
 
+    source_clear_fields = set(
+        dto.provider_metadata.get("source_clear_fields") or []
+    )
+    source_blank_fields = set(
+        dto.provider_metadata.get("source_blank_fields") or []
+    )
+
+    strategy_value = dto.strategy
+
+    if strategy_value is None:
+        strategy_value = _resolve_local_strategy_transclusion(
+            db,
+            dto.provider_metadata.get(
+                "strategy_transclusion"
+            ),
+        )
+
+    authoritative_fields = set(
+        dto.provided_fields
+    )
+
+    if strategy_value is not None:
+        authoritative_fields.add("strategy")
+
     def assign(
         field: str,
         value,
@@ -258,7 +369,10 @@ def _bridge_creature(db: Session, entity: KnowledgeEntity, dto: CreatureKnowledg
         nonlocal canonical_changed
         if field in protected or value in (None, "", []):
             return
-        if provided is not None and provided not in dto.provided_fields:
+        if (
+            provided is not None
+            and provided not in authoritative_fields
+        ):
             return
         if (
             preserve_existing_on_partial
@@ -307,7 +421,7 @@ def _bridge_creature(db: Session, entity: KnowledgeEntity, dto: CreatureKnowledg
     assign("is_boss", dto.is_boss, provided="is_boss")
     assign("description", dto.description, provided="description")
     assign("behavior", dto.behavior, provided="behavior")
-    assign("strategy", dto.strategy, provided="strategy")
+    assign("strategy", strategy_value, provided="strategy")
     assign("notes", dto.notes, provided="notes")
     assign("bestiary_class", dto.bestiary_class, provided="bestiary_class")
     assign("bestiary_level", dto.bestiary_level, provided="bestiary_level")
@@ -319,6 +433,94 @@ def _bridge_creature(db: Session, entity: KnowledgeEntity, dto: CreatureKnowledg
         assign("image_url", dto.image_reference, provided="image_reference")
     assign("locations", list(dto.locations), provided="locations")
     assign("related_tasks", list(dto.task_references), provided="task_references")
+
+    # Explicit source-empty values are authoritative evidence, not merely an
+    # omitted field. Opaque/global partial documents remain conservative.
+    can_apply_explicit_clear = (
+        not dto.is_partial
+        or field_aware_partial
+    )
+
+    if can_apply_explicit_clear:
+        for field in (
+            "behavior",
+            "strategy",
+            "description",
+            "notes",
+            "locations",
+        ):
+            if field in protected:
+                continue
+
+            empty_value = (
+                []
+                if field == "locations"
+                else None
+            )
+
+            # Explicit semantic-empty provider evidence is authoritative.
+            if field in source_clear_fields:
+                if getattr(creature, field) != empty_value:
+                    setattr(
+                        creature,
+                        field,
+                        empty_value,
+                    )
+                    canonical_changed = True
+                continue
+
+            # A merely blank source field is weaker evidence. It may remove
+            # only an existing canonical semantic placeholder, never useful
+            # canonical prose.
+            if field not in source_blank_fields:
+                continue
+
+            current_value = getattr(
+                creature,
+                field,
+            )
+
+            if field == "locations":
+                values = list(
+                    current_value or []
+                )
+
+                if (
+                    values
+                    and all(
+                        _is_semantic_empty_text(value)
+                        for value in values
+                    )
+                ):
+                    creature.locations = []
+                    canonical_changed = True
+            elif _is_semantic_empty_text(
+                current_value
+            ):
+                if current_value is not None:
+                    setattr(
+                        creature,
+                        field,
+                        None,
+                    )
+                    canonical_changed = True
+
+        # Fingerprint of the historical parser bug:
+        #
+        # old parser:
+        #     behavior = strategy or behaviour
+        #
+        # If current source has no usable behavior and canonical behavior is
+        # exactly the newly-resolved strategy, that canonical behavior was
+        # demonstrably stored in the wrong semantic field.
+        if (
+            "behavior" not in protected
+            and dto.behavior is None
+            and strategy_value is not None
+            and creature.behavior == strategy_value
+        ):
+            creature.behavior = None
+            canonical_changed = True
 
     # Historical imports represented provider unknown values ("?", blank)
     # as integer zero. Clear only that known legacy sentinel when the current

@@ -102,7 +102,11 @@ class HttpTibiaWikiCreatureClient:
         return self._request(params)
 
     def fetch_detail(self, *, external_id: str | None, page_title: str | None) -> dict[str, Any]:
-        params: dict[str, Any] = {"action": "parse", "prop": "wikitext", "format": "json"}
+        params: dict[str, Any] = {
+            "action": "parse",
+            "prop": "wikitext|images",
+            "format": "json",
+        }
         if external_id and external_id.isdigit():
             params["pageid"] = external_id
         elif page_title:
@@ -116,6 +120,136 @@ def _serialized_size(value: dict[str, Any]) -> int:
     return len(json.dumps(value, ensure_ascii=False, separators=(",", ":")).encode("utf-8"))
 
 
+_IMAGE_EXTENSIONS = (
+    ".gif",
+    ".png",
+    ".webp",
+    ".jpg",
+    ".jpeg",
+)
+
+
+def _normalize_file_reference(value: str) -> str:
+    value = str(value or "").strip()
+
+    if value.casefold().startswith("file:"):
+        value = value[5:]
+
+    return " ".join(
+        value.replace("_", " ").split()
+    ).casefold()
+
+
+def _parse_image_titles(parsed: dict[str, Any]) -> tuple[str, ...]:
+    """
+    Extract MediaWiki parse.images references without guessing.
+
+    Depending on MediaWiki/API version an image entry may be a string
+    or a small mapping. Preserve only explicit provider values.
+    """
+    values: list[str] = []
+
+    for item in parsed.get("images") or []:
+        if isinstance(item, str):
+            title = item.strip()
+        elif isinstance(item, dict):
+            title = str(
+                item.get("*")
+                or item.get("title")
+                or item.get("name")
+                or ""
+            ).strip()
+        else:
+            title = ""
+
+        if not title:
+            continue
+
+        if title.casefold().startswith("file:"):
+            title = title[5:].strip()
+
+        if title and title not in values:
+            values.append(title)
+
+    return tuple(values)
+
+
+def _select_exact_creature_image(
+    page_title: str,
+    parsed: dict[str, Any],
+) -> str | None:
+    """
+    Select only a file whose filename stem exactly matches the MediaWiki
+    creature page title.
+
+    Examples:
+        Blooming Tower (Dark)
+            -> Blooming Tower (Dark).gif
+
+        Monk (Creature)
+            -> Monk (Creature).gif
+
+    References such as "... Soul Core.gif", maps, icons or anniversary
+    artwork are deliberately rejected.
+    """
+    expected_stem = _normalize_file_reference(
+        page_title
+    )
+
+    candidates: list[tuple[int, str]] = []
+
+    extension_priority = {
+        ".gif": 0,
+        ".png": 1,
+        ".webp": 2,
+        ".jpg": 3,
+        ".jpeg": 4,
+    }
+
+    for title in _parse_image_titles(parsed):
+        lowered = title.casefold()
+
+        extension = next(
+            (
+                ext
+                for ext in _IMAGE_EXTENSIONS
+                if lowered.endswith(ext)
+            ),
+            None,
+        )
+
+        if extension is None:
+            continue
+
+        stem = title[: -len(extension)]
+
+        if (
+            _normalize_file_reference(stem)
+            != expected_stem
+        ):
+            continue
+
+        candidates.append(
+            (
+                extension_priority[extension],
+                title,
+            )
+        )
+
+    if not candidates:
+        return None
+
+    candidates.sort(
+        key=lambda item: (
+            item[0],
+            item[1].casefold(),
+        )
+    )
+
+    return candidates[0][1]
+
+
+
 def _detail_parts(raw: dict[str, Any]) -> tuple[str, str, str, dict[str, Any]]:
     parsed = raw.get("parse")
     if not isinstance(parsed, dict):
@@ -126,7 +260,23 @@ def _detail_parts(raw: dict[str, Any]) -> tuple[str, str, str, dict[str, Any]]:
     wikitext = wikitext_node.get("*") if isinstance(wikitext_node, dict) else None
     if not external_id or not page_title or not isinstance(wikitext, str) or not wikitext.strip():
         raise MalformedProviderPayloadError()
-    return external_id, page_title, wikitext, _build_creature_payload(page_title, wikitext)
+    image_reference = (
+        _select_exact_creature_image(
+            page_title,
+            parsed,
+        )
+    )
+
+    return (
+        external_id,
+        page_title,
+        wikitext,
+        _build_creature_payload(
+            page_title,
+            wikitext,
+            image_reference=image_reference,
+        ),
+    )
 
 
 class TibiaWikiCreatureAdapter:

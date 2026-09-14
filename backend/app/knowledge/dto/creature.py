@@ -130,6 +130,17 @@ class CreatureKnowledgeDTO:
             for source, target in field_map.items()
             if source in payload and source not in missing and payload.get(source) not in (None, "", [])
         }
+
+        # Media availability and media authority are intentionally separate.
+        #
+        # A historical/name-derived Special:FilePath URL remains available as
+        # a compatibility fallback, but it must never overwrite canonical
+        # Creature.image_url during normalization.
+        #
+        # Only an exact File reference returned by MediaWiki parse.images is
+        # authoritative provider evidence.
+        if payload.get("image_evidence") != "page_images_exact":
+            provided.discard("image_reference")
         canonical_name = str(payload.get("name") or page_title).strip()
         aliases = () if normalize_name(page_title) == normalize_name(canonical_name) else (page_title.strip(),)
         loot = tuple(
@@ -180,9 +191,29 @@ class CreatureKnowledgeDTO:
             is_boss=bool(payload.get("is_boss")),
             provider_metadata={
                 "page_title": page_title,
+                "image_file_reference": (
+                    payload.get("image_file_reference")
+                ),
+                "image_evidence": (
+                    payload.get("image_evidence")
+                ),
                 "missing_fields": sorted(missing),
                 "source_unknown_fields": sorted(
                     set(payload.get("source_unknown_fields") or [])
+                ),
+                "source_clear_fields": sorted(
+                    set(payload.get("source_clear_fields") or [])
+                ),
+                "source_blank_fields": sorted(
+                    set(payload.get("source_blank_fields") or [])
+                ),
+                "strategy_transclusion": (
+                    dict(payload["strategy_transclusion"])
+                    if isinstance(
+                        payload.get("strategy_transclusion"),
+                        dict,
+                    )
+                    else None
                 ),
             },
             provided_fields=frozenset(provided),

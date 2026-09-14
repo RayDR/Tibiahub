@@ -14,6 +14,7 @@ from app.services.creature_category_service import (
     creature_category_expression,
 )
 from app.services.entity_metadata_service import EntityMetadataService
+from app.services.bestiary_source import _is_semantic_empty_text
 from app.services.text_utils import normalize_search_text, slugify
 
 
@@ -150,6 +151,53 @@ def upsert_creature_payload(db: Session, payload: dict[str, Any]) -> Creature:
         ):
             setattr(creature, field, None)
 
+    source_clear_fields = set(
+        payload.get("source_clear_fields") or []
+    )
+    source_blank_fields = set(
+        payload.get("source_blank_fields") or []
+    )
+
+    for field in (
+        "behavior",
+        "strategy",
+        "description",
+        "notes",
+    ):
+        if field in protected:
+            continue
+
+        if field in source_clear_fields:
+            setattr(
+                creature,
+                field,
+                None,
+            )
+            continue
+
+        if (
+            field in source_blank_fields
+            and _is_semantic_empty_text(
+                getattr(creature, field)
+            )
+            and getattr(creature, field) is not None
+        ):
+            setattr(
+                creature,
+                field,
+                None,
+            )
+
+    # Repair only the exact historical strategy->behavior fingerprint.
+    parsed_strategy = payload.get("strategy")
+    if (
+        "behavior" not in protected
+        and payload.get("behavior") is None
+        and parsed_strategy not in (None, "")
+        and creature.behavior == parsed_strategy
+    ):
+        creature.behavior = None
+
     # Only overwrite image_url when not locked by admin
     if not getattr(creature, "image_locked", False):
         _copy_if_present(creature, payload, "image_url")
@@ -157,7 +205,33 @@ def upsert_creature_payload(db: Session, payload: dict[str, Any]) -> Creature:
     creature.data_sources = _merge_list(creature.data_sources, payload.get("data_sources"))
     creature.missing_fields = list(payload.get("missing_fields") or [])
     creature.related_tasks = _merge_list(creature.related_tasks, payload.get("related_tasks"))
-    creature.locations = _merge_list(creature.locations, payload.get("locations"))
+
+    missing_fields = set(
+        payload.get("missing_fields") or []
+    )
+
+    if "locations" not in protected:
+        if "locations" in source_clear_fields:
+            creature.locations = []
+        elif (
+            "locations" in source_blank_fields
+            and creature.locations
+            and all(
+                _is_semantic_empty_text(value)
+                for value in creature.locations
+            )
+        ):
+            creature.locations = []
+        elif (
+            "locations" in payload
+            and "locations" not in missing_fields
+        ):
+            # Current TibiaWiki evidence is authoritative here. Do not merge
+            # stale historical locations back into corrected source values.
+            creature.locations = list(
+                payload.get("locations") or []
+            )
+
     creature.raw_data = payload
     creature.last_synced_at = datetime.now(UTC)
 

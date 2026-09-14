@@ -978,3 +978,531 @@ def test_creature_source_deduplicates_and_sanitizes_locations():
     assert feroxa["locations"] == [
         "Behind the teleport",
     ]
+
+def test_field_aware_partial_updates_supplied_fields_while_preserving_missing_fields(
+    creature_registry,
+    db,
+):
+    adapter = TibiaWikiCreatureAdapter(
+        FixtureCreatureClient()
+    )
+
+    result = adapter.fetch(
+        request(
+            "creature_detail",
+            payload={
+                "external_id": "321",
+                "page_title": "Demon",
+            },
+        )
+    )
+
+    normalization = adapter.normalize(
+        result.documents[0],
+        normalization_context(),
+    )
+
+    canonical_data = deepcopy(
+        normalization.canonical_data or {}
+    )
+
+    # Simulate a partial document whose provider contract explicitly
+    # says hitpoints are missing, while behavior and strategy are
+    # genuinely supplied.
+    canonical_data["is_partial"] = True
+
+    provider_metadata = dict(
+        canonical_data.get(
+            "provider_metadata"
+        )
+        or {}
+    )
+
+    provider_metadata["missing_fields"] = [
+        "hitpoints",
+    ]
+
+    canonical_data[
+        "provider_metadata"
+    ] = provider_metadata
+
+    provided_fields = set(
+        canonical_data.get(
+            "provided_fields"
+        )
+        or []
+    )
+
+    provided_fields.discard("hitpoints")
+    provided_fields.update(
+        {
+            "behavior",
+            "strategy",
+        }
+    )
+
+    canonical_data[
+        "provided_fields"
+    ] = sorted(provided_fields)
+
+    canonical_data["hitpoints"] = None
+    canonical_data[
+        "behavior"
+    ] = "Updated behavior"
+    canonical_data[
+        "strategy"
+    ] = "Updated strategy"
+
+    normalization = replace(
+        normalization,
+        canonical_data=canonical_data,
+        warnings=(
+            "partial_creature_detail",
+        ),
+    )
+
+    existing = Creature(
+        name="Demon",
+        normalized_name=normalize_search_text(
+            "Demon"
+        ),
+        slug="demon",
+        external_id="321",
+        source_name="tibiawiki",
+        hitpoints=9999,
+        experience=8888,
+        behavior="Old behavior",
+        strategy="Old strategy",
+        is_boss=False,
+        protected_fields=[],
+    )
+
+    db.add(existing)
+    db.flush()
+
+    KnowledgeNormalizationService.apply(
+        db,
+        normalization,
+    )
+
+    db.flush()
+    db.refresh(existing)
+
+    # Missing source field survives.
+    assert existing.hitpoints == 9999
+
+    # Explicitly supplied fields may repair canonical content even
+    # though the entity as a whole is partial.
+    assert existing.behavior == "Updated behavior"
+    assert existing.strategy == "Updated strategy"
+
+def test_creature_parser_marks_explicit_clear_without_clearing_lsth_reference():
+    from app.services.bestiary_source import _build_creature_payload
+
+    payload = _build_creature_payload(
+        "Semantic Probe",
+        """{{Infobox Creature
+| name = Semantic Probe
+| hp = 10
+| exp = 20
+| behaviour = Unknown.
+| strategy = {{#lsth:Rotten Blood Quest/Spoiler|Bakragore}}
+| notes = None.
+| location = ?
+}}""",
+    )
+
+    assert payload["behavior"] is None
+    assert payload["strategy"] is None
+    assert payload["notes"] is None
+    assert payload["locations"] == []
+
+    assert set(payload["source_clear_fields"]) == {
+        "behavior",
+        "description",
+        "notes",
+        "locations",
+    }
+
+    assert payload["strategy_transclusion"] == {
+        "page": "Rotten Blood Quest/Spoiler",
+        "section": "Bakragore",
+    }
+
+    assert "strategy" not in payload["source_clear_fields"]
+
+
+def test_strategy_section_cleanup_removes_visual_markup_but_preserves_dialogue():
+    from app.services.bestiary_source import (
+        _extract_wiki_section,
+        _strip_strategy_section_markup,
+    )
+
+    wikitext = """== Other ==
+Ignore me.
+
+== Grand Master Oberon ==
+[[File:Oberon.gif|right]]
+{{FightTips
+|{{FightTip|type=equip|element=Physical}}
+}}
+This battle is both physical and verbal.
+
+{| class="wikitable"
+! Boss !! Reply
+|-
+| {{Sound|The world will suffer for its idle laziness!}}
+| Are you ever going to fight or do you prefer talking!
+|}
+
+[[File:Example.png|thumb|300px]]
+
+== Next ==
+Do not include me.
+"""
+
+    section = _extract_wiki_section(
+        wikitext,
+        "Grand Master Oberon",
+    )
+
+    assert section is not None
+
+    cleaned = _strip_strategy_section_markup(
+        section
+    )
+
+    assert "This battle is both physical and verbal." in cleaned
+    assert "The world will suffer for its idle laziness!" in cleaned
+    assert "Are you ever going to fight or do you prefer talking!" in cleaned
+
+    assert "Oberon.gif" not in cleaned
+    assert "Example.png" not in cleaned
+    assert "thumb" not in cleaned
+    assert "right" not in cleaned
+    assert "wikitable" not in cleaned
+    assert "Do not include me." not in cleaned
+
+
+def test_creature_explicit_clear_and_strategy_transclusion_contract(
+    creature_registry,
+    db,
+):
+    from copy import deepcopy
+    from dataclasses import replace
+
+    from app.knowledge.services.normalization import (
+        KnowledgeNormalizationService,
+    )
+    from app.models import Creature
+    from app.services.text_utils import (
+        normalize_search_text,
+    )
+
+    adapter = TibiaWikiCreatureAdapter(
+        FixtureCreatureClient()
+    )
+
+    result = adapter.fetch(
+        request(
+            "creature_detail",
+            payload={
+                "external_id": "321",
+                "page_title": "Demon",
+            },
+        )
+    )
+
+    normalization = adapter.normalize(
+        result.documents[0],
+        normalization_context(),
+    )
+
+    canonical_data = deepcopy(
+        normalization.canonical_data or {}
+    )
+
+    canonical_data["is_partial"] = True
+    canonical_data["behavior"] = None
+    canonical_data["strategy"] = "Legacy tactical strategy"
+    canonical_data["description"] = None
+    canonical_data["locations"] = []
+
+    provided = set(
+        canonical_data.get("provided_fields")
+        or []
+    )
+
+    provided.discard("behavior")
+    provided.discard("description")
+    provided.discard("locations")
+    provided.add("strategy")
+
+    canonical_data["provided_fields"] = sorted(
+        provided
+    )
+
+    metadata = dict(
+        canonical_data.get(
+            "provider_metadata"
+        )
+        or {}
+    )
+
+    metadata["missing_fields"] = [
+        "loot",
+        "locations",
+    ]
+
+    metadata["source_clear_fields"] = [
+        "description",
+        "locations",
+    ]
+
+    metadata["strategy_transclusion"] = None
+
+    canonical_data["provider_metadata"] = metadata
+
+    normalization = replace(
+        normalization,
+        canonical_data=canonical_data,
+        warnings=(
+            "partial_creature_detail",
+        ),
+    )
+
+    existing = Creature(
+        name="Demon",
+        normalized_name=normalize_search_text(
+            "Demon"
+        ),
+        slug="demon",
+        external_id="321",
+        source_name="tibiawiki",
+        hitpoints=9999,
+        experience=8888,
+        behavior="Legacy tactical strategy",
+        strategy=None,
+        description="None.",
+        locations=["Unknown"],
+        is_boss=False,
+        protected_fields=[],
+    )
+
+    db.add(existing)
+    db.flush()
+
+    KnowledgeNormalizationService.apply(
+        db,
+        normalization,
+    )
+
+    db.flush()
+    db.refresh(existing)
+
+    # Numeric source data marked missing by this synthetic partial payload is
+    # outside this regression's semantic-clear contract.
+    assert existing.behavior is None
+    assert existing.strategy == "Legacy tactical strategy"
+    assert existing.description is None
+    assert existing.locations == []
+
+
+def test_creature_parser_distinguishes_blank_from_explicit_empty_source():
+    from app.services.bestiary_source import _build_creature_payload
+
+    payload = _build_creature_payload(
+        "Blank Behavior Probe",
+        """{{Infobox Creature
+| name = Blank Behavior Probe
+| hp = 10
+| exp = 20
+| behaviour =
+| strategy = Unknown.
+| notes =
+| location =
+}}""",
+    )
+
+    assert payload["behavior"] is None
+    assert payload["strategy"] is None
+    assert payload["notes"] is None
+    assert payload["locations"] == []
+
+    # Unknown. is explicit semantic-empty evidence.
+    assert set(
+        payload["source_clear_fields"]
+    ) == {
+        "strategy",
+    }
+
+    # Blank parameters are weaker evidence and must not erase useful
+    # canonical prose.
+    assert set(
+        payload["source_blank_fields"]
+    ) == {
+        "behavior",
+        "description",
+        "notes",
+        "locations",
+    }
+
+
+def test_creature_detail_prefers_exact_mediawiki_file_evidence():
+    from app.knowledge.adapters.tibiawiki_creatures import (
+        _detail_parts,
+    )
+
+    raw = {
+        "parse": {
+            "pageid": 107847,
+            "title": "Blooming Tower (Dark)",
+            "wikitext": {
+                "*": """{{Infobox Creature
+| name = Blooming Tower
+| actualname = Blooming Tower
+| hp = 100
+| exp = 0
+}}"""
+            },
+            "images": [
+                "Some Interface Icon.png",
+                "Blooming Tower (Dark).gif",
+                "Blooming Tower Soul Core.gif",
+            ],
+        }
+    }
+
+    external_id, page_title, _wikitext, payload = (
+        _detail_parts(raw)
+    )
+
+    assert external_id == "107847"
+    assert page_title == "Blooming Tower (Dark)"
+
+    assert (
+        payload["image_file_reference"]
+        == "Blooming Tower (Dark).gif"
+    )
+
+    assert (
+        payload["image_url"]
+        == "https://tibia.fandom.com/wiki/"
+        "Special:FilePath/Blooming_Tower_(Dark).gif"
+    )
+
+    assert (
+        payload["image_evidence"]
+        == "page_images_exact"
+    )
+
+
+def test_creature_detail_rejects_related_but_nonexact_images():
+    from app.knowledge.adapters.tibiawiki_creatures import (
+        _detail_parts,
+    )
+
+    raw = {
+        "parse": {
+            "pageid": 999999,
+            "title": "Example Creature",
+            "wikitext": {
+                "*": """{{Infobox Creature
+| name = Example Creature
+| hp = 100
+| exp = 50
+}}"""
+            },
+            "images": [
+                "Example Creature Soul Core.gif",
+                "Example Creature Map.png",
+                "Some Interface Icon.png",
+            ],
+        }
+    }
+
+    _external_id, _page_title, _wikitext, payload = (
+        _detail_parts(raw)
+    )
+
+    assert payload["image_file_reference"] is None
+
+    # Compatibility fallback remains available when exact File evidence
+    # is absent, but its provenance is no longer confused with evidence.
+    assert (
+        payload["image_evidence"]
+        == "synthetic_name_fallback"
+    )
+
+    assert payload["image_url"].endswith(
+        "/Special:FilePath/Example_Creature.gif"
+    )
+
+
+def test_synthetic_creature_image_fallback_is_not_authoritative():
+    from app.knowledge.dto import CreatureKnowledgeDTO
+    from app.services.bestiary_source import _build_creature_payload
+
+    wikitext = """{{Infobox Creature
+| name = Example Creature
+| hp = 100
+| exp = 50
+}}"""
+
+    synthetic = _build_creature_payload(
+        "Example Creature",
+        wikitext,
+    )
+
+    assert (
+        synthetic["image_evidence"]
+        == "synthetic_name_fallback"
+    )
+    assert synthetic["image_url"].endswith(
+        "/Special:FilePath/Example_Creature.gif"
+    )
+    # Synthetic media does not make the creature detail partial.
+    # Authority is controlled independently through provided_fields.
+    assert "image_url" not in synthetic["missing_fields"]
+
+    synthetic_dto = (
+        CreatureKnowledgeDTO.from_tibiawiki_payload(
+            synthetic,
+            external_id="123",
+            page_title="Example Creature",
+        )
+    )
+
+    # The compatibility URL may remain available in the DTO, but the
+    # normalizer must not treat it as authoritative provider evidence.
+    assert synthetic_dto.image_reference is not None
+    assert (
+        "image_reference"
+        not in synthetic_dto.provided_fields
+    )
+
+    exact = _build_creature_payload(
+        "Example Creature",
+        wikitext,
+        image_reference="Example_Creature.gif",
+    )
+
+    assert exact["image_evidence"] == "page_images_exact"
+    assert (
+        exact["image_file_reference"]
+        == "Example_Creature.gif"
+    )
+    assert "image_url" not in exact["missing_fields"]
+
+    exact_dto = (
+        CreatureKnowledgeDTO.from_tibiawiki_payload(
+            exact,
+            external_id="123",
+            page_title="Example Creature",
+        )
+    )
+
+    assert (
+        "image_reference"
+        in exact_dto.provided_fields
+    )
